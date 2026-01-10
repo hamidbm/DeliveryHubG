@@ -57,10 +57,25 @@ export interface Milestone {
 }
 
 export interface WikiPage {
-  id: string;
+  id?: string;
+  _id?: string;
   title: string;
   content: string;
   parentId?: string;
+  category?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  author?: string;
+  lastModifiedBy?: string;
+  tags?: string[];
+  readingTime?: number;
+  version?: number;
+  status?: 'Draft' | 'Published' | 'Archived';
+}
+
+export interface WikiVersion extends Omit<WikiPage, 'id'> {
+  pageId: string;
+  versionedAt: string;
 }
 
 export interface AppState {

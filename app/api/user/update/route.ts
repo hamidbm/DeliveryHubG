@@ -8,7 +8,8 @@ import { getDb } from '../../../../services/db';
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
 
 export async function POST(request: Request) {
-  const cookieStore = cookies();
+  // Await cookies() as it is now asynchronous in recent Next.js versions.
+  const cookieStore = await cookies();
   const token = cookieStore.get('nexus_auth_token')?.value;
 
   if (!token) {

@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -7,6 +8,9 @@ import Dashboard from '../components/Dashboard';
 import Applications from '../components/Applications';
 import AIInsights from '../components/AIInsights';
 import WorkItems from '../components/WorkItems';
+import Wiki from '../components/Wiki';
+import Milestones from '../components/Milestones';
+import GovernanceDocuments from '../components/GovernanceDocuments';
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -63,6 +67,12 @@ export default function Home() {
         return <AIInsights />;
       case 'work-items':
         return <WorkItems />;
+      case 'wiki':
+        return <Wiki currentUser={user} />;
+      case 'reviews':
+        return <Milestones />;
+      case 'documents':
+        return <GovernanceDocuments />;
       default:
         return (
           <div className="flex flex-col items-center justify-center py-20 text-slate-400">
