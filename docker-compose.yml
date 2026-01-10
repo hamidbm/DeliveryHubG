@@ -1,7 +1,7 @@
 services:
   mongodb:
     image: mongo:latest
-    container_name: aura-mongo
+    container_name: mongo
     restart: unless-stopped
     ports:
       - "27017:27017"
@@ -17,7 +17,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: aura-portal
+    image: deliveryhub:1.0.0
+    container_name: deliveryhub
     restart: unless-stopped
     ports:
       - "3000:3000"
