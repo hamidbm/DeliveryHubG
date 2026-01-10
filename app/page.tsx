@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import Layout from '../components/Layout';
 import Dashboard from '../components/Dashboard';
 import Applications from '../components/Applications';
@@ -11,6 +12,46 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [activeBundle, setActiveBundle] = useState('all');
   const [activeVendor, setActiveVendor] = useState('all');
+  const [user, setUser] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const router = useRouter();
+
+  useEffect(() => {
+    async function checkAuth() {
+      try {
+        const res = await fetch('/api/auth/me');
+        if (res.ok) {
+          const data = await res.json();
+          setUser(data.user);
+        } else {
+          router.push('/login');
+        }
+      } catch (err) {
+        router.push('/login');
+      } finally {
+        setLoading(false);
+      }
+    }
+    checkAuth();
+  }, [router]);
+
+  const handleLogout = async () => {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    router.push('/login');
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+        <div className="flex flex-col items-center">
+          <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+          <p className="text-slate-400 font-medium animate-pulse">Initializing Nexus Portal...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) return null;
 
   const renderContent = () => {
     switch (activeTab) {
@@ -22,14 +63,6 @@ export default function Home() {
         return <AIInsights />;
       case 'work-items':
         return <WorkItems />;
-      case 'wiki':
-        return (
-          <div className="flex flex-col items-center justify-center py-24 text-slate-400 bg-white rounded-3xl border border-slate-200 shadow-sm">
-            <i className="fas fa-book-open text-6xl mb-4 text-slate-200"></i>
-            <h2 className="text-xl font-bold text-slate-600">Knowledge Base</h2>
-            <p>Module implementation scheduled for Milestone 4.</p>
-          </div>
-        );
       default:
         return (
           <div className="flex flex-col items-center justify-center py-20 text-slate-400">
@@ -48,6 +81,9 @@ export default function Home() {
       setActiveBundle={setActiveBundle}
       activeVendor={activeVendor}
       setActiveVendor={setActiveVendor}
+      userName={user.name}
+      userRole={user.role}
+      onLogout={handleLogout}
     >
       {renderContent()}
     </Layout>
