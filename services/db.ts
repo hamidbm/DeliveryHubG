@@ -59,7 +59,7 @@ const calculateReadingTime = (content: string): number => {
   return Math.ceil(minutes);
 };
 
-export const saveWikiPage = async (page: any) => {
+export const saveWikiPage = async (page: Partial<WikiPage>) => {
   try {
     const db = await getDb();
     const { _id, ...data } = page;
@@ -68,7 +68,8 @@ export const saveWikiPage = async (page: any) => {
 
     if (_id) {
       // 1. Snapshot current version before update
-      const existing = await db.collection('wiki_pages').findOne({ _id: new ObjectId(_id) });
+      // Fix: Conversion through unknown as per compiler suggestion to bridge lack of overlap between MongoDB's generic Document type and the WikiPage interface.
+      const existing = await db.collection('wiki_pages').findOne({ _id: new ObjectId(_id) }) as unknown as WikiPage | null;
       if (existing) {
         const { _id: currentId, ...historyData } = existing;
         await db.collection('wiki_history').insertOne({
@@ -78,18 +79,22 @@ export const saveWikiPage = async (page: any) => {
         });
       }
 
-      // 2. Update existing page with version increment
+      // 2. Update existing page with version increment and refreshed metadata
       const nextVersion = (existing?.version || 1) + 1;
       const updatePayload = {
         ...data,
         updatedAt: now,
         readingTime,
         version: nextVersion,
-        status: data.status || existing?.status || 'Published'
+        status: data.status || existing?.status || 'Published',
+        // Author is preserved from original creation; lastModifiedBy is updated
+        author: existing?.author || data.author || 'System',
+        lastModifiedBy: data.lastModifiedBy || 'System'
       };
 
-      // Safeguard: Do not overwrite createdAt on update
-      delete updatePayload.createdAt;
+      // Ensure we don't accidentally overwrite createdAt with undefined if not in 'data'
+      // The $set operation will only update fields provided.
+      delete (updatePayload as any).createdAt;
 
       return await db.collection('wiki_pages').updateOne(
         { _id: new ObjectId(_id) },
@@ -98,14 +103,17 @@ export const saveWikiPage = async (page: any) => {
       );
     } else {
       // Create new page with initial timestamps, version 1, and default status
-      return await db.collection('wiki_pages').insertOne({
+      const insertPayload = {
         ...data,
         createdAt: now,
         updatedAt: now,
         readingTime,
         version: 1,
-        status: data.status || 'Published'
-      });
+        status: data.status || 'Published',
+        author: data.author || 'System',
+        lastModifiedBy: data.lastModifiedBy || data.author || 'System'
+      };
+      return await db.collection('wiki_pages').insertOne(insertPayload);
     }
   } catch (error) {
     console.error("Wiki save error:", error);
@@ -135,7 +143,7 @@ export const revertWikiPage = async (pageId: string, versionId: string) => {
     }
 
     // 3. Restore the version (retaining latest version count + 1)
-    const nextVersion = (current?.version || 0) + 1;
+    const nextVersion = ((current as any)?.version || 0) + 1;
     const { _id: _, pageId: __, versionedAt: ___, ...rest } = version;
     return await db.collection('wiki_pages').updateOne(
       { _id: new ObjectId(pageId) },
@@ -156,7 +164,14 @@ export const seedDatabase = async (apps: any[], items: any[], wiki: any[] = []) 
     
     await db.collection('applications').insertMany(apps);
     await db.collection('workitems').insertMany(items);
-    if (wiki.length > 0) await db.collection('wiki_pages').insertMany(wiki.map(p => ({ ...p, version: 1, status: 'Published' })));
+    if (wiki.length > 0) await db.collection('wiki_pages').insertMany(wiki.map(p => ({ 
+      ...p, 
+      version: 1, 
+      status: 'Published', 
+      createdAt: new Date().toISOString(), 
+      updatedAt: new Date().toISOString(),
+      author: 'Seed Process'
+    })));
     return { success: true };
   } catch (error) {
     console.error("Seeding failed:", error);
