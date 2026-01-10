@@ -14,6 +14,7 @@ const WikiPageDisplay: React.FC<WikiPageDisplayProps> = ({ page, onNavigate }) =
   const htmlContent = useMemo(() => {
     if (!page.content) return '';
     try {
+      // marked v12 standard usage
       return marked.parse(page.content, {
         gfm: true,
         breaks: true,
@@ -86,7 +87,7 @@ const WikiPageDisplay: React.FC<WikiPageDisplayProps> = ({ page, onNavigate }) =
           
           <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-50 text-blue-600 rounded-full border border-blue-100 shadow-sm">
             <i className="fas fa-file-lines text-[10px]"></i>
-            <span className="text-[10px] font-black uppercase tracking-widest">Registry Node</span>
+            <span className="text-[10px] font-black uppercase tracking-widest">Enterprise Registry</span>
           </div>
           
           {page.category && (
@@ -130,7 +131,7 @@ const WikiPageDisplay: React.FC<WikiPageDisplayProps> = ({ page, onNavigate }) =
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest">Provision Date</span>
+            <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest">Created Date</span>
             <div className="flex items-center gap-2.5">
               <i className="fas fa-calendar-check text-slate-300 text-[12px]"></i>
               <span className="text-sm font-bold text-slate-500">{formatDate(page.createdAt)}</span>
@@ -138,7 +139,7 @@ const WikiPageDisplay: React.FC<WikiPageDisplayProps> = ({ page, onNavigate }) =
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest">Sync Timestamp</span>
+            <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest">Last Updated</span>
             <div className="flex items-center gap-2.5">
               <i className="fas fa-arrows-rotate text-slate-300 text-[12px]"></i>
               <span className="text-sm font-bold text-slate-500">{formatDate(page.updatedAt)}</span>
@@ -168,17 +169,17 @@ const WikiPageDisplay: React.FC<WikiPageDisplayProps> = ({ page, onNavigate }) =
           <div className="w-16 h-16 rounded-full bg-white flex items-center justify-center shadow-sm mb-4">
             <i className="fas fa-feather-pointed text-2xl text-blue-200"></i>
           </div>
-          <p className="font-black uppercase tracking-widest text-[10px]">Drafting in progress. No content published yet.</p>
+          <p className="font-black uppercase tracking-widest text-[10px]">No content has been published to this registry node.</p>
         </div>
       )}
 
       <footer className="mt-24 pt-10 border-t border-slate-50 flex flex-col sm:flex-row items-center justify-between gap-6 text-slate-300">
         <div className="flex items-center gap-3">
           <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.3)]"></div>
-          <span className="text-[10px] font-bold uppercase tracking-[0.2em]">Nexus Registry Verified Node</span>
+          <span className="text-[10px] font-bold uppercase tracking-[0.2em]">Nexus Registry Verified</span>
         </div>
         <div className="flex items-center gap-6">
-          <span className="text-[9px] font-black uppercase tracking-widest opacity-50">v4.1 Governance</span>
+          <span className="text-[9px] font-black uppercase tracking-widest opacity-50">v4.1 Compliance</span>
           <div className="flex gap-4">
             <i className="fab fa-markdown text-xl opacity-50 hover:opacity-100 transition-opacity cursor-help" title="Markdown Enabled"></i>
             <i className="fas fa-print text-sm opacity-50 hover:opacity-100 transition-opacity cursor-pointer"></i>
