@@ -15,6 +15,7 @@ const WikiPageDisplay: React.FC<WikiPageDisplayProps> = ({ page, onNavigate }) =
   const htmlContent = useMemo(() => {
     if (!page.content) return '';
     try {
+      // Custom macro replacements could be done here (e.g., converting [DOC-123] to links)
       return marked.parse(page.content, {
         gfm: true,
         breaks: true,
@@ -32,122 +33,101 @@ const WikiPageDisplay: React.FC<WikiPageDisplayProps> = ({ page, onNavigate }) =
       if (anchor && anchor.getAttribute('href')?.startsWith('#wiki-')) {
         e.preventDefault();
         const id = anchor.getAttribute('href')?.replace('#wiki-', '');
-        if (id && onNavigate) {
-          onNavigate(id);
-        }
+        if (id && onNavigate) onNavigate(id);
       }
     };
-
     const container = contentRef.current;
-    if (container) {
-      container.addEventListener('click', handleLinkClick);
-    }
-    return () => {
-      if (container) {
-        container.removeEventListener('click', handleLinkClick);
-      }
-    };
+    if (container) container.addEventListener('click', handleLinkClick);
+    return () => { if (container) container.removeEventListener('click', handleLinkClick); };
   }, [onNavigate, htmlContent]);
 
   const formatDate = (dateStr?: string) => {
     if (!dateStr) return 'N/A';
     return new Date(dateStr).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
+      month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit'
     });
   };
 
-  // Metadata labels
   const bundle = BUNDLES.find(b => b.id === page.bundleId);
   const application = APPLICATIONS.find(a => a.id === page.applicationId);
   const milestone = MILESTONES.find(m => m.id === page.milestoneId);
 
   return (
     <article className="animate-fadeIn w-full pb-32">
-      <header className="mb-12">
-        <div className="flex flex-wrap items-center gap-3 mb-8">
+      <header className="mb-16">
+        <div className="flex flex-wrap items-center gap-3 mb-10">
           <div className="inline-flex items-center gap-2 px-3 py-1 bg-slate-900 text-white rounded-full border border-slate-800 shadow-sm">
-            <span className="text-[10px] font-black uppercase tracking-widest">v{page.version || '1.0'}</span>
+            <span className="text-[10px] font-black uppercase tracking-widest">Version {page.version || '1.0'}</span>
           </div>
-
-          <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-50 text-blue-600 rounded-full border border-blue-100 shadow-sm">
-            <i className="fas fa-layer-group text-[10px]"></i>
-            <span className="text-[10px] font-black uppercase tracking-widest">Registry node</span>
+          <div className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-50 text-emerald-600 rounded-full border border-emerald-100 shadow-sm">
+            <span className="text-[10px] font-black uppercase tracking-widest">{page.status || 'Published'}</span>
           </div>
-          
           {page.category && (
-            <div className="inline-flex items-center gap-2 px-3 py-1 bg-indigo-50 text-indigo-600 rounded-full border border-indigo-100 shadow-sm">
+            <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-50 text-blue-600 rounded-full border border-blue-100 shadow-sm">
               <span className="text-[10px] font-black uppercase tracking-widest">{page.category}</span>
             </div>
           )}
         </div>
         
-        <h1 className="text-6xl font-black text-slate-900 tracking-tighter leading-[1.1] mb-10">
-          {page.title || 'Untitled Document'}
+        <h1 className="text-6xl font-black text-slate-900 tracking-tighter leading-none mb-12">
+          {page.title}
         </h1>
         
-        {/* Business Context Chips */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 py-10 border-y border-slate-100 mb-12">
+          <div className="space-y-1">
+             <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest">Author</span>
+             <p className="text-sm font-bold text-slate-700">{page.author || 'System'}</p>
+          </div>
+          <div className="space-y-1">
+             <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest">Last Modified</span>
+             <p className="text-sm font-bold text-slate-700">{page.lastModifiedBy || 'System'}</p>
+          </div>
+          <div className="space-y-1">
+             <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest">Provisioned</span>
+             <p className="text-sm font-bold text-slate-500">{formatDate(page.createdAt)}</p>
+          </div>
+          <div className="space-y-1">
+             <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest">Sync Hash</span>
+             <p className="text-sm font-mono text-slate-400 font-bold uppercase tracking-tighter">{Math.random().toString(36).substring(7)}</p>
+          </div>
+        </div>
+
         {(bundle || application || milestone) && (
-          <div className="flex flex-wrap gap-4 mb-10 pb-10 border-b border-slate-100">
+          <div className="flex flex-wrap gap-4 p-8 bg-slate-50/50 rounded-[2rem] border border-slate-100 mb-16">
             {bundle && (
-              <div className="flex flex-col gap-1">
-                <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Business Bundle</span>
-                <div className="bg-slate-50 border border-slate-100 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-700 flex items-center gap-2">
-                  <i className="fas fa-box-archive text-blue-500"></i>
-                  {bundle.name}
-                </div>
+              <div className="bg-white px-4 py-2 rounded-2xl border border-slate-200 flex items-center gap-3">
+                 <i className="fas fa-layer-group text-blue-500 text-xs"></i>
+                 <div className="flex flex-col">
+                   <span className="text-[8px] font-black text-slate-300 uppercase">Bundle</span>
+                   <span className="text-xs font-black text-slate-700">{bundle.name}</span>
+                 </div>
               </div>
             )}
             {application && (
-              <div className="flex flex-col gap-1">
-                <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Target Application</span>
-                <div className="bg-slate-50 border border-slate-100 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-700 flex items-center gap-2">
-                  <i className="fas fa-cube text-indigo-500"></i>
-                  {application.name}
-                </div>
+              <div className="bg-white px-4 py-2 rounded-2xl border border-slate-200 flex items-center gap-3">
+                 <i className="fas fa-cube text-indigo-500 text-xs"></i>
+                 <div className="flex flex-col">
+                   <span className="text-[8px] font-black text-slate-300 uppercase">Application</span>
+                   <span className="text-xs font-black text-slate-700">{application.name}</span>
+                 </div>
               </div>
             )}
             {milestone && (
-              <div className="flex flex-col gap-1">
-                <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Delivery Milestone</span>
-                <div className="bg-slate-50 border border-slate-100 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-700 flex items-center gap-2">
-                  <i className="fas fa-flag-checkered text-emerald-500"></i>
-                  {milestone.name}
-                </div>
+              <div className="bg-white px-4 py-2 rounded-2xl border border-slate-200 flex items-center gap-3">
+                 <i className="fas fa-flag-checkered text-emerald-500 text-xs"></i>
+                 <div className="flex flex-col">
+                   <span className="text-[8px] font-black text-slate-300 uppercase">Milestone</span>
+                   <span className="text-xs font-black text-slate-700">{milestone.name}</span>
+                 </div>
               </div>
             )}
           </div>
         )}
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-12 gap-y-8 py-8 border-b border-slate-100">
-          <div className="flex flex-col gap-1.5">
-            <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest">Primary Author</span>
-            <span className="text-sm font-bold text-slate-700">{page.author || 'System'}</span>
-          </div>
-          
-          <div className="flex flex-col gap-1.5">
-            <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest">Last Modifier</span>
-            <span className="text-sm font-bold text-slate-700">{page.lastModifiedBy || page.author || 'System'}</span>
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest">Provisioned</span>
-            <span className="text-sm font-bold text-slate-500">{formatDate(page.createdAt)}</span>
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest">Modified</span>
-            <span className="text-sm font-bold text-slate-500">{formatDate(page.updatedAt)}</span>
-          </div>
-        </div>
       </header>
 
       <div 
         ref={contentRef}
-        className="prose prose-slate prose-xl max-w-none transition-all duration-300"
+        className="prose prose-slate prose-xl max-w-none prose-headings:tracking-tighter prose-headings:font-black"
         dangerouslySetInnerHTML={{ __html: htmlContent }}
       />
     </article>

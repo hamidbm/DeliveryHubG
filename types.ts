@@ -59,10 +59,13 @@ export interface Milestone {
 export interface WikiSpace {
   _id?: string;
   id?: string;
+  key: string;
   name: string;
   description?: string;
   icon?: string;
   color?: string;
+  visibility: 'internal' | 'vendors' | 'specific';
+  allowedVendorCompanies?: string[];
   createdAt?: string;
 }
 
@@ -72,7 +75,7 @@ export interface WikiPage {
   title: string;
   content: string;
   parentId?: string;
-  spaceId: string; // Required space association
+  spaceId: string; 
   bundleId?: string;
   applicationId?: string;
   milestoneId?: string;
@@ -85,6 +88,26 @@ export interface WikiPage {
   readingTime?: number;
   version?: number;
   status?: 'Draft' | 'Published' | 'Archived';
+  watchers?: string[];
+}
+
+export interface WikiComment {
+  _id?: string;
+  pageId: string;
+  parentId?: string;
+  author: string;
+  authorRole?: string;
+  content: string;
+  createdAt: string;
+}
+
+export interface WikiTemplate {
+  _id?: string;
+  name: string;
+  key: string;
+  description: string;
+  content: string;
+  category: string;
 }
 
 export interface WikiVersion extends Omit<WikiPage, 'id'> {
