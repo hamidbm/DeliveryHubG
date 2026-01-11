@@ -148,6 +148,26 @@ const WikiForm: React.FC<WikiFormProps> = ({
     }
   };
 
+  const insertCallout = () => {
+    const snippet = `\n<div class="callout info">\n  <div class="title">[Some Title]</div>\n  <p>\n    \n  </p>\n</div>\n`;
+    insertText(snippet, '');
+  };
+
+  const insertWarnCallout = () => {
+    const snippet = `\n<div class="callout warn">\n  <div class="title">[Some Title]</div>\n  <p>\n    \n  </p>\n</div>\n`;
+    insertText(snippet, '');
+  };
+
+  const insertSuccessCallout = () => {
+    const snippet = `\n<div class="callout success">\n  <div class="title">[Some Title]</div>\n  <p>\n    \n  </p>\n</div>\n`;
+    insertText(snippet, '');
+  };
+
+  const insertCodeSnippet = () => {
+    const snippet = `\n<pre><code>\n// Some comment\n\n</code></pre>\n`;
+    insertText(snippet, '');
+  };
+
   const setFontSize = (size: string) => {
     insertText(`<span style="font-size: ${size}">`, '</span>');
     setShowSizeMenu(false);
@@ -233,6 +253,7 @@ const WikiForm: React.FC<WikiFormProps> = ({
             <div className="flex items-center gap-1">
               <ToolbarButton icon="fa-bold" onClick={() => insertText(editorFormat === 'markdown' ? '**' : '<b>', editorFormat === 'markdown' ? '**' : '</b>')} />
               <ToolbarButton icon="fa-italic" onClick={() => insertText(editorFormat === 'markdown' ? '*' : '<i>', editorFormat === 'markdown' ? '*' : '</i>')} />
+              <ToolbarButton icon="fa-paragraph" label="Paragraph" onClick={() => insertText('<p>', '</p>')} />
               <div className="w-[1px] h-6 bg-slate-200 mx-2"></div>
               
               <button 
@@ -283,6 +304,12 @@ const WikiForm: React.FC<WikiFormProps> = ({
               <div className="w-[1px] h-6 bg-slate-200 mx-2"></div>
               <ToolbarButton icon="fa-list-ul" onClick={handleList} />
               <ToolbarButton icon="fa-table" onClick={() => insertText(editorFormat === 'markdown' ? '\n| H1 | H2 |\n|---|---|\n| C1 | C2 |\n' : '\n<table><tr><th>H1</th><th>H2</th></tr><tr><td>C1</td><td>C2</td></tr></table>\n')} />
+              <ToolbarButton icon="fa-minus" onClick={() => insertText(editorFormat === 'markdown' ? '\n---\n' : '\n<hr />\n')} />
+              <ToolbarButton icon="fa-quote-left" onClick={() => insertText('\n<blockquote>\n  <p>\n    \n  </p>\n  <p>\n    \n  </p>\n</blockquote>\n')} />
+              <ToolbarButton icon="fa-info-circle" label="Call Out Info" onClick={insertCallout} />
+              <ToolbarButton icon="fa-exclamation-triangle" label="Call Out Warn" onClick={insertWarnCallout} />
+              <ToolbarButton icon="fa-check-circle" label="Call Out Success" onClick={insertSuccessCallout} />
+              <ToolbarButton icon="fa-code" label="Code" onClick={insertCodeSnippet} />
             </div>
 
             <div className="flex items-center gap-4">
@@ -320,8 +347,8 @@ const WikiForm: React.FC<WikiFormProps> = ({
             </h4>
             <SidebarField label="Type" value={category} onChange={setCategory} options={WIKI_CATEGORIES} />
             <SidebarField label="Visual Theme" value={themeKey} onChange={setThemeKey} options={[{ id: '', name: 'Use Space Default' }, ...themes.map(t => ({ id: t.key, name: t.name }))]} />
-            <SidebarField label="Bundle" value={bundleId} onChange={setBundleId} options={BUNDLES.map(b => ({ id: b.id, name: b.name }))} />
-            <SidebarField label="App" value={applicationId} onChange={setApplicationId} options={APPLICATIONS.map(a => ({ id: a.id, name: a.name }))} />
+            <SidebarField label="Business Bundle" value={bundleId} onChange={setBundleId} options={BUNDLES.map(b => ({ id: b.id, name: b.name }))} />
+            <SidebarField label="App Context" value={applicationId} onChange={setApplicationId} options={APPLICATIONS.map(a => ({ id: a.id, name: a.name }))} />
           </div>
         </aside>
       </div>

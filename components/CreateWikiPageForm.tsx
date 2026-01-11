@@ -145,6 +145,26 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
     insertText(editorFormat === 'markdown' ? mdTable : htmlTable, '');
   };
 
+  const insertCallout = () => {
+    const snippet = `\n<div class="callout info">\n  <div class="title">[Some Title]</div>\n  <p>\n    \n  </p>\n</div>\n`;
+    insertText(snippet, '');
+  };
+
+  const insertWarnCallout = () => {
+    const snippet = `\n<div class="callout warn">\n  <div class="title">[Some Title]</div>\n  <p>\n    \n  </p>\n</div>\n`;
+    insertText(snippet, '');
+  };
+
+  const insertSuccessCallout = () => {
+    const snippet = `\n<div class="callout success">\n  <div class="title">[Some Title]</div>\n  <p>\n    \n  </p>\n</div>\n`;
+    insertText(snippet, '');
+  };
+
+  const insertCodeSnippet = () => {
+    const snippet = `\n<pre><code>\n// Some comment\n\n</code></pre>\n`;
+    insertText(snippet, '');
+  };
+
   const setFontSize = (size: string) => {
     insertText(`<span style="font-size: ${size}">`, '</span>');
     setShowSizeMenu(false);
@@ -263,6 +283,7 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
             <div className="flex items-center gap-1">
               <ToolbarButton icon="fa-bold" label="Bold" onClick={() => insertText(editorFormat === 'markdown' ? '**' : '<b>', editorFormat === 'markdown' ? '**' : '</b>')} />
               <ToolbarButton icon="fa-italic" label="Italic" onClick={() => insertText(editorFormat === 'markdown' ? '*' : '<i>', editorFormat === 'markdown' ? '*' : '</i>')} />
+              <ToolbarButton icon="fa-paragraph" label="Paragraph" onClick={() => insertText('<p>', '</p>')} />
               <div className="w-[1px] h-6 bg-slate-200 mx-2"></div>
               
               <button 
@@ -317,6 +338,11 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
               <ToolbarButton icon="fa-list-ul" label="Bullets" onClick={handleList} />
               <ToolbarButton icon="fa-table" label="Insert Table" onClick={insertTable} />
               <ToolbarButton icon="fa-minus" label="Horizontal Rule" onClick={() => insertText(editorFormat === 'markdown' ? '\n---\n' : '\n<hr />\n')} />
+              <ToolbarButton icon="fa-quote-left" label="Blockquote" onClick={() => insertText('\n<blockquote>\n  <p>\n    \n  </p>\n  <p>\n    \n  </p>\n</blockquote>\n')} />
+              <ToolbarButton icon="fa-info-circle" label="Call Out Info" onClick={insertCallout} />
+              <ToolbarButton icon="fa-exclamation-triangle" label="Call Out Warn" onClick={insertWarnCallout} />
+              <ToolbarButton icon="fa-check-circle" label="Call Out Success" onClick={insertSuccessCallout} />
+              <ToolbarButton icon="fa-code" label="Code" onClick={insertCodeSnippet} />
               
               <div className="w-[1px] h-6 bg-slate-200 mx-2"></div>
               
