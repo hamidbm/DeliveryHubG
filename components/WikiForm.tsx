@@ -24,15 +24,11 @@ interface WikiFormProps {
 
 const WIKI_CATEGORIES = ["Architecture Decision Record (ADR)", "Low Level Design (LLD)", "Meeting Notes", "Runbook", "General"];
 
-const COLORS = [
-  { name: 'Blue', value: '#3b82f6' },
-  { name: 'Red', value: '#ef4444' },
-  { name: 'Green', value: '#10b981' },
-  { name: 'Orange', value: '#f59e0b' },
-  { name: 'Purple', value: '#8b5cf6' },
-  { name: 'Slate', value: '#475569' },
-  { name: 'Gold', value: '#d4af37' }
-];
+const COLOR_PALETTE = {
+  blue: ['#07549C', '#096CC8', '#0B83F4', '#2791F5', '#63B0F8', '#BBDCFC'],
+  red: ['#9C0725', '#C8092F', '#F40B3A', '#F86381', '#FA8FA4'],
+  green: ['#05703C', '#079C54', '#09C86C', '#BBFCDC']
+};
 
 const WikiForm: React.FC<WikiFormProps> = ({ 
   initialTitle = '', 
@@ -62,13 +58,14 @@ const WikiForm: React.FC<WikiFormProps> = ({
   const [viewMode, setViewMode] = useState<'edit' | 'split'>('split');
   const [editorFormat, setEditorFormat] = useState<'markdown' | 'html'>('markdown');
   const [showSizeMenu, setShowSizeMenu] = useState(false);
+  const [showColorMenu, setShowColorMenu] = useState(false);
   const [themes, setThemes] = useState<WikiTheme[]>([]);
   
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
   const sizeMenuRef = useRef<HTMLDivElement>(null);
+  const colorMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // FIX: Corrected fetch chain typo (res => res.json())
     fetch('/api/wiki/themes?active=true')
       .then(res => res.json())
       .then(setThemes)
@@ -85,6 +82,9 @@ const WikiForm: React.FC<WikiFormProps> = ({
       if (sizeMenuRef.current && !sizeMenuRef.current.contains(event.target as Node)) {
         setShowSizeMenu(false);
       }
+      if (colorMenuRef.current && !colorMenuRef.current.contains(event.target as Node)) {
+        setShowColorMenu(false);
+      }
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
@@ -96,7 +96,6 @@ const WikiForm: React.FC<WikiFormProps> = ({
 
     try {
       const looksLikeHtml = /<\/?[a-z][\s\S]*>/i.test(raw);
-      
       const sanitizeOptions = {
         USE_PROFILES: { html: true },
         FORBID_TAGS: ["script", "iframe", "object", "embed", "link", "meta", "style"],
@@ -311,6 +310,46 @@ const WikiForm: React.FC<WikiFormProps> = ({
               <ToolbarButton icon="fa-triangle-exclamation" label="Warn" onClick={() => insertCallout('warn')} />
               <ToolbarButton icon="fa-circle-check" label="Success" onClick={() => insertCallout('success')} />
               <ToolbarButton icon="fa-code" label="Code" onClick={insertCodeSnippet} />
+
+              <div className="w-[1px] h-6 bg-slate-200 mx-2"></div>
+              
+              {/* Color Dropdown */}
+              <div className="relative" ref={colorMenuRef}>
+                <button 
+                  onClick={() => setShowColorMenu(!showColorMenu)}
+                  className={`h-10 px-3 flex items-center gap-2 rounded-xl transition-all border ${
+                    showColorMenu ? 'bg-slate-900 text-white shadow-lg border-slate-900' : 'text-slate-500 hover:text-blue-600 hover:bg-white border-transparent'
+                  }`}
+                  title="Text Color"
+                >
+                  <i className="fas fa-palette text-sm"></i>
+                  <i className={`fas fa-chevron-down text-[8px] transition-transform ${showColorMenu ? 'rotate-180' : ''}`}></i>
+                </button>
+                {showColorMenu && (
+                  <div className="absolute top-full left-0 mt-2 w-52 bg-white border border-slate-200 rounded-[2rem] shadow-2xl p-5 z-50 animate-fadeIn overflow-hidden">
+                    <div className="space-y-4">
+                      {Object.entries(COLOR_PALETTE).map(([theme, colors]) => (
+                        <div key={theme} className="space-y-2">
+                          <p className="text-[8px] font-black text-slate-300 uppercase tracking-widest">{theme} theme</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {colors.map(color => (
+                              <button 
+                                key={color}
+                                onClick={() => {
+                                  insertText(`<span style="color: ${color}">`, '</span>');
+                                  setShowColorMenu(false);
+                                }}
+                                className="w-6 h-6 rounded-full border border-black/5 hover:scale-125 transition-transform shadow-sm"
+                                style={{ backgroundColor: color }}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="flex items-center gap-4 shrink-0">
@@ -333,7 +372,7 @@ const WikiForm: React.FC<WikiFormProps> = ({
             {viewMode === 'split' && (
               <div className="flex-1 border-l border-slate-100 overflow-y-auto p-12 bg-white custom-scrollbar shadow-inner">
                 <div 
-                  className={`wiki-content theme-${themeKey || 'default'} max-w-none`} 
+                  className={`wiki-content theme-${themeKey || 'default'} max-w-none prose`} 
                   dangerouslySetInnerHTML={{ __html: renderedContent }} 
                 />
               </div>
