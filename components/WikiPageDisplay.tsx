@@ -1,7 +1,7 @@
 
-import React, { useMemo, useEffect, useRef } from 'react';
+import React, { useMemo, useEffect, useRef, useState } from 'react';
 import { marked } from 'marked';
-import { WikiPage } from '../types';
+import { WikiPage, WikiTheme, WikiSpace } from '../types';
 import { BUNDLES, APPLICATIONS, MILESTONES } from '../constants';
 
 interface WikiPageDisplayProps {
@@ -11,12 +11,40 @@ interface WikiPageDisplayProps {
 
 const WikiPageDisplay: React.FC<WikiPageDisplayProps> = ({ page, onNavigate }) => {
   const contentRef = useRef<HTMLDivElement>(null);
+  const [activeTheme, setActiveTheme] = useState<WikiTheme | null>(null);
+
+  useEffect(() => {
+    const resolveTheme = async () => {
+      try {
+        const [themesRes, spaceRes] = await Promise.all([
+          fetch('/api/wiki/themes?active=true'),
+          fetch(`/api/wiki/spaces`)
+        ]);
+        const themes: WikiTheme[] = await themesRes.json();
+        const spaces: WikiSpace[] = await spaceRes.json();
+        const currentSpace = spaces.find(s => s._id === page.spaceId || s.id === page.spaceId);
+
+        const themeKey = page.themeKey || currentSpace?.defaultThemeKey;
+        let theme = themes.find(t => t.key === themeKey);
+        
+        if (!theme) {
+          theme = themes.find(t => t.isDefault);
+        }
+        
+        setActiveTheme(theme || null);
+      } catch (err) {
+        console.error("Theme resolution failed:", err);
+      }
+    };
+    resolveTheme();
+  }, [page]);
 
   const htmlContent = useMemo(() => {
     if (!page.content) return '';
     try {
-      // Custom macro replacements could be done here (e.g., converting [DOC-123] to links)
-      return marked.parse(page.content, {
+      // Basic sanitization: strip script tags for MVP
+      const sanitized = page.content.replace(/<script\b[^>]*>([\s\S]*?)<\/script>/gim, "");
+      return marked.parse(sanitized, {
         gfm: true,
         breaks: true,
       });
@@ -54,6 +82,11 @@ const WikiPageDisplay: React.FC<WikiPageDisplayProps> = ({ page, onNavigate }) =
 
   return (
     <article className="animate-fadeIn w-full pb-32">
+      {/* Dynamic Scoped Theme Injection */}
+      {activeTheme && (
+        <style dangerouslySetInnerHTML={{ __html: activeTheme.css }} />
+      )}
+
       <header className="mb-16">
         <div className="flex flex-wrap items-center gap-3 mb-10">
           <div className="inline-flex items-center gap-2 px-3 py-1 bg-slate-900 text-white rounded-full border border-slate-800 shadow-sm">
@@ -65,6 +98,12 @@ const WikiPageDisplay: React.FC<WikiPageDisplayProps> = ({ page, onNavigate }) =
           {page.category && (
             <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-50 text-blue-600 rounded-full border border-blue-100 shadow-sm">
               <span className="text-[10px] font-black uppercase tracking-widest">{page.category}</span>
+            </div>
+          )}
+          {activeTheme && (
+            <div className="inline-flex items-center gap-2 px-3 py-1 bg-purple-50 text-purple-600 rounded-full border border-purple-100 shadow-sm">
+              <i className="fas fa-palette text-[8px]"></i>
+              <span className="text-[10px] font-black uppercase tracking-widest">{activeTheme.name} Theme</span>
             </div>
           )}
         </div>
@@ -125,9 +164,10 @@ const WikiPageDisplay: React.FC<WikiPageDisplayProps> = ({ page, onNavigate }) =
         )}
       </header>
 
+      {/* Scoped content container */}
       <div 
         ref={contentRef}
-        className="prose prose-slate prose-xl max-w-none prose-headings:tracking-tighter prose-headings:font-black"
+        className={`wiki-content theme-${activeTheme?.key || 'default'} prose prose-slate prose-xl max-w-none prose-headings:tracking-tighter prose-headings:font-black`}
         dangerouslySetInnerHTML={{ __html: htmlContent }}
       />
     </article>

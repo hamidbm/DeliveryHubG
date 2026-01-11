@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useMemo, useEffect } from 'react';
-import { WikiPage } from '../types';
+import { WikiPage, WikiTheme } from '../types';
 import { BUNDLES, APPLICATIONS } from '../constants';
 import { marked } from 'marked';
 
@@ -55,17 +55,29 @@ const WikiForm: React.FC<WikiFormProps> = ({
   const [bundleId, setBundleId] = useState(initialBundleId);
   const [applicationId, setApplicationId] = useState(initialApplicationId);
   const [milestoneId, setMilestoneId] = useState(initialMilestoneId);
+  const [themeKey, setThemeKey] = useState('');
   const [status, setStatus] = useState<'Draft' | 'Published'>('Published');
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'edit' | 'split'>('split');
   const [editorFormat, setEditorFormat] = useState<'markdown' | 'html'>('markdown');
   const [showSizeMenu, setShowSizeMenu] = useState(false);
+  const [themes, setThemes] = useState<WikiTheme[]>([]);
   
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
   const sizeMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    fetch('/api/wiki/themes?active=true').then(res => res.json()).then(setThemes).catch(() => []);
+    
+    // Load existing theme
+    if (id) {
+      fetch('/api/wiki').then(r => r.json()).then(pages => {
+        const page = pages.find((p: WikiPage) => p._id === id || p.id === id);
+        if (page?.themeKey) setThemeKey(page.themeKey);
+      });
+    }
+
     const handleClickOutside = (event: MouseEvent) => {
       if (sizeMenuRef.current && !sizeMenuRef.current.contains(event.target as Node)) {
         setShowSizeMenu(false);
@@ -73,7 +85,7 @@ const WikiForm: React.FC<WikiFormProps> = ({
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+  }, [id]);
 
   const renderedContent = useMemo(() => {
     try {
@@ -141,6 +153,7 @@ const WikiForm: React.FC<WikiFormProps> = ({
       applicationId: applicationId || undefined,
       milestoneId: milestoneId || undefined,
       category,
+      themeKey: themeKey || undefined,
       status,
       author: initialAuthor || currentUser?.name || 'System',
       lastModifiedBy: currentUser?.name || 'System',
@@ -289,6 +302,7 @@ const WikiForm: React.FC<WikiFormProps> = ({
 
         <aside className="w-80 border-l border-slate-200 bg-slate-50 p-8 space-y-10 shrink-0 overflow-y-auto custom-scrollbar">
           <SidebarField label="Type" value={category} onChange={setCategory} options={WIKI_CATEGORIES} />
+          <SidebarField label="Visual Theme" value={themeKey} onChange={setThemeKey} options={[{ id: '', name: 'Use Space Default' }, ...themes.map(t => ({ id: t.key, name: t.name }))]} />
           <SidebarField label="Bundle" value={bundleId} onChange={setBundleId} options={BUNDLES.map(b => ({ id: b.id, name: b.name }))} />
           <SidebarField label="App" value={applicationId} onChange={setApplicationId} options={APPLICATIONS.map(a => ({ id: a.id, name: a.name }))} />
         </aside>
@@ -308,7 +322,6 @@ const SidebarField = ({ label, value, onChange, options }: any) => (
   <div className="space-y-2">
     <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">{label}</label>
     <select value={value} onChange={(e) => onChange(e.target.value)} className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-4 text-xs font-bold text-slate-700 focus:border-blue-500 outline-none transition-all shadow-sm">
-      <option value="">Unassigned</option>
       {options.map((o: any) => typeof o === 'string' ? <option key={o} value={o}>{o}</option> : <option key={o.id} value={o.id}>{o.name}</option>)}
     </select>
   </div>

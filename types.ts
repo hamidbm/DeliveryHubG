@@ -77,6 +77,21 @@ export interface WikiSpace {
   visibility: 'internal' | 'vendors' | 'specific';
   allowedVendorCompanies?: string[];
   createdAt?: string;
+  defaultThemeKey?: string; // New: Default theme for space
+}
+
+export interface WikiTheme {
+  _id?: string;
+  key: string;
+  name: string;
+  description?: string;
+  css: string;
+  isActive: boolean;
+  isDefault: boolean;
+  createdById?: string;
+  updatedById?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface WikiPage {
@@ -90,7 +105,7 @@ export interface WikiPage {
   applicationId?: string;
   milestoneId?: string;
   vendorCompany?: string;
-  category?: string; // Effectively "Type"
+  category?: string;
   createdAt?: string;
   updatedAt?: string;
   author?: string;
@@ -102,7 +117,8 @@ export interface WikiPage {
   watchers?: string[];
   links?: {
     documentIds: string[];
-  }
+  };
+  themeKey?: string; // New: Specific theme for page
 }
 
 export interface WikiComment {

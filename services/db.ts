@@ -1,7 +1,7 @@
 
 import clientPromise from '../lib/mongodb';
 import { ObjectId } from 'mongodb';
-import { WikiPage, WikiSpace, WikiComment, WikiTemplate, Bundle } from '../types';
+import { WikiPage, WikiSpace, WikiComment, WikiTemplate, Bundle, WikiTheme } from '../types';
 
 export const getDb = async () => {
   const client = await clientPromise;
@@ -67,6 +67,76 @@ export const saveWikiSpace = async (space: Partial<WikiSpace>) => {
   } catch (error) {
     console.error("Wiki space save error:", error);
     return null;
+  }
+};
+
+// Wiki Themes
+export const fetchWikiThemes = async (activeOnly = false) => {
+  try {
+    const db = await getDb();
+    const query = activeOnly ? { isActive: true } : {};
+    return await db.collection('wiki_themes').find(query).toArray();
+  } catch (error) {
+    console.error("Wiki themes fetch error:", error);
+    return [];
+  }
+};
+
+export const saveWikiTheme = async (theme: Partial<WikiTheme>) => {
+  try {
+    const db = await getDb();
+    const { _id, ...data } = theme;
+    const now = new Date().toISOString();
+
+    // If setting as default, unset others
+    if (data.isDefault) {
+      await db.collection('wiki_themes').updateMany({}, { $set: { isDefault: false } });
+    }
+
+    if (_id) {
+      return await db.collection('wiki_themes').updateOne(
+        { _id: new ObjectId(_id) },
+        { $set: { ...data, updatedAt: now } }
+      );
+    } else {
+      // Ensure unique key
+      const existing = await db.collection('wiki_themes').findOne({ key: data.key });
+      if (existing) throw new Error("Theme key already exists");
+
+      return await db.collection('wiki_themes').insertOne({
+        ...data,
+        isActive: data.isActive ?? true,
+        isDefault: data.isDefault ?? false,
+        createdAt: now,
+        updatedAt: now
+      });
+    }
+  } catch (error) {
+    console.error("Wiki theme save error:", error);
+    throw error;
+  }
+};
+
+export const deleteWikiTheme = async (id: string) => {
+  try {
+    const db = await getDb();
+    // Check if used by any space or page
+    const theme = await db.collection('wiki_themes').findOne({ _id: new ObjectId(id) }) as unknown as WikiTheme;
+    if (!theme) return null;
+    
+    if (theme.isDefault) throw new Error("Cannot delete default theme");
+
+    const spaceUsage = await db.collection('wiki_spaces').countDocuments({ defaultThemeKey: theme.key });
+    const pageUsage = await db.collection('wiki_pages').countDocuments({ themeKey: theme.key });
+
+    if (spaceUsage > 0 || pageUsage > 0) {
+      throw new Error(`Theme is currently in use by ${spaceUsage} spaces and ${pageUsage} pages.`);
+    }
+
+    return await db.collection('wiki_themes').deleteOne({ _id: new ObjectId(id) });
+  } catch (error) {
+    console.error("Wiki theme delete error:", error);
+    throw error;
   }
 };
 
@@ -232,8 +302,6 @@ export const seedDatabase = async (apps: any[], items: any[], wiki: any[] = []) 
     await db.collection('bundles').deleteMany({});
     
     // Seed Bundles
-    // FIX: Using any[] here to resolve the TypeScript error where Bundle._id (string) is 
-    // incompatible with MongoDB's expected OptionalId<Document> (which uses ObjectId).
     const bundles: any[] = [
       { id: 'b1', name: 'GPS', description: 'Global Positioning', applicationNames: ['RouteOptima', 'LogisticsHub'] },
       { id: 'b2', name: 'Member', description: 'Identity Management', applicationNames: ['MemberPortal V2'] },
@@ -245,6 +313,7 @@ export const seedDatabase = async (apps: any[], items: any[], wiki: any[] = []) 
     await db.collection('applications').insertMany(apps);
     await db.collection('workitems').insertMany(items);
 
+    // Seed default space and themes
     const spaceCount = await db.collection('wiki_spaces').countDocuments();
     if (spaceCount === 0) {
       await db.collection('wiki_spaces').insertOne({
@@ -256,7 +325,22 @@ export const seedDatabase = async (apps: any[], items: any[], wiki: any[] = []) 
         icon: 'fa-book-atlas',
         color: '#3b82f6',
         visibility: 'internal',
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        defaultThemeKey: 'modern'
+      });
+    }
+
+    const themeCount = await db.collection('wiki_themes').countDocuments();
+    if (themeCount === 0) {
+      await db.collection('wiki_themes').insertOne({
+        key: 'modern',
+        name: 'Modern Enterprise',
+        description: 'Clean, spacious, and professional.',
+        css: `.wiki-content.theme-modern h1 { color: #0f172a; border-bottom: 2px solid #e2e8f0; padding-bottom: 0.5rem; }\n.wiki-content.theme-modern p { line-height: 1.8; color: #334155; }`,
+        isActive: true,
+        isDefault: true,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
       });
     }
 
