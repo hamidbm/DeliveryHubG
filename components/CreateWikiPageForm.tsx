@@ -216,7 +216,6 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
 
   return (
     <div className="fixed inset-0 z-[100] bg-slate-50 flex flex-col animate-fadeIn">
-      {/* Top Header */}
       <header className="px-10 py-5 bg-white border-b border-slate-200 flex items-center justify-between shadow-sm shrink-0">
         <div className="flex items-center gap-6">
           <button onClick={onCancel} className="w-10 h-10 rounded-full bg-slate-50 hover:bg-slate-100 flex items-center justify-center text-slate-400 border border-slate-100 shadow-sm transition-all">
@@ -265,17 +264,13 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
 
       <div className="flex flex-1 overflow-hidden">
         <div className="flex-1 flex flex-col overflow-hidden bg-white shadow-inner">
-          
-          {/* Main Editor Toolbar */}
           <div className="px-8 py-3 border-b border-slate-100 bg-slate-50 flex items-center justify-between sticky top-0 z-10 overflow-x-auto no-scrollbar">
             <div className="flex items-center gap-1 shrink-0">
-              {/* Styling Group */}
               <ToolbarButton icon="fa-bold" label="Bold" onClick={() => insertText(editorFormat === 'markdown' ? '**' : '<b>', editorFormat === 'markdown' ? '**' : '</b>')} />
               <ToolbarButton icon="fa-italic" label="Italic" onClick={() => insertText(editorFormat === 'markdown' ? '*' : '<i>', editorFormat === 'markdown' ? '*' : '</i>')} />
               <ToolbarButton icon="fa-paragraph" label="Paragraph" onClick={() => insertText('<p>', '</p>')} />
               <div className="w-[1px] h-6 bg-slate-200 mx-2"></div>
               
-              {/* Headings Group */}
               <button 
                 onClick={() => insertText(editorFormat === 'markdown' ? '# ' : '<h1>', editorFormat === 'markdown' ? '' : '</h1>')}
                 className="h-10 px-4 flex items-center gap-2 text-slate-700 font-black hover:text-blue-600 hover:bg-white border border-transparent hover:border-slate-100 rounded-xl transition-all"
@@ -295,7 +290,6 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
               
               <div className="w-[1px] h-6 bg-slate-200 mx-2"></div>
 
-              {/* Text Size Menu */}
               <div className="relative" ref={sizeMenuRef}>
                 <button 
                   onClick={() => setShowSizeMenu(!showSizeMenu)}
@@ -326,7 +320,6 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
 
               <div className="w-[1px] h-6 bg-slate-200 mx-2"></div>
 
-              {/* Structural Elements Group */}
               <ToolbarButton icon="fa-list-ul" label="Bullets" onClick={handleList} />
               <ToolbarButton icon="fa-table" label="Insert Table" onClick={insertTable} />
               <ToolbarButton icon="fa-minus" label="Horizontal Rule" onClick={() => insertText(editorFormat === 'markdown' ? '\n---\n' : '\n<hr />\n')} />
@@ -334,7 +327,6 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
               
               <div className="w-[1px] h-6 bg-slate-200 mx-2"></div>
 
-              {/* Enterprise Snippets Group */}
               <ToolbarButton icon="fa-circle-info" label="Callout Info" onClick={() => insertCallout('info')} />
               <ToolbarButton icon="fa-triangle-exclamation" label="Callout Warn" onClick={() => insertCallout('warn')} />
               <ToolbarButton icon="fa-circle-check" label="Callout Success" onClick={() => insertCallout('success')} />
@@ -342,7 +334,6 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
 
               <div className="w-[1px] h-6 bg-slate-200 mx-2"></div>
               
-              {/* Color Palette */}
               <div className="flex items-center gap-1.5 ml-2">
                 {COLORS.map(c => (
                   <button 
@@ -381,7 +372,6 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
             </div>
           </div>
 
-          {/* Editor Body Area */}
           <div className={`flex flex-1 overflow-hidden ${viewMode === 'split' ? 'flex-row' : 'flex-col'}`}>
             <div className="flex-1 flex flex-col relative bg-white">
               <textarea 
@@ -389,7 +379,7 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
                 className="flex-1 border-none focus:ring-0 p-12 text-slate-700 leading-relaxed resize-none text-lg font-medium placeholder:text-slate-200 bg-transparent custom-scrollbar selection:bg-blue-100"
-                placeholder="Start authoring enterprise-grade artifacts. Leverage the toolbar for consistent formatting..."
+                placeholder="Start authoring enterprise-grade artifacts..."
               />
               <div className="absolute bottom-6 right-8 text-[9px] font-black text-slate-300 uppercase tracking-widest flex items-center gap-4 pointer-events-none bg-slate-50/80 px-4 py-2 rounded-full border border-slate-100">
                 <span>{content.length} characters</span>
@@ -409,7 +399,6 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
           </div>
         </div>
 
-        {/* Editor Settings Sidebar */}
         <aside className="w-80 border-l border-slate-200 bg-slate-50 p-8 space-y-10 shrink-0 overflow-y-auto custom-scrollbar">
           <div className="space-y-6">
             <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
@@ -420,36 +409,8 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
             <SidebarField label="Business Bundle" value={bundleId} onChange={setBundleId} options={BUNDLES.map(b => ({ id: b.id, name: b.name }))} />
             <SidebarField label="App Context" value={applicationId} onChange={setApplicationId} options={APPLICATIONS.map(a => ({ id: a.id, name: a.name }))} />
           </div>
-
-          <div className="pt-8 border-t border-slate-200 space-y-4">
-             <h5 className="font-black text-[10px] text-slate-400 uppercase tracking-widest flex items-center gap-2">
-               <i className="fas fa-file-invoice"></i> Templates
-             </h5>
-             <div className="grid grid-cols-1 gap-3">
-               <TemplateCard title="ADR" desc="Decision Log" onClick={() => insertTemplate('ADR')} />
-               <TemplateCard title="LLD" desc="System Design" onClick={() => insertTemplate('LLD')} />
-             </div>
-          </div>
-          
-          <div className="p-6 bg-blue-600 rounded-[2rem] text-white shadow-2xl relative overflow-hidden group">
-             <div className="absolute -top-4 -right-4 w-20 h-20 bg-white/10 rounded-full group-hover:scale-150 transition-transform duration-700"></div>
-             <h5 className="font-black text-[10px] uppercase tracking-widest mb-2 flex items-center gap-2">
-               <i className="fas fa-lightbulb"></i>
-               User Guidance
-             </h5>
-             <p className="text-[10px] font-medium opacity-80 leading-relaxed">
-               Select multiple sentences and use the Bullets tool to convert them into a structured list automatically.
-             </p>
-          </div>
         </aside>
       </div>
-      
-      <style jsx>{`
-        .custom-scrollbar::-webkit-scrollbar { width: 5px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-      `}</style>
     </div>
   );
 };
@@ -475,19 +436,6 @@ const SidebarField = ({ label, value, onChange, options }: any) => (
       {options.map((o: any) => typeof o === 'string' ? <option key={o} value={o}>{o}</option> : <option key={o.id} value={o.id}>{o.name}</option>)}
     </select>
   </div>
-);
-
-const TemplateCard = ({ title, desc, onClick }: any) => (
-  <button 
-    onClick={onClick}
-    className="w-full text-left p-4 bg-white border border-slate-200 rounded-2xl hover:border-blue-400 hover:shadow-xl transition-all group"
-  >
-    <div className="flex items-center justify-between mb-1">
-      <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest">{title}</span>
-      <i className="fas fa-plus text-[8px] text-slate-300 group-hover:text-blue-500 group-hover:rotate-90 transition-all"></i>
-    </div>
-    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter truncate">{desc}</p>
-  </button>
 );
 
 export default CreateWikiPageForm;

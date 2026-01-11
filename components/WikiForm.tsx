@@ -68,7 +68,11 @@ const WikiForm: React.FC<WikiFormProps> = ({
   const sizeMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    fetch('/api/wiki/themes?active=true').then(res => r => r.json()).then(setThemes).catch(() => []);
+    // FIX: Corrected fetch chain typo (res => res.json())
+    fetch('/api/wiki/themes?active=true')
+      .then(res => res.json())
+      .then(setThemes)
+      .catch(() => []);
     
     if (id) {
       fetch('/api/wiki').then(r => r.json()).then(pages => {
@@ -147,7 +151,6 @@ const WikiForm: React.FC<WikiFormProps> = ({
     }
   };
 
-  // Fix: Added missing insertTable function to resolve "Cannot find name 'insertTable'" error.
   const insertTable = () => {
     const mdTable = `\n| Header 1 | Header 2 |\n|----------|----------|\n| Cell 1   | Cell 2   |\n`;
     const htmlTable = `\n<table border="1">\n  <tr><th>Header 1</th><th>Header 2</th></tr>\n  <tr><td>Cell 1</td><td>Cell 2</td></tr>\n</table>\n`;
@@ -247,9 +250,9 @@ const WikiForm: React.FC<WikiFormProps> = ({
         <div className="flex-1 flex flex-col overflow-hidden bg-white shadow-inner">
           <div className="px-8 py-3 border-b border-slate-100 bg-slate-50 flex items-center justify-between sticky top-0 z-10 overflow-x-auto no-scrollbar">
             <div className="flex items-center gap-1 shrink-0">
-              <ToolbarButton icon="fa-bold" onClick={() => insertText(editorFormat === 'markdown' ? '**' : '<b>', editorFormat === 'markdown' ? '**' : '</b>')} />
-              <ToolbarButton icon="fa-italic" onClick={() => insertText(editorFormat === 'markdown' ? '*' : '<i>', editorFormat === 'markdown' ? '*' : '</i>')} />
-              <ToolbarButton icon="fa-paragraph" onClick={() => insertText('<p>', '</p>')} />
+              <ToolbarButton icon="fa-bold" label="Bold" onClick={() => insertText(editorFormat === 'markdown' ? '**' : '<b>', editorFormat === 'markdown' ? '**' : '</b>')} />
+              <ToolbarButton icon="fa-italic" label="Italic" onClick={() => insertText(editorFormat === 'markdown' ? '*' : '<i>', editorFormat === 'markdown' ? '*' : '</i>')} />
+              <ToolbarButton icon="fa-paragraph" label="Paragraph" onClick={() => insertText('<p>', '</p>')} />
               <div className="w-[1px] h-6 bg-slate-200 mx-2"></div>
               
               <button 
@@ -298,16 +301,16 @@ const WikiForm: React.FC<WikiFormProps> = ({
               </div>
 
               <div className="w-[1px] h-6 bg-slate-200 mx-2"></div>
-              <ToolbarButton icon="fa-list-ul" onClick={handleList} />
-              <ToolbarButton icon="fa-table" onClick={insertTable} />
-              <ToolbarButton icon="fa-minus" onClick={() => insertText(editorFormat === 'markdown' ? '\n---\n' : '\n<hr />\n')} />
-              <ToolbarButton icon="fa-quote-left" onClick={() => insertText('\n<blockquote>\n  <p>\n    \n  </p>\n</blockquote>\n')} />
+              <ToolbarButton icon="fa-list-ul" label="List" onClick={handleList} />
+              <ToolbarButton icon="fa-table" label="Table" onClick={insertTable} />
+              <ToolbarButton icon="fa-minus" label="HR" onClick={() => insertText(editorFormat === 'markdown' ? '\n---\n' : '\n<hr />\n')} />
+              <ToolbarButton icon="fa-quote-left" label="Quote" onClick={() => insertText('\n<blockquote>\n  <p>\n    \n  </p>\n</blockquote>\n')} />
               
               <div className="w-[1px] h-6 bg-slate-200 mx-2"></div>
-              <ToolbarButton icon="fa-circle-info" onClick={() => insertCallout('info')} />
-              <ToolbarButton icon="fa-triangle-exclamation" onClick={() => insertCallout('warn')} />
-              <ToolbarButton icon="fa-circle-check" onClick={() => insertCallout('success')} />
-              <ToolbarButton icon="fa-code" onClick={insertCodeSnippet} />
+              <ToolbarButton icon="fa-circle-info" label="Info" onClick={() => insertCallout('info')} />
+              <ToolbarButton icon="fa-triangle-exclamation" label="Warn" onClick={() => insertCallout('warn')} />
+              <ToolbarButton icon="fa-circle-check" label="Success" onClick={() => insertCallout('success')} />
+              <ToolbarButton icon="fa-code" label="Code" onClick={insertCodeSnippet} />
             </div>
 
             <div className="flex items-center gap-4 shrink-0">
