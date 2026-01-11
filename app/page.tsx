@@ -11,6 +11,7 @@ import WorkItems from '../components/WorkItems';
 import Wiki from '../components/Wiki';
 import Milestones from '../components/Milestones';
 import GovernanceDocuments from '../components/GovernanceDocuments';
+import Admin from '../components/Admin';
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -94,6 +95,8 @@ export default function Home() {
         return <Milestones />;
       case 'documents':
         return <GovernanceDocuments />;
+      case 'admin':
+        return <Admin />;
       default:
         return (
           <div className="flex flex-col items-center justify-center py-20 text-slate-400">
