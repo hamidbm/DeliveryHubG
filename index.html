@@ -34,6 +34,56 @@
     .prose blockquote { border-left: 6px solid #3b82f6; padding: 1.5rem; font-style: italic; color: #64748b; margin: 2rem 0; background: #f0f7ff; border-radius: 0 1rem 1rem 0; }
     .prose hr { border: 0; border-top: 2px solid #e2e8f0; margin: 3rem 0; }
 
+    /* Cards Grid System */
+    .wiki-content .cards {
+      display: grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap: 1.5rem;
+      margin: 2rem 0;
+    }
+    .wiki-content .card {
+      background: white;
+      border: 1px solid #e2e8f0;
+      border-radius: 1.5rem;
+      padding: 1.5rem;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+      display: flex;
+      flex-direction: column;
+    }
+    .wiki-content .card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+    }
+    .wiki-content .card.accent {
+      border-top: 4px solid #3b82f6;
+    }
+    .wiki-content .card.span-6 { grid-column: span 12; }
+    @media (min-width: 768px) {
+      .wiki-content .card.span-6 { grid-column: span 6; }
+    }
+    .wiki-content .card-title {
+      font-weight: 800;
+      font-size: 1.25rem !important;
+      margin-top: 0 !important;
+      margin-bottom: 0.25rem !important;
+      color: #0f172a !important;
+      border: none !important;
+      padding-bottom: 0 !important;
+    }
+    .wiki-content .card-meta {
+      font-size: 0.75rem !important;
+      font-weight: 700 !important;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #94a3b8 !important;
+      margin-bottom: 1rem !important;
+    }
+    .wiki-content .card p {
+      font-size: 0.95rem !important;
+      margin-bottom: 0 !important;
+    }
+
     /* Enterprise Callout Styles */
     .wiki-content .callout {
       padding: 1.5rem;

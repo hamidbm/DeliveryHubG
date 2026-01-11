@@ -136,6 +136,11 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
     insertText(editorFormat === 'markdown' ? mdTable : htmlTable, '');
   };
 
+  const insertCardsGrid = () => {
+    const snippet = `\n<div class="cards">\n  <div class="card accent span-6">\n    <h3 class="card-title">[Some Title]</h3>\n    <p class="card-meta">[Sub title]</p>\n    <p>[Contents]</p>\n  </div>\n\n  <div class="card span-6">\n    <h3 class="card-title">[Some Title]</h3>\n    <p class="card-meta">[Sub title]</p>\n    <p>[Contents]</p>\n  </div>\n</div>\n`;
+    insertText(snippet, '');
+  };
+
   const insertCallout = (type: 'info' | 'warn' | 'success') => {
     const snippet = `\n<div class="callout ${type}">\n  <div class="title">[Some Title]</div>\n  <p>\n    \n  </p>\n</div>\n`;
     insertText(snippet, '');
@@ -243,7 +248,6 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
 
       <div className="flex flex-1 overflow-hidden">
         <div className="flex-1 flex flex-col overflow-hidden bg-white shadow-inner">
-          {/* Changed overflow-x-auto to overflow-visible to prevent clipping absolute children (dropdowns) */}
           <div className="px-8 py-3 border-b border-slate-100 bg-slate-50 flex items-center justify-between sticky top-0 z-[60] overflow-visible">
             <div className="flex items-center gap-1 shrink-0">
               <ToolbarButton icon="fa-bold" label="Bold" onClick={() => insertText(editorFormat === 'markdown' ? '**' : '<b>', editorFormat === 'markdown' ? '**' : '</b>')} />
@@ -302,6 +306,7 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
 
               <ToolbarButton icon="fa-list-ul" label="Bullets" onClick={handleList} />
               <ToolbarButton icon="fa-table" label="Insert Table" onClick={insertTable} />
+              <ToolbarButton icon="fa-table-cells" label="Cards Grid" onClick={insertCardsGrid} />
               <ToolbarButton icon="fa-minus" label="Horizontal Rule" onClick={() => insertText(editorFormat === 'markdown' ? '\n---\n' : '\n<hr />\n')} />
               <ToolbarButton icon="fa-quote-left" label="Blockquote" onClick={() => insertText('\n<blockquote>\n  <p>\n    \n  </p>\n</blockquote>\n')} />
               
