@@ -3,7 +3,7 @@ import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { WikiPage, WikiTheme } from '../types';
 import { BUNDLES, APPLICATIONS } from '../constants';
 import { marked } from 'marked';
-import DOMPurify from 'dompurify';
+import DOMPurify from 'isomorphic-dompurify';
 
 interface WikiFormProps {
   initialTitle?: string;
@@ -86,15 +86,28 @@ const WikiForm: React.FC<WikiFormProps> = ({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [id]);
 
+  // Robust Preview Pipeline: Detects content type and sanitizes with safe HTML profiles
   const renderedContent = useMemo(() => {
+    const raw = (content || "").trim();
+    if (!raw) return '<p class="text-slate-300 italic">No content to preview</p>';
+
     try {
-      const rawHtml = marked.parse(content || '_No content to preview_') as string;
-      return DOMPurify.sanitize(rawHtml, {
-        FORBID_TAGS: ['style', 'script', 'iframe'],
-        FORBID_ATTR: ['style', 'onerror', 'onload']
-      });
+      const looksLikeHtml = /<\/?[a-z][\s\S]*>/i.test(raw);
+      
+      const sanitizeOptions = {
+        USE_PROFILES: { html: true },
+        FORBID_TAGS: ["script", "iframe", "object", "embed", "link", "meta", "style"],
+        FORBID_ATTR: ["onerror", "onload", "onclick", "onmouseover", "style"]
+      };
+
+      if (looksLikeHtml) {
+        return DOMPurify.sanitize(raw, sanitizeOptions);
+      }
+
+      const rendered = marked.parse(raw, { gfm: true, breaks: true }) as string;
+      return DOMPurify.sanitize(rendered, sanitizeOptions);
     } catch (e) {
-      return 'Error rendering preview';
+      return '<p class="text-red-500">Error rendering preview</p>';
     }
   }, [content]);
 
@@ -269,7 +282,7 @@ const WikiForm: React.FC<WikiFormProps> = ({
 
               <div className="w-[1px] h-6 bg-slate-200 mx-2"></div>
               <ToolbarButton icon="fa-list-ul" onClick={handleList} />
-              <ToolbarButton icon="fa-table" onClick={() => insertText(editorFormat === 'markdown' ? '\n| H1 | H2 |\n|---|---|\n| C1 | C2 |\n' : '\n<table><tr><th>H1</th></tr><tr><td>C1</td></tr></table>\n')} />
+              <ToolbarButton icon="fa-table" onClick={() => insertText(editorFormat === 'markdown' ? '\n| H1 | H2 |\n|---|---|\n| C1 | C2 |\n' : '\n<table><tr><th>H1</th><th>H2</th></tr><tr><td>C1</td><td>C2</td></tr></table>\n')} />
             </div>
 
             <div className="flex items-center gap-4">
@@ -291,7 +304,10 @@ const WikiForm: React.FC<WikiFormProps> = ({
             <textarea ref={textAreaRef} value={content} onChange={(e) => setContent(e.target.value)} className="flex-1 border-none focus:ring-0 p-12 text-slate-700 leading-relaxed resize-none text-lg font-medium placeholder:text-slate-200 bg-transparent custom-scrollbar" placeholder="Edit artifact content..." />
             {viewMode === 'split' && (
               <div className="flex-1 border-l border-slate-100 overflow-y-auto p-12 bg-white custom-scrollbar shadow-inner">
-                <div className="prose prose-slate prose-xl max-w-none" dangerouslySetInnerHTML={{ __html: renderedContent }} />
+                <div 
+                  className={`wiki-content theme-${themeKey || 'default'} max-w-none`} 
+                  dangerouslySetInnerHTML={{ __html: renderedContent }} 
+                />
               </div>
             )}
           </div>

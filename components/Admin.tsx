@@ -110,44 +110,38 @@ const Admin: React.FC = () => {
       );
     }
 
-    // Module View Layout
-    return (
-      <div className="flex flex-col h-full bg-white relative">
-        <header className="px-12 py-8 border-b border-slate-100 bg-white sticky top-0 z-30 flex items-center justify-between shadow-sm">
-          <div className="flex items-center gap-6">
-            <button 
-              onClick={() => setActiveModule('home')}
-              className="w-10 h-10 rounded-full bg-slate-50 hover:bg-slate-100 border border-slate-100 flex items-center justify-center text-slate-400 hover:text-blue-600 transition-all"
-              title="Back to Console"
-            >
-              <i className="fas fa-arrow-left"></i>
-            </button>
-            <div className="flex flex-col">
-              <span className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">System Management</span>
-              <h3 className="text-2xl font-black text-slate-900 tracking-tighter uppercase">
-                {allModules.find(m => m.id === activeModule)?.label}
-              </h3>
-            </div>
-          </div>
-          <div className="flex items-center gap-4">
-             <div className="bg-emerald-50 text-emerald-600 text-[9px] font-black uppercase tracking-widest px-4 py-2 rounded-full border border-emerald-100">Live Context</div>
-          </div>
-        </header>
-
-        <div className="flex-1">
-          {activeModule === 'wiki-themes' ? (
-            <AdminThemes />
-          ) : (
+    switch (activeModule) {
+      case 'wiki-themes':
+        return <AdminThemes />;
+      default:
+        return (
+          <div className="flex flex-col h-full bg-white relative">
+            <header className="px-12 py-8 border-b border-slate-100 bg-white sticky top-0 z-30 flex items-center justify-between shadow-sm">
+              <div className="flex items-center gap-6">
+                <button 
+                  onClick={() => setActiveModule('home')}
+                  className="w-10 h-10 rounded-full bg-slate-50 hover:bg-slate-100 border border-slate-100 flex items-center justify-center text-slate-400 hover:text-blue-600 transition-all"
+                  title="Back to Console"
+                >
+                  <i className="fas fa-arrow-left"></i>
+                </button>
+                <div className="flex flex-col">
+                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">System Management</span>
+                  <h3 className="text-2xl font-black text-slate-900 tracking-tighter uppercase">
+                    {allModules.find(m => m.id === activeModule)?.label}
+                  </h3>
+                </div>
+              </div>
+            </header>
             <div className="flex flex-col items-center justify-center min-h-[600px] text-center p-20 text-slate-200">
                <i className="fas fa-screwdriver-wrench text-8xl mb-8 opacity-5"></i>
                <h3 className="text-xl font-black text-slate-300 uppercase tracking-[0.2em]">Module Initialization Pending</h3>
                <p className="text-sm font-bold text-slate-400 mt-2 max-w-md">The {allModules.find(m => m.id === activeModule)?.label} module is being connected to the core database.</p>
                <button onClick={() => setActiveModule('home')} className="mt-8 px-8 py-3 bg-slate-900 text-white text-[10px] font-black rounded-xl uppercase tracking-widest shadow-xl">Back to Home</button>
             </div>
-          )}
-        </div>
-      </div>
-    );
+          </div>
+        );
+    }
   };
 
   return (

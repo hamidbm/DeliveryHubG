@@ -1,7 +1,7 @@
 
 import React, { useMemo, useEffect, useRef, useState } from 'react';
 import { marked } from 'marked';
-import DOMPurify from 'dompurify';
+import DOMPurify from 'isomorphic-dompurify';
 import { WikiPage, WikiTheme, WikiSpace } from '../types';
 import { BUNDLES, APPLICATIONS, MILESTONES } from '../constants';
 
@@ -9,10 +9,6 @@ interface WikiPageDisplayProps {
   page: WikiPage;
   onNavigate?: (id: string) => void;
 }
-
-// Security: Create a hardened marked renderer that blocks all raw HTML input
-const renderer = new (marked as any).Renderer();
-renderer.html = () => ''; // Return empty string for any raw HTML blocks
 
 const WikiPageDisplay: React.FC<WikiPageDisplayProps> = ({ page, onNavigate }) => {
   const contentRef = useRef<HTMLDivElement>(null);
@@ -44,25 +40,37 @@ const WikiPageDisplay: React.FC<WikiPageDisplayProps> = ({ page, onNavigate }) =
     resolveTheme();
   }, [page.spaceId, page.themeKey]);
 
-  // Security: Harden the Markdown pipeline with DOMPurify sanitization
+  // Enhanced Rendering Pipeline: Supports both HTML and Markdown with robust sanitization
   const htmlContent = useMemo(() => {
-    if (!page.content) return '';
+    const raw = (page.content || "").trim();
+    if (!raw) return "";
+
     try {
-      // 1. Convert Markdown to HTML using hardened renderer (no raw HTML allowed)
-      const rawHtml = marked.parse(page.content, {
-        gfm: true,
-        breaks: true,
-        renderer,
+      // Heuristic: treat as HTML if it contains a tag-like structure
+      const looksLikeHtml = /<\/?[a-z][\s\S]*>/i.test(raw);
+      
+      const sanitizeOptions = {
+        USE_PROFILES: { html: true }, // Allows tables, lists, etc safely
+        FORBID_TAGS: ["script", "iframe", "object", "embed", "link", "meta", "style"],
+        FORBID_ATTR: ["onerror", "onload", "onclick", "onmouseover", "style"],
+        ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
+      };
+
+      if (looksLikeHtml) {
+        // Content is already HTML -> sanitize and return
+        return DOMPurify.sanitize(raw, sanitizeOptions);
+      }
+
+      // Content is Markdown -> convert to HTML then sanitize
+      // Using standard marked renderer to allow HTML blocks in MD input (sanitized later)
+      const rendered = marked.parse(raw, { 
+        gfm: true, 
+        breaks: true 
       }) as string;
 
-      // 2. Sanitize the output to remove dangerous tags, attributes, and URI schemes
-      return DOMPurify.sanitize(rawHtml, {
-        FORBID_TAGS: ['style', 'script', 'iframe', 'object', 'embed', 'link', 'meta', 'svg', 'math'],
-        FORBID_ATTR: ['style', 'onerror', 'onload', 'onclick', 'onmouseover'],
-        ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
-      });
+      return DOMPurify.sanitize(rendered, sanitizeOptions);
     } catch (err) {
-      console.error("Markdown parsing error:", err);
+      console.error("Rendering pipeline error:", err);
       return 'Error rendering document content securely.';
     }
   }, [page.content]);
@@ -93,7 +101,6 @@ const WikiPageDisplay: React.FC<WikiPageDisplayProps> = ({ page, onNavigate }) =
   const application = APPLICATIONS.find(a => a.id === page.applicationId);
   const milestone = MILESTONES.find(m => m.id === page.milestoneId);
   
-  // Fix: Unique Sync Hash derived from document ID rather than random
   const syncHash = useMemo(() => {
     const id = page._id || page.id || 'new';
     return id.substring(id.length - 8).toUpperCase();
@@ -101,7 +108,6 @@ const WikiPageDisplay: React.FC<WikiPageDisplayProps> = ({ page, onNavigate }) =
 
   return (
     <article className="animate-fadeIn w-full pb-32">
-      {/* Dynamic Scoped Theme Injection - Trusted source from Admin control */}
       {activeTheme && (
         <style dangerouslySetInnerHTML={{ __html: activeTheme.css }} />
       )}
@@ -183,7 +189,6 @@ const WikiPageDisplay: React.FC<WikiPageDisplayProps> = ({ page, onNavigate }) =
         )}
       </header>
 
-      {/* Scoped content container - Securely rendered and themed */}
       <div 
         ref={contentRef}
         className={`wiki-content theme-${activeTheme?.key || 'default'} max-w-none`}
