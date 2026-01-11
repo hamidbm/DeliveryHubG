@@ -1,11 +1,21 @@
 
 import clientPromise from '../lib/mongodb';
 import { ObjectId } from 'mongodb';
-import { WikiPage, WikiSpace, WikiComment, WikiTemplate } from '../types';
+import { WikiPage, WikiSpace, WikiComment, WikiTemplate, Bundle } from '../types';
 
 export const getDb = async () => {
   const client = await clientPromise;
   return client.db('deliveryhub');
+};
+
+export const fetchAllBundles = async () => {
+  try {
+    const db = await getDb();
+    return await db.collection('bundles').find({}).toArray();
+  } catch (error) {
+    console.error("Failed to fetch bundles:", error);
+    return [];
+  }
 };
 
 export const fetchAllApplications = async () => {
@@ -89,7 +99,6 @@ export const saveWikiPage = async (page: Partial<WikiPage>) => {
     if (_id) {
       const existing = await db.collection('wiki_pages').findOne({ _id: new ObjectId(_id) }) as unknown as WikiPage | null;
       if (existing) {
-        // Archive to history
         const { _id: currentId, ...historyData } = existing as any;
         await db.collection('wiki_history').insertOne({
           ...historyData,
@@ -148,7 +157,6 @@ export const fetchWikiComments = async (pageId: string) => {
   }
 };
 
-// Fixed TypeScript error by destructuring _id out of comment to prevent string/ObjectId mismatch
 export const saveWikiComment = async (comment: Partial<WikiComment>) => {
   try {
     const db = await getDb();
@@ -221,8 +229,19 @@ export const seedDatabase = async (apps: any[], items: any[], wiki: any[] = []) 
     const db = await getDb();
     await db.collection('applications').deleteMany({});
     await db.collection('workitems').deleteMany({});
-    if (wiki.length > 0) await db.collection('wiki_pages').deleteMany({});
+    await db.collection('bundles').deleteMany({});
     
+    // Seed Bundles
+    // FIX: Using any[] here to resolve the TypeScript error where Bundle._id (string) is 
+    // incompatible with MongoDB's expected OptionalId<Document> (which uses ObjectId).
+    const bundles: any[] = [
+      { id: 'b1', name: 'GPS', description: 'Global Positioning', applicationNames: ['RouteOptima', 'LogisticsHub'] },
+      { id: 'b2', name: 'Member', description: 'Identity Management', applicationNames: ['MemberPortal V2'] },
+      { id: 'b3', name: 'Claims', description: 'Core Claims', applicationNames: ['ClaimsProcessor'] },
+      { id: 'b4', name: 'Finance', description: 'Financial Core', applicationNames: ['BillingCore'] },
+    ];
+    await db.collection('bundles').insertMany(bundles);
+
     await db.collection('applications').insertMany(apps);
     await db.collection('workitems').insertMany(items);
 
@@ -242,6 +261,7 @@ export const seedDatabase = async (apps: any[], items: any[], wiki: any[] = []) 
     }
 
     if (wiki.length > 0) {
+      await db.collection('wiki_pages').deleteMany({});
       await db.collection('wiki_pages').insertMany(wiki.map(p => ({ 
         ...p, 
         version: 1, 
@@ -249,7 +269,8 @@ export const seedDatabase = async (apps: any[], items: any[], wiki: any[] = []) 
         createdAt: new Date().toISOString(), 
         updatedAt: new Date().toISOString(),
         author: 'System',
-        spaceId: '000000000000000000000001'
+        spaceId: '000000000000000000000001',
+        category: p.category || 'Documentation'
       })));
     }
 

@@ -13,7 +13,7 @@ interface CreateWikiPageFormProps {
   onCancel: () => void;
 }
 
-const WIKI_CATEGORIES = ["Technical", "Governance", "Process", "Security", "Architecture", "Operational"];
+const WIKI_CATEGORIES = ["Architecture Decision Record (ADR)", "Low Level Design (LLD)", "Meeting Notes", "Runbook", "General"];
 
 const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({ 
   parentId: initialParentId, 
@@ -25,12 +25,11 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
 }) => {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
-  const [parentId, setParentId] = useState(initialParentId || '');
-  const [category, setCategory] = useState('');
+  const [category, setCategory] = useState('General');
   const [bundleId, setBundleId] = useState('');
   const [applicationId, setApplicationId] = useState('');
   const [milestoneId, setMilestoneId] = useState('');
-  const [tagsInput, setTagsInput] = useState('');
+  const [status, setStatus] = useState<'Draft' | 'Published'>('Draft');
   const [isSaving, setIsSaving] = useState(false);
   const [viewMode, setViewMode] = useState<'edit' | 'preview' | 'split'>('edit');
   
@@ -44,31 +43,19 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
     }
   }, [content]);
 
-  // Dependent filters
-  const filteredApps = useMemo(() => {
-    return bundleId ? APPLICATIONS.filter(a => a.bundleId === bundleId) : APPLICATIONS;
-  }, [bundleId]);
-
-  const filteredMilestones = useMemo(() => {
-    return applicationId ? MILESTONES.filter(m => m.applicationId === applicationId) : [];
-  }, [applicationId]);
-
   const handleSave = async () => {
     if (!title.trim()) return;
     setIsSaving(true);
 
-    const tags = tagsInput.split(',').map(t => t.trim()).filter(t => t !== '');
-
     const payload: Partial<WikiPage> = {
       title: title.trim(),
       content,
-      parentId: parentId || undefined,
       spaceId,
       bundleId: bundleId || undefined,
       applicationId: applicationId || undefined,
       milestoneId: milestoneId || undefined,
-      category: category || undefined,
-      tags: tags.length > 0 ? tags : undefined,
+      category,
+      status,
       author: currentUser?.name || 'System',
       lastModifiedBy: currentUser?.name || 'System'
     };
@@ -85,116 +72,93 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
         onSaveSuccess(data.result?.insertedId || '');
       }
     } catch (err) {
-      console.error("Knowledge creation failed:", err);
+      console.error("Save failed:", err);
     } finally {
       setIsSaving(false);
     }
   };
 
+  const insertTemplate = (tpl: string) => {
+    let tplContent = '';
+    if (tpl === 'ADR') tplContent = '# ADR: [Title]\n\n## Status\nProposed\n\n## Context\n...\n\n## Decision\n...\n\n## Consequences\n...';
+    if (tpl === 'LLD') tplContent = '# LLD: [Title]\n\n## Introduction\n...\n\n## Architecture\n...\n\n## Data Model\n...';
+    setContent(content + '\n' + tplContent);
+  };
+
   return (
-    <div className="flex flex-col h-full bg-white animate-fadeIn relative">
-      <header className="px-10 py-6 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white/90 backdrop-blur-md z-30 shadow-sm">
-        <div className="flex items-center gap-4">
-          <div className="w-10 h-10 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-lg">
-            <i className="fas fa-plus text-sm"></i>
-          </div>
+    <div className="fixed inset-0 z-[100] bg-white flex flex-col animate-fadeIn">
+      <header className="px-10 py-6 border-b border-slate-100 flex items-center justify-between bg-white shadow-sm shrink-0">
+        <div className="flex items-center gap-6">
+          <button onClick={onCancel} className="w-10 h-10 rounded-full bg-slate-50 hover:bg-slate-100 flex items-center justify-center text-slate-400 transition-all">
+            <i className="fas fa-arrow-left"></i>
+          </button>
           <div className="flex flex-col">
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Creation Mode</span>
-            <span className="text-sm font-bold text-slate-800">New Documentation Node</span>
+            <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest leading-none mb-1">Editor Core v2</span>
+            <input 
+              value={title} onChange={(e) => setTitle(e.target.value)}
+              className="text-xl font-black text-slate-800 placeholder:text-slate-100 border-none p-0 focus:ring-0 outline-none bg-transparent tracking-tight"
+              placeholder="Untitled Knowledge Node"
+            />
           </div>
         </div>
         
-        <div className="flex items-center gap-3">
-          <button 
-            onClick={onCancel}
-            className="px-5 py-2.5 text-xs font-black text-slate-400 hover:text-slate-800 transition-all uppercase tracking-widest rounded-xl"
-          >
-            Cancel
-          </button>
+        <div className="flex items-center gap-4">
+          <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
+            <button onClick={() => setStatus('Draft')} className={`px-4 py-1.5 text-[9px] font-black uppercase tracking-widest rounded-lg transition-all ${status === 'Draft' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}>Draft</button>
+            <button onClick={() => setStatus('Published')} className={`px-4 py-1.5 text-[9px] font-black uppercase tracking-widest rounded-lg transition-all ${status === 'Published' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}>Publish</button>
+          </div>
           <button 
             onClick={handleSave}
             disabled={!title.trim() || isSaving}
-            className="px-8 py-2.5 bg-slate-900 text-white text-xs font-black rounded-xl shadow-xl hover:bg-slate-800 disabled:opacity-30 transition-all uppercase tracking-widest flex items-center gap-3"
+            className="px-8 py-3 bg-slate-900 text-white text-[10px] font-black rounded-xl shadow-xl hover:bg-slate-800 transition-all uppercase tracking-widest flex items-center gap-2"
           >
             {isSaving ? <i className="fas fa-circle-notch fa-spin"></i> : <i className="fas fa-cloud-arrow-up"></i>}
-            {isSaving ? 'Publishing...' : 'Publish Entry'}
+            Save Artifact
           </button>
         </div>
       </header>
 
-      {/* Metadata Context Bar */}
-      <div className="px-10 py-4 bg-slate-50 border-b border-slate-100 flex flex-wrap items-center gap-x-8 gap-y-4">
-        <div className="flex flex-col gap-1.5">
-          <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Bundle Association</label>
-          <select 
-            value={bundleId}
-            onChange={(e) => { setBundleId(e.target.value); setApplicationId(''); setMilestoneId(''); }}
-            className="text-[10px] font-bold text-slate-600 bg-white border border-slate-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500/10 transition-all"
-          >
-            <option value="">No Bundle</option>
-            {BUNDLES.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-          </select>
+      <div className="flex flex-1 overflow-hidden">
+        {/* Main Editor */}
+        <div className="flex-1 flex flex-col p-12 overflow-y-auto custom-scrollbar">
+          <div className="flex items-center gap-4 mb-6 border-b border-slate-50 pb-4">
+            <button onClick={() => insertTemplate('ADR')} className="text-[10px] font-black text-slate-400 hover:text-blue-500 uppercase tracking-widest">+ ADR</button>
+            <button onClick={() => insertTemplate('LLD')} className="text-[10px] font-black text-slate-400 hover:text-blue-500 uppercase tracking-widest">+ LLD</button>
+            <div className="h-4 w-[1px] bg-slate-100 mx-2"></div>
+            <button onClick={() => setViewMode(viewMode === 'split' ? 'edit' : 'split')} className="text-[10px] font-black text-slate-400 hover:text-blue-500 uppercase tracking-widest flex items-center gap-2">
+              <i className="fas fa-columns"></i> Split Preview
+            </button>
+          </div>
+
+          <div className={`flex flex-1 gap-12 ${viewMode === 'split' ? 'flex-row' : 'flex-col'}`}>
+            <textarea 
+              ref={textAreaRef}
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              className={`flex-1 border-none focus:ring-0 p-0 text-slate-700 leading-relaxed resize-none text-xl font-medium placeholder:text-slate-100 bg-transparent ${viewMode === 'split' ? 'border-r border-slate-50 pr-12' : ''}`}
+              placeholder="Authored documents can be just Markdown or HTML..."
+            />
+            {viewMode === 'split' && (
+              <div className="flex-1 prose prose-slate max-w-none" dangerouslySetInnerHTML={{ __html: renderedContent }} />
+            )}
+          </div>
         </div>
 
-        <div className="flex flex-col gap-1.5">
-          <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Application Hub</label>
-          <select 
-            value={applicationId}
-            onChange={(e) => { setApplicationId(e.target.value); setMilestoneId(''); }}
-            className="text-[10px] font-bold text-slate-600 bg-white border border-slate-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500/10 transition-all"
-          >
-            <option value="">No Application</option>
-            {filteredApps.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-          </select>
-        </div>
+        {/* Metadata Sidebar */}
+        <aside className="w-80 border-l border-slate-100 bg-slate-50/30 p-10 space-y-10 shrink-0">
+          <div className="space-y-6">
+            <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Context Metadata</h4>
+            <SidebarField label="Document Type" value={category} onChange={setCategory} options={WIKI_CATEGORIES} />
+            <SidebarField label="Business Bundle" value={bundleId} onChange={setBundleId} options={BUNDLES.map(b => ({ id: b.id, name: b.name }))} />
+            <SidebarField label="Target Application" value={applicationId} onChange={setApplicationId} options={APPLICATIONS.map(a => ({ id: a.id, name: a.name }))} />
+            <SidebarField label="Delivery Milestone" value={milestoneId} onChange={setMilestoneId} options={[...Array(10)].map((_, i) => ({ id: `M${i+1}`, name: `M${i+1}` }))} />
+          </div>
 
-        <div className="flex flex-col gap-1.5">
-          <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Delivery Milestone</label>
-          <select 
-            value={milestoneId}
-            onChange={(e) => setMilestoneId(e.target.value)}
-            disabled={!applicationId}
-            className="text-[10px] font-bold text-slate-600 bg-white border border-slate-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500/10 transition-all disabled:opacity-30"
-          >
-            <option value="">No Milestone</option>
-            {filteredMilestones.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-          </select>
-        </div>
-
-        <div className="flex flex-col gap-1.5">
-          <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Content Category</label>
-          <select 
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
-            className="text-[10px] font-bold text-slate-600 bg-white border border-slate-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500/10 transition-all"
-          >
-            <option value="">Uncategorized</option>
-            {WIKI_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-          </select>
-        </div>
-      </div>
-
-      <div className="flex-1 flex w-full overflow-hidden">
-        <div className="flex flex-col w-1/2 border-r border-slate-100 overflow-y-auto p-12 custom-scrollbar">
-           <input 
-            type="text"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            className="text-4xl font-black text-slate-900 w-full border-none focus:ring-0 p-0 placeholder:text-slate-100 tracking-tighter bg-transparent mb-12"
-            placeholder="Document Identity"
-            autoFocus
-          />
-          <textarea 
-            ref={textAreaRef}
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            className="w-full flex-1 border-none focus:ring-0 p-0 text-slate-600 leading-relaxed resize-none text-lg placeholder:text-slate-100 font-medium bg-transparent"
-            placeholder="Draft your content using Markdown..."
-          />
-        </div>
-        <div className="w-1/2 bg-slate-50/30 overflow-y-auto p-12 custom-scrollbar">
-          <div className="prose prose-slate prose-xl max-w-none" dangerouslySetInnerHTML={{ __html: renderedContent }} />
-        </div>
+          <div className="p-6 bg-blue-600 rounded-3xl text-white shadow-xl shadow-blue-600/20">
+             <h5 className="font-black text-xs uppercase tracking-widest mb-2">Architect Tip</h5>
+             <p className="text-[10px] font-medium opacity-80 leading-relaxed">Ensure you link your milestones. This enables the Executive Roadmap view for leadership.</p>
+          </div>
+        </aside>
       </div>
       
       <style jsx>{`
@@ -205,5 +169,19 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
     </div>
   );
 };
+
+const SidebarField = ({ label, value, onChange, options }: any) => (
+  <div className="space-y-2">
+    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">{label}</label>
+    <select 
+      value={value} 
+      onChange={(e) => onChange(e.target.value)}
+      className="w-full bg-white border-2 border-slate-100 rounded-xl px-4 py-3 text-xs font-bold text-slate-600 outline-none focus:border-blue-500 transition-all"
+    >
+      <option value="">Select {label}</option>
+      {options.map((o: any) => typeof o === 'string' ? <option key={o} value={o}>{o}</option> : <option key={o.id} value={o.id}>{o.name}</option>)}
+    </select>
+  </div>
+);
 
 export default CreateWikiPageForm;

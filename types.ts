@@ -16,10 +16,20 @@ export enum MilestoneStatus {
   DELAYED = 'Delayed'
 }
 
+export enum HierarchyMode {
+  APP_MILESTONE_TYPE = 'Application → Milestone → Type',
+  TYPE_APP_MILESTONE = 'Type → Application → Milestone',
+  VENDOR_APP_MILESTONE_TYPE = 'Vendor → Application → Milestone → Type',
+  SPACE_APP_MILESTONE_TYPE = 'Space → Application → Milestone → Type',
+  SPACE_TYPE_APP_MILESTONE = 'Space → Type → Application → Milestone'
+}
+
 export interface Bundle {
+  _id?: string;
   id: string;
   name: string;
   description: string;
+  applicationNames?: string[];
 }
 
 export interface Vendor {
@@ -79,7 +89,8 @@ export interface WikiPage {
   bundleId?: string;
   applicationId?: string;
   milestoneId?: string;
-  category?: string;
+  vendorCompany?: string;
+  category?: string; // Effectively "Type"
   createdAt?: string;
   updatedAt?: string;
   author?: string;
@@ -89,6 +100,9 @@ export interface WikiPage {
   version?: number;
   status?: 'Draft' | 'Published' | 'Archived';
   watchers?: string[];
+  links?: {
+    documentIds: string[];
+  }
 }
 
 export interface WikiComment {
