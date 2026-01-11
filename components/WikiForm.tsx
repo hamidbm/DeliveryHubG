@@ -86,10 +86,10 @@ const WikiForm: React.FC<WikiFormProps> = ({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [id]);
 
-  // Robust Preview Pipeline: Detects content type and sanitizes with safe HTML profiles
+  // Robust Preview Pipeline: Synchronized with WikiPageDisplay logic
   const renderedContent = useMemo(() => {
     const raw = (content || "").trim();
-    if (!raw) return '<p class="text-slate-300 italic">No content to preview</p>';
+    if (!raw) return '<p class="text-slate-300 italic font-medium">No content to preview</p>';
 
     try {
       const looksLikeHtml = /<\/?[a-z][\s\S]*>/i.test(raw);
@@ -301,7 +301,7 @@ const WikiForm: React.FC<WikiFormProps> = ({
           </div>
 
           <div className={`flex flex-1 overflow-hidden ${viewMode === 'split' ? 'flex-row' : 'flex-col'}`}>
-            <textarea ref={textAreaRef} value={content} onChange={(e) => setContent(e.target.value)} className="flex-1 border-none focus:ring-0 p-12 text-slate-700 leading-relaxed resize-none text-lg font-medium placeholder:text-slate-200 bg-transparent custom-scrollbar" placeholder="Edit artifact content..." />
+            <textarea ref={textAreaRef} value={content} onChange={(e) => setContent(e.target.value)} className="flex-1 border-none focus:ring-0 p-12 text-slate-700 leading-relaxed resize-none text-lg font-medium placeholder:text-slate-200 bg-transparent custom-scrollbar font-medium" placeholder="Edit artifact content..." />
             {viewMode === 'split' && (
               <div className="flex-1 border-l border-slate-100 overflow-y-auto p-12 bg-white custom-scrollbar shadow-inner">
                 <div 
@@ -314,10 +314,15 @@ const WikiForm: React.FC<WikiFormProps> = ({
         </div>
 
         <aside className="w-80 border-l border-slate-200 bg-slate-50 p-8 space-y-10 shrink-0 overflow-y-auto custom-scrollbar">
-          <SidebarField label="Type" value={category} onChange={setCategory} options={WIKI_CATEGORIES} />
-          <SidebarField label="Visual Theme" value={themeKey} onChange={setThemeKey} options={[{ id: '', name: 'Use Space Default' }, ...themes.map(t => ({ id: t.key, name: t.name }))]} />
-          <SidebarField label="Bundle" value={bundleId} onChange={setBundleId} options={BUNDLES.map(b => ({ id: b.id, name: b.name }))} />
-          <SidebarField label="App" value={applicationId} onChange={setApplicationId} options={APPLICATIONS.map(a => ({ id: a.id, name: a.name }))} />
+          <div className="space-y-6">
+            <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+              <i className="fas fa-cog"></i> Configuration
+            </h4>
+            <SidebarField label="Type" value={category} onChange={setCategory} options={WIKI_CATEGORIES} />
+            <SidebarField label="Visual Theme" value={themeKey} onChange={setThemeKey} options={[{ id: '', name: 'Use Space Default' }, ...themes.map(t => ({ id: t.key, name: t.name }))]} />
+            <SidebarField label="Bundle" value={bundleId} onChange={setBundleId} options={BUNDLES.map(b => ({ id: b.id, name: b.name }))} />
+            <SidebarField label="App" value={applicationId} onChange={setApplicationId} options={APPLICATIONS.map(a => ({ id: a.id, name: a.name }))} />
+          </div>
         </aside>
       </div>
     </div>

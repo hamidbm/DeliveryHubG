@@ -1,8 +1,9 @@
 
 import React, { useState, useRef, useMemo, useEffect } from 'react';
-import { WikiPage } from '../types';
+import { WikiPage, WikiTheme } from '../types';
 import { BUNDLES, APPLICATIONS } from '../constants';
 import { marked } from 'marked';
+import DOMPurify from 'isomorphic-dompurify';
 
 interface CreateWikiPageFormProps {
   parentId?: string;
@@ -37,18 +38,25 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
   const [bundleId, setBundleId] = useState('');
   const [applicationId, setApplicationId] = useState('');
   const [milestoneId, setMilestoneId] = useState('');
+  const [themeKey, setThemeKey] = useState('');
   const [status, setStatus] = useState<'Draft' | 'Published'>('Draft');
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'edit' | 'split'>('split');
   const [editorFormat, setEditorFormat] = useState<'markdown' | 'html'>('markdown');
   const [showSizeMenu, setShowSizeMenu] = useState(false);
+  const [themes, setThemes] = useState<WikiTheme[]>([]);
   
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
   const sizeMenuRef = useRef<HTMLDivElement>(null);
 
-  // Close size menu on click outside
   useEffect(() => {
+    // Fetch available themes for the dropdown
+    fetch('/api/wiki/themes?active=true')
+      .then(res => res.json())
+      .then(setThemes)
+      .catch(() => []);
+
     const handleClickOutside = (event: MouseEvent) => {
       if (sizeMenuRef.current && !sizeMenuRef.current.contains(event.target as Node)) {
         setShowSizeMenu(false);
@@ -58,11 +66,28 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  // Robust Preview Pipeline: Supports both HTML and Markdown with safe sanitization (Matches WikiPageDisplay)
   const renderedContent = useMemo(() => {
+    const raw = (content || "").trim();
+    if (!raw) return '<p class="text-slate-300 italic font-medium">Start typing to see preview...</p>';
+
     try {
-      return marked.parse(content || '_No content to preview_');
+      const looksLikeHtml = /<\/?[a-z][\s\S]*>/i.test(raw);
+      
+      const sanitizeOptions = {
+        USE_PROFILES: { html: true },
+        FORBID_TAGS: ["script", "iframe", "object", "embed", "link", "meta", "style"],
+        FORBID_ATTR: ["onerror", "onload", "onclick", "onmouseover", "style"]
+      };
+
+      if (looksLikeHtml) {
+        return DOMPurify.sanitize(raw, sanitizeOptions);
+      }
+
+      const rendered = marked.parse(raw, { gfm: true, breaks: true }) as string;
+      return DOMPurify.sanitize(rendered, sanitizeOptions);
     } catch (e) {
-      return 'Error rendering preview';
+      return '<p class="text-red-500">Error rendering preview</p>';
     }
   }, [content]);
 
@@ -125,7 +150,6 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
     setShowSizeMenu(false);
   };
 
-  // Added missing insertTemplate function to fix the errors
   const insertTemplate = (type: string) => {
     let templateText = '';
     if (type === 'ADR') {
@@ -156,6 +180,7 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
       applicationId: applicationId || undefined,
       milestoneId: milestoneId || undefined,
       category,
+      themeKey: themeKey || undefined,
       status,
       author: currentUser?.name || 'System',
       lastModifiedBy: currentUser?.name || 'System'
@@ -240,7 +265,6 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
               <ToolbarButton icon="fa-italic" label="Italic" onClick={() => insertText(editorFormat === 'markdown' ? '*' : '<i>', editorFormat === 'markdown' ? '*' : '</i>')} />
               <div className="w-[1px] h-6 bg-slate-200 mx-2"></div>
               
-              {/* Distinct Heading Controls */}
               <button 
                 onClick={() => insertText(editorFormat === 'markdown' ? '# ' : '<h1>', editorFormat === 'markdown' ? '' : '</h1>')}
                 className="h-10 px-4 flex items-center gap-2 text-slate-700 font-black hover:text-blue-600 hover:bg-white border border-transparent hover:border-slate-100 rounded-xl transition-all"
@@ -353,8 +377,11 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
             </div>
             
             {viewMode === 'split' && (
-              <div className="flex-1 border-l border-slate-100 overflow-y-auto p-12 bg-slate-50/20 custom-scrollbar shadow-inner">
-                <div className="max-w-none prose prose-slate prose-xl prose-headings:font-black" dangerouslySetInnerHTML={{ __html: renderedContent }} />
+              <div className="flex-1 border-l border-slate-100 overflow-y-auto p-12 bg-white custom-scrollbar shadow-inner">
+                <div 
+                  className={`wiki-content theme-${themeKey || 'default'} max-w-none`} 
+                  dangerouslySetInnerHTML={{ __html: renderedContent }} 
+                />
               </div>
             )}
           </div>
@@ -367,6 +394,7 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
               <i className="fas fa-cog"></i> Configuration
             </h4>
             <SidebarField label="Artifact Type" value={category} onChange={setCategory} options={WIKI_CATEGORIES} />
+            <SidebarField label="Visual Theme" value={themeKey} onChange={setThemeKey} options={[{ id: '', name: 'Use Space Default' }, ...themes.map(t => ({ id: t.key, name: t.name }))]} />
             <SidebarField label="Business Bundle" value={bundleId} onChange={setBundleId} options={BUNDLES.map(b => ({ id: b.id, name: b.name }))} />
             <SidebarField label="App Context" value={applicationId} onChange={setApplicationId} options={APPLICATIONS.map(a => ({ id: a.id, name: a.name }))} />
           </div>
@@ -422,7 +450,6 @@ const SidebarField = ({ label, value, onChange, options }: any) => (
       onChange={(e) => onChange(e.target.value)}
       className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-4 text-xs font-bold text-slate-700 focus:border-blue-500 outline-none transition-all shadow-sm"
     >
-      <option value="">Unassigned</option>
       {options.map((o: any) => typeof o === 'string' ? <option key={o} value={o}>{o}</option> : <option key={o.id} value={o.id}>{o.name}</option>)}
     </select>
   </div>
