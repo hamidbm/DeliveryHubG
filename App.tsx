@@ -8,6 +8,7 @@ import WorkItems from './components/WorkItems';
 import Wiki from './components/Wiki';
 import Milestones from './components/Milestones';
 import GovernanceDocuments from './components/GovernanceDocuments';
+import Admin from './components/Admin';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -75,6 +76,8 @@ const App: React.FC = () => {
         return <Milestones />;
       case 'documents':
         return <GovernanceDocuments />;
+      case 'admin':
+        return <Admin />;
       default:
         return (
           <div className="flex flex-col items-center justify-center py-20 text-slate-400">

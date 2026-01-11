@@ -63,6 +63,9 @@ const Layout: React.FC<LayoutProps> = ({
 
   const filteredApps = applications.filter(a => activeBundle === 'all' || a.bundleId === activeBundle);
 
+  // Determine if we should show the filter bar (only for non-admin/profile/insight views)
+  const showFilterBar = ['dashboard', 'applications', 'work-items', 'wiki', 'reviews', 'documents'].includes(activeTab);
+
   return (
     <div className="min-h-screen flex flex-col">
       {/* Fixed Top Navbar */}
@@ -110,7 +113,7 @@ const Layout: React.FC<LayoutProps> = ({
                </Link>
                <button onClick={onLogout} className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center space-x-2 transition font-medium">
                  <i className="fas fa-sign-out-alt"></i>
-                 <span>Sign Out</span>
+                 <span>Sign Sign Out</span>
                </button>
             </div>
           </div>
@@ -118,44 +121,45 @@ const Layout: React.FC<LayoutProps> = ({
       </nav>
 
       {/* Layer 1: Contextual Sub-navigation & Filters Bar */}
-      {/* This bar now consistently shows Space, Bundle, App, Milestone as requested */}
-      <div className="bg-white border-b border-slate-200 h-14 fixed top-16 w-full z-40 flex items-center px-8 justify-between shadow-sm">
-        <div className="flex items-center gap-6 overflow-x-auto no-scrollbar shrink-0">
-          <FilterSelect label="Space" value={selSpaceId} onChange={setSelSpaceId!} options={spaces.map(s => ({ id: s._id || s.id!, name: s.name }))} />
-          <FilterSelect label="Bundle" value={activeBundle} onChange={setActiveBundle} options={BUNDLES.map(b => ({ id: b.id, name: b.name }))} />
-          <FilterSelect label="App" value={activeApp} onChange={setActiveApp!} options={filteredApps.map(a => ({ id: a.id, name: a.name }))} />
-          <FilterSelect label="Milestone" value={selMilestone} onChange={setSelMilestone!} options={[...Array(10)].map((_, i) => ({ id: `M${i+1}`, name: `M${i+1}` }))} />
-        </div>
-        
-        <div className="flex items-center gap-4 shrink-0">
-          <div className="relative">
-            <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-300 text-[10px]"></i>
-            <input 
-              type="text" 
-              placeholder="Search repository..." 
-              value={searchQuery}
-              onChange={(e) => setSearchQuery?.(e.target.value)}
-              className="bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-1.5 text-[11px] font-bold focus:border-blue-500 outline-none w-44 transition-all"
-            />
+      {showFilterBar && (
+        <div className="bg-white border-b border-slate-200 h-14 fixed top-16 w-full z-40 flex items-center px-8 justify-between shadow-sm">
+          <div className="flex items-center gap-6 overflow-x-auto no-scrollbar shrink-0">
+            <FilterSelect label="Space" value={selSpaceId} onChange={setSelSpaceId!} options={spaces.map(s => ({ id: s._id || s.id!, name: s.name }))} />
+            <FilterSelect label="Bundle" value={activeBundle} onChange={setActiveBundle} options={BUNDLES.map(b => ({ id: b.id, name: b.name }))} />
+            <FilterSelect label="App" value={activeApp} onChange={setActiveApp!} options={filteredApps.map(a => ({ id: a.id, name: a.name }))} />
+            <FilterSelect label="Milestone" value={selMilestone} onChange={setSelMilestone!} options={[...Array(10)].map((_, i) => ({ id: `M${i+1}`, name: `M${i+1}` }))} />
           </div>
           
-          <button 
-            onClick={onCreateSpace}
-            className="px-4 py-1.5 bg-slate-900 text-white text-[9px] font-black rounded-lg hover:bg-slate-800 transition-all uppercase tracking-widest flex items-center gap-2 shadow-lg shadow-black/10"
-          >
-            <i className="fas fa-plus"></i>
-            Create Space
-          </button>
+          <div className="flex items-center gap-4 shrink-0">
+            <div className="relative">
+              <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-300 text-[10px]"></i>
+              <input 
+                type="text" 
+                placeholder="Search repository..." 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery?.(e.target.value)}
+                className="bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-1.5 text-[11px] font-bold focus:border-blue-500 outline-none w-44 transition-all"
+              />
+            </div>
+            
+            <button 
+              onClick={onCreateSpace}
+              className="px-4 py-1.5 bg-slate-900 text-white text-[9px] font-black rounded-lg hover:bg-slate-800 transition-all uppercase tracking-widest flex items-center gap-2 shadow-lg shadow-black/10"
+            >
+              <i className="fas fa-plus"></i>
+              Create Space
+            </button>
 
-          <div className="hidden xl:flex items-center space-x-2 text-slate-300 italic text-[9px] font-black uppercase tracking-widest">
-            <i className="fas fa-shield-alt text-blue-500/50"></i>
-            <span>Secure Tunnel</span>
+            <div className="hidden xl:flex items-center space-x-2 text-slate-300 italic text-[9px] font-black uppercase tracking-widest">
+              <i className="fas fa-shield-alt text-blue-500/50"></i>
+              <span>Secure Tunnel</span>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Main Content Area */}
-      <main className="mt-[7.5rem] p-6 flex-grow overflow-y-auto bg-[#F8FAFC]">
+      <main className={`${showFilterBar ? 'mt-[7.5rem]' : 'mt-16'} p-6 flex-grow overflow-y-auto bg-[#F8FAFC]`}>
         <div className="max-w-[1600px] mx-auto">
           {children}
         </div>
