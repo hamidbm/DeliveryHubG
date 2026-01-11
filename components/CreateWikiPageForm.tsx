@@ -51,7 +51,6 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
   const sizeMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // Fetch available themes for the dropdown
     fetch('/api/wiki/themes?active=true')
       .then(res => res.json())
       .then(setThemes)
@@ -66,7 +65,6 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Robust Preview Pipeline: Supports both HTML and Markdown with safe sanitization (Matches WikiPageDisplay)
   const renderedContent = useMemo(() => {
     const raw = (content || "").trim();
     if (!raw) return '<p class="text-slate-300 italic font-medium">Start typing to see preview...</p>';
@@ -145,18 +143,8 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
     insertText(editorFormat === 'markdown' ? mdTable : htmlTable, '');
   };
 
-  const insertCallout = () => {
-    const snippet = `\n<div class="callout info">\n  <div class="title">[Some Title]</div>\n  <p>\n    \n  </p>\n</div>\n`;
-    insertText(snippet, '');
-  };
-
-  const insertWarnCallout = () => {
-    const snippet = `\n<div class="callout warn">\n  <div class="title">[Some Title]</div>\n  <p>\n    \n  </p>\n</div>\n`;
-    insertText(snippet, '');
-  };
-
-  const insertSuccessCallout = () => {
-    const snippet = `\n<div class="callout success">\n  <div class="title">[Some Title]</div>\n  <p>\n    \n  </p>\n</div>\n`;
+  const insertCallout = (type: 'info' | 'warn' | 'success') => {
+    const snippet = `\n<div class="callout ${type}">\n  <div class="title">[Some Title]</div>\n  <p>\n    \n  </p>\n</div>\n`;
     insertText(snippet, '');
   };
 
@@ -279,13 +267,15 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
         <div className="flex-1 flex flex-col overflow-hidden bg-white shadow-inner">
           
           {/* Main Editor Toolbar */}
-          <div className="px-8 py-3 border-b border-slate-100 bg-slate-50 flex items-center justify-between sticky top-0 z-10">
-            <div className="flex items-center gap-1">
+          <div className="px-8 py-3 border-b border-slate-100 bg-slate-50 flex items-center justify-between sticky top-0 z-10 overflow-x-auto no-scrollbar">
+            <div className="flex items-center gap-1 shrink-0">
+              {/* Styling Group */}
               <ToolbarButton icon="fa-bold" label="Bold" onClick={() => insertText(editorFormat === 'markdown' ? '**' : '<b>', editorFormat === 'markdown' ? '**' : '</b>')} />
               <ToolbarButton icon="fa-italic" label="Italic" onClick={() => insertText(editorFormat === 'markdown' ? '*' : '<i>', editorFormat === 'markdown' ? '*' : '</i>')} />
               <ToolbarButton icon="fa-paragraph" label="Paragraph" onClick={() => insertText('<p>', '</p>')} />
               <div className="w-[1px] h-6 bg-slate-200 mx-2"></div>
               
+              {/* Headings Group */}
               <button 
                 onClick={() => insertText(editorFormat === 'markdown' ? '# ' : '<h1>', editorFormat === 'markdown' ? '' : '</h1>')}
                 className="h-10 px-4 flex items-center gap-2 text-slate-700 font-black hover:text-blue-600 hover:bg-white border border-transparent hover:border-slate-100 rounded-xl transition-all"
@@ -305,7 +295,7 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
               
               <div className="w-[1px] h-6 bg-slate-200 mx-2"></div>
 
-              {/* Click-to-toggle Font Size Tool */}
+              {/* Text Size Menu */}
               <div className="relative" ref={sizeMenuRef}>
                 <button 
                   onClick={() => setShowSizeMenu(!showSizeMenu)}
@@ -335,15 +325,21 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
               </div>
 
               <div className="w-[1px] h-6 bg-slate-200 mx-2"></div>
+
+              {/* Structural Elements Group */}
               <ToolbarButton icon="fa-list-ul" label="Bullets" onClick={handleList} />
               <ToolbarButton icon="fa-table" label="Insert Table" onClick={insertTable} />
               <ToolbarButton icon="fa-minus" label="Horizontal Rule" onClick={() => insertText(editorFormat === 'markdown' ? '\n---\n' : '\n<hr />\n')} />
-              <ToolbarButton icon="fa-quote-left" label="Blockquote" onClick={() => insertText('\n<blockquote>\n  <p>\n    \n  </p>\n  <p>\n    \n  </p>\n</blockquote>\n')} />
-              <ToolbarButton icon="fa-info-circle" label="Call Out Info" onClick={insertCallout} />
-              <ToolbarButton icon="fa-exclamation-triangle" label="Call Out Warn" onClick={insertWarnCallout} />
-              <ToolbarButton icon="fa-check-circle" label="Call Out Success" onClick={insertSuccessCallout} />
-              <ToolbarButton icon="fa-code" label="Code" onClick={insertCodeSnippet} />
+              <ToolbarButton icon="fa-quote-left" label="Blockquote" onClick={() => insertText('\n<blockquote>\n  <p>\n    \n  </p>\n</blockquote>\n')} />
               
+              <div className="w-[1px] h-6 bg-slate-200 mx-2"></div>
+
+              {/* Enterprise Snippets Group */}
+              <ToolbarButton icon="fa-circle-info" label="Callout Info" onClick={() => insertCallout('info')} />
+              <ToolbarButton icon="fa-triangle-exclamation" label="Callout Warn" onClick={() => insertCallout('warn')} />
+              <ToolbarButton icon="fa-circle-check" label="Callout Success" onClick={() => insertCallout('success')} />
+              <ToolbarButton icon="fa-code" label="Code Snippet" onClick={insertCodeSnippet} />
+
               <div className="w-[1px] h-6 bg-slate-200 mx-2"></div>
               
               {/* Color Palette */}
@@ -362,14 +358,14 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
               </div>
             </div>
 
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-4 shrink-0">
               <div className="flex items-center gap-2 bg-white border border-slate-200 px-3 py-1.5 rounded-2xl shadow-sm">
                 <span className={`text-[9px] font-black uppercase tracking-widest ${editorFormat === 'markdown' ? 'text-blue-600' : 'text-slate-400'}`}>Markdown</span>
                 <button 
                   onClick={() => setEditorFormat(editorFormat === 'markdown' ? 'html' : 'markdown')}
                   className={`w-10 h-5 rounded-full relative transition-all ${editorFormat === 'markdown' ? 'bg-slate-200' : 'bg-blue-600'}`}
                 >
-                  <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${editorFormat === 'markdown' ? 'left-0.5' : 'left-5.5'}`}></div>
+                  <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${editorFormat === 'markdown' ? 'left-0.5' : 'left-5'}`}></div>
                 </button>
                 <span className={`text-[9px] font-black uppercase tracking-widest ${editorFormat === 'html' ? 'text-blue-600' : 'text-slate-400'}`}>HTML</span>
               </div>
