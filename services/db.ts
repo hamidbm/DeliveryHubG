@@ -1,7 +1,7 @@
 
 import clientPromise from '../lib/mongodb';
 import { ObjectId } from 'mongodb';
-import { WikiPage } from '../types';
+import { WikiPage, WikiSpace } from '../types';
 
 export const getDb = async () => {
   const client = await clientPromise;
@@ -29,10 +29,42 @@ export const fetchAllWorkItems = async () => {
 };
 
 // Wiki Operations
-export const fetchWikiPages = async () => {
+export const fetchWikiSpaces = async () => {
   try {
     const db = await getDb();
-    return await db.collection('wiki_pages').find({}).toArray();
+    return await db.collection('wiki_spaces').find({}).toArray();
+  } catch (error) {
+    console.error("Wiki spaces fetch error:", error);
+    return [];
+  }
+};
+
+export const saveWikiSpace = async (space: Partial<WikiSpace>) => {
+  try {
+    const db = await getDb();
+    const { _id, ...data } = space;
+    if (_id) {
+      return await db.collection('wiki_spaces').updateOne(
+        { _id: new ObjectId(_id) },
+        { $set: data }
+      );
+    } else {
+      return await db.collection('wiki_spaces').insertOne({
+        ...data,
+        createdAt: new Date().toISOString()
+      });
+    }
+  } catch (error) {
+    console.error("Wiki space save error:", error);
+    return null;
+  }
+};
+
+export const fetchWikiPages = async (spaceId?: string) => {
+  try {
+    const db = await getDb();
+    const query = spaceId ? { spaceId } : {};
+    return await db.collection('wiki_pages').find(query).toArray();
   } catch (error) {
     console.error("Wiki fetch error:", error);
     return [];
@@ -67,11 +99,9 @@ export const saveWikiPage = async (page: Partial<WikiPage>) => {
     const readingTime = calculateReadingTime(data.content || '');
 
     if (_id) {
-      // Logic for Update
       const existing = await db.collection('wiki_pages').findOne({ _id: new ObjectId(_id) }) as unknown as WikiPage | null;
       
       if (existing) {
-        // 1. Archive current version to history
         const { _id: currentId, ...historyData } = existing as any;
         await db.collection('wiki_history').insertOne({
           ...historyData,
@@ -79,7 +109,6 @@ export const saveWikiPage = async (page: Partial<WikiPage>) => {
           versionedAt: now
         });
 
-        // 2. Prepare Update Payload
         const nextVersion = (existing.version || 1) + 1;
         const updatePayload = {
           ...data,
@@ -87,7 +116,6 @@ export const saveWikiPage = async (page: Partial<WikiPage>) => {
           readingTime,
           version: nextVersion,
           status: data.status || existing.status || 'Published',
-          // Preserve original author and creation date
           author: existing.author || data.author || 'System',
           createdAt: existing.createdAt,
           lastModifiedBy: data.lastModifiedBy || 'System'
@@ -100,7 +128,6 @@ export const saveWikiPage = async (page: Partial<WikiPage>) => {
       }
       return null;
     } else {
-      // Logic for Creation
       const insertPayload = {
         ...data,
         createdAt: now,
@@ -165,8 +192,24 @@ export const seedDatabase = async (apps: any[], items: any[], wiki: any[] = []) 
       status: 'Published', 
       createdAt: new Date().toISOString(), 
       updatedAt: new Date().toISOString(),
-      author: 'System'
+      author: 'System',
+      spaceId: 'default'
     })));
+
+    // Create a default space if none exists
+    const spaceCount = await db.collection('wiki_spaces').countDocuments();
+    if (spaceCount === 0) {
+      await db.collection('wiki_spaces').insertOne({
+        _id: new ObjectId('000000000000000000000001'),
+        id: 'default',
+        name: 'General Space',
+        description: 'Core platform documentation and onboarding.',
+        icon: 'fa-book-atlas',
+        color: '#3b82f6',
+        createdAt: new Date().toISOString()
+      });
+    }
+
     return { success: true };
   } catch (error) {
     console.error("Seeding failed:", error);

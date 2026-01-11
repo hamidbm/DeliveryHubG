@@ -56,12 +56,26 @@ export interface Milestone {
   dueDate: string;
 }
 
+export interface WikiSpace {
+  _id?: string;
+  id?: string;
+  name: string;
+  description?: string;
+  icon?: string;
+  color?: string;
+  createdAt?: string;
+}
+
 export interface WikiPage {
   id?: string;
   _id?: string;
   title: string;
   content: string;
   parentId?: string;
+  spaceId: string; // Required space association
+  bundleId?: string;
+  applicationId?: string;
+  milestoneId?: string;
   category?: string;
   createdAt?: string;
   updatedAt?: string;

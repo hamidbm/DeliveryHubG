@@ -37,10 +37,11 @@ export const MILESTONES: Milestone[] = [
   { id: 'm3', name: 'Production Cutover', applicationId: 'app1', vendorCompany: 'Infosys', status: MilestoneStatus.PLANNED, dueDate: '2025-05-20' },
 ];
 
+// Added missing required spaceId property to each WikiPage
 export const WIKI_PAGES: WikiPage[] = [
-  { id: 'w1', title: 'Getting Started', content: '## Welcome\nThis is the core onboarding documentation for the platform.' },
-  { id: 'w2', title: 'Architecture Standards', content: '### Cloud Standards\nAll applications must follow the 12-factor app methodology.' },
-  { id: 'w3', title: 'Deployment Guide', content: 'Use the standard CI/CD pipeline defined in Jenkins.', parentId: 'w2' },
+  { id: 'w1', title: 'Getting Started', content: '## Welcome\nThis is the core onboarding documentation for the platform.', spaceId: 'default' },
+  { id: 'w2', title: 'Architecture Standards', content: '### Cloud Standards\nAll applications must follow the 12-factor app methodology.', spaceId: 'default' },
+  { id: 'w3', title: 'Deployment Guide', content: 'Use the standard CI/CD pipeline defined in Jenkins.', parentId: 'w2', spaceId: 'default' },
 ];
 
 export const NAV_ITEMS = [
