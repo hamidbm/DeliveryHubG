@@ -1,5 +1,5 @@
 
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { WikiPage } from '../types';
 import { BUNDLES, APPLICATIONS } from '../constants';
 import { marked } from 'marked';
@@ -42,8 +42,21 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'edit' | 'split'>('split');
   const [editorFormat, setEditorFormat] = useState<'markdown' | 'html'>('markdown');
+  const [showSizeMenu, setShowSizeMenu] = useState(false);
   
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
+  const sizeMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close size menu on click outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (sizeMenuRef.current && !sizeMenuRef.current.contains(event.target as Node)) {
+        setShowSizeMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const renderedContent = useMemo(() => {
     try {
@@ -80,21 +93,19 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
     const selected = textarea.value.substring(start, end);
     
     if (selected.trim().includes('\n')) {
-      // Split multiple lines and bullet each one
       const lines = selected.split('\n');
       const formattedLines = lines.map(line => {
         if (!line.trim()) return line;
-        return editorFormat === 'markdown' ? `- ${line}` : `  <li>${line}</li>`;
+        const clean = line.trim();
+        return editorFormat === 'markdown' ? `- ${clean}` : `  <li>${clean}</li>`;
       }).join('\n');
       
       const result = editorFormat === 'markdown' 
         ? formattedLines 
         : `<ul>\n${formattedLines}\n</ul>`;
         
-      const newContent = textarea.value.substring(0, start) + result + textarea.value.substring(end);
-      setContent(newContent);
+      setContent(textarea.value.substring(0, start) + result + textarea.value.substring(end));
     } else {
-      // Single line bullet
       if (editorFormat === 'markdown') {
         insertText('- ', '');
       } else {
@@ -110,8 +121,23 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
   };
 
   const setFontSize = (size: string) => {
-    // Both Markdown and HTML modes use HTML span for specific sizes as Markdown has no native font-size
     insertText(`<span style="font-size: ${size}">`, '</span>');
+    setShowSizeMenu(false);
+  };
+
+  // Added missing insertTemplate function to fix the errors
+  const insertTemplate = (type: string) => {
+    let templateText = '';
+    if (type === 'ADR') {
+      templateText = editorFormat === 'markdown' 
+        ? `# ADR: [Short Title]\n\n## Status\nProposed\n\n## Context\n[Problem description]\n\n## Decision\n[Proposed solution]\n\n## Consequences\n[Pros and Cons]`
+        : `<h1>ADR: [Short Title]</h1>\n<p><b>Status:</b> Proposed</p>\n<h2>Context</h2>\n<p>[Problem description]</p>\n<h2>Decision</h2>\n<p>[Proposed solution]</p>\n<h2>Consequences</h2>\n<p>[Pros and Cons]</p>`;
+    } else if (type === 'LLD') {
+      templateText = editorFormat === 'markdown'
+        ? `# LLD: [System Name]\n\n## Overview\n[Brief description]\n\n## Architecture\n[Diagram or component list]\n\n## Interface\n[API or Method signatures]`
+        : `<h1>LLD: [System Name]</h1>\n<h2>Overview</h2>\n<p>[Brief description]</p>\n<h2>Architecture</h2>\n<p>[Description]</p>`;
+    }
+    insertText(templateText, '');
   };
 
   const handleSave = async () => {
@@ -146,44 +172,35 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
       if (res.ok) {
         onSaveSuccess(data.result?.insertedId || '');
       } else {
-        setSaveError(data.error || "Failed to save to registry.");
+        setSaveError(data.error || "Save error encountered.");
       }
     } catch (err) {
-      setSaveError("Network connection lost.");
+      setSaveError("Registry connection timed out.");
     } finally {
       setIsSaving(false);
     }
   };
 
-  const insertTemplate = (tpl: string) => {
-    let tplContent = '';
-    if (tpl === 'ADR') tplContent = '# ADR: [Title]\n\n## Status\nProposed\n\n## Context\n...\n\n## Decision\n...\n\n## Consequences\n...';
-    if (tpl === 'LLD') tplContent = '# LLD: [Title]\n\n## Introduction\n...\n\n## Architecture\n...\n\n## Data Model\n...';
-    setContent(content + (content ? '\n\n' : '') + tplContent);
-  };
-
   return (
     <div className="fixed inset-0 z-[100] bg-slate-50 flex flex-col animate-fadeIn">
-      {/* Header */}
+      {/* Top Header */}
       <header className="px-10 py-5 bg-white border-b border-slate-200 flex items-center justify-between shadow-sm shrink-0">
         <div className="flex items-center gap-6">
-          <button onClick={onCancel} className="w-10 h-10 rounded-full bg-slate-50 hover:bg-slate-100 flex items-center justify-center text-slate-400 transition-all border border-slate-100 shadow-sm">
+          <button onClick={onCancel} className="w-10 h-10 rounded-full bg-slate-50 hover:bg-slate-100 flex items-center justify-center text-slate-400 border border-slate-100 shadow-sm transition-all">
             <i className="fas fa-times"></i>
           </button>
           <div className="flex flex-col">
-            <div className="flex items-center gap-2 mb-0.5">
-               <span className="text-[9px] font-black text-blue-600 uppercase tracking-widest leading-none bg-blue-50 px-2 py-0.5 rounded">Nexus Editor v4.5</span>
-            </div>
+            <span className="text-[9px] font-black text-blue-600 uppercase tracking-widest bg-blue-50 px-2 py-0.5 rounded w-fit mb-1">Editor Suite v5.0</span>
             <input 
               value={title} onChange={(e) => setTitle(e.target.value)}
               className="text-2xl font-black text-slate-800 placeholder:text-slate-200 border-none p-0 focus:ring-0 outline-none bg-transparent tracking-tight w-[500px]"
-              placeholder="Enter Artifact Title..."
+              placeholder="Artifact Title Required"
             />
           </div>
         </div>
         
         <div className="flex items-center gap-4">
-          <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 mr-4">
+          <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 mr-4 shadow-inner">
             <button onClick={() => setStatus('Draft')} className={`px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${status === 'Draft' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}>Draft</button>
             <button onClick={() => setStatus('Published')} className={`px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${status === 'Published' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}>Publish</button>
           </div>
@@ -191,12 +208,12 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
           <button 
             onClick={handleSave}
             disabled={isSaving}
-            className={`px-10 py-3.5 rounded-2xl shadow-2xl transition-all uppercase tracking-widest font-black text-[10px] flex items-center gap-3 ${
-              isSaving ? 'bg-slate-300 text-slate-500' : 'bg-slate-900 text-white hover:bg-slate-800 hover:-translate-y-1'
+            className={`px-10 py-3.5 rounded-2xl shadow-xl transition-all uppercase tracking-widest font-black text-[10px] flex items-center gap-3 ${
+              isSaving ? 'bg-slate-300 text-slate-500 cursor-not-allowed' : 'bg-slate-900 text-white hover:bg-slate-800 hover:-translate-y-1'
             }`}
           >
             {isSaving ? <i className="fas fa-circle-notch fa-spin"></i> : <i className="fas fa-cloud-arrow-up"></i>}
-            {isSaving ? 'Saving...' : 'Save Artifact'}
+            {isSaving ? 'Syncing Registry' : 'Save Artifact'}
           </button>
         </div>
       </header>
@@ -204,10 +221,10 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
       {saveError && (
         <div className="bg-red-600 text-white px-10 py-4 text-xs font-bold flex items-center justify-between animate-fadeIn z-20">
           <div className="flex items-center gap-3">
-            <i className="fas fa-exclamation-circle text-lg"></i>
+            <i className="fas fa-exclamation-triangle"></i>
             <span>{saveError}</span>
           </div>
-          <button onClick={() => setSaveError(null)} className="w-8 h-8 rounded-full bg-black/10 flex items-center justify-center hover:bg-black/20">
+          <button onClick={() => setSaveError(null)} className="w-8 h-8 rounded-full bg-black/10 flex items-center justify-center hover:bg-black/20 transition-colors">
             <i className="fas fa-times"></i>
           </button>
         </div>
@@ -216,44 +233,60 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
       <div className="flex flex-1 overflow-hidden">
         <div className="flex-1 flex flex-col overflow-hidden bg-white shadow-inner">
           
-          {/* Toolbar */}
+          {/* Main Editor Toolbar */}
           <div className="px-8 py-3 border-b border-slate-100 bg-slate-50 flex items-center justify-between sticky top-0 z-10">
             <div className="flex items-center gap-1">
               <ToolbarButton icon="fa-bold" label="Bold" onClick={() => insertText(editorFormat === 'markdown' ? '**' : '<b>', editorFormat === 'markdown' ? '**' : '</b>')} />
               <ToolbarButton icon="fa-italic" label="Italic" onClick={() => insertText(editorFormat === 'markdown' ? '*' : '<i>', editorFormat === 'markdown' ? '*' : '</i>')} />
               <div className="w-[1px] h-6 bg-slate-200 mx-2"></div>
               
-              {/* Visible Headings */}
+              {/* Distinct Heading Controls */}
               <button 
                 onClick={() => insertText(editorFormat === 'markdown' ? '# ' : '<h1>', editorFormat === 'markdown' ? '' : '</h1>')}
-                className="h-10 px-3 flex items-center gap-2 text-slate-500 hover:text-blue-600 hover:bg-white rounded-xl transition-all"
+                className="h-10 px-4 flex items-center gap-2 text-slate-700 font-black hover:text-blue-600 hover:bg-white border border-transparent hover:border-slate-100 rounded-xl transition-all"
                 title="Heading 1"
               >
-                <i className="fas fa-heading"></i>
-                <span className="text-[10px] font-black uppercase">H1</span>
+                <i className="fas fa-heading text-xs"></i>
+                <span className="text-xs">H1</span>
               </button>
               <button 
                 onClick={() => insertText(editorFormat === 'markdown' ? '## ' : '<h2>', editorFormat === 'markdown' ? '' : '</h2>')}
-                className="h-10 px-3 flex items-center gap-2 text-slate-500 hover:text-blue-600 hover:bg-white rounded-xl transition-all"
+                className="h-10 px-4 flex items-center gap-2 text-slate-700 font-black hover:text-blue-600 hover:bg-white border border-transparent hover:border-slate-100 rounded-xl transition-all"
                 title="Heading 2"
               >
-                <i className="fas fa-heading"></i>
-                <span className="text-[10px] font-black uppercase">H2</span>
+                <i className="fas fa-heading text-xs opacity-60"></i>
+                <span className="text-xs">H2</span>
               </button>
               
               <div className="w-[1px] h-6 bg-slate-200 mx-2"></div>
 
-              {/* Font Size Tool */}
-              <div className="relative group mx-2">
-                <button className="h-10 px-3 flex items-center gap-2 text-slate-500 hover:text-blue-600 hover:bg-white rounded-xl transition-all">
-                  <i className="fas fa-text-height text-xs"></i>
-                  <span className="text-[10px] font-black uppercase">Size</span>
+              {/* Click-to-toggle Font Size Tool */}
+              <div className="relative" ref={sizeMenuRef}>
+                <button 
+                  onClick={() => setShowSizeMenu(!showSizeMenu)}
+                  className={`h-10 px-3 flex items-center gap-2 rounded-xl transition-all border ${
+                    showSizeMenu ? 'bg-blue-600 text-white shadow-lg border-blue-600' : 'text-slate-500 hover:text-blue-600 hover:bg-white border-transparent'
+                  }`}
+                  title="Text Size"
+                >
+                  <i className="fas fa-text-height text-sm"></i>
+                  <i className={`fas fa-chevron-down text-[8px] transition-transform ${showSizeMenu ? 'rotate-180' : ''}`}></i>
                 </button>
-                <div className="absolute top-full left-0 mt-1 w-32 bg-white border border-slate-200 rounded-xl shadow-2xl opacity-0 translate-y-2 pointer-events-none group-hover:opacity-100 group-hover:translate-y-0 transition-all z-20">
-                  {['14px', '18px', '24px', '32px', '48px'].map(sz => (
-                    <button key={sz} onClick={() => setFontSize(sz)} className="w-full text-left px-4 py-2.5 text-[10px] font-bold text-slate-600 hover:bg-slate-50 border-b border-slate-50 last:border-0">{sz}</button>
-                  ))}
-                </div>
+                {showSizeMenu && (
+                  <div className="absolute top-full left-0 mt-2 w-36 bg-white border border-slate-200 rounded-2xl shadow-2xl py-2 z-50 animate-fadeIn overflow-hidden">
+                    <div className="px-4 py-2 text-[9px] font-black text-slate-300 uppercase tracking-widest bg-slate-50 border-b border-slate-50 mb-1">Pick Size</div>
+                    {['12px', '14px', '18px', '24px', '32px', '48px'].map(sz => (
+                      <button 
+                        key={sz} 
+                        onClick={() => setFontSize(sz)} 
+                        className="w-full text-left px-5 py-3 text-[11px] font-bold text-slate-600 hover:bg-blue-50 hover:text-blue-600 transition-all flex items-center justify-between group"
+                      >
+                        {sz}
+                        <i className="fas fa-plus text-[8px] opacity-0 group-hover:opacity-100 transition-opacity"></i>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div className="w-[1px] h-6 bg-slate-200 mx-2"></div>
@@ -263,16 +296,18 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
               
               <div className="w-[1px] h-6 bg-slate-200 mx-2"></div>
               
-              {/* Palette */}
+              {/* Color Palette */}
               <div className="flex items-center gap-1.5 ml-2">
                 {COLORS.map(c => (
                   <button 
                     key={c.name}
                     title={c.name}
                     onClick={() => insertText(`<span style="color: ${c.value}">`, '</span>')} 
-                    className="w-5 h-5 rounded-full hover:scale-125 transition-transform shadow-sm border border-black/5" 
+                    className="w-6 h-6 rounded-full hover:scale-125 transition-all shadow-sm border border-black/5 flex items-center justify-center group" 
                     style={{ backgroundColor: c.value }}
-                  ></button>
+                  >
+                    <div className="w-1 h-1 bg-white/40 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                  </button>
                 ))}
               </div>
             </div>
@@ -291,47 +326,69 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
               <button 
                 onClick={() => setViewMode(viewMode === 'split' ? 'edit' : 'split')}
                 className={`px-5 py-2 text-[9px] font-black uppercase tracking-widest rounded-xl flex items-center gap-2 transition-all ${
-                  viewMode === 'split' ? 'bg-slate-900 text-white shadow-lg' : 'bg-white border border-slate-200 text-slate-500 hover:border-blue-500'
+                  viewMode === 'split' ? 'bg-slate-900 text-white shadow-lg shadow-black/20' : 'bg-white border border-slate-200 text-slate-500 hover:border-blue-500 hover:text-blue-600'
                 }`}
               >
                 <i className={`fas ${viewMode === 'split' ? 'fa-eye-slash' : 'fa-columns'}`}></i> 
-                {viewMode === 'split' ? 'Full Edit' : 'Split View'}
+                {viewMode === 'split' ? 'Collapse Preview' : 'Split View'}
               </button>
             </div>
           </div>
 
+          {/* Editor Body Area */}
           <div className={`flex flex-1 overflow-hidden ${viewMode === 'split' ? 'flex-row' : 'flex-col'}`}>
-            <textarea 
-              ref={textAreaRef}
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              className="flex-1 border-none focus:ring-0 p-12 text-slate-700 leading-relaxed resize-none text-lg font-medium placeholder:text-slate-200 bg-transparent custom-scrollbar"
-              placeholder="Start authoring your document here..."
-            />
+            <div className="flex-1 flex flex-col relative bg-white">
+              <textarea 
+                ref={textAreaRef}
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
+                className="flex-1 border-none focus:ring-0 p-12 text-slate-700 leading-relaxed resize-none text-lg font-medium placeholder:text-slate-200 bg-transparent custom-scrollbar selection:bg-blue-100"
+                placeholder="Start authoring enterprise-grade artifacts. Leverage the toolbar for consistent formatting..."
+              />
+              <div className="absolute bottom-6 right-8 text-[9px] font-black text-slate-300 uppercase tracking-widest flex items-center gap-4 pointer-events-none bg-slate-50/80 px-4 py-2 rounded-full border border-slate-100">
+                <span>{content.length} characters</span>
+                <span className="w-1 h-1 rounded-full bg-slate-200"></span>
+                <span>{content.split(/\s+/).filter(x => x).length} words</span>
+              </div>
+            </div>
+            
             {viewMode === 'split' && (
-              <div className="flex-1 border-l border-slate-100 overflow-y-auto p-12 bg-white custom-scrollbar shadow-inner">
-                <div className="max-w-none prose prose-slate prose-xl" dangerouslySetInnerHTML={{ __html: renderedContent }} />
+              <div className="flex-1 border-l border-slate-100 overflow-y-auto p-12 bg-slate-50/20 custom-scrollbar shadow-inner">
+                <div className="max-w-none prose prose-slate prose-xl prose-headings:font-black" dangerouslySetInnerHTML={{ __html: renderedContent }} />
               </div>
             )}
           </div>
         </div>
 
-        {/* Sidebar */}
+        {/* Editor Settings Sidebar */}
         <aside className="w-80 border-l border-slate-200 bg-slate-50 p-8 space-y-10 shrink-0 overflow-y-auto custom-scrollbar">
           <div className="space-y-6">
             <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-              <i className="fas fa-database"></i> Context
+              <i className="fas fa-cog"></i> Configuration
             </h4>
-            <SidebarField label="Category" value={category} onChange={setCategory} options={WIKI_CATEGORIES} />
-            <SidebarField label="Bundle" value={bundleId} onChange={setBundleId} options={BUNDLES.map(b => ({ id: b.id, name: b.name }))} />
-            <SidebarField label="Application" value={applicationId} onChange={setApplicationId} options={APPLICATIONS.map(a => ({ id: a.id, name: a.name }))} />
+            <SidebarField label="Artifact Type" value={category} onChange={setCategory} options={WIKI_CATEGORIES} />
+            <SidebarField label="Business Bundle" value={bundleId} onChange={setBundleId} options={BUNDLES.map(b => ({ id: b.id, name: b.name }))} />
+            <SidebarField label="App Context" value={applicationId} onChange={setApplicationId} options={APPLICATIONS.map(a => ({ id: a.id, name: a.name }))} />
           </div>
 
-          <div className="p-6 bg-blue-600 rounded-[2rem] text-white shadow-xl relative overflow-hidden">
-             <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -mr-10 -mt-10"></div>
-             <h5 className="font-black text-[10px] uppercase tracking-widest mb-2">Editor Pro-Tip</h5>
+          <div className="pt-8 border-t border-slate-200 space-y-4">
+             <h5 className="font-black text-[10px] text-slate-400 uppercase tracking-widest flex items-center gap-2">
+               <i className="fas fa-file-invoice"></i> Templates
+             </h5>
+             <div className="grid grid-cols-1 gap-3">
+               <TemplateCard title="ADR" desc="Decision Log" onClick={() => insertTemplate('ADR')} />
+               <TemplateCard title="LLD" desc="System Design" onClick={() => insertTemplate('LLD')} />
+             </div>
+          </div>
+          
+          <div className="p-6 bg-blue-600 rounded-[2rem] text-white shadow-2xl relative overflow-hidden group">
+             <div className="absolute -top-4 -right-4 w-20 h-20 bg-white/10 rounded-full group-hover:scale-150 transition-transform duration-700"></div>
+             <h5 className="font-black text-[10px] uppercase tracking-widest mb-2 flex items-center gap-2">
+               <i className="fas fa-lightbulb"></i>
+               User Guidance
+             </h5>
              <p className="text-[10px] font-medium opacity-80 leading-relaxed">
-               For multi-line bullets, select several lines of text and click the Bullet icon. Each line will be converted automatically.
+               Select multiple sentences and use the Bullets tool to convert them into a structured list automatically.
              </p>
           </div>
         </aside>
@@ -341,6 +398,7 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
         .custom-scrollbar::-webkit-scrollbar { width: 5px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
       `}</style>
     </div>
   );
@@ -350,7 +408,7 @@ const ToolbarButton = ({ icon, label, onClick }: any) => (
   <button 
     onClick={onClick}
     title={label}
-    className="w-10 h-10 flex items-center justify-center text-slate-500 hover:text-blue-600 hover:bg-white hover:shadow-lg rounded-xl transition-all"
+    className="w-10 h-10 flex items-center justify-center text-slate-500 hover:text-blue-600 hover:bg-white border border-transparent hover:border-slate-100 hover:shadow-lg rounded-xl transition-all"
   >
     <i className={`fas ${icon} text-sm`}></i>
   </button>
@@ -368,6 +426,19 @@ const SidebarField = ({ label, value, onChange, options }: any) => (
       {options.map((o: any) => typeof o === 'string' ? <option key={o} value={o}>{o}</option> : <option key={o.id} value={o.id}>{o.name}</option>)}
     </select>
   </div>
+);
+
+const TemplateCard = ({ title, desc, onClick }: any) => (
+  <button 
+    onClick={onClick}
+    className="w-full text-left p-4 bg-white border border-slate-200 rounded-2xl hover:border-blue-400 hover:shadow-xl transition-all group"
+  >
+    <div className="flex items-center justify-between mb-1">
+      <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest">{title}</span>
+      <i className="fas fa-plus text-[8px] text-slate-300 group-hover:text-blue-500 group-hover:rotate-90 transition-all"></i>
+    </div>
+    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter truncate">{desc}</p>
+  </button>
 );
 
 export default CreateWikiPageForm;
