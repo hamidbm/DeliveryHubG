@@ -2,8 +2,7 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { WikiPage, WikiTheme } from '../types';
 import { BUNDLES, APPLICATIONS } from '../constants';
-import { marked } from 'marked';
-import DOMPurify from 'isomorphic-dompurify';
+import WikiPageDisplay from './WikiPageDisplay';
 
 interface WikiFormProps {
   initialTitle?: string;
@@ -55,8 +54,8 @@ const WikiForm: React.FC<WikiFormProps> = ({
   const [status, setStatus] = useState<'Draft' | 'Published'>('Published');
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<'edit' | 'split'>('split');
-  const [editorFormat, setEditorFormat] = useState<'markdown' | 'html'>('markdown');
+  const [viewMode, setViewMode] = useState<'edit' | 'preview'>('edit');
+  const [editorFormat, setEditorFormat] = useState<'markdown' | 'html'>('html');
   const [showSizeMenu, setShowSizeMenu] = useState(false);
   const [showColorMenu, setShowColorMenu] = useState(false);
   const [themes, setThemes] = useState<WikiTheme[]>([]);
@@ -92,29 +91,6 @@ const WikiForm: React.FC<WikiFormProps> = ({
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [id]);
-
-  const renderedContent = useMemo(() => {
-    const raw = (content || "").trim();
-    if (!raw) return '<p class="text-slate-300 italic font-medium">No content to preview</p>';
-
-    try {
-      const looksLikeHtml = /<\/?[a-z][\s\S]*>/i.test(raw);
-      const sanitizeOptions = {
-        USE_PROFILES: { html: true },
-        FORBID_TAGS: ["script", "iframe", "object", "embed", "link", "meta", "style"],
-        FORBID_ATTR: ["onerror", "onload", "onclick", "onmouseover", "style"]
-      };
-
-      if (looksLikeHtml) {
-        return DOMPurify.sanitize(raw, sanitizeOptions);
-      }
-
-      const rendered = marked.parse(raw, { gfm: true, breaks: true }) as string;
-      return DOMPurify.sanitize(rendered, sanitizeOptions);
-    } catch (e) {
-      return '<p class="text-red-500">Error rendering preview</p>';
-    }
-  }, [content]);
 
   const insertText = (before: string, after: string = '') => {
     if (!textAreaRef.current) return;
@@ -215,6 +191,23 @@ const WikiForm: React.FC<WikiFormProps> = ({
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const previewPage: WikiPage = {
+    _id: id,
+    id,
+    title,
+    content,
+    spaceId,
+    bundleId: bundleId || undefined,
+    applicationId: applicationId || undefined,
+    milestoneId: milestoneId || undefined,
+    category,
+    themeKey: themeKey || undefined,
+    status,
+    author: initialAuthor || currentUser?.name || 'System',
+    lastModifiedBy: currentUser?.name || 'System',
+    createdAt: initialCreatedAt || new Date().toISOString()
   };
 
   return (
@@ -368,21 +361,30 @@ const WikiForm: React.FC<WikiFormProps> = ({
                 </button>
                 <span className={`text-[9px] font-black uppercase tracking-widest ${editorFormat === 'html' ? 'text-blue-600' : 'text-slate-400'}`}>HTML</span>
               </div>
-              <button onClick={() => setViewMode(viewMode === 'split' ? 'edit' : 'split')} className={`px-4 py-1.5 text-[9px] font-black uppercase tracking-widest rounded-xl transition-all ${viewMode === 'split' ? 'bg-slate-900 text-white shadow-lg shadow-black/20' : 'bg-white border border-slate-200 text-slate-500 hover:border-blue-500 hover:text-blue-600'}`}>
-                <i className={`fas ${viewMode === 'split' ? 'fa-eye-slash' : 'fa-columns'}`}></i> 
-                {viewMode === 'split' ? 'Collapse' : 'Preview'}
+              <button 
+                onClick={() => setViewMode(viewMode === 'preview' ? 'edit' : 'preview')} 
+                className={`px-4 py-1.5 text-[9px] font-black uppercase tracking-widest rounded-xl transition-all ${viewMode === 'preview' ? 'bg-slate-900 text-white shadow-lg shadow-black/20' : 'bg-white border border-slate-200 text-slate-500 hover:border-blue-500 hover:text-blue-600'}`}
+              >
+                <i className={`fas ${viewMode === 'preview' ? 'fa-pen-to-square' : 'fa-eye'} mr-2`}></i> 
+                {viewMode === 'preview' ? 'Return to Editor' : 'Full Preview'}
               </button>
             </div>
           </div>
 
-          <div className={`flex flex-1 overflow-hidden ${viewMode === 'split' ? 'flex-row' : 'flex-col'}`}>
-            <textarea ref={textAreaRef} value={content} onChange={(e) => setContent(e.target.value)} className="flex-1 border-none focus:ring-0 p-12 text-slate-700 leading-relaxed resize-none text-lg font-medium placeholder:text-slate-200 bg-transparent custom-scrollbar font-medium" placeholder="Edit artifact content..." />
-            {viewMode === 'split' && (
-              <div className="flex-1 border-l border-slate-100 overflow-y-auto p-12 bg-white custom-scrollbar shadow-inner">
-                <div 
-                  className={`wiki-content theme-${themeKey || 'default'} max-w-none prose`} 
-                  dangerouslySetInnerHTML={{ __html: renderedContent }} 
-                />
+          <div className="flex-1 overflow-hidden relative bg-white">
+            {viewMode === 'edit' ? (
+              <textarea 
+                ref={textAreaRef} 
+                value={content} 
+                onChange={(e) => setContent(e.target.value)} 
+                className="w-full h-full border-none focus:ring-0 p-12 text-slate-700 leading-relaxed resize-none text-lg font-medium placeholder:text-slate-200 bg-transparent custom-scrollbar font-medium" 
+                placeholder="Edit artifact content..." 
+              />
+            ) : (
+              <div className="absolute inset-0 overflow-y-auto p-12 bg-white custom-scrollbar">
+                <div className="max-w-5xl mx-auto">
+                  <WikiPageDisplay page={previewPage} />
+                </div>
               </div>
             )}
           </div>
