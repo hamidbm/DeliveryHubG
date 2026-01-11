@@ -164,10 +164,10 @@ const WikiPageDisplay: React.FC<WikiPageDisplayProps> = ({ page, onNavigate }) =
         )}
       </header>
 
-      {/* Scoped content container */}
+      {/* Scoped content container - Removed Tailwind 'prose' to ensure custom theme CSS is the primary styling source */}
       <div 
         ref={contentRef}
-        className={`wiki-content theme-${activeTheme?.key || 'default'} prose prose-slate prose-xl max-w-none prose-headings:tracking-tighter prose-headings:font-black`}
+        className={`wiki-content theme-${activeTheme?.key || 'default'} max-w-none`}
         dangerouslySetInnerHTML={{ __html: htmlContent }}
       />
     </article>
