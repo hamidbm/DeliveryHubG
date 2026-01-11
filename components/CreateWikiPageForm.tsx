@@ -96,12 +96,9 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
     const end = textarea.selectionEnd;
     const text = textarea.value;
     const selectedText = text.substring(start, end);
-    
     const replacement = before + selectedText + after;
     const newContent = text.substring(0, start) + replacement + text.substring(end);
-    
     setContent(newContent);
-    
     setTimeout(() => {
       textarea.focus();
       textarea.setSelectionRange(start + before.length, start + before.length + selectedText.length);
@@ -122,11 +119,7 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
         const clean = line.trim();
         return editorFormat === 'markdown' ? `- ${clean}` : `  <li>${clean}</li>`;
       }).join('\n');
-      
-      const result = editorFormat === 'markdown' 
-        ? formattedLines 
-        : `<ul>\n${formattedLines}\n</ul>`;
-        
+      const result = editorFormat === 'markdown' ? formattedLines : `<ul>\n${formattedLines}\n</ul>`;
       setContent(textarea.value.substring(0, start) + result + textarea.value.substring(end));
     } else {
       if (editorFormat === 'markdown') {
@@ -250,7 +243,8 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
 
       <div className="flex flex-1 overflow-hidden">
         <div className="flex-1 flex flex-col overflow-hidden bg-white shadow-inner">
-          <div className="px-8 py-3 border-b border-slate-100 bg-slate-50 flex items-center justify-between sticky top-0 z-10 overflow-x-auto no-scrollbar">
+          {/* Changed overflow-x-auto to overflow-visible to prevent clipping absolute children (dropdowns) */}
+          <div className="px-8 py-3 border-b border-slate-100 bg-slate-50 flex items-center justify-between sticky top-0 z-[60] overflow-visible">
             <div className="flex items-center gap-1 shrink-0">
               <ToolbarButton icon="fa-bold" label="Bold" onClick={() => insertText(editorFormat === 'markdown' ? '**' : '<b>', editorFormat === 'markdown' ? '**' : '</b>')} />
               <ToolbarButton icon="fa-italic" label="Italic" onClick={() => insertText(editorFormat === 'markdown' ? '*' : '<i>', editorFormat === 'markdown' ? '*' : '</i>')} />
@@ -288,7 +282,7 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
                   <i className={`fas fa-chevron-down text-[8px] transition-transform ${showSizeMenu ? 'rotate-180' : ''}`}></i>
                 </button>
                 {showSizeMenu && (
-                  <div className="absolute top-full left-0 mt-2 w-36 bg-white border border-slate-200 rounded-2xl shadow-2xl py-2 z-50 animate-fadeIn overflow-hidden">
+                  <div className="absolute top-full left-0 mt-2 w-36 bg-white border border-slate-200 rounded-2xl shadow-2xl py-2 z-[70] animate-fadeIn overflow-hidden">
                     <div className="px-4 py-2 text-[9px] font-black text-slate-300 uppercase tracking-widest bg-slate-50 border-b border-slate-50 mb-1">Pick Size</div>
                     {['12px', '14px', '18px', '24px', '32px', '48px'].map(sz => (
                       <button 
@@ -320,7 +314,6 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
 
               <div className="w-[1px] h-6 bg-slate-200 mx-2"></div>
               
-              {/* Color Dropdown */}
               <div className="relative" ref={colorMenuRef}>
                 <button 
                   onClick={() => setShowColorMenu(!showColorMenu)}
@@ -333,7 +326,7 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
                   <i className={`fas fa-chevron-down text-[8px] transition-transform ${showColorMenu ? 'rotate-180' : ''}`}></i>
                 </button>
                 {showColorMenu && (
-                  <div className="absolute top-full left-0 mt-2 w-52 bg-white border border-slate-200 rounded-[2rem] shadow-2xl p-5 z-50 animate-fadeIn overflow-hidden">
+                  <div className="absolute top-full left-0 mt-2 w-52 bg-white border border-slate-200 rounded-[2rem] shadow-2xl p-5 z-[70] animate-fadeIn overflow-hidden">
                     <div className="space-y-4">
                       {Object.entries(COLOR_PALETTE).map(([theme, colors]) => (
                         <div key={theme} className="space-y-2">
