@@ -2,170 +2,219 @@
 import React, { useState } from 'react';
 import AdminThemes from './AdminThemes';
 
-const Admin: React.FC = () => {
-  const [activeModule, setActiveModule] = useState('home');
+type AdminModuleId = 'home' | 'wiki-themes' | 'vendors' | 'roles' | 'bundles' | 'taxonomy' | 'artifact-rules' | 'milestone-templates' | 'users' | 'sharepoint' | 'ai-settings';
 
-  const modules = [
-    { id: 'wiki-themes', label: 'Wiki Themes', icon: 'fa-palette', description: 'Visual styling and document rendering definitions.', color: 'blue' },
-    { id: 'users', label: 'Identity Mgmt', icon: 'fa-users-gear', description: 'User roles, access control, and corporate identity.', color: 'indigo' },
-    { id: 'bundles', label: 'Portfolio Config', icon: 'fa-layer-group', description: 'Business bundles and application hierarchy mapping.', color: 'slate' },
-    { id: 'audit', label: 'Audit Logs', icon: 'fa-list-check', description: 'Security audit trails and system change history.', color: 'emerald' }
+interface AdminModule {
+  id: AdminModuleId;
+  label: string;
+  icon: string;
+  description: string;
+  color: string;
+}
+
+interface AdminSection {
+  title: string;
+  modules: AdminModule[];
+}
+
+const Admin: React.FC = () => {
+  const [activeModule, setActiveModule] = useState<AdminModuleId>('home');
+
+  const sections: AdminSection[] = [
+    {
+      title: 'Configuration',
+      modules: [
+        { id: 'vendors', label: 'Vendors', icon: 'fa-building-shield', description: 'Manage vendor catalog, regions, and engagement status.', color: 'blue' },
+        { id: 'roles', label: 'Roles & Permissions', icon: 'fa-user-lock', description: 'Map organizational roles to system permission profiles.', color: 'indigo' },
+        { id: 'bundles', label: 'Bundles', icon: 'fa-layer-group', description: 'Configure business bundles and application hierarchies.', color: 'slate' },
+        { id: 'taxonomy', label: 'Taxonomy', icon: 'fa-tags', description: 'Define document categories, types, and format options.', color: 'emerald' },
+      ]
+    },
+    {
+      title: 'Governance',
+      modules: [
+        { id: 'artifact-rules', label: 'Artifact Rules', icon: 'fa-clipboard-check', description: 'Define required artifacts per milestone for each app.', color: 'amber' },
+        { id: 'milestone-templates', label: 'Milestone Plans', icon: 'fa-route', description: 'Standardize M1-M10 sequence and requirements.', color: 'orange' },
+        { id: 'wiki-themes', label: 'Wiki Themes', icon: 'fa-palette', description: 'Enterprise CSS templates for documentation rendering.', color: 'purple' },
+      ]
+    },
+    {
+      title: 'Users & Access',
+      modules: [
+        { id: 'users', label: 'Users', icon: 'fa-users-gear', description: 'Manage accounts, roles, and vendor associations.', color: 'cyan' },
+      ]
+    },
+    {
+      title: 'Integrations',
+      modules: [
+        { id: 'sharepoint', label: 'SharePoint', icon: 'fa-file-export', description: 'Global base URL patterns and mapping settings.', color: 'sky' },
+        { id: 'ai-settings', label: 'AI Settings', icon: 'fa-robot', description: 'Configure Gemini API keys and reasoning parameters.', color: 'violet' },
+      ]
+    }
   ];
+
+  const allModules = sections.flatMap(s => s.modules);
 
   const renderModuleContent = () => {
     if (activeModule === 'home') {
       return (
-        <div className="p-12 animate-fadeIn max-w-6xl mx-auto">
-          <header className="mb-12">
-            <h2 className="text-4xl font-black text-slate-900 tracking-tighter">System Administration</h2>
-            <p className="text-slate-500 font-medium text-lg mt-2">Manage the core parameters and governance of the NexusDelivery ecosystem.</p>
+        <div className="p-12 animate-fadeIn max-w-7xl mx-auto">
+          <header className="mb-16">
+            <h2 className="text-5xl font-black text-slate-900 tracking-tighter">Command Center</h2>
+            <p className="text-slate-500 font-medium text-xl mt-3">Configure enterprise parameters and system governance.</p>
           </header>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            {modules.map((m) => (
-              <button
-                key={m.id}
-                onClick={() => setActiveModule(m.id)}
-                className="group relative bg-white border border-slate-200 rounded-[2.5rem] p-10 text-left transition-all hover:shadow-2xl hover:shadow-slate-200 hover:-translate-y-2 overflow-hidden"
-              >
-                <div className={`absolute -top-10 -right-10 w-40 h-40 rounded-full opacity-5 group-hover:scale-150 transition-transform duration-700 ${
-                  m.color === 'blue' ? 'bg-blue-600' : m.color === 'indigo' ? 'bg-indigo-600' : m.color === 'emerald' ? 'bg-emerald-600' : 'bg-slate-600'
-                }`}></div>
-                
-                <div className="flex items-center gap-6 mb-6">
-                  <div className={`w-16 h-16 rounded-[1.5rem] flex items-center justify-center shadow-lg transition-transform group-hover:rotate-6 ${
-                    m.color === 'blue' ? 'bg-blue-600 text-white' : m.color === 'indigo' ? 'bg-indigo-600 text-white' : m.color === 'emerald' ? 'bg-emerald-600 text-white' : 'bg-slate-900 text-white'
-                  }`}>
-                    <i className={`fas ${m.icon} text-2xl`}></i>
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">{m.label}</h3>
-                    <div className="h-1 w-12 bg-slate-100 mt-1 group-hover:w-24 transition-all duration-500"></div>
-                  </div>
+          <div className="space-y-16">
+            {sections.map((section) => (
+              <section key={section.title}>
+                <div className="flex items-center gap-4 mb-8">
+                  <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">{section.title}</h3>
+                  <div className="h-[1px] flex-1 bg-slate-100"></div>
                 </div>
-                
-                <p className="text-slate-500 font-medium leading-relaxed mb-8">
-                  {m.description}
-                </p>
-                
-                <div className="flex items-center gap-2 text-[10px] font-black text-blue-600 uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-opacity">
-                  <span>Enter Module</span>
-                  <i className="fas fa-arrow-right"></i>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                  {section.modules.map((m) => (
+                    <button
+                      key={m.id}
+                      onClick={() => setActiveModule(m.id)}
+                      className="group bg-white border border-slate-200 rounded-[2rem] p-8 text-left transition-all hover:shadow-2xl hover:shadow-slate-200 hover:-translate-y-1 flex flex-col justify-between"
+                    >
+                      <div>
+                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg transition-transform group-hover:rotate-6 mb-6 ${
+                          m.color === 'blue' ? 'bg-blue-600' : 
+                          m.color === 'indigo' ? 'bg-indigo-600' : 
+                          m.color === 'emerald' ? 'bg-emerald-600' : 
+                          m.color === 'amber' ? 'bg-amber-500' :
+                          m.color === 'orange' ? 'bg-orange-500' :
+                          m.color === 'purple' ? 'bg-purple-600' :
+                          m.color === 'cyan' ? 'bg-cyan-500' :
+                          m.color === 'sky' ? 'bg-sky-500' : 'bg-slate-900'
+                        } text-white`}>
+                          <i className={`fas ${m.icon} text-xl`}></i>
+                        </div>
+                        <h4 className="text-lg font-black text-slate-900 tracking-tight mb-2 group-hover:text-blue-600 transition-colors">{m.label}</h4>
+                        <p className="text-slate-500 text-xs font-medium leading-relaxed mb-6">
+                          {m.description}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 text-[9px] font-black text-blue-600 uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-opacity">
+                        <span>Open Module</span>
+                        <i className="fas fa-arrow-right"></i>
+                      </div>
+                    </button>
+                  ))}
                 </div>
-              </button>
+              </section>
             ))}
-          </div>
-
-          <div className="mt-12 p-8 bg-slate-50 rounded-[2rem] border border-slate-100 flex items-center justify-between">
-            <div className="flex items-center gap-6">
-              <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center text-slate-400 border border-slate-200 shadow-sm">
-                <i className="fas fa-shield-halved text-lg"></i>
-              </div>
-              <div>
-                <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Security Status</p>
-                <p className="text-sm font-bold text-slate-700">AES-256 Encrypted Session Active. No active vulnerability threats detected.</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Secure</span>
-            </div>
           </div>
         </div>
       );
     }
 
-    switch (activeModule) {
-      case 'wiki-themes':
-        return (
-          <div className="relative">
+    // Module View Layout
+    return (
+      <div className="flex flex-col h-full bg-white relative">
+        <header className="px-12 py-8 border-b border-slate-100 bg-white sticky top-0 z-30 flex items-center justify-between shadow-sm">
+          <div className="flex items-center gap-6">
             <button 
               onClick={() => setActiveModule('home')}
-              className="absolute top-8 left-8 z-50 w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-400 hover:text-blue-600 hover:shadow-lg transition-all"
-              title="Back to Admin Home"
+              className="w-10 h-10 rounded-full bg-slate-50 hover:bg-slate-100 border border-slate-100 flex items-center justify-center text-slate-400 hover:text-blue-600 transition-all"
+              title="Back to Console"
             >
               <i className="fas fa-arrow-left"></i>
             </button>
-            <div className="pt-16">
-              <AdminThemes />
+            <div className="flex flex-col">
+              <span className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">System Management</span>
+              <h3 className="text-2xl font-black text-slate-900 tracking-tighter uppercase">
+                {allModules.find(m => m.id === activeModule)?.label}
+              </h3>
             </div>
           </div>
-        );
-      default:
-        return (
-          <div className="flex flex-col items-center justify-center h-[700px] text-slate-300">
-            <button onClick={() => setActiveModule('home')} className="mb-10 text-xs font-black text-slate-400 hover:text-blue-600 uppercase tracking-[0.2em] flex items-center gap-2">
-              <i className="fas fa-arrow-left"></i> Back to Console
-            </button>
-            <i className="fas fa-screwdriver-wrench text-8xl mb-6 opacity-5"></i>
-            <h3 className="text-xl font-black uppercase tracking-widest">Module Provisioning Required</h3>
-            <p className="text-sm font-medium mt-2">The {modules.find(m => m.id === activeModule)?.label} interface is being updated.</p>
+          <div className="flex items-center gap-4">
+             <div className="bg-emerald-50 text-emerald-600 text-[9px] font-black uppercase tracking-widest px-4 py-2 rounded-full border border-emerald-100">Live Context</div>
           </div>
-        );
-    }
+        </header>
+
+        <div className="flex-1">
+          {activeModule === 'wiki-themes' ? (
+            <AdminThemes />
+          ) : (
+            <div className="flex flex-col items-center justify-center min-h-[600px] text-center p-20 text-slate-200">
+               <i className="fas fa-screwdriver-wrench text-8xl mb-8 opacity-5"></i>
+               <h3 className="text-xl font-black text-slate-300 uppercase tracking-[0.2em]">Module Initialization Pending</h3>
+               <p className="text-sm font-bold text-slate-400 mt-2 max-w-md">The {allModules.find(m => m.id === activeModule)?.label} module is being connected to the core database.</p>
+               <button onClick={() => setActiveModule('home')} className="mt-8 px-8 py-3 bg-slate-900 text-white text-[10px] font-black rounded-xl uppercase tracking-widest shadow-xl">Back to Home</button>
+            </div>
+          )}
+        </div>
+      </div>
+    );
   };
 
   return (
-    <div className="flex bg-white min-h-[850px] border border-slate-200 rounded-[2.5rem] shadow-2xl overflow-hidden animate-fadeIn">
-      {/* Sidebar Sub-nav */}
+    <div className="flex bg-white min-h-[900px] border border-slate-200 rounded-[3rem] shadow-2xl overflow-hidden animate-fadeIn">
+      {/* Sidebar Nav */}
       <aside className="w-80 border-r border-slate-100 flex flex-col shrink-0 bg-slate-50/20">
-        <div className="p-8 border-b border-slate-100">
-           <h2 className="text-2xl font-black text-slate-900 tracking-tighter">Admin Console</h2>
-           <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">System Control Layer</p>
+        <div className="p-10 border-b border-slate-100">
+           <div className="flex items-center gap-3 mb-1">
+             <div className="w-8 h-8 bg-slate-900 rounded-xl flex items-center justify-center text-white">
+               <i className="fas fa-terminal text-sm"></i>
+             </div>
+             <h2 className="text-xl font-black text-slate-900 tracking-tighter">Console</h2>
+           </div>
+           <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Nexus System Admin</p>
         </div>
         
-        <nav className="flex-1 p-6 space-y-2 overflow-y-auto">
+        <nav className="flex-1 p-6 space-y-2 overflow-y-auto custom-scrollbar">
           <button
             onClick={() => setActiveModule('home')}
             className={`w-full text-left p-4 rounded-2xl transition-all group ${
               activeModule === 'home' 
-              ? 'bg-slate-900 text-white shadow-xl shadow-slate-200' 
+              ? 'bg-slate-900 text-white shadow-xl' 
               : 'text-slate-600 hover:bg-slate-100/50'
             }`}
           >
             <div className="flex items-center gap-4">
-              <i className={`fas fa-home ${activeModule === 'home' ? 'text-blue-400' : 'text-slate-300 group-hover:text-slate-500'}`}></i>
-              <span className="text-sm font-black uppercase tracking-tight">Console Home</span>
+              <i className={`fas fa-home ${activeModule === 'home' ? 'text-blue-400' : 'text-slate-300'}`}></i>
+              <span className="text-xs font-black uppercase tracking-tight">System Home</span>
             </div>
           </button>
 
           <div className="h-4"></div>
-          <p className="px-4 text-[9px] font-black text-slate-300 uppercase tracking-[0.2em] mb-2">Management Modules</p>
-
-          {modules.map((m) => (
-            <button
-              key={m.id}
-              onClick={() => setActiveModule(m.id)}
-              className={`w-full text-left p-4 rounded-2xl transition-all group ${
-                activeModule === m.id 
-                ? 'bg-slate-900 text-white shadow-xl shadow-slate-200' 
-                : 'text-slate-600 hover:bg-slate-100/50'
-              }`}
-            >
-              <div className="flex items-center gap-4 mb-1">
-                <i className={`fas ${m.icon} ${activeModule === m.id ? 'text-blue-400' : 'text-slate-300 group-hover:text-slate-500'}`}></i>
-                <span className="text-sm font-black uppercase tracking-tight">{m.label}</span>
-              </div>
-              <p className={`text-[9px] font-medium leading-tight ${activeModule === m.id ? 'text-slate-400' : 'text-slate-400'}`}>
-                {m.description.substring(0, 40)}...
-              </p>
-            </button>
+          
+          {sections.map(section => (
+            <div key={section.title} className="space-y-1 mb-6">
+              <p className="px-4 text-[8px] font-black text-slate-300 uppercase tracking-[0.3em] mb-2">{section.title}</p>
+              {section.modules.map(m => (
+                <button
+                  key={m.id}
+                  onClick={() => setActiveModule(m.id)}
+                  className={`w-full text-left px-4 py-3 rounded-xl transition-all flex items-center gap-3 group ${
+                    activeModule === m.id 
+                    ? 'bg-blue-600 text-white shadow-lg' 
+                    : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
+                  }`}
+                >
+                  <i className={`fas ${m.icon} text-xs ${activeModule === m.id ? 'opacity-100' : 'opacity-30 group-hover:opacity-100'}`}></i>
+                  <span className="text-[11px] font-bold tracking-tight">{m.label}</span>
+                </button>
+              ))}
+            </div>
           ))}
         </nav>
 
         <div className="p-8 bg-slate-900 text-white relative overflow-hidden">
-           <div className="absolute top-0 right-0 w-24 h-24 bg-white/5 rounded-full -mr-12 -mt-12"></div>
+           <div className="absolute top-0 right-0 w-24 h-24 bg-blue-500/10 rounded-full -mr-12 -mt-12"></div>
            <div className="relative z-10">
              <div className="flex items-center gap-2 mb-2">
                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-               <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Security Pulse</span>
+               <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Security Gate Active</span>
              </div>
-             <p className="text-[10px] font-medium text-slate-300">System integrity verified.</p>
+             <p className="text-[10px] font-medium text-slate-400">All administrative actions are audited by the Security Layer.</p>
            </div>
         </div>
       </aside>
 
-      {/* Main Admin Content */}
+      {/* Content Area */}
       <main className="flex-1 overflow-y-auto custom-scrollbar bg-white">
         {renderModuleContent()}
       </main>

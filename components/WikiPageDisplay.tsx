@@ -1,6 +1,7 @@
 
 import React, { useMemo, useEffect, useRef, useState } from 'react';
 import { marked } from 'marked';
+import DOMPurify from 'dompurify';
 import { WikiPage, WikiTheme, WikiSpace } from '../types';
 import { BUNDLES, APPLICATIONS, MILESTONES } from '../constants';
 
@@ -8,6 +9,10 @@ interface WikiPageDisplayProps {
   page: WikiPage;
   onNavigate?: (id: string) => void;
 }
+
+// Security: Create a hardened marked renderer that blocks all raw HTML input
+const renderer = new (marked as any).Renderer();
+renderer.html = () => ''; // Return empty string for any raw HTML blocks
 
 const WikiPageDisplay: React.FC<WikiPageDisplayProps> = ({ page, onNavigate }) => {
   const contentRef = useRef<HTMLDivElement>(null);
@@ -37,20 +42,28 @@ const WikiPageDisplay: React.FC<WikiPageDisplayProps> = ({ page, onNavigate }) =
       }
     };
     resolveTheme();
-  }, [page]);
+  }, [page.spaceId, page.themeKey]);
 
+  // Security: Harden the Markdown pipeline with DOMPurify sanitization
   const htmlContent = useMemo(() => {
     if (!page.content) return '';
     try {
-      // Basic sanitization: strip script tags for MVP
-      const sanitized = page.content.replace(/<script\b[^>]*>([\s\S]*?)<\/script>/gim, "");
-      return marked.parse(sanitized, {
+      // 1. Convert Markdown to HTML using hardened renderer (no raw HTML allowed)
+      const rawHtml = marked.parse(page.content, {
         gfm: true,
         breaks: true,
+        renderer,
+      }) as string;
+
+      // 2. Sanitize the output to remove dangerous tags, attributes, and URI schemes
+      return DOMPurify.sanitize(rawHtml, {
+        FORBID_TAGS: ['style', 'script', 'iframe', 'object', 'embed', 'link', 'meta', 'svg', 'math'],
+        FORBID_ATTR: ['style', 'onerror', 'onload', 'onclick', 'onmouseover'],
+        ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
       });
     } catch (err) {
       console.error("Markdown parsing error:", err);
-      return 'Error rendering document content.';
+      return 'Error rendering document content securely.';
     }
   }, [page.content]);
 
@@ -79,10 +92,16 @@ const WikiPageDisplay: React.FC<WikiPageDisplayProps> = ({ page, onNavigate }) =
   const bundle = BUNDLES.find(b => b.id === page.bundleId);
   const application = APPLICATIONS.find(a => a.id === page.applicationId);
   const milestone = MILESTONES.find(m => m.id === page.milestoneId);
+  
+  // Fix: Unique Sync Hash derived from document ID rather than random
+  const syncHash = useMemo(() => {
+    const id = page._id || page.id || 'new';
+    return id.substring(id.length - 8).toUpperCase();
+  }, [page._id, page.id]);
 
   return (
     <article className="animate-fadeIn w-full pb-32">
-      {/* Dynamic Scoped Theme Injection */}
+      {/* Dynamic Scoped Theme Injection - Trusted source from Admin control */}
       {activeTheme && (
         <style dangerouslySetInnerHTML={{ __html: activeTheme.css }} />
       )}
@@ -127,7 +146,7 @@ const WikiPageDisplay: React.FC<WikiPageDisplayProps> = ({ page, onNavigate }) =
           </div>
           <div className="space-y-1">
              <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest">Sync Hash</span>
-             <p className="text-sm font-mono text-slate-400 font-bold uppercase tracking-tighter">{Math.random().toString(36).substring(7)}</p>
+             <p className="text-sm font-mono text-slate-400 font-bold uppercase tracking-tighter">{syncHash}</p>
           </div>
         </div>
 
@@ -164,7 +183,7 @@ const WikiPageDisplay: React.FC<WikiPageDisplayProps> = ({ page, onNavigate }) =
         )}
       </header>
 
-      {/* Scoped content container - Removed Tailwind 'prose' to ensure custom theme CSS is the primary styling source */}
+      {/* Scoped content container - Securely rendered and themed */}
       <div 
         ref={contentRef}
         className={`wiki-content theme-${activeTheme?.key || 'default'} max-w-none`}
