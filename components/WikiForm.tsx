@@ -1,7 +1,7 @@
 
-import React, { useState, useRef, useMemo } from 'react';
-import { WikiPage, Application, Milestone, Bundle } from '../types';
-import { BUNDLES, APPLICATIONS, MILESTONES } from '../constants';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
+import { WikiPage } from '../types';
+import { BUNDLES, APPLICATIONS } from '../constants';
 import { marked } from 'marked';
 
 interface WikiFormProps {
@@ -33,10 +33,8 @@ const WikiForm: React.FC<WikiFormProps> = ({
   initialBundleId = '',
   initialApplicationId = '',
   initialMilestoneId = '',
-  parentId: initialParentId, 
   spaceId,
   id,
-  allPages,
   currentUser,
   onSaveSuccess,
   onCancel
@@ -49,7 +47,9 @@ const WikiForm: React.FC<WikiFormProps> = ({
   const [milestoneId, setMilestoneId] = useState(initialMilestoneId);
   const [status, setStatus] = useState<'Draft' | 'Published'>('Published');
   const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'edit' | 'split'>('edit');
+  const [editorFormat, setEditorFormat] = useState<'markdown' | 'html'>('markdown');
   
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -61,10 +61,35 @@ const WikiForm: React.FC<WikiFormProps> = ({
     }
   }, [content]);
 
-  const handleSave = async () => {
-    if (!title.trim()) return;
-    setIsSaving(true);
+  const insertText = (before: string, after: string = '') => {
+    if (!textAreaRef.current) return;
+    const textarea = textAreaRef.current;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selectedText = textarea.value.substring(start, end);
+    const replacement = before + selectedText + after;
+    
+    const newContent = 
+      textarea.value.substring(0, start) + 
+      replacement + 
+      textarea.value.substring(end);
+    
+    setContent(newContent);
+    
+    setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(start + before.length, start + before.length + selectedText.length);
+    }, 0);
+  };
 
+  const handleSave = async () => {
+    setSaveError(null);
+    if (!title.trim()) {
+      setSaveError("Title cannot be empty.");
+      return;
+    }
+    
+    setIsSaving(true);
     const payload: Partial<WikiPage> = {
       _id: id,
       title: title.trim(),
@@ -90,97 +115,135 @@ const WikiForm: React.FC<WikiFormProps> = ({
       const data = await res.json();
       if (res.ok) {
         onSaveSuccess(data.result?.insertedId || id);
+      } else {
+        setSaveError(data.error || "Persistence layer error. Artifact not saved.");
       }
     } catch (err) {
-      console.error("Save failed:", err);
+      setSaveError("Registry connection lost.");
     } finally {
       setIsSaving(false);
     }
   };
 
-  const insertTemplate = (tpl: string) => {
-    let tplContent = '';
-    if (tpl === 'ADR') tplContent = '\n\n# ADR: [Title]\n\n## Status\nProposed\n\n## Context\n...\n\n## Decision\n...\n\n## Consequences\n...';
-    if (tpl === 'LLD') tplContent = '\n\n# LLD: [Title]\n\n## Introduction\n...\n\n## Architecture\n...\n\n## Data Model\n...';
-    setContent(content + tplContent);
-  };
-
   return (
-    <div className="fixed inset-0 z-[100] bg-white flex flex-col animate-fadeIn">
-      <header className="px-10 py-6 border-b border-slate-100 flex items-center justify-between bg-white shadow-sm shrink-0">
+    <div className="fixed inset-0 z-[100] bg-slate-50 flex flex-col animate-fadeIn">
+      <header className="px-10 py-5 bg-white border-b border-slate-200 flex items-center justify-between shadow-sm shrink-0">
         <div className="flex items-center gap-6">
-          <button onClick={onCancel} className="w-10 h-10 rounded-full bg-slate-50 hover:bg-slate-100 flex items-center justify-center text-slate-400 transition-all">
-            <i className="fas fa-arrow-left"></i>
+          <button onClick={onCancel} className="w-10 h-10 rounded-full bg-slate-50 hover:bg-slate-100 flex items-center justify-center text-slate-400 transition-all border border-slate-100 shadow-sm">
+            <i className="fas fa-times"></i>
           </button>
           <div className="flex flex-col">
-            <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest leading-none mb-1">Editing Artifact</span>
+            <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest leading-none mb-1">Revising Artifact</span>
             <input 
               value={title} onChange={(e) => setTitle(e.target.value)}
-              className="text-xl font-black text-slate-800 border-none p-0 focus:ring-0 outline-none bg-transparent tracking-tight"
-              placeholder="Page Title"
+              className="text-2xl font-black text-slate-800 border-none p-0 focus:ring-0 outline-none bg-transparent tracking-tight w-[400px]"
+              placeholder="Artifact Title"
             />
           </div>
         </div>
         
         <div className="flex items-center gap-4">
-          <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
-            <button onClick={() => setStatus('Draft')} className={`px-4 py-1.5 text-[9px] font-black uppercase tracking-widest rounded-lg transition-all ${status === 'Draft' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}>Draft</button>
-            <button onClick={() => setStatus('Published')} className={`px-4 py-1.5 text-[9px] font-black uppercase tracking-widest rounded-lg transition-all ${status === 'Published' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}>Publish</button>
+          <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 mr-4">
+            <button onClick={() => setStatus('Draft')} className={`px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${status === 'Draft' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}>Draft</button>
+            <button onClick={() => setStatus('Published')} className={`px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${status === 'Published' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}>Publish</button>
           </div>
           <button 
             onClick={handleSave}
-            disabled={!title.trim() || isSaving}
-            className="px-8 py-3 bg-slate-900 text-white text-[10px] font-black rounded-xl shadow-xl hover:bg-slate-800 transition-all uppercase tracking-widest flex items-center gap-2"
+            disabled={isSaving}
+            className={`px-8 py-3 rounded-xl shadow-xl transition-all uppercase tracking-widest font-black text-[10px] flex items-center gap-2 ${
+              isSaving ? 'bg-slate-300 text-slate-500' : 'bg-slate-900 text-white hover:bg-slate-800'
+            }`}
           >
             {isSaving ? <i className="fas fa-circle-notch fa-spin"></i> : <i className="fas fa-save"></i>}
-            Update Artifact
+            {isSaving ? 'Syncing...' : 'Update Artifact'}
           </button>
         </div>
       </header>
 
+      {saveError && (
+        <div className="bg-red-500 text-white px-10 py-3 text-xs font-bold animate-fadeIn">
+          <i className="fas fa-exclamation-triangle mr-3"></i>
+          {saveError}
+        </div>
+      )}
+
       <div className="flex flex-1 overflow-hidden">
-        {/* Main Editor */}
-        <div className="flex-1 flex flex-col p-12 overflow-y-auto custom-scrollbar">
-          <div className="flex items-center gap-4 mb-6 border-b border-slate-50 pb-4">
-            <button onClick={() => insertTemplate('ADR')} className="text-[10px] font-black text-slate-400 hover:text-blue-500 uppercase tracking-widest">+ ADR</button>
-            <button onClick={() => insertTemplate('LLD')} className="text-[10px] font-black text-slate-400 hover:text-blue-500 uppercase tracking-widest">+ LLD</button>
-            <div className="h-4 w-[1px] bg-slate-100 mx-2"></div>
-            <button onClick={() => setViewMode(viewMode === 'split' ? 'edit' : 'split')} className="text-[10px] font-black text-slate-400 hover:text-blue-500 uppercase tracking-widest flex items-center gap-2">
-              <i className="fas fa-columns"></i> Split Preview
-            </button>
+        <div className="flex-1 flex flex-col overflow-hidden bg-white">
+          <div className="px-10 py-3 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+            <div className="flex items-center gap-1">
+              <ToolbarButton icon="fa-bold" label="Bold" onClick={() => editorFormat === 'markdown' ? insertText('**', '**') : insertText('<b>', '</b>')} />
+              <ToolbarButton icon="fa-italic" label="Italic" onClick={() => editorFormat === 'markdown' ? insertText('*', '*') : insertText('<i>', '</i>')} />
+              <ToolbarButton icon="fa-strikethrough" label="Strike" onClick={() => editorFormat === 'markdown' ? insertText('~~', '~~') : insertText('<del>', '</del>')} />
+              <div className="w-[1px] h-6 bg-slate-200 mx-1"></div>
+              <ToolbarButton icon="fa-heading" label="H1" onClick={() => editorFormat === 'markdown' ? insertText('# ', '') : insertText('<h1>', '</h1>')} />
+              <ToolbarButton icon="fa-heading" label="H2" size="xs" onClick={() => editorFormat === 'markdown' ? insertText('## ', '') : insertText('<h2>', '</h2>')} />
+              <div className="w-[1px] h-6 bg-slate-200 mx-1"></div>
+              <ToolbarButton icon="fa-list-ul" label="List" onClick={() => editorFormat === 'markdown' ? insertText('- ', '') : insertText('<ul><li>', '</li></ul>')} />
+              <ToolbarButton icon="fa-quote-left" label="Quote" onClick={() => editorFormat === 'markdown' ? insertText('> ', '') : insertText('<blockquote>', '</blockquote>')} />
+              <ToolbarButton icon="fa-code" label="Code" onClick={() => editorFormat === 'markdown' ? insertText('```\n', '\n```') : insertText('<pre><code>', '</code></pre>')} />
+              <div className="w-[1px] h-6 bg-slate-200 mx-1"></div>
+              <div className="flex items-center gap-1 ml-2">
+                <button onClick={() => insertText('<span style="color: #3b82f6">', '</span>')} className="w-4 h-4 rounded-full bg-blue-500 hover:scale-125 transition-transform"></button>
+                <button onClick={() => insertText('<span style="color: #ef4444">', '</span>')} className="w-4 h-4 rounded-full bg-red-500 hover:scale-125 transition-transform"></button>
+                <button onClick={() => insertText('<span style="color: #10b981">', '</span>')} className="w-4 h-4 rounded-full bg-emerald-500 hover:scale-125 transition-transform"></button>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2 bg-white border border-slate-200 px-3 py-1.5 rounded-xl shadow-sm">
+                <span className={`text-[9px] font-black uppercase tracking-widest ${editorFormat === 'markdown' ? 'text-blue-600' : 'text-slate-400'}`}>MD</span>
+                <button 
+                  onClick={() => setEditorFormat(editorFormat === 'markdown' ? 'html' : 'markdown')}
+                  className={`w-8 h-4 rounded-full relative transition-all ${editorFormat === 'markdown' ? 'bg-slate-200' : 'bg-blue-600'}`}
+                >
+                  <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all ${editorFormat === 'markdown' ? 'left-0.5' : 'left-4.5'}`}></div>
+                </button>
+                <span className={`text-[9px] font-black uppercase tracking-widest ${editorFormat === 'html' ? 'text-blue-600' : 'text-slate-400'}`}>HTML</span>
+              </div>
+              <button 
+                onClick={() => setViewMode(viewMode === 'split' ? 'edit' : 'split')}
+                className={`px-4 py-1.5 text-[9px] font-black uppercase tracking-widest rounded-xl flex items-center gap-2 transition-all ${
+                  viewMode === 'split' ? 'bg-blue-600 text-white' : 'bg-white border border-slate-200 text-slate-500'
+                }`}
+              >
+                <i className="fas fa-columns"></i> Split Preview
+              </button>
+            </div>
           </div>
 
-          <div className={`flex flex-1 gap-12 ${viewMode === 'split' ? 'flex-row' : 'flex-col'}`}>
+          <div className={`flex flex-1 overflow-hidden ${viewMode === 'split' ? 'flex-row' : 'flex-col'}`}>
             <textarea 
               ref={textAreaRef}
               value={content}
               onChange={(e) => setContent(e.target.value)}
-              className={`flex-1 border-none focus:ring-0 p-0 text-slate-700 leading-relaxed resize-none text-xl font-medium placeholder:text-slate-100 bg-transparent ${viewMode === 'split' ? 'border-r border-slate-50 pr-12' : ''}`}
+              className="flex-1 border-none focus:ring-0 p-12 text-slate-700 leading-relaxed resize-none text-lg font-medium placeholder:text-slate-200 bg-transparent custom-scrollbar"
+              placeholder="Artifact content..."
             />
             {viewMode === 'split' && (
-              <div className="flex-1 prose prose-slate max-w-none" dangerouslySetInnerHTML={{ __html: renderedContent }} />
+              <div className="flex-1 border-l border-slate-100 overflow-y-auto p-12 bg-white custom-scrollbar">
+                <div className="prose prose-slate prose-lg max-w-none" dangerouslySetInnerHTML={{ __html: renderedContent }} />
+              </div>
             )}
           </div>
         </div>
 
-        {/* Metadata Sidebar */}
-        <aside className="w-80 border-l border-slate-100 bg-slate-50/30 p-10 space-y-10 shrink-0">
+        <aside className="w-80 border-l border-slate-200 bg-slate-50 p-8 space-y-10 shrink-0 overflow-y-auto custom-scrollbar">
           <div className="space-y-6">
-            <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Context Metadata</h4>
+            <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Metadata context</h4>
             <SidebarField label="Document Type" value={category} onChange={setCategory} options={WIKI_CATEGORIES} />
             <SidebarField label="Business Bundle" value={bundleId} onChange={setBundleId} options={BUNDLES.map(b => ({ id: b.id, name: b.name }))} />
-            <SidebarField label="Target Application" value={applicationId} onChange={setApplicationId} options={APPLICATIONS.map(a => ({ id: a.id, name: a.name }))} />
-            <SidebarField label="Delivery Milestone" value={milestoneId} onChange={setMilestoneId} options={[...Array(10)].map((_, i) => ({ id: `M${i+1}`, name: `M${i+1}` }))} />
+            <SidebarField label="Application" value={applicationId} onChange={setApplicationId} options={APPLICATIONS.map(a => ({ id: a.id, name: a.name }))} />
+            <SidebarField label="Milestone" value={milestoneId} onChange={setMilestoneId} options={[...Array(10)].map((_, i) => ({ id: `M${i+1}`, name: `M${i+1}` }))} />
           </div>
           
-          <div className="pt-10 border-t border-slate-100">
+          <div className="pt-10 border-t border-slate-200">
              <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest block mb-2">Audit Logs</span>
              <div className="space-y-3">
                <div className="flex gap-3">
                  <div className="w-6 h-6 rounded-lg bg-slate-100 flex items-center justify-center text-[8px] font-black">SY</div>
                  <div className="flex flex-col">
-                   <span className="text-[10px] font-bold text-slate-600">Created by {initialAuthor || 'System'}</span>
-                   <span className="text-[8px] text-slate-400">{new Date(initialCreatedAt || Date.now()).toLocaleDateString()}</span>
+                   <span className="text-[10px] font-bold text-slate-600">Revision by {currentUser?.name || 'System'}</span>
+                   <span className="text-[8px] text-slate-400">{new Date().toLocaleDateString()}</span>
                  </div>
                </div>
              </div>
@@ -197,13 +260,23 @@ const WikiForm: React.FC<WikiFormProps> = ({
   );
 };
 
+const ToolbarButton = ({ icon, label, onClick, size = 'sm' }: any) => (
+  <button 
+    onClick={onClick}
+    title={label}
+    className="w-10 h-10 flex items-center justify-center text-slate-500 hover:text-blue-600 hover:bg-white hover:shadow-sm rounded-xl transition-all"
+  >
+    <i className={`fas ${icon} ${size === 'xs' ? 'text-[10px]' : 'text-sm'}`}></i>
+  </button>
+);
+
 const SidebarField = ({ label, value, onChange, options }: any) => (
   <div className="space-y-2">
     <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">{label}</label>
     <select 
       value={value} 
       onChange={(e) => onChange(e.target.value)}
-      className="w-full bg-white border-2 border-slate-100 rounded-xl px-4 py-3 text-xs font-bold text-slate-600 outline-none focus:border-blue-500 transition-all"
+      className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-4 text-xs font-bold text-slate-700 outline-none focus:border-blue-500 transition-all shadow-sm"
     >
       <option value="">Select {label}</option>
       {options.map((o: any) => typeof o === 'string' ? <option key={o} value={o}>{o}</option> : <option key={o.id} value={o.id}>{o.name}</option>)}
