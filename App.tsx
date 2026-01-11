@@ -11,8 +11,18 @@ import GovernanceDocuments from './components/GovernanceDocuments';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
+  
+  // Global / Contextual Filters
   const [activeBundle, setActiveBundle] = useState('all');
   const [activeVendor, setActiveVendor] = useState('all');
+  const [selSpaceId, setSelSpaceId] = useState('all');
+  const [activeApp, setActiveApp] = useState('all');
+  const [selMilestone, setSelMilestone] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  
+  // Trigger for child components (e.g. opening "Create Space" modal in Wiki)
+  const [wikiTrigger, setWikiTrigger] = useState<string | null>(null);
+
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -49,7 +59,18 @@ const App: React.FC = () => {
       case 'work-items':
         return <WorkItems />;
       case 'wiki':
-        return <Wiki currentUser={user} />;
+        return (
+          <Wiki 
+            currentUser={user}
+            selSpaceId={selSpaceId}
+            selBundleId={activeBundle}
+            selAppId={activeApp}
+            selMilestone={selMilestone}
+            searchQuery={searchQuery}
+            externalTrigger={wikiTrigger}
+            onTriggerProcessed={() => setWikiTrigger(null)}
+          />
+        );
       case 'reviews':
         return <Milestones />;
       case 'documents':
@@ -77,10 +98,24 @@ const App: React.FC = () => {
     <Layout 
       activeTab={activeTab} 
       setActiveTab={setActiveTab}
+      // Contextual Filter Props
+      selSpaceId={selSpaceId}
+      setSelSpaceId={setSelSpaceId}
       activeBundle={activeBundle}
       setActiveBundle={setActiveBundle}
+      activeApp={activeApp}
+      setActiveApp={setActiveApp}
       activeVendor={activeVendor}
       setActiveVendor={setActiveVendor}
+      selMilestone={selMilestone}
+      setSelMilestone={setSelMilestone}
+      searchQuery={searchQuery}
+      setSearchQuery={setSearchQuery}
+      
+      // Actions
+      onCreateSpace={() => setWikiTrigger('create-space')}
+
+      // User Props
       userName={user?.name}
       userRole={user?.role}
       onLogout={handleLogout}

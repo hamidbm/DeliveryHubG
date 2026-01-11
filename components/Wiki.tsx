@@ -12,22 +12,31 @@ interface WikiProps {
     role: string;
     email: string;
   };
+  // Filters passed from parent (App.tsx -> Layout)
+  selSpaceId: string;
+  selBundleId: string;
+  selAppId: string;
+  selMilestone: string;
+  searchQuery: string;
+  
+  // External control triggers
+  externalTrigger?: string | null;
+  onTriggerProcessed?: () => void;
 }
 
-const Wiki: React.FC<WikiProps> = ({ currentUser }) => {
-  // Layer 1 - Filter States
-  const [spaces, setSpaces] = useState<WikiSpace[]>([]);
-  const [bundles, setBundles] = useState<Bundle[]>([]);
-  const [applications, setApplications] = useState<Application[]>([]);
-  const [milestones, setMilestones] = useState<Milestone[]>([]);
-  
-  const [selSpaceId, setSelSpaceId] = useState<string>('all');
-  const [selBundleId, setSelBundleId] = useState<string>('all');
-  const [selAppId, setSelAppId] = useState<string>('all');
-  const [selMilestone, setSelMilestone] = useState<string>('all');
-  const [searchQuery, setSearchQuery] = useState('');
-  
+const Wiki: React.FC<WikiProps> = ({ 
+  currentUser, 
+  selSpaceId, 
+  selBundleId, 
+  selAppId, 
+  selMilestone, 
+  searchQuery,
+  externalTrigger,
+  onTriggerProcessed
+}) => {
   // Layer 2 - UI Mode & Content States
+  const [spaces, setSpaces] = useState<WikiSpace[]>([]);
+  const [applications, setApplications] = useState<Application[]>([]);
   const [hierarchyMode, setHierarchyMode] = useState<HierarchyMode>(HierarchyMode.APP_MILESTONE_TYPE);
   const [pages, setPages] = useState<WikiPage[]>([]);
   const [activePage, setActivePage] = useState<WikiPage | null>(null);
@@ -42,22 +51,26 @@ const Wiki: React.FC<WikiProps> = ({ currentUser }) => {
   const [newSpaceName, setNewSpaceName] = useState('');
   const [newSpaceKey, setNewSpaceKey] = useState('');
 
+  // Handle external triggers from the Global Context Bar (Layout)
+  useEffect(() => {
+    if (externalTrigger === 'create-space') {
+      setIsCreatingSpace(true);
+      onTriggerProcessed?.();
+    }
+  }, [externalTrigger, onTriggerProcessed]);
+
   useEffect(() => {
     const init = async () => {
       setLoading(true);
       try {
-        const [spRes, bnRes, apRes, msRes, pgRes] = await Promise.all([
+        const [spRes, apRes, pgRes] = await Promise.all([
           fetch('/api/wiki/spaces'),
-          fetch('/api/bundles'), // You might need to add this API or fetch from seed
           fetch('/api/applications'),
-          fetch('/api/milestones'),
           fetch('/api/wiki')
         ]);
         
         setSpaces(await spRes.json());
-        setBundles(await bnRes.json().catch(() => []));
         setApplications(await apRes.json().catch(() => []));
-        setMilestones(await msRes.json().catch(() => []));
         setPages(await pgRes.json());
       } catch (e) {
         console.error("Wiki Init Error", e);
@@ -68,15 +81,9 @@ const Wiki: React.FC<WikiProps> = ({ currentUser }) => {
     init();
   }, []);
 
-  // Filter application list based on bundle
-  const filteredApps = useMemo(() => {
-    if (selBundleId === 'all') return applications;
-    return applications.filter(a => a.bundleId === selBundleId);
-  }, [selBundleId, applications]);
-
   // Layer 3 - Dynamic Tree Explorer (PROJECTION LOGIC)
   const treeData = useMemo(() => {
-    // 1. Filter pages based on Layer 1 context bar
+    // 1. Filter pages based on Layer 1 context bar (props)
     let filtered = pages;
     if (selSpaceId !== 'all') filtered = filtered.filter(p => p.spaceId === selSpaceId);
     if (selBundleId !== 'all') filtered = filtered.filter(p => p.bundleId === selBundleId);
@@ -139,6 +146,33 @@ const Wiki: React.FC<WikiProps> = ({ currentUser }) => {
     if (found) setActivePage(found);
   };
 
+  const handleCreateSpace = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newSpaceName.trim() || !newSpaceKey.trim()) return;
+    
+    try {
+      const res = await fetch('/api/wiki/spaces', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          name: newSpaceName, 
+          key: newSpaceKey.toUpperCase(), 
+          visibility: 'internal',
+          icon: 'fa-book' 
+        }),
+      });
+      if (res.ok) {
+        setNewSpaceName('');
+        setNewSpaceKey('');
+        setIsCreatingSpace(false);
+        const spRes = await fetch('/api/wiki/spaces');
+        setSpaces(await spRes.json());
+      }
+    } catch (err) {
+      console.error("Space creation failed", err);
+    }
+  };
+
   const renderTreeNode = (node: any, depth = 0) => {
     const isPage = node.type === 'page';
     const isActive = isPage && (activePage?._id === node.data?._id || activePage?.id === node.data?.id);
@@ -167,41 +201,11 @@ const Wiki: React.FC<WikiProps> = ({ currentUser }) => {
   };
 
   return (
-    <div className="flex flex-col bg-white min-h-[900px] border border-slate-200 rounded-[2.5rem] shadow-2xl overflow-hidden animate-fadeIn">
-      
-      {/* Layer 1: Wiki Context Bar */}
-      <div className="h-20 border-b border-slate-100 flex items-center px-8 gap-6 bg-slate-50/30 sticky top-0 z-40 backdrop-blur-md">
-        <div className="flex items-center gap-4 flex-1">
-          <FilterSelect label="Space" value={selSpaceId} onChange={setSelSpaceId} options={spaces.map(s => ({ id: s._id || s.id!, name: s.name }))} />
-          <FilterSelect label="Bundle" value={selBundleId} onChange={setSelBundleId} options={bundles.map(b => ({ id: b.id, name: b.name }))} />
-          <FilterSelect label="App" value={selAppId} onChange={setSelAppId} options={filteredApps.map(a => ({ id: a.id, name: a.name }))} />
-          <FilterSelect label="Milestone" value={selMilestone} onChange={setSelMilestone} options={[...Array(10)].map((_, i) => ({ id: `M${i+1}`, name: `M${i+1}` }))} />
-        </div>
-
-        <div className="flex items-center gap-4">
-          <div className="relative">
-            <i className="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 text-xs"></i>
-            <input 
-              type="text" 
-              placeholder="Search wiki..." 
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="bg-white border-2 border-slate-100 rounded-2xl pl-10 pr-4 py-2.5 text-xs focus:border-blue-500 transition-all w-48 font-bold"
-            />
-          </div>
-          <button 
-            onClick={() => setIsCreatingSpace(true)}
-            className="px-6 py-2.5 bg-slate-900 text-white text-[10px] font-black rounded-xl hover:bg-slate-800 transition-all uppercase tracking-widest shadow-xl shadow-slate-900/10 flex items-center gap-2"
-          >
-            <i className="fas fa-plus"></i> Space
-          </button>
-        </div>
-      </div>
-
-      {/* Layer 2: Main Workspace Area */}
+    <div className="flex bg-white min-h-[850px] border border-slate-200 rounded-[2.5rem] shadow-2xl overflow-hidden animate-fadeIn">
+      {/* Layer 2: Workspace splits into Pane 1 (Tree) and Pane 2 (Content) */}
       <div className="flex flex-1 overflow-hidden relative">
         
-        {/* Layer 3: Dynamic Tree Explorer */}
+        {/* Layer 3: Dynamic Tree Explorer (Left Pane) */}
         {!isEditing && !isCreating && (
           <aside className="w-80 border-r border-slate-100 flex flex-col shrink-0 bg-slate-50/10">
             <div className="p-6 border-b border-slate-100 space-y-4">
@@ -210,7 +214,7 @@ const Wiki: React.FC<WikiProps> = ({ currentUser }) => {
                 <select 
                   value={hierarchyMode}
                   onChange={(e) => setHierarchyMode(e.target.value as HierarchyMode)}
-                  className="w-full bg-white border-2 border-slate-100 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-600 outline-none focus:border-blue-500 transition-all"
+                  className="w-full bg-white border-2 border-slate-100 rounded-xl px-4 py-2 text-xs font-bold text-slate-600 outline-none focus:border-blue-500 transition-all"
                 >
                   {Object.values(HierarchyMode).map(mode => (
                     <option key={mode} value={mode}>{mode}</option>
@@ -226,12 +230,52 @@ const Wiki: React.FC<WikiProps> = ({ currentUser }) => {
             </div>
             <nav className="flex-1 overflow-y-auto p-4 custom-scrollbar">
               {treeData.map(node => renderTreeNode(node))}
+              {treeData.length === 0 && (
+                <div className="py-20 text-center text-slate-300">
+                  <p className="text-[10px] font-black uppercase tracking-widest">No matching results</p>
+                </div>
+              )}
             </nav>
           </aside>
         )}
 
-        {/* Layer 4: Content Viewer / Editor */}
+        {/* Layer 4: Content Viewer / Editor (Right Pane) */}
         <div className="flex-1 flex flex-col overflow-y-auto custom-scrollbar relative">
+          {isCreatingSpace && (
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-6">
+              <form onSubmit={handleCreateSpace} className="bg-white rounded-[2.5rem] w-full max-w-md p-10 shadow-2xl animate-fadeIn border border-slate-100">
+                <h3 className="text-2xl font-black text-slate-900 mb-2">Initialize Knowledge Space</h3>
+                <p className="text-sm text-slate-500 mb-8 font-medium">Functional silos to organize enterprise documentation.</p>
+                
+                <div className="space-y-6">
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="col-span-2 space-y-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Space Name</label>
+                      <input 
+                        type="text" required value={newSpaceName} onChange={(e) => setNewSpaceName(e.target.value)}
+                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-slate-700 focus:border-blue-500 transition-all font-bold"
+                        placeholder="Engineering..."
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Space Key</label>
+                      <input 
+                        type="text" required maxLength={3} value={newSpaceKey} onChange={(e) => setNewSpaceKey(e.target.value)}
+                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-slate-700 focus:border-blue-500 transition-all font-black text-center"
+                        placeholder="ENG"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-4 mt-10">
+                  <button type="button" onClick={() => setIsCreatingSpace(false)} className="flex-1 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-800 transition-all">Discard</button>
+                  <button type="submit" className="flex-1 py-4 bg-slate-900 text-white text-[10px] font-black rounded-2xl shadow-xl hover:bg-slate-800 transition-all uppercase tracking-widest">Provision Space</button>
+                </div>
+              </form>
+            </div>
+          )}
+
           {isCreating ? (
             <CreateWikiPageForm 
               spaceId={selSpaceId === 'all' ? (spaces[0]?._id || 'default') : selSpaceId}
@@ -246,6 +290,12 @@ const Wiki: React.FC<WikiProps> = ({ currentUser }) => {
               initialTitle={activePage.title}
               initialContent={activePage.content}
               spaceId={activePage.spaceId}
+              initialAuthor={activePage.author}
+              initialCreatedAt={activePage.createdAt}
+              initialCategory={activePage.category}
+              initialBundleId={activePage.bundleId}
+              initialApplicationId={activePage.applicationId}
+              initialMilestoneId={activePage.milestoneId}
               allPages={pages}
               currentUser={currentUser}
               onSaveSuccess={handleSaveSuccess}
@@ -255,17 +305,21 @@ const Wiki: React.FC<WikiProps> = ({ currentUser }) => {
             <WikiHistory page={activePage} onClose={() => setViewHistory(false)} onRevert={handleSaveSuccess} />
           ) : activePage ? (
             <div className="animate-fadeIn">
-              <div className="px-10 py-6 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white/90 backdrop-blur-md z-30">
-                <div className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                  <i className="fas fa-link text-blue-500"></i>
-                  <span>Registry Node</span>
-                </div>
+              <div className="px-10 py-6 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white/90 backdrop-blur-md z-30 shadow-sm">
                 <div className="flex items-center gap-3">
-                  <ActionIcon icon="fa-pen-fancy" tooltip="Edit Page" onClick={() => setIsEditing(true)} />
-                  <ActionIcon icon="fa-comments" tooltip="Comments" onClick={() => setShowComments(!showComments)} active={showComments} />
-                  <ActionIcon icon="fa-clock-rotate-left" tooltip="History" onClick={() => setViewHistory(true)} />
-                  <ActionIcon icon="fa-star" tooltip="Watch" onClick={() => {}} />
-                  <ActionIcon icon="fa-link" tooltip="Copy Link" onClick={() => {}} />
+                   <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                    <i className="fas fa-link text-blue-500"></i>
+                    <span>{spaces.find(s => s._id === activePage.spaceId || s.id === activePage.spaceId)?.name || 'Registry Node'}</span>
+                   </div>
+                   <div className="w-1 h-1 rounded-full bg-slate-200"></div>
+                   <span className="text-sm font-bold text-slate-800 truncate max-w-[300px]">{activePage.title}</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <ActionIcon icon="fa-pen-fancy" tooltip="Edit Node" onClick={() => setIsEditing(true)} />
+                  <ActionIcon icon="fa-comments" tooltip="Feedback Loop" onClick={() => setShowComments(!showComments)} active={showComments} />
+                  <ActionIcon icon="fa-clock-rotate-left" tooltip="Version Control" onClick={() => setViewHistory(true)} />
+                  <ActionIcon icon="fa-star" tooltip="Watch Artifact" onClick={() => {}} />
+                  <ActionIcon icon="fa-link" tooltip="Permanent Link" onClick={() => {}} />
                 </div>
               </div>
               <div className="p-16 max-w-5xl mx-auto">
@@ -296,26 +350,12 @@ const Wiki: React.FC<WikiProps> = ({ currentUser }) => {
   );
 };
 
-const FilterSelect = ({ label, value, onChange, options }: any) => (
-  <div className="flex flex-col gap-1 min-w-[120px]">
-    <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-1">{label}</label>
-    <select 
-      value={value} 
-      onChange={(e) => onChange(e.target.value)}
-      className="bg-white border-2 border-slate-100 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-600 focus:border-blue-500 transition-all outline-none"
-    >
-      <option value="all">All {label}s</option>
-      {options.map((o: any) => <option key={o.id} value={o.id}>{o.name}</option>)}
-    </select>
-  </div>
-);
-
 const ActionIcon = ({ icon, tooltip, onClick, active }: any) => (
   <button 
     title={tooltip}
     onClick={onClick}
     className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all ${
-      active ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-100 hover:text-blue-600'
+      active ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-100 hover:text-blue-600'
     }`}
   >
     <i className={`fas ${icon} text-sm`}></i>
@@ -342,17 +382,17 @@ const WikiComments = ({ pageId, currentUser }: any) => {
 
   return (
     <div className="space-y-8 animate-fadeIn">
-      <h3 className="text-xl font-black text-slate-800">Collaborative Feedback</h3>
+      <h3 className="text-xl font-black text-slate-800 tracking-tighter">Collaborative Feedback</h3>
       <div className="space-y-6">
         {comments.map((c, i) => (
-          <div key={i} className="flex gap-4">
-            <div className="w-10 h-10 bg-slate-100 rounded-2xl flex items-center justify-center text-[10px] font-black">{c.author[0]}</div>
-            <div className="flex-1 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+          <div key={i} className="flex gap-4 group">
+            <div className="w-10 h-10 bg-slate-100 rounded-2xl flex items-center justify-center text-[10px] font-black group-hover:bg-blue-50 transition-colors">{c.author[0]}</div>
+            <div className="flex-1 bg-slate-50/50 p-4 rounded-2xl border border-slate-100">
               <div className="flex justify-between mb-2">
                 <span className="text-xs font-black">{c.author}</span>
-                <span className="text-[10px] text-slate-400">{new Date(c.createdAt).toLocaleDateString()}</span>
+                <span className="text-[10px] text-slate-400 font-bold uppercase">{new Date(c.createdAt).toLocaleDateString()}</span>
               </div>
-              <p className="text-sm text-slate-600 leading-relaxed">{c.content}</p>
+              <p className="text-sm text-slate-600 leading-relaxed font-medium">{c.content}</p>
             </div>
           </div>
         ))}
@@ -360,10 +400,10 @@ const WikiComments = ({ pageId, currentUser }: any) => {
       <div className="flex gap-4 mt-10">
         <textarea 
           value={text} onChange={(e) => setText(e.target.value)}
-          placeholder="Join the discussion..."
-          className="flex-1 bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm focus:border-blue-500 outline-none h-24"
+          placeholder="Provide architectural feedback or ask questions..."
+          className="flex-1 bg-white border border-slate-200 rounded-2xl p-5 text-sm font-medium focus:border-blue-500 outline-none h-24 shadow-sm"
         />
-        <button onClick={post} className="px-8 bg-slate-900 text-white text-[10px] font-black rounded-2xl uppercase tracking-widest shadow-xl">Post</button>
+        <button onClick={post} className="px-8 bg-slate-900 text-white text-[10px] font-black rounded-2xl uppercase tracking-widest shadow-xl h-12 self-end">Post</button>
       </div>
     </div>
   );
