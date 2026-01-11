@@ -24,6 +24,16 @@ interface WikiFormProps {
 
 const WIKI_CATEGORIES = ["Architecture Decision Record (ADR)", "Low Level Design (LLD)", "Meeting Notes", "Runbook", "General"];
 
+const COLORS = [
+  { name: 'Blue', value: '#3b82f6' },
+  { name: 'Red', value: '#ef4444' },
+  { name: 'Green', value: '#10b981' },
+  { name: 'Orange', value: '#f59e0b' },
+  { name: 'Purple', value: '#8b5cf6' },
+  { name: 'Slate', value: '#475569' },
+  { name: 'Gold', value: '#d4af37' }
+];
+
 const WikiForm: React.FC<WikiFormProps> = ({ 
   initialTitle = '', 
   initialContent = '', 
@@ -48,7 +58,7 @@ const WikiForm: React.FC<WikiFormProps> = ({
   const [status, setStatus] = useState<'Draft' | 'Published'>('Published');
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<'edit' | 'split'>('edit');
+  const [viewMode, setViewMode] = useState<'edit' | 'split'>('split');
   const [editorFormat, setEditorFormat] = useState<'markdown' | 'html'>('markdown');
   
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
@@ -80,6 +90,34 @@ const WikiForm: React.FC<WikiFormProps> = ({
       textarea.focus();
       textarea.setSelectionRange(start + before.length, start + before.length + selectedText.length);
     }, 0);
+  };
+
+  const handleList = () => {
+    if (!textAreaRef.current) return;
+    const textarea = textAreaRef.current;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selected = textarea.value.substring(start, end);
+    
+    if (selected.trim().includes('\n')) {
+      const lines = selected.split('\n');
+      const formattedLines = lines.map(line => {
+        if (!line.trim()) return line;
+        return editorFormat === 'markdown' ? `- ${line}` : `  <li>${line}</li>`;
+      }).join('\n');
+      
+      const result = editorFormat === 'markdown' 
+        ? formattedLines 
+        : `<ul>\n${formattedLines}\n</ul>`;
+        
+      setContent(textarea.value.substring(0, start) + result + textarea.value.substring(end));
+    } else {
+      if (editorFormat === 'markdown') {
+        insertText('- ', '');
+      } else {
+        insertText('<ul>\n  <li>', '</li>\n</ul>');
+      }
+    }
   };
 
   const handleSave = async () => {
@@ -133,7 +171,7 @@ const WikiForm: React.FC<WikiFormProps> = ({
             <i className="fas fa-times"></i>
           </button>
           <div className="flex flex-col">
-            <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest leading-none mb-1">Revising Artifact</span>
+            <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest leading-none mb-1">Editing Artifact</span>
             <input 
               value={title} onChange={(e) => setTitle(e.target.value)}
               className="text-2xl font-black text-slate-800 border-none p-0 focus:ring-0 outline-none bg-transparent tracking-tight w-[400px]"
@@ -150,7 +188,7 @@ const WikiForm: React.FC<WikiFormProps> = ({
           <button 
             onClick={handleSave}
             disabled={isSaving}
-            className={`px-8 py-3 rounded-xl shadow-xl transition-all uppercase tracking-widest font-black text-[10px] flex items-center gap-2 ${
+            className={`px-10 py-3.5 rounded-2xl shadow-2xl transition-all uppercase tracking-widest font-black text-[10px] flex items-center gap-3 ${
               isSaving ? 'bg-slate-300 text-slate-500' : 'bg-slate-900 text-white hover:bg-slate-800'
             }`}
           >
@@ -169,41 +207,41 @@ const WikiForm: React.FC<WikiFormProps> = ({
 
       <div className="flex flex-1 overflow-hidden">
         <div className="flex-1 flex flex-col overflow-hidden bg-white">
-          <div className="px-10 py-3 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+          <div className="px-8 py-3 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
             <div className="flex items-center gap-1">
-              <ToolbarButton icon="fa-bold" label="Bold" onClick={() => editorFormat === 'markdown' ? insertText('**', '**') : insertText('<b>', '</b>')} />
-              <ToolbarButton icon="fa-italic" label="Italic" onClick={() => editorFormat === 'markdown' ? insertText('*', '*') : insertText('<i>', '</i>')} />
-              <ToolbarButton icon="fa-strikethrough" label="Strike" onClick={() => editorFormat === 'markdown' ? insertText('~~', '~~') : insertText('<del>', '</del>')} />
-              <div className="w-[1px] h-6 bg-slate-200 mx-1"></div>
-              <ToolbarButton icon="fa-heading" label="H1" onClick={() => editorFormat === 'markdown' ? insertText('# ', '') : insertText('<h1>', '</h1>')} />
-              <ToolbarButton icon="fa-heading" label="H2" size="xs" onClick={() => editorFormat === 'markdown' ? insertText('## ', '') : insertText('<h2>', '</h2>')} />
-              <div className="w-[1px] h-6 bg-slate-200 mx-1"></div>
-              <ToolbarButton icon="fa-list-ul" label="List" onClick={() => editorFormat === 'markdown' ? insertText('- ', '') : insertText('<ul><li>', '</li></ul>')} />
-              <ToolbarButton icon="fa-quote-left" label="Quote" onClick={() => editorFormat === 'markdown' ? insertText('> ', '') : insertText('<blockquote>', '</blockquote>')} />
-              <ToolbarButton icon="fa-code" label="Code" onClick={() => editorFormat === 'markdown' ? insertText('```\n', '\n```') : insertText('<pre><code>', '</code></pre>')} />
-              <div className="w-[1px] h-6 bg-slate-200 mx-1"></div>
-              <div className="flex items-center gap-1 ml-2">
-                <button onClick={() => insertText('<span style="color: #3b82f6">', '</span>')} className="w-4 h-4 rounded-full bg-blue-500 hover:scale-125 transition-transform"></button>
-                <button onClick={() => insertText('<span style="color: #ef4444">', '</span>')} className="w-4 h-4 rounded-full bg-red-500 hover:scale-125 transition-transform"></button>
-                <button onClick={() => insertText('<span style="color: #10b981">', '</span>')} className="w-4 h-4 rounded-full bg-emerald-500 hover:scale-125 transition-transform"></button>
+              <ToolbarButton icon="fa-bold" label="Bold" onClick={() => insertText(editorFormat === 'markdown' ? '**' : '<b>', editorFormat === 'markdown' ? '**' : '</b>')} />
+              <ToolbarButton icon="fa-italic" label="Italic" onClick={() => insertText(editorFormat === 'markdown' ? '*' : '<i>', editorFormat === 'markdown' ? '*' : '</i>')} />
+              <div className="w-[1px] h-6 bg-slate-200 mx-2"></div>
+              <ToolbarButton icon="fa-h1" label="Heading 1" onClick={() => insertText(editorFormat === 'markdown' ? '# ' : '<h1>', editorFormat === 'markdown' ? '' : '</h1>')} />
+              <ToolbarButton icon="fa-h2" label="Heading 2" onClick={() => insertText(editorFormat === 'markdown' ? '## ' : '<h2>', editorFormat === 'markdown' ? '' : '</h2>')} />
+              <div className="w-[1px] h-6 bg-slate-200 mx-2"></div>
+              <ToolbarButton icon="fa-list-ul" label="Bullets" onClick={handleList} />
+              <ToolbarButton icon="fa-table" label="Insert Table" onClick={() => insertText('\n| H1 | H2 |\n|---|---|\n| C1 | C2 |\n', '')} />
+              <div className="w-[1px] h-6 bg-slate-200 mx-2"></div>
+              <div className="flex items-center gap-1.5 ml-2">
+                {COLORS.map(c => (
+                  <button 
+                    key={c.name}
+                    onClick={() => insertText(`<span style="color: ${c.value}">`, '</span>')} 
+                    className="w-5 h-5 rounded-full hover:scale-125 transition-transform" 
+                    style={{ backgroundColor: c.value }}
+                  ></button>
+                ))}
               </div>
             </div>
 
             <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2 bg-white border border-slate-200 px-3 py-1.5 rounded-xl shadow-sm">
+              <div className="flex items-center gap-2 bg-white border border-slate-200 px-3 py-1.5 rounded-2xl shadow-sm">
                 <span className={`text-[9px] font-black uppercase tracking-widest ${editorFormat === 'markdown' ? 'text-blue-600' : 'text-slate-400'}`}>MD</span>
-                <button 
-                  onClick={() => setEditorFormat(editorFormat === 'markdown' ? 'html' : 'markdown')}
-                  className={`w-8 h-4 rounded-full relative transition-all ${editorFormat === 'markdown' ? 'bg-slate-200' : 'bg-blue-600'}`}
-                >
-                  <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all ${editorFormat === 'markdown' ? 'left-0.5' : 'left-4.5'}`}></div>
+                <button onClick={() => setEditorFormat(editorFormat === 'markdown' ? 'html' : 'markdown')} className={`w-10 h-5 rounded-full relative transition-all ${editorFormat === 'markdown' ? 'bg-slate-200' : 'bg-blue-600'}`}>
+                  <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${editorFormat === 'markdown' ? 'left-0.5' : 'left-5.5'}`}></div>
                 </button>
                 <span className={`text-[9px] font-black uppercase tracking-widest ${editorFormat === 'html' ? 'text-blue-600' : 'text-slate-400'}`}>HTML</span>
               </div>
               <button 
                 onClick={() => setViewMode(viewMode === 'split' ? 'edit' : 'split')}
                 className={`px-4 py-1.5 text-[9px] font-black uppercase tracking-widest rounded-xl flex items-center gap-2 transition-all ${
-                  viewMode === 'split' ? 'bg-blue-600 text-white' : 'bg-white border border-slate-200 text-slate-500'
+                  viewMode === 'split' ? 'bg-blue-600 text-white shadow-lg' : 'bg-white border border-slate-200 text-slate-500 hover:border-blue-500'
                 }`}
               >
                 <i className="fas fa-columns"></i> Split Preview
@@ -220,8 +258,8 @@ const WikiForm: React.FC<WikiFormProps> = ({
               placeholder="Artifact content..."
             />
             {viewMode === 'split' && (
-              <div className="flex-1 border-l border-slate-100 overflow-y-auto p-12 bg-white custom-scrollbar">
-                <div className="prose prose-slate prose-lg max-w-none" dangerouslySetInnerHTML={{ __html: renderedContent }} />
+              <div className="flex-1 border-l border-slate-100 overflow-y-auto p-12 bg-white custom-scrollbar shadow-inner">
+                <div className="prose prose-slate prose-xl max-w-none" dangerouslySetInnerHTML={{ __html: renderedContent }} />
               </div>
             )}
           </div>
@@ -235,19 +273,6 @@ const WikiForm: React.FC<WikiFormProps> = ({
             <SidebarField label="Application" value={applicationId} onChange={setApplicationId} options={APPLICATIONS.map(a => ({ id: a.id, name: a.name }))} />
             <SidebarField label="Milestone" value={milestoneId} onChange={setMilestoneId} options={[...Array(10)].map((_, i) => ({ id: `M${i+1}`, name: `M${i+1}` }))} />
           </div>
-          
-          <div className="pt-10 border-t border-slate-200">
-             <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest block mb-2">Audit Logs</span>
-             <div className="space-y-3">
-               <div className="flex gap-3">
-                 <div className="w-6 h-6 rounded-lg bg-slate-100 flex items-center justify-center text-[8px] font-black">SY</div>
-                 <div className="flex flex-col">
-                   <span className="text-[10px] font-bold text-slate-600">Revision by {currentUser?.name || 'System'}</span>
-                   <span className="text-[8px] text-slate-400">{new Date().toLocaleDateString()}</span>
-                 </div>
-               </div>
-             </div>
-          </div>
         </aside>
       </div>
       
@@ -260,13 +285,13 @@ const WikiForm: React.FC<WikiFormProps> = ({
   );
 };
 
-const ToolbarButton = ({ icon, label, onClick, size = 'sm' }: any) => (
+const ToolbarButton = ({ icon, label, onClick }: any) => (
   <button 
     onClick={onClick}
     title={label}
-    className="w-10 h-10 flex items-center justify-center text-slate-500 hover:text-blue-600 hover:bg-white hover:shadow-sm rounded-xl transition-all"
+    className="w-10 h-10 flex items-center justify-center text-slate-500 hover:text-blue-600 hover:bg-white rounded-xl transition-all"
   >
-    <i className={`fas ${icon} ${size === 'xs' ? 'text-[10px]' : 'text-sm'}`}></i>
+    <i className={`fas ${icon} text-sm`}></i>
   </button>
 );
 
