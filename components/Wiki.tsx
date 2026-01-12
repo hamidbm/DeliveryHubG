@@ -1,6 +1,6 @@
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { WikiPage, WikiSpace, HierarchyMode, Bundle, Application, Milestone, WikiTheme } from '../types';
+import React, { useState, useEffect, useMemo } from 'react';
+import { WikiPage, WikiTheme, HierarchyMode, Application, WikiSpace } from '../types';
 import WikiForm from './WikiForm';
 import CreateWikiPageForm from './CreateWikiPageForm';
 import WikiPageDisplay from './WikiPageDisplay';
@@ -12,14 +12,11 @@ interface WikiProps {
     role: string;
     email: string;
   };
-  // Filters passed from parent (App.tsx -> Layout)
   selSpaceId: string;
   selBundleId: string;
   selAppId: string;
   selMilestone: string;
   searchQuery: string;
-  
-  // External control triggers
   externalTrigger?: string | null;
   onTriggerProcessed?: () => void;
 }
@@ -34,7 +31,6 @@ const Wiki: React.FC<WikiProps> = ({
   externalTrigger,
   onTriggerProcessed
 }) => {
-  // Layer 2 - UI Mode & Content States
   const [spaces, setSpaces] = useState<WikiSpace[]>([]);
   const [themes, setThemes] = useState<WikiTheme[]>([]);
   const [applications, setApplications] = useState<Application[]>([]);
@@ -48,15 +44,16 @@ const Wiki: React.FC<WikiProps> = ({
   const [loading, setLoading] = useState(true);
   const [showComments, setShowComments] = useState(false);
   
+  // UI Control
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
+
   // Modals
   const [isCreatingSpace, setIsCreatingSpace] = useState(false);
   const [newSpaceName, setNewSpaceName] = useState('');
   const [newSpaceKey, setNewSpaceKey] = useState('');
-
-  // Space Settings form state
   const [spaceTheme, setSpaceTheme] = useState('');
 
-  // Handle external triggers from the Global Context Bar (Layout)
   useEffect(() => {
     if (externalTrigger === 'create-space') {
       setIsCreatingSpace(true);
@@ -75,10 +72,15 @@ const Wiki: React.FC<WikiProps> = ({
           fetch('/api/wiki/themes?active=true')
         ]);
         
-        setSpaces(await spRes.json());
-        setApplications(await apRes.json().catch(() => []));
-        setPages(await pgRes.json());
-        setThemes(await thRes.json());
+        const spacesData = await spRes.json();
+        const appsData = await apRes.json().catch(() => []);
+        const pagesData = await pgRes.json();
+        const themesData = await thRes.json();
+
+        setSpaces(spacesData);
+        setApplications(appsData);
+        setPages(pagesData);
+        setThemes(themesData);
       } catch (e) {
         console.error("Wiki Init Error", e);
       } finally {
@@ -88,34 +90,44 @@ const Wiki: React.FC<WikiProps> = ({
     init();
   }, []);
 
-  // Layer 3 - Dynamic Tree Explorer (PROJECTION LOGIC)
   const treeData = useMemo(() => {
     let filtered = pages;
     if (selSpaceId !== 'all') filtered = filtered.filter(p => p.spaceId === selSpaceId);
     if (selBundleId !== 'all') filtered = filtered.filter(p => p.bundleId === selBundleId);
     if (selAppId !== 'all') filtered = filtered.filter(p => p.applicationId === selAppId);
     if (selMilestone !== 'all') filtered = filtered.filter(p => p.milestoneId === selMilestone);
+    
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       filtered = filtered.filter(p => 
         p.title.toLowerCase().includes(q) || 
-        p.content.toLowerCase().includes(q) || 
-        p.tags?.some(t => t.toLowerCase().includes(q))
+        p.content.toLowerCase().includes(q)
       );
     }
 
     const tree: any[] = [];
+    const allFolderIds: string[] = [];
+
     const buildPath = (path: string[], page: WikiPage) => {
       let currentLevel = tree;
+      let pathAcc = '';
       path.forEach((part, i) => {
+        pathAcc = pathAcc ? `${pathAcc}/${part}` : part;
+        const nodeId = `lvl-${i}-${pathAcc}`;
         let node = currentLevel.find(n => n.label === part && n.type === 'folder');
         if (!node) {
-          node = { label: part, type: 'folder', children: [] };
+          node = { label: part, type: 'folder', children: [], id: nodeId };
           currentLevel.push(node);
+          allFolderIds.push(nodeId);
         }
         currentLevel = node.children;
         if (i === path.length - 1) {
-          currentLevel.push({ label: page.title, type: 'page', data: page });
+          currentLevel.push({ 
+            label: page.title, 
+            type: 'page', 
+            data: page, 
+            id: `page-${page._id || page.id}`
+          });
         }
       });
     };
@@ -123,8 +135,8 @@ const Wiki: React.FC<WikiProps> = ({
     filtered.forEach(page => {
       const app = applications.find(a => a.id === page.applicationId)?.name || 'Unassigned App';
       const ms = page.milestoneId || 'No Milestone';
-      const type = page.category || 'Documentation';
-      const space = spaces.find(s => s._id === page.spaceId || s.id === page.spaceId)?.name || 'Default Space';
+      const type = page.category || 'General Documentation';
+      const space = spaces.find(s => s._id === page.spaceId || s.id === page.spaceId)?.name || 'Registry';
       const vendor = page.vendorCompany || 'In-House';
 
       let path: string[] = [];
@@ -138,8 +150,39 @@ const Wiki: React.FC<WikiProps> = ({
       buildPath(path, page);
     });
 
+    // Expand everything by default on first load or mode change
+    setExpandedNodes(prev => {
+      const next = new Set(prev);
+      allFolderIds.forEach(id => next.add(id));
+      return next;
+    });
+
     return tree;
   }, [pages, selSpaceId, selBundleId, selAppId, selMilestone, searchQuery, hierarchyMode, applications, spaces]);
+
+  const getIconForNode = (node: any, depth: number) => {
+    if (node.type === 'page') return 'fa-file-lines text-blue-500/60';
+    
+    // Determine logical mapping based on current hierarchy projection
+    const modeParts = hierarchyMode.split(' → ');
+    const levelType = modeParts[depth] || '';
+
+    if (levelType.includes('Space')) return 'fa-layer-group text-indigo-500';
+    if (levelType.includes('Application')) return 'fa-cube text-blue-500';
+    if (levelType.includes('Milestone')) return 'fa-flag-checkered text-amber-500';
+    if (levelType.includes('Type') || levelType.includes('Vendor')) return 'fa-tags text-slate-400';
+
+    return 'fa-circle-dot text-slate-300';
+  };
+
+  const toggleNode = (nodeId: string) => {
+    setExpandedNodes(prev => {
+      const next = new Set(prev);
+      if (next.has(nodeId)) next.delete(nodeId);
+      else next.add(nodeId);
+      return next;
+    });
+  };
 
   const handleSaveSuccess = async (savedId: string) => {
     setIsEditing(false);
@@ -154,17 +197,11 @@ const Wiki: React.FC<WikiProps> = ({
   const handleCreateSpace = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newSpaceName.trim() || !newSpaceKey.trim()) return;
-    
     try {
       const res = await fetch('/api/wiki/spaces', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          name: newSpaceName, 
-          key: newSpaceKey.toUpperCase(), 
-          visibility: 'internal',
-          icon: 'fa-book' 
-        }),
+        body: JSON.stringify({ name: newSpaceName, key: newSpaceKey.toUpperCase(), visibility: 'internal', icon: 'fa-book' }),
       });
       if (res.ok) {
         setNewSpaceName('');
@@ -198,45 +235,107 @@ const Wiki: React.FC<WikiProps> = ({
 
   const renderTreeNode = (node: any, depth = 0) => {
     const isPage = node.type === 'page';
+    const isExpanded = expandedNodes.has(node.id);
     const isActive = isPage && (activePage?._id === node.data?._id || activePage?.id === node.data?.id);
 
     return (
-      <div key={node.label + depth} className="flex flex-col">
-        <button
-          onClick={() => {
-            if (isPage) {
-              setActivePage(node.data);
-              setIsEditing(false);
-              setIsCreating(false);
-            }
-          }}
-          className={`w-full text-left px-4 py-2 flex items-center gap-3 transition-all rounded-xl ${
-            isActive ? 'bg-blue-600 text-white shadow-lg font-bold' : 'text-slate-600 hover:bg-slate-100/50'
-          }`}
-          style={{ marginLeft: `${depth * 12}px` }}
-        >
-          <i className={`fas ${isPage ? 'fa-file-lines' : 'fa-folder-closed'} text-[10px] opacity-40`}></i>
-          <span className="text-sm truncate">{node.label}</span>
-        </button>
-        {node.children && node.children.map((child: any) => renderTreeNode(child, depth + 1))}
+      <div key={node.id} className="flex flex-col relative">
+        <div className="flex items-center group/node relative">
+          {/* Vertical Linkage Line */}
+          {depth > 0 && (
+            <div 
+              className="absolute border-l border-slate-200" 
+              style={{ 
+                left: `${(depth - 1) * 20 + 10}px`, 
+                top: '0', 
+                bottom: (node.children && isExpanded) ? 'auto' : '50%', 
+                height: (node.children && isExpanded) ? '100%' : '50%', 
+                width: '1px' 
+              }} 
+            />
+          )}
+          {/* Horizontal Branch Line */}
+          {depth > 0 && (
+            <div 
+              className="absolute border-t border-slate-200" 
+              style={{ left: `${(depth - 1) * 20 + 10}px`, top: '50%', width: '10px' }} 
+            />
+          )}
+
+          <button
+            onClick={() => {
+              if (isPage) {
+                setActivePage(node.data);
+                setIsEditing(false);
+                setIsCreating(false);
+              } else {
+                toggleNode(node.id);
+              }
+            }}
+            className={`w-full text-left pl-2 pr-3 py-1.5 flex items-center gap-2 transition-all rounded-lg my-0.5 relative z-10 ${
+              isActive 
+              ? 'bg-blue-50/50 text-blue-700 font-semibold shadow-sm' 
+              : 'text-slate-500 hover:bg-slate-100/60'
+            }`}
+            style={{ marginLeft: `${depth * 20}px` }}
+          >
+            {!isPage && (
+              <i className={`fas ${isExpanded ? 'fa-caret-down' : 'fa-caret-right'} text-[10px] w-4 flex-shrink-0 opacity-40 transition-transform`}></i>
+            )}
+            {isPage && <div className="w-4"></div>}
+            
+            <i className={`fas ${getIconForNode(node, depth)} text-[12px] flex-shrink-0 opacity-80 group-hover/node:opacity-100 transition-opacity`}></i>
+            
+            <span className="text-[11px] font-medium truncate">{node.label}</span>
+            
+            {isActive && (
+               <div className="ml-auto w-1 h-3 rounded-full bg-blue-500 animate-fadeIn"></div>
+            )}
+          </button>
+        </div>
+        
+        {node.children && isExpanded && (
+          <div className="flex flex-col relative">
+            {/* Continuation line for children if this node is expanded */}
+            <div 
+              className="absolute border-l border-slate-200" 
+              style={{ left: `${depth * 20 + 10}px`, top: '0', bottom: '12px', width: '1px' }} 
+            />
+            {node.children.map((child: any) => renderTreeNode(child, depth + 1))}
+          </div>
+        )}
       </div>
     );
   };
 
+  const activeSpace = spaces.find(s => s._id === activePage?.spaceId || s.id === activePage?.spaceId);
+
   return (
-    <div className="flex bg-white min-h-[850px] border border-slate-200 rounded-[2.5rem] shadow-2xl overflow-hidden animate-fadeIn">
+    <div className="flex bg-white min-h-[850px] border border-slate-200 rounded-[2.5rem] shadow-2xl overflow-hidden animate-fadeIn relative">
+      
+      {/* Sidebar Toggle */}
+      {!isEditing && !isCreating && (
+        <button 
+          onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+          className={`absolute z-[60] top-4 w-7 h-7 rounded-full bg-white border border-slate-200 shadow-md flex items-center justify-center text-slate-400 hover:text-blue-600 transition-all ${isSidebarCollapsed ? 'left-4' : 'left-[306px]'}`}
+          title={isSidebarCollapsed ? 'Show Explorer' : 'Hide Explorer'}
+        >
+          <i className={`fas ${isSidebarCollapsed ? 'fa-chevron-right' : 'fa-chevron-left'} text-[10px]`}></i>
+        </button>
+      )}
+
       <div className="flex flex-1 overflow-hidden relative">
         
-        {/* Left Pane: Tree */}
+        {/* Left Pane: Tree Explorer */}
         {!isEditing && !isCreating && (
-          <aside className="w-80 border-r border-slate-100 flex flex-col shrink-0 bg-slate-50/10">
-            <div className="p-6 border-b border-slate-100 space-y-4">
+          <aside className={`border-r border-slate-100 flex flex-col shrink-0 bg-slate-50/20 transition-all duration-500 ease-in-out ${isSidebarCollapsed ? 'w-0 opacity-0 -translate-x-full' : 'w-80 opacity-100'}`}>
+            <div className="p-6 pt-16 border-b border-slate-100 space-y-4">
               <div className="flex flex-col gap-1.5">
-                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Hierarchy Projection</label>
+                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Projection Mode</label>
                 <select 
                   value={hierarchyMode}
                   onChange={(e) => setHierarchyMode(e.target.value as HierarchyMode)}
-                  className="w-full bg-white border-2 border-slate-100 rounded-xl px-4 py-2 text-xs font-bold text-slate-600 outline-none focus:border-blue-500 transition-all"
+                  className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2 text-[11px] font-bold text-slate-600 outline-none focus:border-blue-500 transition-all shadow-sm"
                 >
                   {Object.values(HierarchyMode).map(mode => (
                     <option key={mode} value={mode}>{mode}</option>
@@ -246,92 +345,91 @@ const Wiki: React.FC<WikiProps> = ({
               <div className="grid grid-cols-2 gap-2">
                 <button 
                   onClick={() => setIsCreating(true)}
-                  className="py-3 border-2 border-dashed border-slate-200 rounded-2xl text-[10px] font-black text-slate-400 uppercase tracking-widest hover:border-blue-500 hover:text-blue-500 transition-all flex items-center justify-center gap-2"
+                  className="py-2.5 border border-slate-200 rounded-xl text-[9px] font-black text-slate-500 hover:text-blue-600 hover:border-blue-500 transition-all flex items-center justify-center gap-2 bg-white"
                 >
-                  <i className="fas fa-plus-circle"></i> Page
+                  <i className="fas fa-plus"></i> New Artifact
                 </button>
                 <button 
                   disabled={selSpaceId === 'all'}
-                  onClick={() => {
-                    const sp = spaces.find(s => s._id === selSpaceId || s.id === selSpaceId);
-                    setSpaceTheme(sp?.defaultThemeKey || '');
-                    setIsSettingSpace(true);
-                  }}
-                  className="py-3 border-2 border-slate-100 rounded-2xl text-[10px] font-black text-slate-400 uppercase tracking-widest hover:bg-slate-100 disabled:opacity-30 transition-all flex items-center justify-center gap-2"
+                  onClick={() => setIsSettingSpace(true)}
+                  className="py-2.5 border border-slate-100 rounded-xl text-[9px] font-black text-slate-400 hover:bg-white disabled:opacity-30 transition-all flex items-center justify-center gap-2"
                 >
-                  <i className="fas fa-cog"></i> Settings
+                  <i className="fas fa-cog"></i> Configure
                 </button>
               </div>
             </div>
             <nav className="flex-1 overflow-y-auto p-4 custom-scrollbar">
-              {treeData.map(node => renderTreeNode(node))}
+              <div className="space-y-0.5">
+                {treeData.length > 0 ? (
+                  treeData.map(node => renderTreeNode(node))
+                ) : (
+                  <div className="py-20 text-center px-4">
+                    <i className="fas fa-database text-slate-100 text-5xl mb-4 block"></i>
+                    <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest leading-relaxed">No documentation mapped in this projection.</p>
+                  </div>
+                )}
+              </div>
             </nav>
           </aside>
         )}
 
-        {/* Right Pane: Content */}
-        <div className="flex-1 flex flex-col overflow-y-auto custom-scrollbar relative">
+        {/* Right Pane: Main Content */}
+        <div className="flex-1 flex flex-col overflow-y-auto custom-scrollbar bg-white">
           
-          {/* Space Settings Modal */}
           {isSettingSpace && (
-            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-6">
+            <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[200] flex items-center justify-center p-6">
               <div className="bg-white rounded-[2.5rem] w-full max-w-md p-10 shadow-2xl animate-fadeIn border border-slate-100">
                 <h3 className="text-2xl font-black text-slate-900 mb-2">Space Settings</h3>
-                <p className="text-sm text-slate-500 mb-8 font-medium">Configure defaults for this knowledge domain.</p>
-                
+                <p className="text-sm text-slate-500 mb-8 font-medium">Define defaults for the current functional domain.</p>
                 <div className="space-y-6">
                   <div className="space-y-2">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Default Space Theme</label>
                     <select 
                       value={spaceTheme} onChange={(e) => setSpaceTheme(e.target.value)}
-                      className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-slate-700 focus:border-blue-500 transition-all font-bold"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-slate-700 focus:border-blue-500 transition-all font-bold"
                     >
-                      <option value="">System Default</option>
+                      <option value="">Standard Framework</option>
                       {themes.map(t => (
                         <option key={t.key} value={t.key}>{t.name}</option>
                       ))}
                     </select>
                   </div>
                 </div>
-
                 <div className="flex items-center gap-4 mt-10">
-                  <button onClick={() => setIsSettingSpace(false)} className="flex-1 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-800 transition-all">Cancel</button>
-                  <button onClick={handleSaveSpaceSettings} className="flex-1 py-4 bg-blue-600 text-white text-[10px] font-black rounded-2xl shadow-xl hover:bg-blue-700 transition-all uppercase tracking-widest">Apply Settings</button>
+                  <button onClick={() => setIsSettingSpace(false)} className="flex-1 py-4 text-[10px] font-black text-slate-400 uppercase hover:text-slate-800">Cancel</button>
+                  <button onClick={handleSaveSpaceSettings} className="flex-1 py-4 bg-blue-600 text-white text-[10px] font-black rounded-2xl shadow-xl hover:bg-blue-700">Update Space</button>
                 </div>
               </div>
             </div>
           )}
 
           {isCreatingSpace && (
-            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-6">
+            <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[200] flex items-center justify-center p-6">
               <form onSubmit={handleCreateSpace} className="bg-white rounded-[2.5rem] w-full max-w-md p-10 shadow-2xl animate-fadeIn border border-slate-100">
-                <h3 className="text-2xl font-black text-slate-900 mb-2">Initialize Knowledge Space</h3>
-                <p className="text-sm text-slate-500 mb-8 font-medium">Functional silos to organize enterprise documentation.</p>
-                
-                <div className="space-y-6">
+                <h3 className="text-2xl font-black text-slate-900 mb-2">New Knowledge Space</h3>
+                <div className="space-y-6 mt-8">
                   <div className="grid grid-cols-3 gap-4">
                     <div className="col-span-2 space-y-2">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Space Name</label>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Name</label>
                       <input 
                         type="text" required value={newSpaceName} onChange={(e) => setNewSpaceName(e.target.value)}
-                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-slate-700 focus:border-blue-500 transition-all font-bold"
-                        placeholder="Engineering..."
+                        className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-slate-700 font-bold"
+                        placeholder="e.g. Platform Engineering"
                       />
                     </div>
                     <div className="space-y-2">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Space Key</label>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center block">Key</label>
                       <input 
                         type="text" required maxLength={3} value={newSpaceKey} onChange={(e) => setNewSpaceKey(e.target.value)}
-                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-slate-700 focus:border-blue-500 transition-all font-black text-center"
-                        placeholder="ENG"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-slate-700 font-black text-center"
+                        placeholder="PLT"
                       />
                     </div>
                   </div>
                 </div>
-
                 <div className="flex items-center gap-4 mt-10">
-                  <button type="button" onClick={() => setIsCreatingSpace(false)} className="flex-1 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-800 transition-all">Discard</button>
-                  <button type="submit" className="flex-1 py-4 bg-slate-900 text-white text-[10px] font-black rounded-2xl shadow-xl hover:bg-slate-800 transition-all uppercase tracking-widest">Provision Space</button>
+                  <button type="button" onClick={() => setIsCreatingSpace(false)} className="flex-1 py-4 text-[10px] font-black text-slate-400 uppercase">Discard</button>
+                  <button type="submit" className="flex-1 py-4 bg-slate-900 text-white text-[10px] font-black rounded-2xl">Create</button>
                 </div>
               </form>
             </div>
@@ -365,36 +463,38 @@ const Wiki: React.FC<WikiProps> = ({
           ) : viewHistory && activePage ? (
             <WikiHistory page={activePage} onClose={() => setViewHistory(false)} onRevert={handleSaveSuccess} />
           ) : activePage ? (
-            <div className="animate-fadeIn">
-              <div className="px-10 py-6 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white/90 backdrop-blur-md z-30 shadow-sm">
+            <div className="animate-fadeIn min-h-full flex flex-col">
+              <div className="px-10 py-6 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white/95 backdrop-blur-md z-30 shadow-sm">
                 <div className="flex items-center gap-3">
                    <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                    <i className="fas fa-link text-blue-500"></i>
-                    <span>{spaces.find(s => s._id === activePage.spaceId || s.id === activePage.spaceId)?.name || 'Registry Node'}</span>
+                    <i className="fas fa-link text-blue-500/40"></i>
+                    <span>{activeSpace?.name || 'Registry Node'}</span>
                    </div>
                    <div className="w-1 h-1 rounded-full bg-slate-200"></div>
-                   <span className="text-sm font-bold text-slate-800 truncate max-w-[300px]">{activePage.title}</span>
+                   <span className="text-sm font-bold text-slate-800 truncate max-w-[400px]">{activePage.title}</span>
                 </div>
                 <div className="flex items-center gap-1">
-                  <ActionIcon icon="fa-pen-fancy" tooltip="Edit Node" onClick={() => setIsEditing(true)} />
-                  <ActionIcon icon="fa-comments" tooltip="Feedback Loop" onClick={() => setShowComments(!showComments)} active={showComments} />
-                  <ActionIcon icon="fa-clock-rotate-left" tooltip="Version Control" onClick={() => setViewHistory(true)} />
+                  <ActionIcon icon="fa-pen-to-square" tooltip="Revise" onClick={() => setIsEditing(true)} />
+                  <ActionIcon icon="fa-comments" tooltip="Discussion" onClick={() => setShowComments(!showComments)} active={showComments} />
+                  <ActionIcon icon="fa-clock-rotate-left" tooltip="Timeline" onClick={() => setViewHistory(true)} />
                 </div>
               </div>
-              <div className="p-16 max-w-5xl mx-auto">
+              <div className="p-16 max-w-5xl mx-auto flex-1 w-full">
                 <WikiPageDisplay page={activePage} />
                 {showComments && (
-                  <div className="mt-20 pt-10 border-t border-slate-100">
+                  <div className="mt-24 pt-12 border-t border-slate-100">
                     <WikiComments pageId={(activePage._id || activePage.id)!} currentUser={currentUser} />
                   </div>
                 )}
               </div>
             </div>
           ) : (
-            <div className="flex-1 flex flex-col items-center justify-center p-20 text-center text-slate-200">
-              <i className="fas fa-book-open-reader text-8xl mb-6 opacity-5"></i>
-              <h3 className="text-xl font-black text-slate-300 uppercase tracking-[0.2em]">Select a page to view</h3>
-              <p className="text-xs font-bold text-slate-400 mt-2">Browse the dynamic projection tree on the left.</p>
+            <div className="flex-1 flex flex-col items-center justify-center p-20 text-center">
+              <div className="w-24 h-24 rounded-3xl bg-slate-50 flex items-center justify-center mb-8 shadow-inner">
+                <i className="fas fa-book text-slate-200 text-4xl"></i>
+              </div>
+              <h3 className="text-xl font-black text-slate-900 tracking-tight">Enterprise Knowledge Base</h3>
+              <p className="text-slate-400 font-medium mt-2 max-w-sm">Select an artifact from the explorer to review delivery standards and blueprints.</p>
             </div>
           )}
         </div>
@@ -413,11 +513,11 @@ const ActionIcon = ({ icon, tooltip, onClick, active }: any) => (
   <button 
     title={tooltip}
     onClick={onClick}
-    className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all ${
-      active ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-100 hover:text-blue-600'
+    className={`w-9 h-9 flex items-center justify-center rounded-xl transition-all ${
+      active ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50 hover:text-blue-600'
     }`}
   >
-    <i className={`fas ${icon} text-sm`}></i>
+    <i className={`fas ${icon} text-[13px]`}></i>
   </button>
 );
 
@@ -432,6 +532,7 @@ const WikiComments = ({ pageId, currentUser }: any) => {
     if (!text.trim()) return;
     await fetch('/api/wiki/comments', {
       method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ pageId, content: text, author: currentUser?.name || 'System' })
     });
     setText('');
@@ -441,28 +542,37 @@ const WikiComments = ({ pageId, currentUser }: any) => {
 
   return (
     <div className="space-y-8 animate-fadeIn">
-      <h3 className="text-xl font-black text-slate-800 tracking-tighter">Collaborative Feedback</h3>
+      <h3 className="text-2xl font-black text-slate-900 tracking-tighter">Peer Reviews</h3>
       <div className="space-y-6">
-        {comments.map((c, i) => (
-          <div key={i} className="flex gap-4 group">
-            <div className="w-10 h-10 bg-slate-100 rounded-2xl flex items-center justify-center text-[10px] font-black group-hover:bg-blue-50 transition-colors">{c.author[0]}</div>
-            <div className="flex-1 bg-slate-50/50 p-4 rounded-2xl border border-slate-100">
+        {comments.length > 0 ? comments.map((c, i) => (
+          <div key={i} className="flex gap-5 group">
+            <div className="w-10 h-10 bg-slate-100 rounded-2xl flex items-center justify-center text-[11px] font-black text-slate-500 group-hover:bg-blue-600 group-hover:text-white transition-all">
+              {c.author[0]}
+            </div>
+            <div className="flex-1 bg-white p-6 rounded-[1.5rem] border border-slate-100 shadow-sm transition-all group-hover:shadow-md">
               <div className="flex justify-between mb-2">
-                <span className="text-xs font-black">{c.author}</span>
-                <span className="text-[10px] text-slate-400 font-bold uppercase">{new Date(c.createdAt).toLocaleDateString()}</span>
+                <span className="text-xs font-black text-slate-800">{c.author}</span>
+                <span className="text-[10px] text-slate-300 font-bold uppercase">{new Date(c.createdAt).toLocaleDateString()}</span>
               </div>
-              <p className="text-sm text-slate-600 leading-relaxed font-medium">{c.content}</p>
+              <p className="text-[13px] text-slate-600 leading-relaxed font-medium">{c.content}</p>
             </div>
           </div>
-        ))}
+        )) : (
+          <p className="text-slate-300 italic text-sm py-10 text-center">No reviews submitted for this artifact.</p>
+        )}
       </div>
-      <div className="flex gap-4 mt-10">
+      <div className="flex gap-4 mt-12 bg-slate-50/50 p-6 rounded-[2rem] border border-slate-100">
         <textarea 
           value={text} onChange={(e) => setText(e.target.value)}
-          placeholder="Provide architectural feedback or ask questions..."
-          className="flex-1 bg-white border border-slate-200 rounded-2xl p-5 text-sm font-medium focus:border-blue-500 outline-none h-24 shadow-sm"
+          placeholder="Record review feedback or architectural concerns..."
+          className="flex-1 bg-white border border-slate-200 rounded-2xl p-5 text-sm font-medium focus:border-blue-500 outline-none h-28 shadow-sm transition-all"
         />
-        <button onClick={post} className="px-8 bg-slate-900 text-white text-[10px] font-black rounded-2xl uppercase tracking-widest shadow-xl h-12 self-end">Post</button>
+        <button 
+          onClick={post} 
+          className="px-8 bg-slate-900 text-white text-[10px] font-black rounded-2xl uppercase tracking-widest shadow-xl hover:bg-slate-800 transition-all h-14 self-end"
+        >
+          Submit
+        </button>
       </div>
     </div>
   );
