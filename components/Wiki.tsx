@@ -246,7 +246,7 @@ const Wiki: React.FC<WikiProps> = ({
             <div 
               className="absolute border-l border-slate-200" 
               style={{ 
-                left: `${(depth - 1) * 20 + 10}px`, 
+                left: `${(depth - 1) * 22 + 11}px`, 
                 top: '0', 
                 bottom: (node.children && isExpanded) ? 'auto' : '50%', 
                 height: (node.children && isExpanded) ? '100%' : '50%', 
@@ -258,7 +258,7 @@ const Wiki: React.FC<WikiProps> = ({
           {depth > 0 && (
             <div 
               className="absolute border-t border-slate-200" 
-              style={{ left: `${(depth - 1) * 20 + 10}px`, top: '50%', width: '10px' }} 
+              style={{ left: `${(depth - 1) * 22 + 11}px`, top: '50%', width: '11px' }} 
             />
           )}
 
@@ -272,24 +272,24 @@ const Wiki: React.FC<WikiProps> = ({
                 toggleNode(node.id);
               }
             }}
-            className={`w-full text-left pl-2 pr-3 py-1.5 flex items-center gap-2 transition-all rounded-lg my-0.5 relative z-10 ${
+            className={`w-full text-left pl-2 pr-3 py-2 flex items-center gap-2.5 transition-all rounded-xl my-0.5 relative z-10 ${
               isActive 
-              ? 'bg-blue-50/50 text-blue-700 font-semibold shadow-sm' 
-              : 'text-slate-500 hover:bg-slate-100/60'
+              ? 'bg-blue-50/60 text-blue-700 font-bold shadow-sm' 
+              : 'text-slate-600 hover:bg-slate-100/60'
             }`}
-            style={{ marginLeft: `${depth * 20}px` }}
+            style={{ marginLeft: `${depth * 22}px` }}
           >
             {!isPage && (
-              <i className={`fas ${isExpanded ? 'fa-caret-down' : 'fa-caret-right'} text-[10px] w-4 flex-shrink-0 opacity-40 transition-transform`}></i>
+              <i className={`fas ${isExpanded ? 'fa-caret-down' : 'fa-caret-right'} text-[11px] w-4 flex-shrink-0 opacity-40 transition-transform`}></i>
             )}
             {isPage && <div className="w-4"></div>}
             
-            <i className={`fas ${getIconForNode(node, depth)} text-[12px] flex-shrink-0 opacity-80 group-hover/node:opacity-100 transition-opacity`}></i>
+            <i className={`fas ${getIconForNode(node, depth)} text-[14px] flex-shrink-0 opacity-80 group-hover/node:opacity-100 transition-opacity`}></i>
             
-            <span className="text-[11px] font-medium truncate">{node.label}</span>
+            <span className="text-[13px] font-semibold truncate leading-none">{node.label}</span>
             
             {isActive && (
-               <div className="ml-auto w-1 h-3 rounded-full bg-blue-500 animate-fadeIn"></div>
+               <div className="ml-auto w-1.5 h-3.5 rounded-full bg-blue-500 animate-fadeIn shadow-sm"></div>
             )}
           </button>
         </div>
@@ -299,7 +299,7 @@ const Wiki: React.FC<WikiProps> = ({
             {/* Continuation line for children if this node is expanded */}
             <div 
               className="absolute border-l border-slate-200" 
-              style={{ left: `${depth * 20 + 10}px`, top: '0', bottom: '12px', width: '1px' }} 
+              style={{ left: `${depth * 22 + 11}px`, top: '0', bottom: '12px', width: '1px' }} 
             />
             {node.children.map((child: any) => renderTreeNode(child, depth + 1))}
           </div>
@@ -335,7 +335,7 @@ const Wiki: React.FC<WikiProps> = ({
                 <select 
                   value={hierarchyMode}
                   onChange={(e) => setHierarchyMode(e.target.value as HierarchyMode)}
-                  className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2 text-[11px] font-bold text-slate-600 outline-none focus:border-blue-500 transition-all shadow-sm"
+                  className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-[12px] font-bold text-slate-600 outline-none focus:border-blue-500 transition-all shadow-sm"
                 >
                   {Object.values(HierarchyMode).map(mode => (
                     <option key={mode} value={mode}>{mode}</option>
@@ -345,7 +345,7 @@ const Wiki: React.FC<WikiProps> = ({
               <div className="grid grid-cols-2 gap-2">
                 <button 
                   onClick={() => setIsCreating(true)}
-                  className="py-2.5 border border-slate-200 rounded-xl text-[9px] font-black text-slate-500 hover:text-blue-600 hover:border-blue-500 transition-all flex items-center justify-center gap-2 bg-white"
+                  className="py-2.5 border border-slate-200 rounded-xl text-[9px] font-black text-slate-500 hover:text-blue-600 hover:border-blue-500 transition-all flex items-center justify-center gap-2 bg-white shadow-sm"
                 >
                   <i className="fas fa-plus"></i> New Artifact
                 </button>
@@ -365,7 +365,7 @@ const Wiki: React.FC<WikiProps> = ({
                 ) : (
                   <div className="py-20 text-center px-4">
                     <i className="fas fa-database text-slate-100 text-5xl mb-4 block"></i>
-                    <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest leading-relaxed">No documentation mapped in this projection.</p>
+                    <p className="text-[11px] font-black text-slate-300 uppercase tracking-widest leading-relaxed">No documentation mapped in this projection.</p>
                   </div>
                 )}
               </div>
