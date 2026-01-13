@@ -153,7 +153,6 @@ export const saveWikiTheme = async (theme: Partial<WikiTheme>) => {
   return await db.collection('wiki_themes').insertOne({ ...data, createdAt: new Date().toISOString() });
 };
 
-// Added deleteWikiTheme function to resolve theme API route error
 export const deleteWikiTheme = async (id: string) => {
   const db = await getDb();
   return await db.collection('wiki_themes').deleteOne({ _id: new ObjectId(id) });
@@ -207,14 +206,16 @@ export const revertWikiPage = async (pageId: string, versionId: string) => {
   return await db.collection('wiki_pages').updateOne({ _id: new ObjectId(pageId) }, { $set: { ...version, updatedAt: new Date().toISOString() } });
 };
 
-// Updated seedDatabase signature and implementation to include wikiPages and resolve seeding route error
 export const seedDatabase = async (apps: any[], workItems: any[], wikiPages: any[] = []) => {
   try {
     const db = await getDb();
     
-    // Taxonomy Categories
+    // Clear all existing taxonomy for clean seed
     await db.collection('taxonomy_categories').deleteMany({});
-    const cats = [
+    await db.collection('taxonomy_document_types').deleteMany({});
+
+    // Seed Categories (1-8 as requested)
+    const categorySeeds = [
       { key: 'ARCH', name: 'Architecture', icon: 'fa-sitemap', isActive: true, sortOrder: 10 },
       { key: 'DESIGN', name: 'Design & Engineering', icon: 'fa-pencil-ruler', isActive: true, sortOrder: 20 },
       { key: 'SEC', name: 'Security & Risk', icon: 'fa-shield-halved', isActive: true, sortOrder: 30 },
@@ -224,26 +225,51 @@ export const seedDatabase = async (apps: any[], workItems: any[], wikiPages: any
       { key: 'PROG', name: 'Delivery & Program Management', icon: 'fa-route', isActive: true, sortOrder: 70 },
       { key: 'GOV', name: 'Governance & Compliance', icon: 'fa-building-columns', isActive: true, sortOrder: 80 }
     ];
-    const catRes = await db.collection('taxonomy_categories').insertMany(cats);
+    const catRes = await db.collection('taxonomy_categories').insertMany(categorySeeds);
     const catIds = Object.values(catRes.insertedIds);
 
-    // Taxonomy Document Types
-    await db.collection('taxonomy_document_types').deleteMany({});
-    const types = [
-      { key: 'ADR', name: 'Architecture Decision Record (ADR)', categoryId: catIds[0].toString(), isActive: true, sortOrder: 10 },
-      { key: 'SOL_ARCH', name: 'Solution Architecture', categoryId: catIds[0].toString(), isActive: true, sortOrder: 20 },
-      { key: 'HLD', name: 'High-Level Design (HLD)', categoryId: catIds[1].toString(), isActive: true, sortOrder: 10 },
-      { key: 'LLD', name: 'Low-Level Design (LLD)', categoryId: catIds[1].toString(), isActive: true, sortOrder: 20 },
-      { key: 'TM', name: 'Threat Model', categoryId: catIds[2].toString(), isActive: true, sortOrder: 10 },
-      { key: 'CICD', name: 'CI/CD Pipeline Design', categoryId: catIds[3].toString(), isActive: true, sortOrder: 10 },
-      { key: 'RUNBOOK', name: 'Operational Runbook', categoryId: catIds[4].toString(), isActive: true, sortOrder: 10 },
-      { key: 'TEST_PLAN', name: 'Test Plan', categoryId: catIds[5].toString(), isActive: true, sortOrder: 10 },
-      { key: 'STATUS', name: 'Weekly Status Report', categoryId: catIds[6].toString(), isActive: true, sortOrder: 10 },
-      { key: 'POLICY', name: 'Policy / Standard', categoryId: catIds[7].toString(), isActive: true, sortOrder: 10 }
+    // Seed Document Types per Category
+    const typeSeeds = [
+      // 1. Architecture
+      { key: 'ADR', name: 'Architecture Decision Record (ADR)', categoryId: catIds[0].toString(), isActive: true, sortOrder: 1, audience: ['engineering', 'leadership'] },
+      { key: 'SOL_ARCH', name: 'Solution Architecture', categoryId: catIds[0].toString(), isActive: true, sortOrder: 2, audience: ['engineering'] },
+      { key: 'TECH_ARCH', name: 'Technical Architecture', categoryId: catIds[0].toString(), isActive: true, sortOrder: 3, audience: ['engineering'] },
+      { key: 'DATA_ARCH', name: 'Data Architecture', categoryId: catIds[0].toString(), isActive: true, sortOrder: 4, audience: ['engineering'] },
+      { key: 'REF_ARCH', name: 'Reference Architecture', categoryId: catIds[0].toString(), isActive: true, sortOrder: 5, audience: ['engineering'] },
+      // 2. Design
+      { key: 'HLD', name: 'High-Level Design (HLD)', categoryId: catIds[1].toString(), isActive: true, sortOrder: 1, audience: ['engineering'] },
+      { key: 'LLD', name: 'Low-Level Design (LLD)', categoryId: catIds[1].toString(), isActive: true, sortOrder: 2, audience: ['engineering'] },
+      { key: 'API_DESIGN', name: 'API Design / OpenAPI', categoryId: catIds[1].toString(), isActive: true, sortOrder: 3, audience: ['engineering'] },
+      { key: 'DB_DESIGN', name: 'Database Design / ERD', categoryId: catIds[1].toString(), isActive: true, sortOrder: 4, audience: ['engineering'] },
+      { key: 'UX_SPEC', name: 'UI/UX Design Spec', categoryId: catIds[1].toString(), isActive: true, sortOrder: 5, audience: ['product', 'engineering'] },
+      // 3. Security
+      { key: 'THREAT_MODEL', name: 'Threat Model', categoryId: catIds[2].toString(), isActive: true, sortOrder: 1, audience: ['security', 'engineering'] },
+      { key: 'SEC_REVIEW', name: 'Security Review / Assessment', categoryId: catIds[2].toString(), isActive: true, sortOrder: 2, audience: ['security', 'audit'] },
+      { key: 'RISK_REG', name: 'Risk Register Entry', categoryId: catIds[2].toString(), isActive: true, sortOrder: 3, audience: ['security', 'leadership'] },
+      // 4. DevOps
+      { key: 'CICD_DESIGN', name: 'CI/CD Pipeline Design', categoryId: catIds[3].toString(), isActive: true, sortOrder: 1, audience: ['engineering', 'operations'] },
+      { key: 'IAC_DESIGN', name: 'IaC (Terraform) Design', categoryId: catIds[3].toString(), isActive: true, sortOrder: 2, audience: ['engineering'] },
+      { key: 'ENV_STRAT', name: 'Environment Strategy', categoryId: catIds[3].toString(), isActive: true, sortOrder: 3, audience: ['engineering', 'operations'] },
+      // 5. Operations
+      { key: 'RUNBOOK_OPS', name: 'Operational Runbook', categoryId: catIds[4].toString(), isActive: true, sortOrder: 1, audience: ['operations'] },
+      { key: 'INCIDENT_PLAY', name: 'Incident Playbook', categoryId: catIds[4].toString(), isActive: true, sortOrder: 2, audience: ['operations'] },
+      { key: 'DR_PLAN', name: 'DR/BCP Plan', categoryId: catIds[4].toString(), isActive: true, sortOrder: 3, audience: ['operations', 'leadership'] },
+      // 6. Testing
+      { key: 'TEST_STRAT', name: 'Test Strategy', categoryId: catIds[5].toString(), isActive: true, sortOrder: 1, audience: ['engineering', 'audit'] },
+      { key: 'TEST_PLAN', name: 'Test Plan', categoryId: catIds[5].toString(), isActive: true, sortOrder: 2, audience: ['engineering'] },
+      { key: 'UAT_SIGNOFF', name: 'UAT Signoff', categoryId: catIds[5].toString(), isActive: true, sortOrder: 3, audience: ['product', 'engineering'] },
+      // 7. Delivery
+      { key: 'PROJ_CHARTER', name: 'Project Charter', categoryId: catIds[6].toString(), isActive: true, sortOrder: 1, audience: ['program_management', 'leadership'] },
+      { key: 'RAID_LOG', name: 'RAID Log', categoryId: catIds[6].toString(), isActive: true, sortOrder: 2, audience: ['program_management'] },
+      { key: 'MEETING_NOTES', name: 'Meeting Notes', categoryId: catIds[6].toString(), isActive: true, sortOrder: 3, audience: ['program_management', 'engineering'] },
+      // 8. Governance
+      { key: 'POLICY_STD', name: 'Policy / Standard', categoryId: catIds[7].toString(), isActive: true, sortOrder: 1, audience: ['audit', 'leadership'] },
+      { key: 'COMP_CHECK', name: 'Compliance Checklist', categoryId: catIds[7].toString(), isActive: true, sortOrder: 2, audience: ['audit', 'security'] },
+      { key: 'APPROVAL_REC', name: 'Approval Record', categoryId: catIds[7].toString(), isActive: true, sortOrder: 3, audience: ['leadership', 'audit'] },
     ];
-    await db.collection('taxonomy_document_types').insertMany(types);
+    await db.collection('taxonomy_document_types').insertMany(typeSeeds);
 
-    // Bundles & Apps
+    // Bundles & Apps Seeding
     await db.collection('bundles').deleteMany({});
     await db.collection('applications').deleteMany({});
     const bundles = [
@@ -262,7 +288,7 @@ export const seedDatabase = async (apps: any[], workItems: any[], wikiPages: any
     }));
     await db.collection('applications').insertMany(seededApps);
 
-    // Added Seeding logic for Wiki Pages if provided
+    // Wiki Pages Seeding
     if (wikiPages && wikiPages.length > 0) {
       await db.collection('wiki_pages').deleteMany({});
       const seededWiki = wikiPages.map(p => ({

@@ -31,6 +31,8 @@ const Wiki: React.FC<WikiProps> = ({
   const [isEditing, setIsEditing] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [loading, setLoading] = useState(true);
+  
+  // Default hierarchyMode updated to Space → Bundle → Application → Milestone
   const [hierarchyMode, setHierarchyMode] = useState<HierarchyMode>(HierarchyMode.SPACE_BUNDLE_APP_MILESTONE);
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
 
@@ -121,22 +123,35 @@ const Wiki: React.FC<WikiProps> = ({
           {!isPage && <i className={`fas ${isExpanded ? 'fa-caret-down' : 'fa-caret-right'} w-2`}></i>}
           {isPage && <div className="w-2"></div>}
           <i className={`fas ${isPage ? 'fa-file-lines opacity-40' : 'fa-folder opacity-40'}`}></i>
-          <span className="text-[13px] truncate">{node.label}</span>
+          <span className="text-[13px] truncate font-medium">{node.label}</span>
         </button>
         {node.children && isExpanded && node.children.map((child: any) => renderTreeNode(child, depth + 1))}
       </div>
     );
   };
 
+  if (loading) {
+    return (
+      <div className="h-[600px] flex items-center justify-center bg-white rounded-[2.5rem] border border-slate-200">
+         <div className="flex flex-col items-center gap-4">
+           <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+           <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Accessing Registry Knowledge...</span>
+         </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex bg-white min-h-[850px] border border-slate-200 rounded-[2.5rem] shadow-2xl overflow-hidden relative">
       <aside className="w-80 border-r border-slate-100 bg-slate-50/20 flex flex-col shrink-0">
         <div className="p-6 border-b border-slate-100 space-y-4">
-          <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Projection</label>
-          <select value={hierarchyMode} onChange={(e) => setHierarchyMode(e.target.value as HierarchyMode)} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-[12px] font-bold text-slate-600 outline-none">
-            {Object.values(HierarchyMode).map(mode => <option key={mode} value={mode}>{mode}</option>)}
-          </select>
-          <button onClick={() => setIsCreating(true)} className="w-full py-2.5 bg-slate-900 text-white rounded-xl text-[9px] font-black uppercase tracking-widest">+ New Artifact</button>
+          <div className="space-y-1">
+            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Projection Mode</label>
+            <select value={hierarchyMode} onChange={(e) => setHierarchyMode(e.target.value as HierarchyMode)} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-[12px] font-bold text-slate-600 outline-none shadow-sm focus:border-blue-500 transition-all">
+              {Object.values(HierarchyMode).map(mode => <option key={mode} value={mode}>{mode}</option>)}
+            </select>
+          </div>
+          <button onClick={() => setIsCreating(true)} className="w-full py-2.5 bg-slate-900 text-white rounded-xl text-[9px] font-black uppercase tracking-widest shadow-xl hover:bg-slate-800 transition-all">+ New Artifact</button>
         </div>
         <nav className="flex-1 overflow-y-auto p-4 custom-scrollbar">
           {treeData.map(node => renderTreeNode(node))}
@@ -146,15 +161,26 @@ const Wiki: React.FC<WikiProps> = ({
         {isCreating ? <CreateWikiPageForm spaceId={selSpaceId === 'all' ? (spaces[0]?._id || 'default') : selSpaceId} allPages={pages} currentUser={currentUser} onSaveSuccess={() => { setIsCreating(false); fetch('/api/wiki').then(r => r.json()).then(setPages); }} onCancel={() => setIsCreating(false)} bundles={bundles} applications={applications} />
         : isEditing && activePage ? <WikiForm id={activePage._id} initialTitle={activePage.title} initialContent={activePage.content} spaceId={activePage.spaceId} onSaveSuccess={() => { setIsEditing(false); fetch('/api/wiki').then(r => r.json()).then(setPages); }} onCancel={() => setIsEditing(false)} bundles={bundles} applications={applications} />
         : activePage ? (
-          <div className="p-16 max-w-5xl mx-auto">
+          <div className="p-16 max-w-5xl mx-auto animate-fadeIn">
             <div className="flex justify-between items-center mb-12">
                <div className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Enterprise Artifact v{activePage.version || 1}</div>
-               <button onClick={() => setIsEditing(true)} className="px-6 py-2 border border-slate-200 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-50">Revise Document</button>
+               <button onClick={() => setIsEditing(true)} className="px-6 py-2 border border-slate-200 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 transition-all">Revise Document</button>
             </div>
             <WikiPageDisplay page={activePage} bundles={bundles} applications={applications} />
           </div>
-        ) : <div className="h-full flex flex-col items-center justify-center text-slate-300"><i className="fas fa-book-open text-6xl mb-4"></i><p className="font-bold text-sm">Select an artifact to begin.</p></div>}
+        ) : <div className="h-full flex flex-col items-center justify-center text-slate-300 p-20 text-center">
+             <div className="w-24 h-24 rounded-3xl bg-slate-50 flex items-center justify-center mb-8 shadow-inner">
+                <i className="fas fa-book-open text-slate-100 text-5xl"></i>
+             </div>
+             <h3 className="text-xl font-black text-slate-900 tracking-tight">Enterprise Knowledge Base</h3>
+             <p className="text-slate-400 font-medium mt-2 max-w-xs">Select an artifact from the explorer to review delivery standards and blueprints.</p>
+           </div>}
       </main>
+      <style jsx>{`
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+      `}</style>
     </div>
   );
 };

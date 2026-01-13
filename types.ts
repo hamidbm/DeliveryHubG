@@ -51,8 +51,11 @@ export interface TaxonomyDocumentType {
   icon?: string;
   isActive: boolean;
   sortOrder: number;
-  audience?: string[];
-  lifecyclePhases?: string[];
+  
+  // Enterprise Metadata
+  audience?: ('engineering' | 'security' | 'operations' | 'leadership' | 'program_management' | 'product' | 'finance' | 'audit')[];
+  lifecyclePhases?: ('strategy' | 'plan' | 'design' | 'build' | 'test' | 'release' | 'operate' | 'improve' | 'retire')[];
+  
   defaultTemplate?: string;
   requiredMetadata?: {
     requiresBundle: boolean;
@@ -63,7 +66,7 @@ export interface TaxonomyDocumentType {
 
 export interface Bundle {
   _id?: string;
-  id?: string; // Legacy/Compat
+  id?: string; 
   key: string;
   name: string;
   description?: string;
@@ -75,8 +78,8 @@ export interface Bundle {
 
 export interface Application {
   _id?: string;
-  id?: string; // Legacy ID mapping
-  aid: string; // Enterprise identifier
+  id?: string; 
+  aid: string; 
   name: string;
   bundleId: string;
   bundleKey?: string;
@@ -97,14 +100,12 @@ export interface Application {
   isActive: boolean;
   createdAt?: string;
   updatedAt?: string;
-  // Added owners property to support component rendering in Applications.tsx
   owners?: {
     name: string;
     role: string;
   }[];
 }
 
-// Added WorkItem interface to fix constants.tsx import error
 export interface WorkItem {
   id: string;
   title: string;
@@ -115,7 +116,6 @@ export interface WorkItem {
   priority: string;
 }
 
-// Added Milestone interface to fix constants.tsx import error
 export interface Milestone {
   id: string;
   name: string;
@@ -135,8 +135,7 @@ export interface WikiPage {
   bundleId?: string;
   applicationId?: string;
   milestoneId?: string;
-  documentTypeId?: string; // Replaces 'category' string
-  category?: string; // Legacy field
+  documentTypeId?: string; 
   createdAt?: string;
   updatedAt?: string;
   author?: string;
@@ -146,7 +145,6 @@ export interface WikiPage {
   themeKey?: string; 
 }
 
-// Added WikiVersion interface to fix WikiHistory.tsx import error
 export interface WikiVersion extends WikiPage {
   versionedAt: string;
   pageId: string;
