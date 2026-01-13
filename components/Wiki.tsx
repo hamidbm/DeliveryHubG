@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { WikiPage, WikiTheme, HierarchyMode, Application, WikiSpace, Bundle } from '../types';
 import WikiForm from './WikiForm';
@@ -44,8 +45,8 @@ const Wiki: React.FC<WikiProps> = ({
   const [viewHistory, setViewHistory] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showComments, setShowComments] = useState(false);
-  // Define hierarchyMode state to handle navigation tree projections
-  const [hierarchyMode, setHierarchyMode] = useState<HierarchyMode>(HierarchyMode.APP_MILESTONE_TYPE);
+  // Default hierarchyMode set to Space -> Bundle -> Application -> Milestone
+  const [hierarchyMode, setHierarchyMode] = useState<HierarchyMode>(HierarchyMode.SPACE_BUNDLE_APP_MILESTONE);
   
   // UI Control
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -136,6 +137,7 @@ const Wiki: React.FC<WikiProps> = ({
 
     filtered.forEach(page => {
       const app = applications.find(a => (a._id === page.applicationId || a.id === page.applicationId))?.name || 'Unassigned App';
+      const bundle = bundles.find(b => (b._id === page.bundleId || b.id === page.bundleId))?.name || 'Unassigned Bundle';
       const ms = page.milestoneId || 'No Milestone';
       const type = page.category || 'General Documentation';
       const space = spaces.find(s => s._id === page.spaceId || s.id === page.spaceId)?.name || 'Registry';
@@ -143,6 +145,12 @@ const Wiki: React.FC<WikiProps> = ({
 
       let path: string[] = [];
       switch (hierarchyMode) {
+        case HierarchyMode.SPACE_BUNDLE_APP_MILESTONE: path = [space, bundle, app, ms]; break;
+        case HierarchyMode.BUNDLE_MILESTONE_TYPE: path = [bundle, ms, type]; break;
+        case HierarchyMode.BUNDLE_TYPE_MILESTONE: path = [bundle, type, ms]; break;
+        case HierarchyMode.BUNDLE_TYPE: path = [bundle, type]; break;
+        case HierarchyMode.BUNDLE_APP_MILESTONE_TYPE: path = [bundle, app, ms, type]; break;
+        case HierarchyMode.BUNDLE_APP_MILESTONE: path = [bundle, app, ms]; break;
         case HierarchyMode.APP_MILESTONE_TYPE: path = [app, ms, type]; break;
         case HierarchyMode.TYPE_APP_MILESTONE: path = [type, app, ms]; break;
         case HierarchyMode.VENDOR_APP_MILESTONE_TYPE: path = [vendor, app, ms, type]; break;
@@ -153,7 +161,7 @@ const Wiki: React.FC<WikiProps> = ({
     });
 
     return tree;
-  }, [pages, selSpaceId, selBundleId, selAppId, selMilestone, searchQuery, hierarchyMode, applications, spaces]);
+  }, [pages, selSpaceId, selBundleId, selAppId, selMilestone, searchQuery, hierarchyMode, applications, bundles, spaces]);
 
   const getIconForNode = (node: any, depth: number) => {
     if (node.type === 'page') return 'fa-file-lines text-blue-500/60';
@@ -163,8 +171,9 @@ const Wiki: React.FC<WikiProps> = ({
     const levelType = modeParts[depth] || '';
 
     if (levelType.includes('Space')) return 'fa-layer-group text-indigo-500';
+    if (levelType.includes('Bundle')) return 'fa-boxes-stacked text-amber-600';
     if (levelType.includes('Application')) return 'fa-cube text-blue-500';
-    if (levelType.includes('Milestone')) return 'fa-flag-checkered text-amber-500';
+    if (levelType.includes('Milestone')) return 'fa-flag-checkered text-emerald-500';
     if (levelType.includes('Type') || levelType.includes('Vendor')) return 'fa-tags text-slate-400';
 
     return 'fa-circle-dot text-slate-300';

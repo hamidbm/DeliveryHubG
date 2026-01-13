@@ -17,6 +17,12 @@ export enum MilestoneStatus {
 }
 
 export enum HierarchyMode {
+  SPACE_BUNDLE_APP_MILESTONE = 'Space → Bundle → Application → Milestone',
+  BUNDLE_MILESTONE_TYPE = 'Bundle → Milestone → Type',
+  BUNDLE_TYPE_MILESTONE = 'Bundle → Type → Milestone',
+  BUNDLE_TYPE = 'Bundle → Type',
+  BUNDLE_APP_MILESTONE_TYPE = 'Bundle → Application → Milestone → Type',
+  BUNDLE_APP_MILESTONE = 'Bundle → Application → Milestone',
   APP_MILESTONE_TYPE = 'Application → Milestone → Type',
   TYPE_APP_MILESTONE = 'Type → Application → Milestone',
   VENDOR_APP_MILESTONE_TYPE = 'Vendor → Application → Milestone → Type',
@@ -26,6 +32,7 @@ export enum HierarchyMode {
 
 export interface Bundle {
   _id?: string;
+  id?: string; // Legacy/Compat
   key: string;
   name: string;
   description?: string;
