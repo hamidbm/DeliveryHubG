@@ -83,8 +83,8 @@ const WikiPageDisplay: React.FC<WikiPageDisplayProps> = ({ page, onNavigate, bun
       <section className="mb-12 flex flex-wrap gap-4">
         <MetaItem label="Category" value={taxCat?.name || 'General'} icon={taxCat?.icon || 'fa-tag'} />
         <MetaItem label="Doc Type" value={taxType?.name || 'Artifact'} icon="fa-file-contract" />
-        <MetaItem label="Cluster" value={bundle?.name || 'Unassigned'} icon="fa-boxes-stacked" />
-        <MetaItem label="App" value={app?.name || 'Registry Node'} icon="fa-cube" />
+        <MetaItem label="Cluster" value={bundle?.name || 'General'} icon="fa-boxes-stacked" />
+        <MetaItem label="App" value={app?.name || 'No App'} icon="fa-cube" />
         <div className="ml-auto flex items-center gap-2">
            <span className="px-3 py-1 bg-slate-900 text-white rounded-lg text-[9px] font-black uppercase tracking-widest">v{page.version || 1}</span>
            <span className="px-3 py-1 bg-emerald-50 text-emerald-600 rounded-lg text-[9px] font-black uppercase tracking-widest border border-emerald-100">{page.status || 'Published'}</span>
