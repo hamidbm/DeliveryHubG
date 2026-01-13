@@ -128,6 +128,7 @@ export interface Milestone {
 export interface WikiPage {
   id?: string;
   _id?: string;
+  slug?: string;
   title: string;
   content: string;
   parentId?: string;

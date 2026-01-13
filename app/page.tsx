@@ -1,7 +1,8 @@
+
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { useState, useEffect, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Layout from '../components/Layout';
 import Dashboard from '../components/Dashboard';
 import Applications from '../components/Applications';
@@ -14,7 +15,21 @@ import Admin from '../components/Admin';
 import { Bundle, Application } from '../types';
 
 export default function Home() {
-  const [activeTab, setActiveTab] = useState('dashboard');
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+        <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    }>
+      <HomeContent />
+    </Suspense>
+  );
+}
+
+function HomeContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'dashboard');
   
   // Dynamic Data Lists
   const [bundles, setBundles] = useState<Bundle[]>([]);
@@ -32,7 +47,23 @@ export default function Home() {
 
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const router = useRouter();
+
+  // Sync activeTab with URL
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (tab && tab !== activeTab) {
+      setActiveTab(tab);
+    }
+  }, [searchParams]);
+
+  const handleTabChange = (tab: string) => {
+    setActiveTab(tab);
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('tab', tab);
+    // Preserving pageId if switching back to wiki, otherwise clear it for clean state? 
+    // Usually better to keep it if we are on wiki, but let's keep it simple.
+    router.push(`?${params.toString()}`);
+  };
 
   useEffect(() => {
     async function init() {
@@ -123,7 +154,7 @@ export default function Home() {
   return (
     <Layout 
       activeTab={activeTab} 
-      setActiveTab={setActiveTab}
+      setActiveTab={handleTabChange}
       selSpaceId={selSpaceId}
       setSelSpaceId={setSelSpaceId}
       activeBundle={activeBundle}

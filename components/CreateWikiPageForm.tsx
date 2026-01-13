@@ -18,6 +18,7 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
   spaceId, currentUser, onSaveSuccess, onCancel, bundles, applications
 }) => {
   const [title, setTitle] = useState('');
+  const [slug, setSlug] = useState('');
   const [content, setContent] = useState('');
   const [documentTypeId, setDocumentTypeId] = useState('');
   const [bundleId, setBundleId] = useState('');
@@ -49,6 +50,21 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
     loadData();
   }, []);
 
+  const generateSlug = (val: string) => {
+    return val.toLowerCase()
+      .trim()
+      .replace(/[^\w\s-]/g, '')
+      .replace(/[\s_-]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+  };
+
+  const handleTitleChange = (val: string) => {
+    setTitle(val);
+    if (!slug || slug === generateSlug(title)) {
+      setSlug(generateSlug(val));
+    }
+  };
+
   const insertText = (before: string, after: string = '') => {
     if (!textAreaRef.current) return;
     const textarea = textAreaRef.current;
@@ -71,7 +87,7 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
     if (!title.trim()) { setSaveError("Title required."); return; }
     setIsSaving(true);
     const payload: Partial<WikiPage> = {
-      title: title.trim(), content, spaceId, bundleId: bundleId || undefined,
+      title: title.trim(), content, slug, spaceId, bundleId: bundleId || undefined,
       applicationId: applicationId || undefined, milestoneId: milestoneId || undefined,
       documentTypeId: documentTypeId || undefined, themeKey: themeKey || undefined, status,
       author: currentUser?.name || 'System', lastModifiedBy: currentUser?.name || 'System'
@@ -92,24 +108,13 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
           <button onClick={onCancel} className="w-10 h-10 rounded-full bg-slate-50 hover:bg-slate-100 flex items-center justify-center text-slate-400 border border-slate-100"><i className="fas fa-times"></i></button>
           <div className="flex flex-col">
             <span className="text-[9px] font-black text-blue-600 uppercase tracking-widest leading-none mb-1">New Artifact Creator</span>
-            <input value={title} onChange={(e) => setTitle(e.target.value)} className="text-2xl font-black text-slate-800 border-none p-0 focus:ring-0 outline-none bg-transparent w-[400px]" placeholder="Untitled Artifact" />
+            <input value={title} onChange={(e) => handleTitleChange(e.target.value)} className="text-2xl font-black text-slate-800 border-none p-0 focus:ring-0 outline-none bg-transparent w-[400px]" placeholder="Untitled Artifact" />
           </div>
         </div>
         <div className="flex items-center gap-4">
-          {/* Editor Format Toggle */}
           <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 mr-2 shadow-inner">
-            <button 
-              onClick={() => setEditorFormat('markdown')} 
-              className={`px-4 py-2 text-[9px] font-black uppercase rounded-lg transition-all ${editorFormat === 'markdown' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}
-            >
-              Markdown
-            </button>
-            <button 
-              onClick={() => setEditorFormat('html')} 
-              className={`px-4 py-2 text-[9px] font-black uppercase rounded-lg transition-all ${editorFormat === 'html' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}
-            >
-              HTML
-            </button>
+            <button onClick={() => setEditorFormat('markdown')} className={`px-4 py-2 text-[9px] font-black uppercase rounded-lg transition-all ${editorFormat === 'markdown' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}>Markdown</button>
+            <button onClick={() => setEditorFormat('html')} className={`px-4 py-2 text-[9px] font-black uppercase rounded-lg transition-all ${editorFormat === 'html' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}>HTML</button>
           </div>
 
           <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 mr-4 shadow-inner">
@@ -134,6 +139,8 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
                 <ToolbarButton icon="fa-list-ul" onClick={() => insertText(editorFormat === 'html' ? '<ul>\n  <li>' : '- ', editorFormat === 'html' ? '</li>\n</ul>' : '')} />
                 <ToolbarButton icon="fa-table" onClick={() => insertText(editorFormat === 'html' ? '\n<table>\n  <tr><th>Header</th></tr>\n  <tr><td>Cell</td></tr>\n</table>\n' : '\n| Header |\n| --- |\n| Cell |\n')} />
                 <div className="w-[1px] h-6 bg-slate-200 mx-2"></div>
+                <ToolbarButton icon="fa-link" onClick={() => insertText(editorFormat === 'html' ? '<a href="/wiki/TARGET-SLUG">Link Title' : '[Link Title](/wiki/TARGET-SLUG', editorFormat === 'html' ? '</a>' : ')')} />
+                <div className="w-[1px] h-6 bg-slate-200 mx-2"></div>
                 <ToolbarButton icon="fa-circle-info" onClick={() => insertText('<div class="callout info">\n  <div class="title"><i class="fas fa-circle-info"></i> INFO</div>\n  <p>', '</p>\n</div>')} />
                 <ToolbarButton icon="fa-triangle-exclamation" onClick={() => insertText('<div class="callout warn">\n  <div class="title"><i class="fas fa-triangle-exclamation"></i> WARNING</div>\n  <p>', '</p>\n</div>')} />
                 <ToolbarButton icon="fa-grip" onClick={() => insertText('<div class="cards">\n  <div class="card accent span-6">\n    <div class="card-title">Card Title</div>\n    <div class="card-meta">META TAG</div>\n    <p>', '</p>\n  </div>\n</div>')} />
@@ -154,7 +161,7 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
               />
             ) : (
               <div className="p-12 max-w-5xl mx-auto">
-                <WikiPageDisplay page={{ title, content, spaceId, bundleId, applicationId, milestoneId, documentTypeId, themeKey }} bundles={bundles} applications={applications} />
+                <WikiPageDisplay page={{ title, content, slug, spaceId, bundleId, applicationId, milestoneId, documentTypeId, themeKey }} bundles={bundles} applications={applications} />
               </div>
             )}
           </div>
@@ -164,6 +171,11 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
           <div className="space-y-6">
             <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><i className="fas fa-cog"></i> Classification</h4>
             
+            <div className="space-y-2">
+              <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Document Slug (Stable URL)</label>
+              <input value={slug} onChange={(e) => setSlug(generateSlug(e.target.value))} className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-4 text-xs font-bold text-blue-600 outline-none shadow-sm focus:border-blue-500 transition-all" placeholder="my-stable-link" />
+            </div>
+
             <div className="space-y-2">
               <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Document Type</label>
               <select value={documentTypeId} onChange={(e) => handleTypeChange(e.target.value)} className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-4 text-xs font-bold text-slate-700 outline-none shadow-sm focus:border-blue-500 transition-all">

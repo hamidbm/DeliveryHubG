@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { WikiPage, WikiTheme, HierarchyMode, Application, WikiSpace, Bundle, TaxonomyCategory, TaxonomyDocumentType } from '../types';
 import WikiForm from './WikiForm';
 import CreateWikiPageForm from './CreateWikiPageForm';
@@ -22,6 +23,10 @@ interface WikiProps {
 const Wiki: React.FC<WikiProps> = ({ 
   currentUser, selSpaceId, selBundleId, selAppId, selMilestone, searchQuery, externalTrigger, onTriggerProcessed, bundles = [], applications = []
 }) => {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
+
   const [spaces, setSpaces] = useState<WikiSpace[]>([]);
   const [themes, setThemes] = useState<WikiTheme[]>([]);
   const [pages, setPages] = useState<WikiPage[]>([]);
@@ -32,6 +37,7 @@ const Wiki: React.FC<WikiProps> = ({
   const [isCreating, setIsCreating] = useState(false);
   const [loading, setLoading] = useState(true);
   const [isSidebarVisible, setIsSidebarVisible] = useState(true);
+  const [copyFeedback, setCopyFeedback] = useState(false);
   
   const [hierarchyMode, setHierarchyMode] = useState<HierarchyMode>(HierarchyMode.SPACE_BUNDLE_APP_MILESTONE);
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
@@ -47,23 +53,60 @@ const Wiki: React.FC<WikiProps> = ({
           fetch('/api/taxonomy/categories?active=true'),
           fetch('/api/taxonomy/document-types?active=true')
         ]);
-        setSpaces(await spRes.json());
-        setPages(await pgRes.json());
+        const spacesData = await spRes.json();
+        const pagesData = await pgRes.json();
+        setSpaces(spacesData);
+        setPages(pagesData);
         setThemes(await thRes.json());
         setCategories(await catRes.json());
         setDocTypes(await typRes.json());
+
+        // Check URL for pageId on initial load
+        const urlPageId = searchParams.get('pageId');
+        if (urlPageId) {
+          const page = resolvePage(urlPageId, pagesData);
+          if (page) setActivePage(page);
+        }
       } catch (e) { console.error("Wiki Init Error", e); }
       finally { setLoading(false); }
     };
     init();
   }, []);
 
+  const resolvePage = (target: string, pageList: WikiPage[]): WikiPage | null => {
+    return pageList.find(p => p._id === target || p.id === target || p.slug === target) || null;
+  };
+
+  const handleNavigate = (target: string) => {
+    const page = resolvePage(target, pages);
+    if (page) {
+      handlePageSelect(page);
+    } else {
+      console.warn(`Could not resolve internal link target: ${target}`);
+    }
+  };
+
+  // Update URL when activePage changes
+  const handlePageSelect = (page: WikiPage) => {
+    setActivePage(page);
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('pageId', (page._id || page.id || page.slug)!);
+    router.push(`${pathname}?${params.toString()}`);
+  };
+
+  const handleCopyLink = () => {
+    if (!activePage) return;
+    navigator.clipboard.writeText(window.location.href);
+    setCopyFeedback(true);
+    setTimeout(() => setCopyFeedback(false), 2000);
+  };
+
   const refreshPages = async (activeId?: string) => {
     const pgRes = await fetch('/api/wiki');
     const newPages = await pgRes.json();
     setPages(newPages);
     if (activeId) {
-      const updated = newPages.find((p: any) => p._id === activeId || p.id === activeId);
+      const updated = resolvePage(activeId, newPages);
       if (updated) setActivePage(updated);
     }
   };
@@ -162,7 +205,7 @@ const Wiki: React.FC<WikiProps> = ({
 
     return (
       <div key={node.id} className="flex flex-col">
-        <button onClick={() => isPage ? setActivePage(node.data) : setExpandedNodes(prev => { const n = new Set(prev); n.has(node.id) ? n.delete(node.id) : n.add(node.id); return n; })}
+        <button onClick={() => isPage ? handlePageSelect(node.data) : setExpandedNodes(prev => { const n = new Set(prev); n.has(node.id) ? n.delete(node.id) : n.add(node.id); return n; })}
           className={`text-left px-3 py-2 flex items-center gap-3 rounded-xl hover:bg-slate-200 transition-all ${isActive ? 'bg-blue-100 text-blue-700 font-bold' : 'text-slate-600'}`} style={{ marginLeft: `${depth * 20}px` }}>
           {!isPage && <i className={`fas ${isExpanded ? 'fa-caret-down' : 'fa-caret-right'} w-2`}></i>}
           {isPage && <div className="w-2"></div>}
@@ -243,6 +286,7 @@ const Wiki: React.FC<WikiProps> = ({
               initialApplicationId={activePage.applicationId}
               initialMilestoneId={activePage.milestoneId}
               initialThemeKey={activePage.themeKey}
+              initialSlug={activePage.slug}
               spaceId={activePage.spaceId} 
               onSaveSuccess={(savedId) => { setIsEditing(false); refreshPages(savedId || activePage._id); }} 
               onCancel={() => setIsEditing(false)} 
@@ -253,9 +297,27 @@ const Wiki: React.FC<WikiProps> = ({
             <div className="p-16 max-w-5xl mx-auto animate-fadeIn">
               <div className="flex justify-between items-center mb-12">
                  <div className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Enterprise Artifact v{activePage.version || 1}</div>
-                 <button onClick={() => setIsEditing(true)} className="px-6 py-2 border border-slate-200 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 transition-all">Revise Document</button>
+                 <div className="flex items-center gap-3">
+                    <button 
+                      onClick={handleCopyLink} 
+                      className="px-6 py-2 bg-white border border-slate-200 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 transition-all flex items-center gap-2"
+                    >
+                      {copyFeedback ? (
+                        <>
+                          <i className="fas fa-check text-emerald-500"></i>
+                          <span className="text-emerald-600">Link Copied!</span>
+                        </>
+                      ) : (
+                        <>
+                          <i className="fas fa-link"></i>
+                          <span>Copy Link</span>
+                        </>
+                      )}
+                    </button>
+                    <button onClick={() => setIsEditing(true)} className="px-6 py-2 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-800 transition-all">Revise Document</button>
+                 </div>
               </div>
-              <WikiPageDisplay page={activePage} bundles={bundles} applications={applications} />
+              <WikiPageDisplay page={activePage} bundles={bundles} applications={applications} onNavigate={handleNavigate} />
             </div>
           ) : (
             <div className="h-full flex flex-col items-center justify-center text-slate-300 p-20 text-center">
