@@ -2,15 +2,17 @@
 import React, { useMemo, useEffect, useRef, useState } from 'react';
 import { marked } from 'marked';
 import DOMPurify from 'isomorphic-dompurify';
-import { WikiPage, WikiTheme, WikiSpace } from '../types';
-import { BUNDLES, APPLICATIONS, MILESTONES } from '../constants';
+import { WikiPage, WikiTheme, WikiSpace, Bundle, Application } from '../types';
+import { MILESTONES } from '../constants';
 
 interface WikiPageDisplayProps {
   page: WikiPage;
   onNavigate?: (id: string) => void;
+  bundles: Bundle[];
+  applications: Application[];
 }
 
-const WikiPageDisplay: React.FC<WikiPageDisplayProps> = ({ page, onNavigate }) => {
+const WikiPageDisplay: React.FC<WikiPageDisplayProps> = ({ page, onNavigate, bundles = [], applications = [] }) => {
   const contentRef = useRef<HTMLDivElement>(null);
   const [activeTheme, setActiveTheme] = useState<WikiTheme | null>(null);
   const [isMetaExpanded, setIsMetaExpanded] = useState(true);
@@ -92,14 +94,13 @@ const WikiPageDisplay: React.FC<WikiPageDisplayProps> = ({ page, onNavigate }) =
     });
   };
 
-  /* Fix: Property 'id' does not exist on type 'Bundle'. Using '_id' instead. */
-  const bundle = BUNDLES.find(b => b._id === page.bundleId);
-  const application = APPLICATIONS.find(a => a.id === page.applicationId);
+  const bundle = (bundles || []).find(b => b._id === page.bundleId);
+  const application = (applications || []).find(a => a._id === page.applicationId || a.id === page.applicationId);
   const milestone = MILESTONES.find(m => m.id === page.milestoneId);
   
   const syncHash = useMemo(() => {
     const id = page._id || page.id || 'new';
-    return id.substring(id.length - 8).toUpperCase();
+    return id.substring(Math.max(0, id.length - 8)).toUpperCase();
   }, [page._id, page.id]);
 
   return (

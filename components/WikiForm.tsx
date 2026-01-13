@@ -1,7 +1,6 @@
 
 import React, { useState, useRef, useMemo, useEffect } from 'react';
-import { WikiPage, WikiTheme } from '../types';
-import { BUNDLES, APPLICATIONS } from '../constants';
+import { WikiPage, WikiTheme, Bundle, Application } from '../types';
 import WikiPageDisplay from './WikiPageDisplay';
 
 interface WikiFormProps {
@@ -19,6 +18,8 @@ interface WikiFormProps {
   onSaveSuccess: (savedId: string) => void;
   onCancel: () => void;
   currentUser?: { name: string };
+  bundles: Bundle[];
+  applications: Application[];
 }
 
 const WIKI_CATEGORIES = ["Architecture Decision Record (ADR)", "Low Level Design (LLD)", "Meeting Notes", "Runbook", "General"];
@@ -42,7 +43,9 @@ const WikiForm: React.FC<WikiFormProps> = ({
   id,
   currentUser,
   onSaveSuccess,
-  onCancel
+  onCancel,
+  bundles,
+  applications
 }) => {
   const [title, setTitle] = useState(initialTitle);
   const [content, setContent] = useState(initialContent);
@@ -383,7 +386,7 @@ const WikiForm: React.FC<WikiFormProps> = ({
             ) : (
               <div className="absolute inset-0 overflow-y-auto p-12 bg-white custom-scrollbar">
                 <div className="max-w-5xl mx-auto">
-                  <WikiPageDisplay page={previewPage} />
+                  <WikiPageDisplay page={previewPage} bundles={bundles} applications={applications} />
                 </div>
               </div>
             )}
@@ -397,9 +400,8 @@ const WikiForm: React.FC<WikiFormProps> = ({
             </h4>
             <SidebarField label="Type" value={category} onChange={setCategory} options={WIKI_CATEGORIES} />
             <SidebarField label="Visual Theme" value={themeKey} onChange={setThemeKey} options={[{ id: '', name: 'Use Space Default' }, ...themes.map(t => ({ id: t.key, name: t.name }))]} />
-            {/* Fix: Property 'id' does not exist on type 'Bundle'. Using '_id' instead. */}
-            <SidebarField label="Business Bundle" value={bundleId} onChange={setBundleId} options={BUNDLES.map(b => ({ id: b._id, name: b.name }))} />
-            <SidebarField label="App Context" value={applicationId} onChange={setApplicationId} options={APPLICATIONS.map(a => ({ id: a.id, name: a.name }))} />
+            <SidebarField label="Business Bundle" value={bundleId} onChange={setBundleId} options={bundles.map(b => ({ id: b._id, name: b.name }))} />
+            <SidebarField label="App Context" value={applicationId} onChange={setApplicationId} options={applications.map(a => ({ id: a._id || a.id, name: a.name }))} />
           </div>
         </aside>
       </div>
@@ -417,6 +419,7 @@ const SidebarField = ({ label, value, onChange, options }: any) => (
   <div className="space-y-2">
     <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">{label}</label>
     <select value={value} onChange={(e) => onChange(e.target.value)} className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-4 text-xs font-bold text-slate-700 focus:border-blue-500 outline-none transition-all shadow-sm">
+      <option value="">None Selected</option>
       {options.map((o: any) => typeof o === 'string' ? <option key={o} value={o}>{o}</option> : <option key={o.id} value={o.id}>{o.name}</option>)}
     </select>
   </div>

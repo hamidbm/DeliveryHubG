@@ -1,7 +1,6 @@
 
 import React, { useState, useRef, useMemo, useEffect } from 'react';
-import { WikiPage, WikiTheme } from '../types';
-import { BUNDLES, APPLICATIONS } from '../constants';
+import { WikiPage, WikiTheme, Bundle, Application } from '../types';
 import WikiPageDisplay from './WikiPageDisplay';
 
 interface CreateWikiPageFormProps {
@@ -11,6 +10,8 @@ interface CreateWikiPageFormProps {
   currentUser?: { name: string };
   onSaveSuccess: (savedId: string) => void;
   onCancel: () => void;
+  bundles: Bundle[];
+  applications: Application[];
 }
 
 const WIKI_CATEGORIES = ["Architecture Decision Record (ADR)", "Low Level Design (LLD)", "Meeting Notes", "Runbook", "General"];
@@ -25,7 +26,9 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
   spaceId,
   currentUser,
   onSaveSuccess,
-  onCancel
+  onCancel,
+  bundles,
+  applications
 }) => {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
@@ -242,7 +245,7 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
           <div className="px-8 py-3 border-b border-slate-100 bg-slate-50 flex items-center justify-between sticky top-0 z-[60] overflow-visible">
             <div className="flex items-center gap-1 shrink-0">
               <ToolbarButton icon="fa-bold" label="Bold" onClick={() => insertText(editorFormat === 'markdown' ? '**' : '<b>', editorFormat === 'markdown' ? '**' : '</b>')} />
-              <ToolbarButton icon="fa-italic" label="Italic" onClick={() => insertText(editorFormat === 'markdown' ? '*' : '<i>', editorFormat === 'markdown' ? '*' : '</i>')} />
+              <ToolbarButton icon="fa-italic" label="Italic" onClick={() => insertText(editorFormat === 'markdown' ? '*' : '<i>', editorFormat === 'markdown' ? '*' : '<i>')} />
               <ToolbarButton icon="fa-paragraph" label="Paragraph" onClick={() => insertText('<p>', '</p>')} />
               <div className="w-[1px] h-6 bg-slate-200 mx-2"></div>
               
@@ -390,7 +393,7 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
             ) : (
               <div className="absolute inset-0 overflow-y-auto p-12 bg-white custom-scrollbar">
                 <div className="max-w-5xl mx-auto">
-                  <WikiPageDisplay page={previewPage} />
+                  <WikiPageDisplay page={previewPage} bundles={bundles} applications={applications} />
                 </div>
               </div>
             )}
@@ -404,9 +407,8 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
             </h4>
             <SidebarField label="Artifact Type" value={category} onChange={setCategory} options={WIKI_CATEGORIES} />
             <SidebarField label="Visual Theme" value={themeKey} onChange={setThemeKey} options={[{ id: '', name: 'Use Space Default' }, ...themes.map(t => ({ id: t.key, name: t.name }))]} />
-            {/* Fix: Property 'id' does not exist on type 'Bundle'. Using '_id' instead. */}
-            <SidebarField label="Business Bundle" value={bundleId} onChange={setBundleId} options={BUNDLES.map(b => ({ id: b._id, name: b.name }))} />
-            <SidebarField label="App Context" value={applicationId} onChange={setApplicationId} options={APPLICATIONS.map(a => ({ id: a.id, name: a.name }))} />
+            <SidebarField label="Business Bundle" value={bundleId} onChange={setBundleId} options={bundles.map(b => ({ id: b._id, name: b.name }))} />
+            <SidebarField label="App Context" value={applicationId} onChange={setApplicationId} options={applications.map(a => ({ id: a._id || a.id, name: a.name }))} />
           </div>
         </aside>
       </div>
@@ -432,6 +434,7 @@ const SidebarField = ({ label, value, onChange, options }: any) => (
       onChange={(e) => onChange(e.target.value)}
       className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-4 text-xs font-bold text-slate-700 focus:border-blue-500 outline-none transition-all shadow-sm"
     >
+      <option value="">None Selected</option>
       {options.map((o: any) => typeof o === 'string' ? <option key={o} value={o}>{o}</option> : <option key={o.id} value={o.id}>{o.name}</option>)}
     </select>
   </div>

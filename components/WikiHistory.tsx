@@ -1,15 +1,17 @@
 
 import React, { useState, useEffect } from 'react';
-import { WikiVersion, WikiPage } from '../types';
+import { WikiVersion, WikiPage, Bundle, Application } from '../types';
 import WikiPageDisplay from './WikiPageDisplay';
 
 interface WikiHistoryProps {
   page: WikiPage;
   onClose: () => void;
   onRevert: (versionId: string) => void;
+  bundles: Bundle[];
+  applications: Application[];
 }
 
-const WikiHistory: React.FC<WikiHistoryProps> = ({ page, onClose, onRevert }) => {
+const WikiHistory: React.FC<WikiHistoryProps> = ({ page, onClose, onRevert, bundles, applications }) => {
   const [history, setHistory] = useState<WikiVersion[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedVersion, setSelectedVersion] = useState<WikiVersion | null>(null);
@@ -190,7 +192,7 @@ const WikiHistory: React.FC<WikiHistoryProps> = ({ page, onClose, onRevert }) =>
                     </button>
                   </div>
                 </div>
-                <WikiPageDisplay page={selectedVersion as any} />
+                <WikiPageDisplay page={selectedVersion as any} bundles={bundles} applications={applications} />
               </div>
 
               {/* Right Column: Comparison Version */}
@@ -210,7 +212,7 @@ const WikiHistory: React.FC<WikiHistoryProps> = ({ page, onClose, onRevert }) =>
                     </button>
                   </div>
                 </div>
-                <WikiPageDisplay page={comparisonVersion as any} />
+                <WikiPageDisplay page={comparisonVersion as any} bundles={bundles} applications={applications} />
               </div>
             </div>
           ) : selectedVersion ? (
@@ -234,7 +236,7 @@ const WikiHistory: React.FC<WikiHistoryProps> = ({ page, onClose, onRevert }) =>
                   Restore Version
                 </button>
               </div>
-              <WikiPageDisplay page={selectedVersion as any} />
+              <WikiPageDisplay page={selectedVersion as any} bundles={bundles} applications={applications} />
             </div>
           ) : !loading && (
             <div className="h-full flex flex-col items-center justify-center text-slate-300">

@@ -83,6 +83,8 @@ const App: React.FC = () => {
             searchQuery={searchQuery}
             externalTrigger={wikiTrigger}
             onTriggerProcessed={() => setWikiTrigger(null)}
+            bundles={bundles}
+            applications={applications}
           />
         );
       case 'reviews':

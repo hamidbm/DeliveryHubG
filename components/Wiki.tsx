@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { WikiPage, WikiTheme, HierarchyMode, Application, WikiSpace } from '../types';
+import { WikiPage, WikiTheme, HierarchyMode, Application, WikiSpace, Bundle } from '../types';
 import WikiForm from './WikiForm';
 import CreateWikiPageForm from './CreateWikiPageForm';
 import WikiPageDisplay from './WikiPageDisplay';
@@ -19,6 +19,8 @@ interface WikiProps {
   searchQuery: string;
   externalTrigger?: string | null;
   onTriggerProcessed?: () => void;
+  bundles: Bundle[];
+  applications: Application[];
 }
 
 const Wiki: React.FC<WikiProps> = ({ 
@@ -29,12 +31,12 @@ const Wiki: React.FC<WikiProps> = ({
   selMilestone, 
   searchQuery,
   externalTrigger,
-  onTriggerProcessed
+  onTriggerProcessed,
+  bundles,
+  applications
 }) => {
   const [spaces, setSpaces] = useState<WikiSpace[]>([]);
   const [themes, setThemes] = useState<WikiTheme[]>([]);
-  const [applications, setApplications] = useState<Application[]>([]);
-  const [hierarchyMode, setHierarchyMode] = useState<HierarchyMode>(HierarchyMode.APP_MILESTONE_TYPE);
   const [pages, setPages] = useState<WikiPage[]>([]);
   const [activePage, setActivePage] = useState<WikiPage | null>(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -43,6 +45,8 @@ const Wiki: React.FC<WikiProps> = ({
   const [viewHistory, setViewHistory] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showComments, setShowComments] = useState(false);
+  // Define hierarchyMode state to handle navigation tree projections
+  const [hierarchyMode, setHierarchyMode] = useState<HierarchyMode>(HierarchyMode.APP_MILESTONE_TYPE);
   
   // UI Control
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -65,20 +69,17 @@ const Wiki: React.FC<WikiProps> = ({
     const init = async () => {
       setLoading(true);
       try {
-        const [spRes, apRes, pgRes, thRes] = await Promise.all([
+        const [spRes, pgRes, thRes] = await Promise.all([
           fetch('/api/wiki/spaces'),
-          fetch('/api/applications'),
           fetch('/api/wiki'),
           fetch('/api/wiki/themes?active=true')
         ]);
         
         const spacesData = await spRes.json();
-        const appsData = await apRes.json().catch(() => []);
         const pagesData = await pgRes.json();
         const themesData = await thRes.json();
 
         setSpaces(spacesData);
-        setApplications(appsData);
         setPages(pagesData);
         setThemes(themesData);
       } catch (e) {
@@ -133,7 +134,7 @@ const Wiki: React.FC<WikiProps> = ({
     };
 
     filtered.forEach(page => {
-      const app = applications.find(a => a.id === page.applicationId)?.name || 'Unassigned App';
+      const app = applications.find(a => a._id === page.applicationId || a.id === page.applicationId)?.name || 'Unassigned App';
       const ms = page.milestoneId || 'No Milestone';
       const type = page.category || 'General Documentation';
       const space = spaces.find(s => s._id === page.spaceId || s.id === page.spaceId)?.name || 'Registry';
@@ -442,6 +443,8 @@ const Wiki: React.FC<WikiProps> = ({
               currentUser={currentUser}
               onSaveSuccess={handleSaveSuccess}
               onCancel={() => setIsCreating(false)}
+              bundles={bundles}
+              applications={applications}
             />
           ) : isEditing && activePage ? (
             <WikiForm 
@@ -459,9 +462,11 @@ const Wiki: React.FC<WikiProps> = ({
               currentUser={currentUser}
               onSaveSuccess={handleSaveSuccess}
               onCancel={() => setIsEditing(false)}
+              bundles={bundles}
+              applications={applications}
             />
           ) : viewHistory && activePage ? (
-            <WikiHistory page={activePage} onClose={() => setViewHistory(false)} onRevert={handleSaveSuccess} />
+            <WikiHistory page={activePage} onClose={() => setViewHistory(false)} onRevert={handleSaveSuccess} bundles={bundles} applications={applications} />
           ) : activePage ? (
             <div className="animate-fadeIn min-h-full flex flex-col">
               <div className="px-10 py-6 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white/95 backdrop-blur-md z-30 shadow-sm">
@@ -480,7 +485,7 @@ const Wiki: React.FC<WikiProps> = ({
                 </div>
               </div>
               <div className="p-16 max-w-5xl mx-auto flex-1 w-full">
-                <WikiPageDisplay page={activePage} />
+                <WikiPageDisplay page={activePage} bundles={bundles} applications={applications} />
                 {showComments && (
                   <div className="mt-24 pt-12 border-t border-slate-100">
                     <WikiComments pageId={(activePage._id || activePage.id)!} currentUser={currentUser} />
