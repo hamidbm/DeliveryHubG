@@ -30,6 +30,37 @@ export enum HierarchyMode {
   SPACE_TYPE_APP_MILESTONE = 'Space → Type → Application → Milestone'
 }
 
+export interface TaxonomyCategory {
+  _id?: string;
+  id?: string;
+  key: string;
+  name: string;
+  description?: string;
+  icon?: string;
+  isActive: boolean;
+  sortOrder: number;
+}
+
+export interface TaxonomyDocumentType {
+  _id?: string;
+  id?: string;
+  key: string;
+  name: string;
+  categoryId: string;
+  description?: string;
+  icon?: string;
+  isActive: boolean;
+  sortOrder: number;
+  audience?: string[];
+  lifecyclePhases?: string[];
+  defaultTemplate?: string;
+  requiredMetadata?: {
+    requiresBundle: boolean;
+    requiresApplication: boolean;
+    requiresMilestone: boolean;
+  };
+}
+
 export interface Bundle {
   _id?: string;
   id?: string; // Legacy/Compat
@@ -40,20 +71,6 @@ export interface Bundle {
   sortOrder?: number;
   createdAt?: string;
   updatedAt?: string;
-}
-
-export interface Vendor {
-  id: string;
-  name: string;
-}
-
-export interface ApplicationOwner {
-  side: 'OT' | 'SVP';
-  role: string;
-  name: string;
-  email: string;
-  title?: string;
-  isPrimary: boolean;
 }
 
 export interface Application {
@@ -77,34 +94,28 @@ export interface Application {
     health: 'Healthy' | 'Risk' | 'Critical';
     lastStatusUpdateAt?: string;
   };
-  owners?: ApplicationOwner[];
-  vendor?: {
-    company: string;
-    contractRef?: string;
-  };
-  governance?: {
-    sowSigned: boolean;
-    sowDocId?: string;
-    notes?: string;
-  };
   isActive: boolean;
-  migrationProgress?: number; // Legacy/Compat
-  status_old?: 'Active' | 'Legacy' | 'Migrating' | 'Decommissioned'; // Legacy/Compat
-  vendorCompanies?: string[]; // Legacy/Compat
   createdAt?: string;
   updatedAt?: string;
+  // Added owners property to support component rendering in Applications.tsx
+  owners?: {
+    name: string;
+    role: string;
+  }[];
 }
 
+// Added WorkItem interface to fix constants.tsx import error
 export interface WorkItem {
   id: string;
   title: string;
-  type: 'Epic' | 'Feature' | 'User Story' | 'Task';
-  status: 'To Do' | 'In Progress' | 'Review' | 'Done';
+  type: string;
+  status: string;
   applicationId: string;
   assignedTo: string;
-  priority: 'Low' | 'Medium' | 'High' | 'Critical';
+  priority: string;
 }
 
+// Added Milestone interface to fix constants.tsx import error
 export interface Milestone {
   id: string;
   name: string;
@@ -112,34 +123,6 @@ export interface Milestone {
   vendorCompany: string;
   status: MilestoneStatus;
   dueDate: string;
-}
-
-export interface WikiSpace {
-  _id?: string;
-  id?: string;
-  key: string;
-  name: string;
-  description?: string;
-  icon?: string;
-  color?: string;
-  visibility: 'internal' | 'vendors' | 'specific';
-  allowedVendorCompanies?: string[];
-  createdAt?: string;
-  defaultThemeKey?: string; 
-}
-
-export interface WikiTheme {
-  _id?: string;
-  key: string;
-  name: string;
-  description?: string;
-  css: string;
-  isActive: boolean;
-  isDefault: boolean;
-  createdById?: string;
-  updatedById?: string;
-  createdAt?: string;
-  updatedAt?: string;
 }
 
 export interface WikiPage {
@@ -152,52 +135,44 @@ export interface WikiPage {
   bundleId?: string;
   applicationId?: string;
   milestoneId?: string;
-  vendorCompany?: string;
-  category?: string;
+  documentTypeId?: string; // Replaces 'category' string
+  category?: string; // Legacy field
   createdAt?: string;
   updatedAt?: string;
   author?: string;
   lastModifiedBy?: string;
-  tags?: string[];
-  readingTime?: number;
   version?: number;
   status?: 'Draft' | 'Published' | 'Archived';
-  watchers?: string[];
-  links?: {
-    documentIds: string[];
-  };
   themeKey?: string; 
 }
 
-export interface WikiComment {
-  _id?: string;
-  pageId: string;
-  parentId?: string;
-  author: string;
-  authorRole?: string;
-  content: string;
-  createdAt: string;
-}
-
-export interface WikiTemplate {
-  _id?: string;
-  name: string;
-  key: string;
-  description: string;
-  content: string;
-  category: string;
-}
-
-export interface WikiVersion extends Omit<WikiPage, 'id'> {
-  pageId: string;
+// Added WikiVersion interface to fix WikiHistory.tsx import error
+export interface WikiVersion extends WikiPage {
   versionedAt: string;
+  pageId: string;
 }
 
-export interface AppState {
-  activeBundleId: string | 'all';
-  activeVendorId: string | 'all';
-  currentUser: {
-    name: string;
-    role: Role;
-  };
+export interface WikiSpace {
+  _id?: string;
+  id?: string;
+  key: string;
+  name: string;
+  description?: string;
+  icon?: string;
+  color?: string;
+  visibility: 'internal' | 'vendors' | 'specific';
+  createdAt?: string;
+  defaultThemeKey?: string; 
+}
+
+export interface WikiTheme {
+  _id?: string;
+  key: string;
+  name: string;
+  description?: string;
+  css: string;
+  isActive: boolean;
+  isDefault: boolean;
+  createdAt?: string;
+  updatedAt?: string;
 }

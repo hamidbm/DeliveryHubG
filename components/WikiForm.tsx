@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useMemo, useEffect } from 'react';
-import { WikiPage, WikiTheme, Bundle, Application } from '../types';
+import { WikiPage, WikiTheme, Bundle, Application, TaxonomyCategory, TaxonomyDocumentType } from '../types';
 import WikiPageDisplay from './WikiPageDisplay';
 
 interface WikiFormProps {
@@ -8,7 +8,7 @@ interface WikiFormProps {
   initialContent?: string;
   initialAuthor?: string;
   initialCreatedAt?: string;
-  initialCategory?: string;
+  initialDocumentTypeId?: string;
   initialBundleId?: string;
   initialApplicationId?: string;
   initialMilestoneId?: string;
@@ -22,8 +22,6 @@ interface WikiFormProps {
   applications: Application[];
 }
 
-const WIKI_CATEGORIES = ["Architecture Decision Record (ADR)", "Low Level Design (LLD)", "Meeting Notes", "Runbook", "General"];
-
 const COLOR_PALETTE = {
   blue: ['#07549C', '#096CC8', '#0B83F4', '#2791F5', '#63B0F8', '#BBDCFC'],
   red: ['#9C0725', '#C8092F', '#F40B3A', '#F86381', '#FA8FA4'],
@@ -35,7 +33,7 @@ const WikiForm: React.FC<WikiFormProps> = ({
   initialContent = '', 
   initialAuthor,
   initialCreatedAt,
-  initialCategory = 'General',
+  initialDocumentTypeId = '',
   initialBundleId = '',
   initialApplicationId = '',
   initialMilestoneId = '',
@@ -49,7 +47,7 @@ const WikiForm: React.FC<WikiFormProps> = ({
 }) => {
   const [title, setTitle] = useState(initialTitle);
   const [content, setContent] = useState(initialContent);
-  const [category, setCategory] = useState(initialCategory);
+  const [documentTypeId, setDocumentTypeId] = useState(initialDocumentTypeId);
   const [bundleId, setBundleId] = useState(initialBundleId);
   const [applicationId, setApplicationId] = useState(initialApplicationId);
   const [milestoneId, setMilestoneId] = useState(initialMilestoneId);
@@ -63,33 +61,41 @@ const WikiForm: React.FC<WikiFormProps> = ({
   const [showColorMenu, setShowColorMenu] = useState(false);
   const [themes, setThemes] = useState<WikiTheme[]>([]);
   
+  // Taxonomy Data
+  const [categories, setCategories] = useState<TaxonomyCategory[]>([]);
+  const [docTypes, setDocTypes] = useState<TaxonomyDocumentType[]>([]);
+
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
   const sizeMenuRef = useRef<HTMLDivElement>(null);
   const colorMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    fetch('/api/wiki/themes?active=true')
-      .then(res => res.json())
-      .then(setThemes)
-      .catch(() => []);
-    
+    const loadData = async () => {
+      const [thRes, catRes, typRes] = await Promise.all([
+        fetch('/api/wiki/themes?active=true'),
+        fetch('/api/taxonomy/categories?active=true'),
+        fetch('/api/taxonomy/document-types?active=true')
+      ]);
+      setThemes(await thRes.json());
+      setCategories(await catRes.json());
+      setDocTypes(await typRes.json());
+    };
+    loadData();
+
     if (id) {
       fetch('/api/wiki')
         .then(res => res.json())
         .then(pages => {
           const page = pages.find((p: any) => p._id === id || p.id === id);
           if (page?.themeKey) setThemeKey(page.themeKey);
+          if (page?.documentTypeId) setDocumentTypeId(page.documentTypeId);
         })
         .catch(() => {});
     }
 
     const handleClickOutside = (event: MouseEvent) => {
-      if (sizeMenuRef.current && !sizeMenuRef.current.contains(event.target as Node)) {
-        setShowSizeMenu(false);
-      }
-      if (colorMenuRef.current && !colorMenuRef.current.contains(event.target as Node)) {
-        setShowColorMenu(false);
-      }
+      if (sizeMenuRef.current && !sizeMenuRef.current.contains(event.target as Node)) setShowSizeMenu(false);
+      if (colorMenuRef.current && !colorMenuRef.current.contains(event.target as Node)) setShowColorMenu(false);
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
@@ -100,330 +106,106 @@ const WikiForm: React.FC<WikiFormProps> = ({
     const textarea = textAreaRef.current;
     const start = textarea.selectionStart;
     const end = textarea.selectionEnd;
-    const text = textarea.value;
-    const selectedText = text.substring(start, end);
-    const replacement = before + selectedText + after;
-    const newContent = text.substring(0, start) + replacement + text.substring(end);
-    setContent(newContent);
-    setTimeout(() => {
-      textarea.focus();
-      textarea.setSelectionRange(start + before.length, start + before.length + selectedText.length);
-    }, 0);
-  };
-
-  const handleList = () => {
-    if (!textAreaRef.current) return;
-    const textarea = textAreaRef.current;
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    const selected = textarea.value.substring(start, end);
-    if (selected.trim().includes('\n')) {
-      const lines = selected.split('\n');
-      const formattedLines = lines.map(line => {
-        if (!line.trim()) return line;
-        const clean = line.trim();
-        return editorFormat === 'markdown' ? `- ${clean}` : `  <li>${clean}</li>`;
-      }).join('\n');
-      const result = editorFormat === 'markdown' ? formattedLines : `<ul>\n${formattedLines}\n</ul>`;
-      setContent(textarea.value.substring(0, start) + result + textarea.value.substring(end));
-    } else {
-      if (editorFormat === 'markdown') insertText('- ', '');
-      else insertText('<ul>\n  <li>', '</li>\n</ul>');
-    }
-  };
-
-  const insertTable = () => {
-    const mdTable = `\n| Header 1 | Header 2 |\n|----------|----------|\n| Cell 1   | Cell 2   |\n`;
-    const htmlTable = `\n<table border="1">\n  <tr><th>Header 1</th><th>Header 2</th></tr>\n  <tr><td>Cell 1</td><td>Cell 2</td></tr>\n</table>\n`;
-    insertText(editorFormat === 'markdown' ? mdTable : htmlTable, '');
-  };
-
-  const insertCardsGrid = () => {
-    const snippet = `\n<div class="cards">\n  <div class="card accent span-6">\n    <h3 class="card-title">[Some Title]</h3>\n    <p class="card-meta">[Sub title]</p>\n    <p>[Contents]</p>\n  </div>\n\n  <div class="card span-6">\n    <h3 class="card-title">[Some Title]</h3>\n    <p class="card-meta">[Sub title]</p>\n    <p>[Contents]</p>\n  </div>\n</div>\n`;
-    insertText(snippet, '');
-  };
-
-  const insertCallout = (type: 'info' | 'warn' | 'success') => {
-    const snippet = `\n<div class="callout ${type}">\n  <div class="title">[Some Title]</div>\n  <p>\n    \n  </p>\n</div>\n`;
-    insertText(snippet, '');
-  };
-
-  const insertCodeSnippet = () => {
-    const snippet = `\n<pre><code>\n// Some comment\n\n</code></pre>\n`;
-    insertText(snippet, '');
-  };
-
-  const setFontSize = (size: string) => {
-    insertText(`<span style="font-size: ${size}">`, '</span>');
-    setShowSizeMenu(false);
+    const replacement = before + textarea.value.substring(start, end) + after;
+    setContent(textarea.value.substring(0, start) + replacement + textarea.value.substring(end));
+    setTimeout(() => { textarea.focus(); textarea.setSelectionRange(start + before.length, start + before.length + (end - start)); }, 0);
   };
 
   const handleSave = async () => {
-    setSaveError(null);
-    if (!title.trim()) {
-      setSaveError("Title cannot be empty.");
-      return;
-    }
+    if (!title.trim()) { setSaveError("Title required."); return; }
     setIsSaving(true);
     const payload: Partial<WikiPage> = {
-      _id: id,
-      title: title.trim(),
-      content,
-      spaceId,
-      bundleId: bundleId || undefined,
-      applicationId: applicationId || undefined,
-      milestoneId: milestoneId || undefined,
-      category,
-      themeKey: themeKey || undefined,
-      status,
-      author: initialAuthor || currentUser?.name || 'System',
-      lastModifiedBy: currentUser?.name || 'System',
-      createdAt: initialCreatedAt
+      _id: id, title: title.trim(), content, spaceId, bundleId: bundleId || undefined,
+      applicationId: applicationId || undefined, milestoneId: milestoneId || undefined,
+      documentTypeId: documentTypeId || undefined, themeKey: themeKey || undefined, status,
+      author: initialAuthor || currentUser?.name || 'System', lastModifiedBy: currentUser?.name || 'System', createdAt: initialCreatedAt
     };
     try {
-      const res = await fetch('/api/wiki', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json();
-      if (res.ok) onSaveSuccess(data.result?.insertedId || id!);
-      else setSaveError(data.error || "Save operation failed.");
-    } catch (err) {
-      setSaveError("Registry connection error.");
-    } finally {
-      setIsSaving(false);
-    }
+      const res = await fetch('/api/wiki', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      if (res.ok) onSaveSuccess(id!);
+      else setSaveError("Update failed.");
+    } catch (err) { setSaveError("Network error."); }
+    finally { setIsSaving(false); }
   };
 
-  const previewPage: WikiPage = {
-    _id: id,
-    id,
-    title,
-    content,
-    spaceId,
-    bundleId: bundleId || undefined,
-    applicationId: applicationId || undefined,
-    milestoneId: milestoneId || undefined,
-    category,
-    themeKey: themeKey || undefined,
-    status,
-    author: initialAuthor || currentUser?.name || 'System',
-    lastModifiedBy: currentUser?.name || 'System',
-    createdAt: initialCreatedAt || new Date().toISOString()
-  };
-
-  const milestoneOptions = useMemo(() => {
-    return [...Array(10)].map((_, i) => ({ id: `M${i + 1}`, name: `M${i + 1}` }));
-  }, []);
-
-  // Filter applications based on selected bundle
-  const filteredApplications = useMemo(() => {
-    if (!bundleId || bundleId === 'all') return applications;
-    return applications.filter(app => String(app.bundleId) === String(bundleId));
-  }, [bundleId, applications]);
-
-  // Handle bundle change to also reset app if it doesn't belong to the new bundle
-  const handleBundleChange = (newBundleId: string) => {
-    setBundleId(newBundleId);
-    if (newBundleId && newBundleId !== 'all') {
-      const app = applications.find(a => String(a._id || a.id) === String(applicationId));
-      if (app && String(app.bundleId) !== String(newBundleId)) {
-        setApplicationId('');
-      }
-    }
-  };
+  const currentType = docTypes.find(t => t._id === documentTypeId);
+  const currentCategory = categories.find(c => c._id === currentType?.categoryId);
 
   return (
     <div className="fixed inset-0 z-[100] bg-slate-50 flex flex-col animate-fadeIn">
       <header className="px-10 py-5 bg-white border-b border-slate-200 flex items-center justify-between shadow-sm shrink-0">
         <div className="flex items-center gap-6">
-          <button onClick={onCancel} className="w-10 h-10 rounded-full bg-slate-50 hover:bg-slate-100 flex items-center justify-center text-slate-400 border border-slate-100 shadow-sm transition-all">
-            <i className="fas fa-times"></i>
-          </button>
+          <button onClick={onCancel} className="w-10 h-10 rounded-full bg-slate-50 hover:bg-slate-100 flex items-center justify-center text-slate-400 border border-slate-100"><i className="fas fa-times"></i></button>
           <div className="flex flex-col">
             <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest leading-none mb-1">Revising Artifact</span>
-            <input 
-              value={title} onChange={(e) => setTitle(e.target.value)}
-              className="text-2xl font-black text-slate-800 border-none p-0 focus:ring-0 outline-none bg-transparent tracking-tight w-[400px]"
-            />
+            <input value={title} onChange={(e) => setTitle(e.target.value)} className="text-2xl font-black text-slate-800 border-none p-0 focus:ring-0 outline-none bg-transparent w-[400px]" />
           </div>
         </div>
         <div className="flex items-center gap-4">
           <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 mr-4 shadow-inner">
-            <button onClick={() => setStatus('Draft')} className={`px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${status === 'Draft' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}>Draft</button>
-            <button onClick={() => setStatus('Published')} className={`px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${status === 'Published' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}>Publish</button>
+            <button onClick={() => setStatus('Draft')} className={`px-4 py-2 text-[10px] font-black uppercase rounded-lg ${status === 'Draft' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}>Draft</button>
+            <button onClick={() => setStatus('Published')} className={`px-4 py-2 text-[10px] font-black uppercase rounded-lg ${status === 'Published' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}>Publish</button>
           </div>
-          <button 
-            onClick={handleSave} disabled={isSaving}
-            className={`px-10 py-3.5 rounded-2xl shadow-xl transition-all uppercase tracking-widest font-black text-[10px] flex items-center gap-3 ${isSaving ? 'bg-slate-300 text-slate-500 cursor-not-allowed' : 'bg-slate-900 text-white hover:bg-slate-800'}`}
-          >
-            {isSaving ? <i className="fas fa-circle-notch fa-spin"></i> : <i className="fas fa-save"></i>}
-            {isSaving ? 'Updating...' : 'Update Artifact'}
+          <button onClick={handleSave} disabled={isSaving} className="px-10 py-3.5 bg-slate-900 text-white rounded-2xl shadow-xl font-black text-[10px] uppercase tracking-widest flex items-center gap-3">
+            {isSaving ? <i className="fas fa-circle-notch fa-spin"></i> : <i className="fas fa-save"></i>} {isSaving ? 'Updating...' : 'Update Artifact'}
           </button>
         </div>
       </header>
 
-      {saveError && (
-        <div className="bg-red-500 text-white px-10 py-3 text-xs font-bold animate-fadeIn">
-          <i className="fas fa-exclamation-triangle mr-3"></i> {saveError}
-        </div>
-      )}
-
       <div className="flex flex-1 overflow-hidden">
-        <div className="flex-1 flex flex-col overflow-hidden bg-white shadow-inner">
-          <div className="px-8 py-3 border-b border-slate-100 bg-slate-50 flex items-center justify-between sticky top-0 z-[60] overflow-visible">
-            <div className="flex items-center gap-1 shrink-0">
-              <ToolbarButton icon="fa-bold" label="Bold" onClick={() => insertText(editorFormat === 'markdown' ? '**' : '<b>', editorFormat === 'markdown' ? '**' : '</b>')} />
-              <ToolbarButton icon="fa-italic" label="Italic" onClick={() => insertText(editorFormat === 'markdown' ? '*' : '<i>', editorFormat === 'markdown' ? '*' : '</i>')} />
-              <ToolbarButton icon="fa-paragraph" label="Paragraph" onClick={() => insertText('<p>', '</p>')} />
-              <div className="w-[1px] h-6 bg-slate-200 mx-2"></div>
-              
-              <button 
-                onClick={() => insertText(editorFormat === 'markdown' ? '# ' : '<h1>', editorFormat === 'markdown' ? '' : '</h1>')} 
-                className="h-10 px-4 flex items-center gap-2 text-slate-700 font-black hover:text-blue-600 hover:bg-white border border-transparent hover:border-slate-100 rounded-xl transition-all"
-                title="Heading 1"
-              >
-                <i className="fas fa-heading text-xs"></i><span className="text-xs">H1</span>
-              </button>
-              <button 
-                onClick={() => insertText(editorFormat === 'markdown' ? '## ' : '<h2>', editorFormat === 'markdown' ? '' : '</h2>')} 
-                className="h-10 px-4 flex items-center gap-2 text-slate-700 font-black hover:text-blue-600 hover:bg-white border border-transparent hover:border-slate-100 rounded-xl transition-all"
-                title="Heading 2"
-              >
-                <i className="fas fa-heading text-xs opacity-60"></i><span className="text-xs">H2</span>
-              </button>
-
-              <div className="w-[1px] h-6 bg-slate-200 mx-2"></div>
-
-              <div className="relative" ref={sizeMenuRef}>
-                <button 
-                  onClick={() => setShowSizeMenu(!showSizeMenu)}
-                  className={`h-10 px-3 flex items-center gap-2 rounded-xl border transition-all ${
-                    showSizeMenu ? 'bg-blue-600 text-white border-blue-600 shadow-lg' : 'text-slate-500 hover:text-blue-600 hover:bg-white border-transparent'
-                  }`}
-                  title="Text Size"
-                >
-                  <i className="fas fa-text-height text-sm"></i>
-                  <i className={`fas fa-chevron-down text-[8px] transition-transform ${showSizeMenu ? 'rotate-180' : ''}`}></i>
-                </button>
-                {showSizeMenu && (
-                  <div className="absolute top-full left-0 mt-2 w-36 bg-white border border-slate-200 rounded-2xl shadow-2xl py-2 z-[70] animate-fadeIn overflow-hidden">
-                    <div className="px-4 py-2 text-[9px] font-black text-slate-300 uppercase tracking-widest bg-slate-50 border-b border-slate-50 mb-1">Pick Size</div>
-                    {['12px', '14px', '18px', '24px', '32px', '48px'].map(sz => (
-                      <button 
-                        key={sz} 
-                        onClick={() => setFontSize(sz)} 
-                        className="w-full text-left px-5 py-3 text-[11px] font-bold text-slate-600 hover:bg-blue-50 hover:text-blue-600 transition-all flex items-center justify-between group"
-                      >
-                        {sz}
-                        <i className="fas fa-plus text-[8px] opacity-0 group-hover:opacity-100 transition-opacity"></i>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div className="w-[1px] h-6 bg-slate-200 mx-2"></div>
-              <ToolbarButton icon="fa-list-ul" label="List" onClick={handleList} />
-              <ToolbarButton icon="fa-table" label="Table" onClick={insertTable} />
-              <ToolbarButton icon="fa-table-cells" label="Cards Grid" onClick={insertCardsGrid} />
-              <ToolbarButton icon="fa-minus" label="HR" onClick={() => insertText(editorFormat === 'markdown' ? '\n---\n' : '\n<hr />\n')} />
-              <ToolbarButton icon="fa-quote-left" label="Quote" onClick={() => insertText('\n<blockquote>\n  <p>\n    \n  </p>\n</blockquote>\n')} />
-              
-              <div className="w-[1px] h-6 bg-slate-200 mx-2"></div>
-              <ToolbarButton icon="fa-circle-info" label="Info" onClick={() => insertCallout('info')} />
-              <ToolbarButton icon="fa-triangle-exclamation" label="Warn" onClick={() => insertCallout('warn')} />
-              <ToolbarButton icon="fa-circle-check" label="Success" onClick={() => insertCallout('success')} />
-              <ToolbarButton icon="fa-code" label="Code" onClick={insertCodeSnippet} />
-
-              <div className="w-[1px] h-6 bg-slate-200 mx-2"></div>
-              
-              <div className="relative" ref={colorMenuRef}>
-                <button 
-                  onClick={() => setShowColorMenu(!showColorMenu)}
-                  className={`h-10 px-3 flex items-center gap-2 rounded-xl transition-all border ${
-                    showColorMenu ? 'bg-slate-900 text-white shadow-lg border-slate-900' : 'text-slate-500 hover:text-blue-600 hover:bg-white border-transparent'
-                  }`}
-                  title="Text Color"
-                >
-                  <i className="fas fa-palette text-sm"></i>
-                  <i className={`fas fa-chevron-down text-[8px] transition-transform ${showColorMenu ? 'rotate-180' : ''}`}></i>
-                </button>
-                {showColorMenu && (
-                  <div className="absolute top-full left-0 mt-2 w-52 bg-white border border-slate-200 rounded-[2rem] shadow-2xl p-5 z-[70] animate-fadeIn overflow-hidden">
-                    <div className="space-y-4">
-                      {Object.entries(COLOR_PALETTE).map(([theme, colors]) => (
-                        <div key={theme} className="space-y-2">
-                          <p className="text-[8px] font-black text-slate-300 uppercase tracking-widest">{theme} theme</p>
-                          <div className="flex flex-wrap gap-1.5">
-                            {colors.map(color => (
-                              <button 
-                                key={color}
-                                onClick={() => {
-                                  insertText(`<span style="color: ${color}">`, '</span>');
-                                  setShowColorMenu(false);
-                                }}
-                                className="w-6 h-6 rounded-full border border-black/5 hover:scale-125 transition-transform shadow-sm"
-                                style={{ backgroundColor: color }}
-                              />
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="flex items-center gap-4 shrink-0">
-              <div className="flex items-center gap-2 bg-white border border-slate-200 px-3 py-1.5 rounded-2xl shadow-sm">
-                <span className={`text-[9px] font-black uppercase tracking-widest ${editorFormat === 'markdown' ? 'text-blue-600' : 'text-slate-400'}`}>MD</span>
-                <button onClick={() => setEditorFormat(editorFormat === 'markdown' ? 'html' : 'markdown')} className={`w-10 h-5 rounded-full relative transition-all ${editorFormat === 'markdown' ? 'bg-slate-200' : 'bg-blue-600'}`}>
-                  <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${editorFormat === 'markdown' ? 'left-0.5' : 'left-5'}`}></div>
-                </button>
-                <span className={`text-[9px] font-black uppercase tracking-widest ${editorFormat === 'html' ? 'text-blue-600' : 'text-slate-400'}`}>HTML</span>
-              </div>
-              <button 
-                onClick={() => setViewMode(viewMode === 'preview' ? 'edit' : 'preview')} 
-                className={`px-4 py-1.5 text-[9px] font-black uppercase tracking-widest rounded-xl transition-all ${viewMode === 'preview' ? 'bg-slate-900 text-white shadow-lg shadow-black/20' : 'bg-white border border-slate-200 text-slate-500 hover:border-blue-500 hover:text-blue-600'}`}
-              >
-                <i className={`fas ${viewMode === 'preview' ? 'fa-pen-to-square' : 'fa-eye'} mr-2`}></i> 
-                {viewMode === 'preview' ? 'Return to Editor' : 'Full Preview'}
-              </button>
-            </div>
+        <div className="flex-1 flex flex-col overflow-hidden bg-white shadow-inner relative">
+          <div className="px-8 py-3 border-b border-slate-100 bg-slate-50 flex items-center justify-between z-50">
+             <div className="flex items-center gap-1">
+                <ToolbarButton icon="fa-bold" onClick={() => insertText('<b>', '</b>')} />
+                <ToolbarButton icon="fa-italic" onClick={() => insertText('<i>', '</i>')} />
+                <ToolbarButton icon="fa-heading" onClick={() => insertText('<h2>', '</h2>')} />
+                <div className="w-[1px] h-6 bg-slate-200 mx-2"></div>
+                <ToolbarButton icon="fa-list-ul" onClick={() => insertText('<ul>\n  <li>', '</li>\n</ul>')} />
+                <ToolbarButton icon="fa-table" onClick={() => insertText('\n<table>\n  <tr><th>Header</th></tr>\n  <tr><td>Cell</td></tr>\n</table>\n')} />
+             </div>
+             <button onClick={() => setViewMode(viewMode === 'preview' ? 'edit' : 'preview')} className={`px-4 py-1.5 text-[9px] font-black uppercase rounded-xl ${viewMode === 'preview' ? 'bg-slate-900 text-white' : 'bg-white border border-slate-200'}`}>
+                {viewMode === 'preview' ? 'Editor' : 'Preview'}
+             </button>
           </div>
-
-          <div className="flex-1 overflow-hidden relative bg-white">
+          <div className="flex-1 overflow-y-auto custom-scrollbar">
             {viewMode === 'edit' ? (
-              <textarea 
-                ref={textAreaRef} 
-                value={content} 
-                onChange={(e) => setContent(e.target.value)} 
-                className="w-full h-full border-none focus:ring-0 p-12 text-slate-700 leading-relaxed resize-none text-lg font-medium placeholder:text-slate-200 bg-transparent custom-scrollbar font-medium" 
-                placeholder="Edit artifact content..." 
-              />
+              <textarea value={content} onChange={(e) => setContent(e.target.value)} ref={textAreaRef} className="w-full h-full p-12 text-slate-700 leading-relaxed resize-none text-lg outline-none font-medium" placeholder="Edit content..." />
             ) : (
-              <div className="absolute inset-0 overflow-y-auto p-12 bg-white custom-scrollbar">
-                <div className="max-w-5xl mx-auto">
-                  <WikiPageDisplay page={previewPage} bundles={bundles} applications={applications} />
-                </div>
-              </div>
+              <div className="p-12 max-w-5xl mx-auto"><WikiPageDisplay page={{ title, content, spaceId, bundleId, applicationId, milestoneId, documentTypeId, themeKey }} bundles={bundles} applications={applications} /></div>
             )}
           </div>
         </div>
 
         <aside className="w-80 border-l border-slate-200 bg-slate-50 p-8 space-y-10 shrink-0 overflow-y-auto custom-scrollbar">
           <div className="space-y-6">
-            <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-              <i className="fas fa-cog"></i> Configuration
-            </h4>
-            <SidebarField label="Type" value={category} onChange={setCategory} options={WIKI_CATEGORIES} />
-            <SidebarField label="Visual Theme" value={themeKey} onChange={setThemeKey} options={[{ id: '', name: 'Use Space Default' }, ...themes.map(t => ({ id: t.key, name: t.name }))]} />
-            <SidebarField label="Business Bundle" value={bundleId} onChange={handleBundleChange} options={bundles.map(b => ({ id: b._id, name: b.name }))} />
-            <SidebarField label="App Context" value={applicationId} onChange={setApplicationId} options={filteredApplications.map(a => ({ id: a._id || a.id, name: a.name }))} />
-            <SidebarField label="Milestone" value={milestoneId} onChange={setMilestoneId} options={milestoneOptions} />
+            <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><i className="fas fa-cog"></i> Configuration</h4>
+            
+            <div className="space-y-2">
+              <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Document Type</label>
+              <select value={documentTypeId} onChange={(e) => setDocumentTypeId(e.target.value)} className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-4 text-xs font-bold text-slate-700 outline-none shadow-sm">
+                <option value="">None Selected</option>
+                {categories.map(cat => (
+                  <optgroup key={cat._id} label={cat.name}>
+                    {docTypes.filter(t => t.categoryId === cat._id).map(type => (
+                      <option key={type._id} value={type._id}>{type.name}</option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-2 opacity-60">
+              <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Category (Derived)</label>
+              <div className="w-full bg-slate-100 border border-slate-200 rounded-2xl px-5 py-4 text-xs font-black text-slate-500 uppercase tracking-widest flex items-center gap-3">
+                <i className={`fas ${currentCategory?.icon || 'fa-tag'}`}></i>
+                {currentCategory?.name || 'No Category Mapped'}
+              </div>
+            </div>
+
+            <SidebarField label="Business Bundle" value={bundleId} onChange={setBundleId} options={bundles.map(b => ({ id: b._id, name: b.name }))} />
+            <SidebarField label="App Context" value={applicationId} onChange={setApplicationId} options={applications.filter(a => !bundleId || bundleId === 'all' || a.bundleId === bundleId).map(a => ({ id: a._id || a.id, name: a.name }))} />
+            <SidebarField label="Milestone" value={milestoneId} onChange={setMilestoneId} options={[...Array(10)].map((_, i) => ({ id: `M${i+1}`, name: `M${i+1}` }))} />
+            <SidebarField label="Visual Theme" value={themeKey} onChange={setThemeKey} options={themes.map(t => ({ id: t.key, name: t.name }))} />
           </div>
         </aside>
       </div>
@@ -431,18 +213,16 @@ const WikiForm: React.FC<WikiFormProps> = ({
   );
 };
 
-const ToolbarButton = ({ icon, label, onClick }: any) => (
-  <button onClick={onClick} title={label} className="w-10 h-10 flex items-center justify-center text-slate-500 hover:text-blue-600 hover:bg-white border border-transparent hover:border-slate-100 rounded-xl transition-all">
-    <i className={`fas ${icon} text-sm`}></i>
-  </button>
+const ToolbarButton = ({ icon, onClick }: any) => (
+  <button onClick={onClick} className="w-9 h-9 flex items-center justify-center text-slate-500 hover:text-blue-600 hover:bg-white rounded-xl transition-all"><i className={`fas ${icon} text-sm`}></i></button>
 );
 
 const SidebarField = ({ label, value, onChange, options }: any) => (
   <div className="space-y-2">
     <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">{label}</label>
-    <select value={value} onChange={(e) => onChange(e.target.value)} className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-4 text-xs font-bold text-slate-700 focus:border-blue-500 outline-none transition-all shadow-sm">
+    <select value={value} onChange={(e) => onChange(e.target.value)} className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-4 text-xs font-bold text-slate-700 outline-none shadow-sm">
       <option value="">None Selected</option>
-      {options.map((o: any) => typeof o === 'string' ? <option key={o} value={o}>{o}</option> : <option key={o.id} value={o.id}>{o.name}</option>)}
+      {options.map((o: any) => <option key={o.id} value={o.id}>{o.name}</option>)}
     </select>
   </div>
 );

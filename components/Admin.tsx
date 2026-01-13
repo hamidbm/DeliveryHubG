@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import AdminThemes from './AdminThemes';
 import AdminBundles from './AdminBundles';
 import AdminApplications from './AdminApplications';
+import AdminTaxonomy from './AdminTaxonomy';
 
 type AdminModuleId = 'home' | 'wiki-themes' | 'vendors' | 'roles' | 'bundles' | 'applications' | 'taxonomy' | 'artifact-rules' | 'milestone-templates' | 'users' | 'sharepoint' | 'ai-settings';
 
@@ -114,6 +115,8 @@ const Admin: React.FC = () => {
     }
 
     switch (activeModule) {
+      case 'taxonomy':
+        return <AdminTaxonomy />;
       case 'wiki-themes':
         return <AdminThemes />;
       case 'bundles':
