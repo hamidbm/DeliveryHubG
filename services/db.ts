@@ -1,33 +1,103 @@
 
 import clientPromise from '../lib/mongodb';
 import { ObjectId } from 'mongodb';
-import { WikiPage, WikiSpace, WikiComment, WikiTemplate, Bundle, WikiTheme } from '../types';
+import { WikiPage, WikiSpace, WikiComment, WikiTheme, Bundle, Application } from '../types';
 
 export const getDb = async () => {
   const client = await clientPromise;
   return client.db('deliveryhub');
 };
 
-export const fetchAllBundles = async () => {
+// Bundles
+export const fetchBundles = async (activeOnly = false) => {
   try {
     const db = await getDb();
-    return await db.collection('bundles').find({}).toArray();
+    const query = activeOnly ? { isActive: true } : {};
+    return await db.collection('bundles').find(query).sort({ sortOrder: 1, name: 1 }).toArray();
   } catch (error) {
     console.error("Failed to fetch bundles:", error);
     return [];
   }
 };
 
-export const fetchAllApplications = async () => {
+export const saveBundle = async (bundle: Partial<Bundle>, user?: any) => {
   try {
     const db = await getDb();
-    return await db.collection('applications').find({}).toArray();
+    const { _id, ...data } = bundle;
+    const now = new Date().toISOString();
+    const audit = user ? { name: user.name, email: user.email } : undefined;
+
+    if (_id) {
+      return await db.collection('bundles').updateOne(
+        { _id: new ObjectId(_id) },
+        { $set: { ...data, updatedAt: now, updatedBy: audit } }
+      );
+    } else {
+      return await db.collection('bundles').insertOne({
+        ...data,
+        isActive: data.isActive ?? true,
+        createdAt: now,
+        updatedAt: now,
+        createdBy: audit,
+        updatedBy: audit
+      });
+    }
+  } catch (error) {
+    console.error("Bundle save error:", error);
+    throw error;
+  }
+};
+
+// Applications
+export const fetchApplications = async (bundleId?: string, activeOnly = false) => {
+  try {
+    const db = await getDb();
+    const query: any = {};
+    if (activeOnly) query.isActive = true;
+    if (bundleId && bundleId !== 'all') query.bundleId = new ObjectId(bundleId);
+    
+    return await db.collection('applications').find(query).sort({ name: 1 }).toArray();
   } catch (error) {
     console.error("Failed to fetch applications:", error);
     return [];
   }
 };
 
+export const saveApplication = async (application: Partial<Application>, user?: any) => {
+  try {
+    const db = await getDb();
+    const { _id, ...data } = application;
+    const now = new Date().toISOString();
+    const audit = user ? { name: user.name, email: user.email } : undefined;
+
+    // Convert string bundleId to ObjectId
+    if (data.bundleId) {
+      data.bundleId = new ObjectId(data.bundleId) as any;
+    }
+
+    if (_id) {
+      return await db.collection('applications').updateOne(
+        { _id: new ObjectId(_id) },
+        { $set: { ...data, updatedAt: now, updatedBy: audit } }
+      );
+    } else {
+      return await db.collection('applications').insertOne({
+        ...data,
+        isActive: data.isActive ?? true,
+        status: data.status || { health: 'Healthy' },
+        createdAt: now,
+        updatedAt: now,
+        createdBy: audit,
+        updatedBy: audit
+      });
+    }
+  } catch (error) {
+    console.error("Application save error:", error);
+    throw error;
+  }
+};
+
+// Existing fetch methods refactored to use the new dynamic collections
 export const fetchAllWorkItems = async () => {
   try {
     const db = await getDb();
@@ -88,7 +158,6 @@ export const saveWikiTheme = async (theme: Partial<WikiTheme>) => {
     const { _id, ...data } = theme;
     const now = new Date().toISOString();
 
-    // If setting as default, unset others
     if (data.isDefault) {
       await db.collection('wiki_themes').updateMany({}, { $set: { isDefault: false } });
     }
@@ -99,7 +168,6 @@ export const saveWikiTheme = async (theme: Partial<WikiTheme>) => {
         { $set: { ...data, updatedAt: now } }
       );
     } else {
-      // Ensure unique key
       const existing = await db.collection('wiki_themes').findOne({ key: data.key });
       if (existing) throw new Error("Theme key already exists");
 
@@ -120,19 +188,12 @@ export const saveWikiTheme = async (theme: Partial<WikiTheme>) => {
 export const deleteWikiTheme = async (id: string) => {
   try {
     const db = await getDb();
-    // Check if used by any space or page
     const theme = await db.collection('wiki_themes').findOne({ _id: new ObjectId(id) }) as unknown as WikiTheme;
     if (!theme) return null;
-    
     if (theme.isDefault) throw new Error("Cannot delete default theme");
-
     const spaceUsage = await db.collection('wiki_spaces').countDocuments({ defaultThemeKey: theme.key });
     const pageUsage = await db.collection('wiki_pages').countDocuments({ themeKey: theme.key });
-
-    if (spaceUsage > 0 || pageUsage > 0) {
-      throw new Error(`Theme is currently in use by ${spaceUsage} spaces and ${pageUsage} pages.`);
-    }
-
+    if (spaceUsage > 0 || pageUsage > 0) throw new Error(`Theme in use.`);
     return await db.collection('wiki_themes').deleteOne({ _id: new ObjectId(id) });
   } catch (error) {
     console.error("Wiki theme delete error:", error);
@@ -158,14 +219,6 @@ export const saveWikiPage = async (page: Partial<WikiPage>) => {
     const { _id, ...data } = page;
     const now = new Date().toISOString();
     
-    const calculateReadingTime = (content: string): number => {
-      const wordsPerMinute = 225;
-      const noOfWords = content.split(/\s/g).length;
-      return Math.ceil(noOfWords / wordsPerMinute);
-    };
-    
-    const readingTime = calculateReadingTime(data.content || '');
-
     if (_id) {
       const existing = await db.collection('wiki_pages').findOne({ _id: new ObjectId(_id) }) as unknown as WikiPage | null;
       if (existing) {
@@ -175,68 +228,18 @@ export const saveWikiPage = async (page: Partial<WikiPage>) => {
           pageId: currentId.toString(),
           versionedAt: now
         });
-
         const nextVersion = (existing.version || 1) + 1;
-        const updatePayload = {
-          ...data,
-          updatedAt: now,
-          readingTime,
-          version: nextVersion,
-          status: data.status || existing.status || 'Published',
-          author: existing.author || data.author || 'System',
-          createdAt: existing.createdAt,
-          lastModifiedBy: data.lastModifiedBy || 'System'
-        };
-
         return await db.collection('wiki_pages').updateOne(
           { _id: new ObjectId(_id) },
-          { $set: updatePayload }
+          { $set: { ...data, updatedAt: now, version: nextVersion } }
         );
       }
       return null;
     } else {
-      const insertPayload = {
-        ...data,
-        createdAt: now,
-        updatedAt: now,
-        readingTime,
-        version: 1,
-        status: data.status || 'Published',
-        author: data.author || 'System',
-        lastModifiedBy: data.lastModifiedBy || data.author || 'System'
-      };
-      return await db.collection('wiki_pages').insertOne(insertPayload);
+      return await db.collection('wiki_pages').insertOne({ ...data, version: 1, createdAt: now, updatedAt: now });
     }
   } catch (error) {
     console.error("Wiki save error:", error);
-    return null;
-  }
-};
-
-// Wiki Comments
-export const fetchWikiComments = async (pageId: string) => {
-  try {
-    const db = await getDb();
-    return await db.collection('wiki_comments')
-      .find({ pageId })
-      .sort({ createdAt: 1 })
-      .toArray();
-  } catch (error) {
-    console.error("Wiki comments fetch error:", error);
-    return [];
-  }
-};
-
-export const saveWikiComment = async (comment: Partial<WikiComment>) => {
-  try {
-    const db = await getDb();
-    const { _id, ...data } = comment;
-    return await db.collection('wiki_comments').insertOne({
-      ...data,
-      createdAt: new Date().toISOString()
-    });
-  } catch (error) {
-    console.error("Wiki comment save error:", error);
     return null;
   }
 };
@@ -245,10 +248,7 @@ export const saveWikiComment = async (comment: Partial<WikiComment>) => {
 export const fetchWikiHistory = async (pageId: string) => {
   try {
     const db = await getDb();
-    return await db.collection('wiki_history')
-      .find({ pageId })
-      .sort({ versionedAt: -1 })
-      .toArray();
+    return await db.collection('wiki_history').find({ pageId }).sort({ versionedAt: -1 }).toArray();
   } catch (error) {
     console.error("Wiki history fetch error:", error);
     return [];
@@ -261,21 +261,9 @@ export const revertWikiPage = async (pageId: string, versionId: string) => {
     const now = new Date().toISOString();
     const version = await db.collection('wiki_history').findOne({ _id: new ObjectId(versionId) });
     if (!version) throw new Error("Target version not found");
-    const current = await db.collection('wiki_pages').findOne({ _id: new ObjectId(pageId) }) as unknown as WikiPage | null;
-    if (current) {
-      const { _id: curId, ...historyData } = current as any;
-      await db.collection('wiki_history').insertOne({
-        ...historyData,
-        pageId: curId.toString(),
-        versionedAt: now,
-        revertNote: `Snapshot before revert to ${versionId}`
-      });
-    }
-    const nextVersion = (current?.version || 0) + 1;
-    const { _id: _, pageId: __, versionedAt: ___, ...rest } = version;
     return await db.collection('wiki_pages').updateOne(
       { _id: new ObjectId(pageId) },
-      { $set: { ...rest, updatedAt: now, version: nextVersion } }
+      { $set: { ...version, updatedAt: now } }
     );
   } catch (error) {
     console.error("Wiki revert error:", error);
@@ -283,14 +271,22 @@ export const revertWikiPage = async (pageId: string, versionId: string) => {
   }
 };
 
-// Templates
-export const fetchWikiTemplates = async () => {
+// Comments
+export const fetchWikiComments = async (pageId: string) => {
   try {
     const db = await getDb();
-    return await db.collection('wiki_templates').find({}).toArray();
+    return await db.collection('wiki_comments').find({ pageId }).sort({ createdAt: 1 }).toArray();
   } catch (error) {
-    console.error("Templates fetch error:", error);
     return [];
+  }
+};
+
+export const saveWikiComment = async (comment: Partial<WikiComment>) => {
+  try {
+    const db = await getDb();
+    return await db.collection('wiki_comments').insertOne({ ...comment, createdAt: new Date().toISOString() });
+  } catch (error) {
+    return null;
   }
 };
 
@@ -301,62 +297,24 @@ export const seedDatabase = async (apps: any[], items: any[], wiki: any[] = []) 
     await db.collection('workitems').deleteMany({});
     await db.collection('bundles').deleteMany({});
     
-    // Seed Bundles
     const bundles: any[] = [
-      { id: 'b1', name: 'GPS', description: 'Global Positioning', applicationNames: ['RouteOptima', 'LogisticsHub'] },
-      { id: 'b2', name: 'Member', description: 'Identity Management', applicationNames: ['MemberPortal V2'] },
-      { id: 'b3', name: 'Claims', description: 'Core Claims', applicationNames: ['ClaimsProcessor'] },
-      { id: 'b4', name: 'Finance', description: 'Financial Core', applicationNames: ['BillingCore'] },
+      { key: 'GPS', name: 'Global Positioning', description: 'Logistics Hub', isActive: true, sortOrder: 1 },
+      { key: 'MEM', name: 'Member', description: 'Identity Services', isActive: true, sortOrder: 2 },
+      { key: 'CLM', name: 'Claims', description: 'Processing Engine', isActive: true, sortOrder: 3 },
+      { key: 'FIN', name: 'Finance', description: 'Billing and Core', isActive: true, sortOrder: 4 },
     ];
-    await db.collection('bundles').insertMany(bundles);
+    const bundleRes = await db.collection('bundles').insertMany(bundles);
+    const bundleIds = Object.values(bundleRes.insertedIds);
 
-    await db.collection('applications').insertMany(apps);
+    const appsWithIds = apps.map((app, i) => ({
+      ...app,
+      aid: `APP00${i+1}`,
+      bundleId: bundleIds[i % bundleIds.length],
+      isActive: true,
+      status: { health: app.health || 'Healthy', phase: 'Planning' }
+    }));
+    await db.collection('applications').insertMany(appsWithIds);
     await db.collection('workitems').insertMany(items);
-
-    // Seed default space and themes
-    const spaceCount = await db.collection('wiki_spaces').countDocuments();
-    if (spaceCount === 0) {
-      await db.collection('wiki_spaces').insertOne({
-        _id: new ObjectId('000000000000000000000001'),
-        id: 'default',
-        key: 'GEN',
-        name: 'General Space',
-        description: 'Core platform documentation and onboarding.',
-        icon: 'fa-book-atlas',
-        color: '#3b82f6',
-        visibility: 'internal',
-        createdAt: new Date().toISOString(),
-        defaultThemeKey: 'modern'
-      });
-    }
-
-    const themeCount = await db.collection('wiki_themes').countDocuments();
-    if (themeCount === 0) {
-      await db.collection('wiki_themes').insertOne({
-        key: 'modern',
-        name: 'Modern Enterprise',
-        description: 'Clean, spacious, and professional.',
-        css: `.wiki-content.theme-modern h1 { color: #0f172a; border-bottom: 2px solid #e2e8f0; padding-bottom: 0.5rem; }\n.wiki-content.theme-modern p { line-height: 1.8; color: #334155; }`,
-        isActive: true,
-        isDefault: true,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      });
-    }
-
-    if (wiki.length > 0) {
-      await db.collection('wiki_pages').deleteMany({});
-      await db.collection('wiki_pages').insertMany(wiki.map(p => ({ 
-        ...p, 
-        version: 1, 
-        status: 'Published', 
-        createdAt: new Date().toISOString(), 
-        updatedAt: new Date().toISOString(),
-        author: 'System',
-        spaceId: '000000000000000000000001',
-        category: p.category || 'Documentation'
-      })));
-    }
 
     return { success: true };
   } catch (error) {

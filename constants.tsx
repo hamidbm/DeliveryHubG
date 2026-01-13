@@ -1,28 +1,18 @@
 
 import React from 'react';
-import { Bundle, Vendor, Application, Role, WorkItem, Milestone, MilestoneStatus, WikiPage } from './types';
+import { Bundle, Application, WorkItem, Milestone, MilestoneStatus, WikiPage } from './types';
 
-export const BUNDLES: Bundle[] = [
-  { id: 'b1', name: 'GPS', description: 'Global Positioning Services and Logistics' },
-  { id: 'b2', name: 'Member', description: 'Member services and identity management' },
-  { id: 'b3', name: 'Claims', description: 'Core insurance claims processing' },
-  { id: 'b4', name: 'Finance', description: 'Internal financial reporting and billing' },
-];
+// Hard-coded lists removed to enforce dynamic fetching from MongoDB
+export const BUNDLES: Bundle[] = [];
 
-export const VENDORS: Vendor[] = [
+export const VENDORS = [
   { id: 'v1', name: 'Infosys' },
   { id: 'v2', name: 'Wipro' },
   { id: 'v3', name: 'Cognizant' },
   { id: 'v4', name: 'TCS' },
 ];
 
-export const APPLICATIONS: Application[] = [
-  { id: 'app1', name: 'RouteOptima', bundleId: 'b1', vendorCompanies: ['Infosys'], status: 'Active', health: 'Healthy', migrationProgress: 85 },
-  { id: 'app2', name: 'MemberPortal V2', bundleId: 'b2', vendorCompanies: ['Wipro', 'Cognizant'], status: 'Migrating', health: 'Risk', migrationProgress: 45 },
-  { id: 'app3', name: 'ClaimsProcessor', bundleId: 'b3', vendorCompanies: ['TCS'], status: 'Legacy', health: 'Healthy', migrationProgress: 10 },
-  { id: 'app4', name: 'BillingCore', bundleId: 'b4', vendorCompanies: ['Infosys'], status: 'Decommissioned', health: 'Critical', migrationProgress: 0 },
-  { id: 'app5', name: 'LogisticsHub', bundleId: 'b1', vendorCompanies: ['Cognizant'], status: 'Active', health: 'Healthy', migrationProgress: 90 },
-];
+export const APPLICATIONS: Application[] = [];
 
 export const WORK_ITEMS: WorkItem[] = [
   { id: 'wi1', title: 'Implement JWT Authentication', type: 'Feature', status: 'Done', applicationId: 'app2', assignedTo: 'John Doe', priority: 'High' },
@@ -37,7 +27,6 @@ export const MILESTONES: Milestone[] = [
   { id: 'm3', name: 'Production Cutover', applicationId: 'app1', vendorCompany: 'Infosys', status: MilestoneStatus.PLANNED, dueDate: '2025-05-20' },
 ];
 
-// Added missing required spaceId property to each WikiPage
 export const WIKI_PAGES: WikiPage[] = [
   { id: 'w1', title: 'Getting Started', content: '## Welcome\nThis is the core onboarding documentation for the platform.', spaceId: 'default' },
   { id: 'w2', title: 'Architecture Standards', content: '### Cloud Standards\nAll applications must follow the 12-factor app methodology.', spaceId: 'default' },

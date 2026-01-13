@@ -26,10 +26,13 @@ export enum HierarchyMode {
 
 export interface Bundle {
   _id?: string;
-  id: string;
+  key: string;
   name: string;
-  description: string;
-  applicationNames?: string[];
+  description?: string;
+  isActive: boolean;
+  sortOrder?: number;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface Vendor {
@@ -37,14 +40,52 @@ export interface Vendor {
   name: string;
 }
 
+export interface ApplicationOwner {
+  side: 'OT' | 'SVP';
+  role: string;
+  name: string;
+  email: string;
+  title?: string;
+  isPrimary: boolean;
+}
+
 export interface Application {
-  id: string;
+  _id?: string;
+  id?: string; // Legacy ID mapping
+  aid: string; // Enterprise identifier
   name: string;
   bundleId: string;
-  vendorCompanies: string[];
-  status: 'Active' | 'Legacy' | 'Migrating' | 'Decommissioned';
-  health: 'Healthy' | 'Risk' | 'Critical';
-  migrationProgress: number;
+  bundleKey?: string;
+  description?: string;
+  tags?: string[];
+  lifecycle?: {
+    plannedStartDate?: string;
+    plannedEndDate?: string;
+    goLiveDate?: string;
+    hypercareStartDate?: string;
+    hypercareEndDate?: string;
+  };
+  status: {
+    phase?: string;
+    health: 'Healthy' | 'Risk' | 'Critical';
+    lastStatusUpdateAt?: string;
+  };
+  owners?: ApplicationOwner[];
+  vendor?: {
+    company: string;
+    contractRef?: string;
+  };
+  governance?: {
+    sowSigned: boolean;
+    sowDocId?: string;
+    notes?: string;
+  };
+  isActive: boolean;
+  migrationProgress?: number; // Legacy/Compat
+  status_old?: 'Active' | 'Legacy' | 'Migrating' | 'Decommissioned'; // Legacy/Compat
+  vendorCompanies?: string[]; // Legacy/Compat
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface WorkItem {
@@ -77,7 +118,7 @@ export interface WikiSpace {
   visibility: 'internal' | 'vendors' | 'specific';
   allowedVendorCompanies?: string[];
   createdAt?: string;
-  defaultThemeKey?: string; // New: Default theme for space
+  defaultThemeKey?: string; 
 }
 
 export interface WikiTheme {
@@ -118,7 +159,7 @@ export interface WikiPage {
   links?: {
     documentIds: string[];
   };
-  themeKey?: string; // New: Specific theme for page
+  themeKey?: string; 
 }
 
 export interface WikiComment {

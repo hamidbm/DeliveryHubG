@@ -1,8 +1,10 @@
 
 import React, { useState } from 'react';
 import AdminThemes from './AdminThemes';
+import AdminBundles from './AdminBundles';
+import AdminApplications from './AdminApplications';
 
-type AdminModuleId = 'home' | 'wiki-themes' | 'vendors' | 'roles' | 'bundles' | 'taxonomy' | 'artifact-rules' | 'milestone-templates' | 'users' | 'sharepoint' | 'ai-settings';
+type AdminModuleId = 'home' | 'wiki-themes' | 'vendors' | 'roles' | 'bundles' | 'applications' | 'taxonomy' | 'artifact-rules' | 'milestone-templates' | 'users' | 'sharepoint' | 'ai-settings';
 
 interface AdminModule {
   id: AdminModuleId;
@@ -27,6 +29,7 @@ const Admin: React.FC = () => {
         { id: 'vendors', label: 'Vendors', icon: 'fa-building-shield', description: 'Manage vendor catalog, regions, and engagement status.', color: 'blue' },
         { id: 'roles', label: 'Roles & Permissions', icon: 'fa-user-lock', description: 'Map organizational roles to system permission profiles.', color: 'indigo' },
         { id: 'bundles', label: 'Bundles', icon: 'fa-layer-group', description: 'Configure business bundles and application hierarchies.', color: 'slate' },
+        { id: 'applications', label: 'Applications', icon: 'fa-cubes', description: 'Onboard enterprise software assets and identity metadata.', color: 'blue' },
         { id: 'taxonomy', label: 'Taxonomy', icon: 'fa-tags', description: 'Define document categories, types, and format options.', color: 'emerald' },
       ]
     },
@@ -113,6 +116,10 @@ const Admin: React.FC = () => {
     switch (activeModule) {
       case 'wiki-themes':
         return <AdminThemes />;
+      case 'bundles':
+        return <AdminBundles />;
+      case 'applications':
+        return <AdminApplications />;
       default:
         return (
           <div className="flex flex-col h-full bg-white relative">

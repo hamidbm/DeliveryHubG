@@ -404,7 +404,8 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
             </h4>
             <SidebarField label="Artifact Type" value={category} onChange={setCategory} options={WIKI_CATEGORIES} />
             <SidebarField label="Visual Theme" value={themeKey} onChange={setThemeKey} options={[{ id: '', name: 'Use Space Default' }, ...themes.map(t => ({ id: t.key, name: t.name }))]} />
-            <SidebarField label="Business Bundle" value={bundleId} onChange={setBundleId} options={BUNDLES.map(b => ({ id: b.id, name: b.name }))} />
+            {/* Fix: Property 'id' does not exist on type 'Bundle'. Using '_id' instead. */}
+            <SidebarField label="Business Bundle" value={bundleId} onChange={setBundleId} options={BUNDLES.map(b => ({ id: b._id, name: b.name }))} />
             <SidebarField label="App Context" value={applicationId} onChange={setApplicationId} options={APPLICATIONS.map(a => ({ id: a.id, name: a.name }))} />
           </div>
         </aside>

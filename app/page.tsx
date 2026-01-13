@@ -12,10 +12,15 @@ import Wiki from '../components/Wiki';
 import Milestones from '../components/Milestones';
 import GovernanceDocuments from '../components/GovernanceDocuments';
 import Admin from '../components/Admin';
+import { Bundle, Application } from '../types';
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState('dashboard');
   
+  // Dynamic Data Lists
+  const [bundles, setBundles] = useState<Bundle[]>([]);
+  const [applications, setApplications] = useState<Application[]>([]);
+
   // Global / Contextual Filters
   const [activeBundle, setActiveBundle] = useState('all');
   const [activeVendor, setActiveVendor] = useState('all');
@@ -24,7 +29,6 @@ export default function Home() {
   const [selMilestone, setSelMilestone] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   
-  // Trigger for child components (e.g. opening "Create Space" modal in Wiki)
   const [wikiTrigger, setWikiTrigger] = useState<string | null>(null);
 
   const [user, setUser] = useState<any>(null);
@@ -32,12 +36,20 @@ export default function Home() {
   const router = useRouter();
 
   useEffect(() => {
-    async function checkAuth() {
+    async function init() {
       try {
-        const res = await fetch('/api/auth/me');
-        if (res.ok) {
-          const data = await res.json();
-          setUser(data.user);
+        const authRes = await fetch('/api/auth/me');
+        if (authRes.ok) {
+          const authData = await authRes.json();
+          setUser(authData.user);
+          
+          // Parallel fetch of bundles and applications
+          const [bRes, aRes] = await Promise.all([
+            fetch('/api/bundles?active=true'),
+            fetch('/api/applications?active=true')
+          ]);
+          setBundles(await bRes.json());
+          setApplications(await aRes.json());
         } else {
           router.push('/login');
         }
@@ -47,7 +59,7 @@ export default function Home() {
         setLoading(false);
       }
     }
-    checkAuth();
+    init();
   }, [router]);
 
   const handleLogout = async () => {
@@ -60,7 +72,7 @@ export default function Home() {
       <div className="min-h-screen bg-slate-900 flex items-center justify-center">
         <div className="flex flex-col items-center">
           <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-          <p className="text-slate-400 font-medium animate-pulse">Initializing Nexus Portal...</p>
+          <p className="text-slate-400 font-medium animate-pulse">Synchronizing Nexus Registry...</p>
         </div>
       </div>
     );
@@ -71,13 +83,13 @@ export default function Home() {
   const renderContent = () => {
     switch (activeTab) {
       case 'dashboard':
-        return <Dashboard />;
+        return <Dashboard applications={applications} bundles={bundles} />;
       case 'applications':
-        return <Applications filterBundle={activeBundle} />;
+        return <Applications filterBundle={activeBundle} applications={applications} bundles={bundles} />;
       case 'ai-insights':
-        return <AIInsights />;
+        return <AIInsights applications={applications} bundles={bundles} />;
       case 'work-items':
-        return <WorkItems />;
+        return <WorkItems applications={applications} />;
       case 'wiki':
         return (
           <Wiki 
@@ -92,7 +104,7 @@ export default function Home() {
           />
         );
       case 'reviews':
-        return <Milestones />;
+        return <Milestones applications={applications} />;
       case 'documents':
         return <GovernanceDocuments />;
       case 'admin':
@@ -111,7 +123,6 @@ export default function Home() {
     <Layout 
       activeTab={activeTab} 
       setActiveTab={setActiveTab}
-      // Contextual Filter Props
       selSpaceId={selSpaceId}
       setSelSpaceId={setSelSpaceId}
       activeBundle={activeBundle}
@@ -124,11 +135,9 @@ export default function Home() {
       setSelMilestone={setSelMilestone}
       searchQuery={searchQuery}
       setSearchQuery={setSearchQuery}
-      
-      // Actions
+      bundles={bundles}
+      applications={applications}
       onCreateSpace={() => setWikiTrigger('create-space')}
-
-      // User Props
       userName={user.name}
       userRole={user.role}
       onLogout={handleLogout}

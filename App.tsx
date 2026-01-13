@@ -9,10 +9,15 @@ import Wiki from './components/Wiki';
 import Milestones from './components/Milestones';
 import GovernanceDocuments from './components/GovernanceDocuments';
 import Admin from './components/Admin';
+import { Bundle, Application } from './types';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   
+  // Dynamic Data Lists
+  const [bundles, setBundles] = useState<Bundle[]>([]);
+  const [applications, setApplications] = useState<Application[]>([]);
+
   // Global / Contextual Filters
   const [activeBundle, setActiveBundle] = useState('all');
   const [activeVendor, setActiveVendor] = useState('all');
@@ -28,20 +33,28 @@ const App: React.FC = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function checkAuth() {
+    async function init() {
       try {
-        const res = await fetch('/api/auth/me');
-        if (res.ok) {
-          const data = await res.json();
-          setUser(data.user);
+        const authRes = await fetch('/api/auth/me');
+        if (authRes.ok) {
+          const authData = await authRes.json();
+          setUser(authData.user);
+          
+          // Parallel fetch of bundles and applications from MongoDB
+          const [bRes, aRes] = await Promise.all([
+            fetch('/api/bundles?active=true'),
+            fetch('/api/applications?active=true')
+          ]);
+          setBundles(await bRes.json());
+          setApplications(await aRes.json());
         }
       } catch (err) {
-        console.error("Auth check failed", err);
+        console.error("Nexus Registry Sync Failed", err);
       } finally {
         setLoading(false);
       }
     }
-    checkAuth();
+    init();
   }, []);
 
   const handleLogout = async () => {
@@ -52,13 +65,13 @@ const App: React.FC = () => {
   const renderContent = () => {
     switch (activeTab) {
       case 'dashboard':
-        return <Dashboard />;
+        return <Dashboard applications={applications} bundles={bundles} />;
       case 'applications':
-        return <Applications filterBundle={activeBundle} />;
+        return <Applications filterBundle={activeBundle} applications={applications} bundles={bundles} />;
       case 'ai-insights':
-        return <AIInsights />;
+        return <AIInsights applications={applications} bundles={bundles} />;
       case 'work-items':
-        return <WorkItems />;
+        return <WorkItems applications={applications} />;
       case 'wiki':
         return (
           <Wiki 
@@ -73,7 +86,7 @@ const App: React.FC = () => {
           />
         );
       case 'reviews':
-        return <Milestones />;
+        return <Milestones applications={applications} />;
       case 'documents':
         return <GovernanceDocuments />;
       case 'admin':
@@ -92,7 +105,10 @@ const App: React.FC = () => {
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center">
-        <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-slate-400 font-bold text-[10px] uppercase tracking-[0.2em] animate-pulse">Synchronizing Registry...</p>
+        </div>
       </div>
     );
   }
@@ -115,6 +131,10 @@ const App: React.FC = () => {
       searchQuery={searchQuery}
       setSearchQuery={setSearchQuery}
       
+      // Data Propagation
+      bundles={bundles}
+      applications={applications}
+
       // Actions
       onCreateSpace={() => setWikiTrigger('create-space')}
 

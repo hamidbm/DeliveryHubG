@@ -1,16 +1,24 @@
 
 import React, { useState, useEffect } from 'react';
 import { getPortfolioSummary } from '../services/geminiService';
-import { APPLICATIONS, VENDORS, MILESTONES } from '../constants';
+import { VENDORS, MILESTONES } from '../constants';
+import { Application, Bundle } from '../types';
 
-const AIInsights: React.FC = () => {
+interface AIInsightsProps {
+  applications?: Application[];
+  bundles?: Bundle[];
+}
+
+const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = [] }) => {
   const [insight, setInsight] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   const generateAIReport = async () => {
+    if (!applications.length) return;
     setLoading(true);
     const summary = await getPortfolioSummary({
-      applications: APPLICATIONS,
+      applications,
+      bundles,
       vendors: VENDORS,
       milestones: MILESTONES
     });
@@ -19,8 +27,10 @@ const AIInsights: React.FC = () => {
   };
 
   useEffect(() => {
-    generateAIReport();
-  }, []);
+    if (applications.length) {
+      generateAIReport();
+    }
+  }, [applications]);
 
   return (
     <div className="space-y-6">
@@ -34,7 +44,7 @@ const AIInsights: React.FC = () => {
         </div>
         <button 
           onClick={generateAIReport}
-          disabled={loading}
+          disabled={loading || !applications.length}
           className="bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition disabled:opacity-50 flex items-center space-x-2"
         >
           <i className={`fas ${loading ? 'fa-spinner fa-spin' : 'fa-sync-alt'}`}></i>
@@ -58,7 +68,7 @@ const AIInsights: React.FC = () => {
               </div>
             ) : (
               <div className="text-slate-700 whitespace-pre-wrap">
-                {insight || "No insights generated yet."}
+                {insight || (applications.length ? "Analyzing registry data..." : "No registry data available for analysis.")}
               </div>
             )}
           </div>
@@ -87,9 +97,9 @@ const AIInsights: React.FC = () => {
              </h3>
              <ul className="space-y-3">
                {[
-                 "MemberPortal migration is behind schedule.",
-                 "Vendor Cognizant has high resource churn.",
-                 "Architecture review needed for RouteOptima."
+                 "Review MemberPortal migration timeline.",
+                 "Assess vendor resource allocation risks.",
+                 "Architecture board approval pending for LLDs."
                ].map((tip, i) => (
                  <li key={i} className="flex items-start space-x-2 text-sm text-slate-600 border-l-2 border-slate-200 pl-3 py-1 hover:border-blue-500 transition cursor-pointer">
                    {tip}

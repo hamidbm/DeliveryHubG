@@ -1,6 +1,6 @@
 
 import { NextResponse } from 'next/server';
-import { fetchBundles, saveBundle } from '../../../services/db';
+import { fetchApplications, saveApplication } from '../../../services/db';
 import { jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
 import { Role } from '../../../types';
@@ -9,9 +9,10 @@ const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_sup
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
+  const bundleId = searchParams.get('bundleId') || undefined;
   const activeOnly = searchParams.get('active') === 'true';
-  const bundles = await fetchBundles(activeOnly);
-  return NextResponse.json(bundles);
+  const apps = await fetchApplications(bundleId, activeOnly);
+  return NextResponse.json(apps);
 }
 
 export async function POST(request: Request) {
@@ -25,10 +26,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized: Admin role required' }, { status: 403 });
     }
 
-    const bundleData = await request.json();
-    const result = await saveBundle(bundleData, payload);
+    const appData = await request.json();
+    const result = await saveApplication(appData, payload);
     return NextResponse.json({ success: true, result });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message || 'Failed to save bundle' }, { status: 500 });
+    return NextResponse.json({ error: error.message || 'Failed to save application' }, { status: 500 });
   }
 }

@@ -92,7 +92,8 @@ const WikiPageDisplay: React.FC<WikiPageDisplayProps> = ({ page, onNavigate }) =
     });
   };
 
-  const bundle = BUNDLES.find(b => b.id === page.bundleId);
+  /* Fix: Property 'id' does not exist on type 'Bundle'. Using '_id' instead. */
+  const bundle = BUNDLES.find(b => b._id === page.bundleId);
   const application = APPLICATIONS.find(a => a.id === page.applicationId);
   const milestone = MILESTONES.find(m => m.id === page.milestoneId);
   

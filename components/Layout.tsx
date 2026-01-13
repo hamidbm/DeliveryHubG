@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { NAV_ITEMS, BUNDLES, VENDORS, MILESTONES } from '../constants';
+import { NAV_ITEMS, VENDORS, MILESTONES } from '../constants';
 import { WikiSpace, Application, Bundle } from '../types';
 
 interface LayoutProps {
@@ -21,6 +21,10 @@ interface LayoutProps {
   setSelMilestone?: (m: string) => void;
   searchQuery?: string;
   setSearchQuery?: (q: string) => void;
+  
+  // Data lists fetched from parent
+  bundles: Bundle[];
+  applications: Application[];
   
   // Actions
   onCreateSpace?: () => void;
@@ -47,28 +51,25 @@ const Layout: React.FC<LayoutProps> = ({
   setSelMilestone,
   searchQuery = '',
   setSearchQuery,
+  bundles = [],
+  applications = [],
   onCreateSpace,
   userName = 'Alex Architect',
   userRole = 'Enterprise Architect',
   onLogout
 }) => {
   const [spaces, setSpaces] = useState<WikiSpace[]>([]);
-  const [applications, setApplications] = useState<Application[]>([]);
 
   useEffect(() => {
-    // Fetch contextual data for the sub-nav dropdowns
     fetch('/api/wiki/spaces').then(r => r.json()).then(setSpaces).catch(() => []);
-    fetch('/api/applications').then(r => r.json()).then(setApplications).catch(() => []);
   }, []);
 
-  const filteredApps = applications.filter(a => activeBundle === 'all' || a.bundleId === activeBundle);
+  const filteredApps = (applications || []).filter(a => activeBundle === 'all' || a.bundleId === activeBundle);
 
-  // Determine if we should show the filter bar (only for non-admin/profile/insight views)
   const showFilterBar = ['dashboard', 'applications', 'work-items', 'wiki', 'reviews', 'documents'].includes(activeTab);
 
   return (
     <div className="min-h-screen flex flex-col">
-      {/* Fixed Top Navbar */}
       <nav className="bg-slate-900 text-white h-16 fixed top-0 w-full z-50 flex items-center px-6 shadow-xl">
         <Link href="/" className="flex items-center space-x-3 mr-12 shrink-0 cursor-pointer">
           <div className="w-8 h-8 bg-blue-500 rounded flex items-center justify-center">
@@ -101,7 +102,7 @@ const Layout: React.FC<LayoutProps> = ({
           </div>
           <div className="group relative">
             <div className="w-10 h-10 rounded-full bg-slate-700 border-2 border-slate-600 flex items-center justify-center overflow-hidden cursor-pointer shadow-lg shadow-black/20">
-               <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(userName)}&background=0D8ABC&color=fff`} alt="avatar" />
+               <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(userName || '')}&background=0D8ABC&color=fff`} alt="avatar" />
             </div>
             <div className="absolute right-0 top-12 w-48 bg-white rounded-xl shadow-2xl border border-slate-100 py-2 hidden group-hover:block animate-fadeIn">
                <div className="px-4 py-2 border-b border-slate-50 mb-1">
@@ -113,20 +114,19 @@ const Layout: React.FC<LayoutProps> = ({
                </Link>
                <button onClick={onLogout} className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center space-x-2 transition font-medium">
                  <i className="fas fa-sign-out-alt"></i>
-                 <span>Sign Sign Out</span>
+                 <span>Sign Out</span>
                </button>
             </div>
           </div>
         </div>
       </nav>
 
-      {/* Layer 1: Contextual Sub-navigation & Filters Bar */}
       {showFilterBar && (
         <div className="bg-white border-b border-slate-200 h-14 fixed top-16 w-full z-40 flex items-center px-8 justify-between shadow-sm">
           <div className="flex items-center gap-6 overflow-x-auto no-scrollbar shrink-0">
             <FilterSelect label="Space" value={selSpaceId} onChange={setSelSpaceId!} options={spaces.map(s => ({ id: s._id || s.id!, name: s.name }))} />
-            <FilterSelect label="Bundle" value={activeBundle} onChange={setActiveBundle} options={BUNDLES.map(b => ({ id: b.id, name: b.name }))} />
-            <FilterSelect label="App" value={activeApp} onChange={setActiveApp!} options={filteredApps.map(a => ({ id: a.id, name: a.name }))} />
+            <FilterSelect label="Bundle" value={activeBundle} onChange={setActiveBundle} options={bundles.map(b => ({ id: b._id, name: b.name }))} />
+            <FilterSelect label="App" value={activeApp} onChange={setActiveApp!} options={filteredApps.map(a => ({ id: a._id, name: a.name }))} />
             <FilterSelect label="Milestone" value={selMilestone} onChange={setSelMilestone!} options={[...Array(10)].map((_, i) => ({ id: `M${i+1}`, name: `M${i+1}` }))} />
           </div>
           
@@ -149,16 +149,10 @@ const Layout: React.FC<LayoutProps> = ({
               <i className="fas fa-plus"></i>
               Create Space
             </button>
-
-            <div className="hidden xl:flex items-center space-x-2 text-slate-300 italic text-[9px] font-black uppercase tracking-widest">
-              <i className="fas fa-shield-alt text-blue-500/50"></i>
-              <span>Secure Tunnel</span>
-            </div>
           </div>
         </div>
       )}
 
-      {/* Main Content Area */}
       <main className={`${showFilterBar ? 'mt-[7.5rem]' : 'mt-16'} p-6 flex-grow overflow-y-auto bg-[#F8FAFC]`}>
         <div className="max-w-[1600px] mx-auto">
           {children}

@@ -1,8 +1,13 @@
 
 import React, { useState } from 'react';
-import { WORK_ITEMS, APPLICATIONS } from '../constants';
+import { WORK_ITEMS } from '../constants';
+import { Application } from '../types';
 
-const WorkItems: React.FC = () => {
+interface WorkItemsProps {
+  applications?: Application[];
+}
+
+const WorkItems: React.FC<WorkItemsProps> = ({ applications = [] }) => {
   const [filter, setFilter] = useState<string>('All');
 
   const filteredItems = filter === 'All' 
@@ -68,7 +73,7 @@ const WorkItems: React.FC = () => {
                 <h3 className="font-bold text-slate-800 text-lg group-hover:text-blue-600 transition tracking-tight">{item.title}</h3>
                 <div className="flex items-center gap-2 text-sm text-slate-500">
                    <i className="fas fa-cube text-slate-300 text-xs"></i>
-                   <span>{APPLICATIONS.find(a => a.id === item.applicationId)?.name}</span>
+                   <span>{(applications || []).find(a => a.id === item.applicationId || a._id === item.applicationId)?.name || 'General Node'}</span>
                    <span className="text-slate-200">•</span>
                    <span className="font-medium text-slate-400 italic">{item.type}</span>
                 </div>

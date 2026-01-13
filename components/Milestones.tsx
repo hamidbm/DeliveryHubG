@@ -1,9 +1,13 @@
 
 import React from 'react';
-import { MILESTONES, APPLICATIONS } from '../constants';
-import { MilestoneStatus } from '../types';
+import { MILESTONES } from '../constants';
+import { MilestoneStatus, Application } from '../types';
 
-const Milestones: React.FC = () => {
+interface MilestonesProps {
+  applications?: Application[];
+}
+
+const Milestones: React.FC<MilestonesProps> = ({ applications = [] }) => {
   const getStatusColor = (status: MilestoneStatus) => {
     switch (status) {
       case MilestoneStatus.COMPLETED: return 'bg-emerald-500';
@@ -43,7 +47,7 @@ const Milestones: React.FC = () => {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {MILESTONES.map((ms) => {
-          const app = APPLICATIONS.find(a => a.id === ms.applicationId);
+          const app = (applications || []).find(a => a.id === ms.applicationId || a._id === ms.applicationId);
           return (
             <div key={ms.id} className="bg-white border border-slate-200 rounded-[2rem] p-8 shadow-sm hover:shadow-xl hover:shadow-slate-200/50 transition-all group">
               <div className="flex justify-between items-start mb-6">
