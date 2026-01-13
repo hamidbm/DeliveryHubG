@@ -32,7 +32,6 @@ const Wiki: React.FC<WikiProps> = ({
   const [isCreating, setIsCreating] = useState(false);
   const [loading, setLoading] = useState(true);
   
-  // Default hierarchyMode updated to Space → Bundle → Application → Milestone
   const [hierarchyMode, setHierarchyMode] = useState<HierarchyMode>(HierarchyMode.SPACE_BUNDLE_APP_MILESTONE);
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
 
@@ -72,18 +71,18 @@ const Wiki: React.FC<WikiProps> = ({
     }
 
     const tree: any[] = [];
-    const buildPath = (path: string[], page: WikiPage) => {
+    const buildPath = (path: string[], pathTypes: string[], page: WikiPage) => {
       let currentLevel = tree;
       path.forEach((part, i) => {
         const nodeId = `lvl-${i}-${path.slice(0, i+1).join('/')}`;
         let node = currentLevel.find(n => n.label === part && n.type === 'folder');
         if (!node) {
-          node = { label: part, type: 'folder', children: [], id: nodeId };
+          node = { label: part, type: 'folder', nodeType: pathTypes[i], children: [], id: nodeId };
           currentLevel.push(node);
         }
         currentLevel = node.children;
         if (i === path.length - 1) {
-          currentLevel.push({ label: page.title, type: 'page', data: page, id: `page-${page._id || page.id}` });
+          currentLevel.push({ label: page.title, type: 'page', nodeType: 'page', data: page, id: `page-${page._id || page.id}` });
         }
       });
     };
@@ -99,30 +98,64 @@ const Wiki: React.FC<WikiProps> = ({
       const space = spaces.find(s => s._id === page.spaceId || s.id === page.spaceId)?.name || 'Registry';
 
       let path: string[] = [];
+      let pathTypes: string[] = [];
+
       switch (hierarchyMode) {
-        case HierarchyMode.SPACE_BUNDLE_APP_MILESTONE: path = [space, bundle, app, ms]; break;
-        case HierarchyMode.BUNDLE_MILESTONE_TYPE: path = [bundle, ms, type]; break;
-        case HierarchyMode.BUNDLE_TYPE: path = [bundle, type]; break;
-        case HierarchyMode.BUNDLE_APP_MILESTONE_TYPE: path = [bundle, app, ms, type]; break;
-        case HierarchyMode.APP_MILESTONE_TYPE: path = [app, ms, type]; break;
-        default: path = [space, bundle, app, ms];
+        case HierarchyMode.SPACE_BUNDLE_APP_MILESTONE: 
+          path = [space, bundle, app, ms]; 
+          pathTypes = ['space', 'bundle', 'app', 'milestone'];
+          break;
+        case HierarchyMode.BUNDLE_MILESTONE_TYPE: 
+          path = [bundle, ms, type]; 
+          pathTypes = ['bundle', 'milestone', 'type'];
+          break;
+        case HierarchyMode.BUNDLE_TYPE: 
+          path = [bundle, type]; 
+          pathTypes = ['bundle', 'type'];
+          break;
+        case HierarchyMode.BUNDLE_APP_MILESTONE_TYPE: 
+          path = [bundle, app, ms, type]; 
+          pathTypes = ['bundle', 'app', 'milestone', 'type'];
+          break;
+        case HierarchyMode.APP_MILESTONE_TYPE: 
+          path = [app, ms, type]; 
+          pathTypes = ['app', 'milestone', 'type'];
+          break;
+        default: 
+          path = [space, bundle, app, ms];
+          pathTypes = ['space', 'bundle', 'app', 'milestone'];
       }
-      buildPath(path, page);
+      buildPath(path, pathTypes, page);
     });
     return tree;
   }, [pages, selSpaceId, selBundleId, selAppId, selMilestone, searchQuery, hierarchyMode, applications, bundles, spaces, docTypes, categories]);
+
+  const getNodeIcon = (node: any) => {
+    if (node.type === 'page') return 'fa-file-lines';
+    switch (node.nodeType) {
+      case 'space': return 'fa-rocket';
+      case 'bundle': return 'fa-boxes-stacked';
+      case 'app': return 'fa-cube';
+      case 'milestone': return 'fa-flag-checkered';
+      case 'category': return 'fa-tag';
+      case 'type': return 'fa-file-contract';
+      default: return 'fa-folder';
+    }
+  };
 
   const renderTreeNode = (node: any, depth = 0) => {
     const isPage = node.type === 'page';
     const isExpanded = expandedNodes.has(node.id);
     const isActive = isPage && (activePage?._id === node.data?._id || activePage?.id === node.data?.id);
+    const iconClass = getNodeIcon(node);
+
     return (
       <div key={node.id} className="flex flex-col">
         <button onClick={() => isPage ? setActivePage(node.data) : setExpandedNodes(prev => { const n = new Set(prev); n.has(node.id) ? n.delete(node.id) : n.add(node.id); return n; })}
           className={`text-left px-3 py-2 flex items-center gap-3 rounded-xl hover:bg-slate-100 transition-all ${isActive ? 'bg-blue-50 text-blue-700 font-bold' : 'text-slate-600'}`} style={{ marginLeft: `${depth * 20}px` }}>
           {!isPage && <i className={`fas ${isExpanded ? 'fa-caret-down' : 'fa-caret-right'} w-2`}></i>}
           {isPage && <div className="w-2"></div>}
-          <i className={`fas ${isPage ? 'fa-file-lines opacity-40' : 'fa-folder opacity-40'}`}></i>
+          <i className={`fas ${iconClass} opacity-40 text-xs w-4 text-center`}></i>
           <span className="text-[13px] truncate font-medium">{node.label}</span>
         </button>
         {node.children && isExpanded && node.children.map((child: any) => renderTreeNode(child, depth + 1))}
@@ -159,7 +192,20 @@ const Wiki: React.FC<WikiProps> = ({
       </aside>
       <main className="flex-1 overflow-y-auto custom-scrollbar bg-white">
         {isCreating ? <CreateWikiPageForm spaceId={selSpaceId === 'all' ? (spaces[0]?._id || 'default') : selSpaceId} allPages={pages} currentUser={currentUser} onSaveSuccess={() => { setIsCreating(false); fetch('/api/wiki').then(r => r.json()).then(setPages); }} onCancel={() => setIsCreating(false)} bundles={bundles} applications={applications} />
-        : isEditing && activePage ? <WikiForm id={activePage._id} initialTitle={activePage.title} initialContent={activePage.content} spaceId={activePage.spaceId} onSaveSuccess={() => { setIsEditing(false); fetch('/api/wiki').then(r => r.json()).then(setPages); }} onCancel={() => setIsEditing(false)} bundles={bundles} applications={applications} />
+        : isEditing && activePage ? <WikiForm 
+            id={activePage._id} 
+            initialTitle={activePage.title} 
+            initialContent={activePage.content} 
+            initialDocumentTypeId={activePage.documentTypeId}
+            initialBundleId={activePage.bundleId}
+            initialApplicationId={activePage.applicationId}
+            initialMilestoneId={activePage.milestoneId}
+            spaceId={activePage.spaceId} 
+            onSaveSuccess={() => { setIsEditing(false); fetch('/api/wiki').then(r => r.json()).then(setPages); }} 
+            onCancel={() => setIsEditing(false)} 
+            bundles={bundles} 
+            applications={applications} 
+          />
         : activePage ? (
           <div className="p-16 max-w-5xl mx-auto animate-fadeIn">
             <div className="flex justify-between items-center mb-12">
