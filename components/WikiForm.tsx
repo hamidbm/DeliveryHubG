@@ -12,6 +12,7 @@ interface WikiFormProps {
   initialBundleId?: string;
   initialApplicationId?: string;
   initialMilestoneId?: string;
+  initialThemeKey?: string;
   spaceId: string;
   allPages?: WikiPage[];
   id?: string;
@@ -31,6 +32,7 @@ const WikiForm: React.FC<WikiFormProps> = ({
   initialBundleId = '',
   initialApplicationId = '',
   initialMilestoneId = '',
+  initialThemeKey = '',
   spaceId,
   id,
   currentUser,
@@ -45,7 +47,7 @@ const WikiForm: React.FC<WikiFormProps> = ({
   const [bundleId, setBundleId] = useState(initialBundleId);
   const [applicationId, setApplicationId] = useState(initialApplicationId);
   const [milestoneId, setMilestoneId] = useState(initialMilestoneId);
-  const [themeKey, setThemeKey] = useState('');
+  const [themeKey, setThemeKey] = useState(initialThemeKey);
   const [status, setStatus] = useState<'Draft' | 'Published'>('Published');
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -71,18 +73,7 @@ const WikiForm: React.FC<WikiFormProps> = ({
       setDocTypes(await typRes.json());
     };
     loadData();
-
-    if (id) {
-      fetch('/api/wiki')
-        .then(res => res.json())
-        .then(pages => {
-          const page = pages.find((p: any) => p._id === id || p.id === id);
-          if (page?.themeKey) setThemeKey(page.themeKey);
-          if (page?.documentTypeId) setDocumentTypeId(page.documentTypeId);
-        })
-        .catch(() => {});
-    }
-  }, [id]);
+  }, []);
 
   const insertText = (before: string, after: string = '') => {
     if (!textAreaRef.current) return;

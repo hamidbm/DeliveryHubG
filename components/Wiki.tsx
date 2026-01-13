@@ -57,6 +57,16 @@ const Wiki: React.FC<WikiProps> = ({
     init();
   }, []);
 
+  const refreshPages = async (activeId?: string) => {
+    const pgRes = await fetch('/api/wiki');
+    const newPages = await pgRes.json();
+    setPages(newPages);
+    if (activeId) {
+      const updated = newPages.find((p: any) => p._id === activeId || p.id === activeId);
+      if (updated) setActivePage(updated);
+    }
+  };
+
   const treeData = useMemo(() => {
     if (!applications || !bundles) return [];
     let filtered = pages;
@@ -191,7 +201,15 @@ const Wiki: React.FC<WikiProps> = ({
         </nav>
       </aside>
       <main className="flex-1 overflow-y-auto custom-scrollbar bg-white">
-        {isCreating ? <CreateWikiPageForm spaceId={selSpaceId === 'all' ? (spaces[0]?._id || 'default') : selSpaceId} allPages={pages} currentUser={currentUser} onSaveSuccess={() => { setIsCreating(false); fetch('/api/wiki').then(r => r.json()).then(setPages); }} onCancel={() => setIsCreating(false)} bundles={bundles} applications={applications} />
+        {isCreating ? <CreateWikiPageForm 
+            spaceId={selSpaceId === 'all' ? (spaces[0]?._id || 'default') : selSpaceId} 
+            allPages={pages} 
+            currentUser={currentUser} 
+            onSaveSuccess={(savedId) => { setIsCreating(false); refreshPages(savedId); }} 
+            onCancel={() => setIsCreating(false)} 
+            bundles={bundles} 
+            applications={applications} 
+          />
         : isEditing && activePage ? <WikiForm 
             id={activePage._id} 
             initialTitle={activePage.title} 
@@ -200,8 +218,9 @@ const Wiki: React.FC<WikiProps> = ({
             initialBundleId={activePage.bundleId}
             initialApplicationId={activePage.applicationId}
             initialMilestoneId={activePage.milestoneId}
+            initialThemeKey={activePage.themeKey}
             spaceId={activePage.spaceId} 
-            onSaveSuccess={() => { setIsEditing(false); fetch('/api/wiki').then(r => r.json()).then(setPages); }} 
+            onSaveSuccess={(savedId) => { setIsEditing(false); refreshPages(savedId || activePage._id); }} 
             onCancel={() => setIsEditing(false)} 
             bundles={bundles} 
             applications={applications} 
