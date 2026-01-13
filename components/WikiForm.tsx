@@ -22,12 +22,6 @@ interface WikiFormProps {
   applications: Application[];
 }
 
-const COLOR_PALETTE = {
-  blue: ['#07549C', '#096CC8', '#0B83F4', '#2791F5', '#63B0F8', '#BBDCFC'],
-  red: ['#9C0725', '#C8092F', '#F40B3A', '#F86381', '#FA8FA4'],
-  green: ['#05703C', '#079C54', '#09C86C', '#BBFCDC']
-};
-
 const WikiForm: React.FC<WikiFormProps> = ({ 
   initialTitle = '', 
   initialContent = '', 
@@ -57,8 +51,6 @@ const WikiForm: React.FC<WikiFormProps> = ({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'edit' | 'preview'>('edit');
   const [editorFormat, setEditorFormat] = useState<'markdown' | 'html'>('html');
-  const [showSizeMenu, setShowSizeMenu] = useState(false);
-  const [showColorMenu, setShowColorMenu] = useState(false);
   const [themes, setThemes] = useState<WikiTheme[]>([]);
   
   // Taxonomy Data
@@ -66,8 +58,6 @@ const WikiForm: React.FC<WikiFormProps> = ({
   const [docTypes, setDocTypes] = useState<TaxonomyDocumentType[]>([]);
 
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
-  const sizeMenuRef = useRef<HTMLDivElement>(null);
-  const colorMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const loadData = async () => {
@@ -92,13 +82,6 @@ const WikiForm: React.FC<WikiFormProps> = ({
         })
         .catch(() => {});
     }
-
-    const handleClickOutside = (event: MouseEvent) => {
-      if (sizeMenuRef.current && !sizeMenuRef.current.contains(event.target as Node)) setShowSizeMenu(false);
-      if (colorMenuRef.current && !colorMenuRef.current.contains(event.target as Node)) setShowColorMenu(false);
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [id]);
 
   const insertText = (before: string, after: string = '') => {
@@ -142,11 +125,27 @@ const WikiForm: React.FC<WikiFormProps> = ({
           </div>
         </div>
         <div className="flex items-center gap-4">
+          {/* Editor Format Toggle */}
+          <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 mr-2 shadow-inner">
+            <button 
+              onClick={() => setEditorFormat('markdown')} 
+              className={`px-4 py-2 text-[9px] font-black uppercase rounded-lg transition-all ${editorFormat === 'markdown' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}
+            >
+              Markdown
+            </button>
+            <button 
+              onClick={() => setEditorFormat('html')} 
+              className={`px-4 py-2 text-[9px] font-black uppercase rounded-lg transition-all ${editorFormat === 'html' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}
+            >
+              HTML
+            </button>
+          </div>
+
           <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 mr-4 shadow-inner">
             <button onClick={() => setStatus('Draft')} className={`px-4 py-2 text-[10px] font-black uppercase rounded-lg ${status === 'Draft' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}>Draft</button>
             <button onClick={() => setStatus('Published')} className={`px-4 py-2 text-[10px] font-black uppercase rounded-lg ${status === 'Published' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}>Publish</button>
           </div>
-          <button onClick={handleSave} disabled={isSaving} className="px-10 py-3.5 bg-slate-900 text-white rounded-2xl shadow-xl font-black text-[10px] uppercase tracking-widest flex items-center gap-3">
+          <button onClick={handleSave} disabled={isSaving} className="px-10 py-3.5 bg-slate-900 text-white rounded-2xl shadow-xl font-black text-[10px] uppercase tracking-widest flex items-center gap-3 active:scale-95 transition-all">
             {isSaving ? <i className="fas fa-circle-notch fa-spin"></i> : <i className="fas fa-save"></i>} {isSaving ? 'Updating...' : 'Update Artifact'}
           </button>
         </div>
@@ -156,22 +155,36 @@ const WikiForm: React.FC<WikiFormProps> = ({
         <div className="flex-1 flex flex-col overflow-hidden bg-white shadow-inner relative">
           <div className="px-8 py-3 border-b border-slate-100 bg-slate-50 flex items-center justify-between z-50">
              <div className="flex items-center gap-1">
-                <ToolbarButton icon="fa-bold" onClick={() => insertText('<b>', '</b>')} />
-                <ToolbarButton icon="fa-italic" onClick={() => insertText('<i>', '</i>')} />
-                <ToolbarButton icon="fa-heading" onClick={() => insertText('<h2>', '</h2>')} />
+                <ToolbarButton icon="fa-bold" onClick={() => insertText(editorFormat === 'html' ? '<b>' : '**', editorFormat === 'html' ? '</b>' : '**')} />
+                <ToolbarButton icon="fa-italic" onClick={() => insertText(editorFormat === 'html' ? '<i>' : '*', editorFormat === 'html' ? '</i>' : '*')} />
+                <ToolbarButton icon="fa-heading" onClick={() => insertText(editorFormat === 'html' ? '<h2>' : '## ', editorFormat === 'html' ? '</h2>' : '')} />
+                <ToolbarButton icon="fa-paragraph" onClick={() => insertText(editorFormat === 'html' ? '<p>' : '', editorFormat === 'html' ? '</p>' : '\n\n')} />
                 <div className="w-[1px] h-6 bg-slate-200 mx-2"></div>
-                <ToolbarButton icon="fa-list-ul" onClick={() => insertText('<ul>\n  <li>', '</li>\n</ul>')} />
-                <ToolbarButton icon="fa-table" onClick={() => insertText('\n<table>\n  <tr><th>Header</th></tr>\n  <tr><td>Cell</td></tr>\n</table>\n')} />
+                <ToolbarButton icon="fa-list-ul" onClick={() => insertText(editorFormat === 'html' ? '<ul>\n  <li>' : '- ', editorFormat === 'html' ? '</li>\n</ul>' : '')} />
+                <ToolbarButton icon="fa-table" onClick={() => insertText(editorFormat === 'html' ? '\n<table>\n  <tr><th>Header</th></tr>\n  <tr><td>Cell</td></tr>\n</table>\n' : '\n| Header |\n| --- |\n| Cell |\n')} />
+                <div className="w-[1px] h-6 bg-slate-200 mx-2"></div>
+                <ToolbarButton icon="fa-circle-info" onClick={() => insertText('<div class="callout info">\n  <div class="title"><i class="fas fa-circle-info"></i> INFO</div>\n  <p>', '</p>\n</div>')} />
+                <ToolbarButton icon="fa-triangle-exclamation" onClick={() => insertText('<div class="callout warn">\n  <div class="title"><i class="fas fa-triangle-exclamation"></i> WARNING</div>\n  <p>', '</p>\n</div>')} />
+                <ToolbarButton icon="fa-grip" onClick={() => insertText('<div class="cards">\n  <div class="card accent span-6">\n    <div class="card-title">Card Title</div>\n    <div class="card-meta">META TAG</div>\n    <p>', '</p>\n  </div>\n</div>')} />
+                <ToolbarButton icon="fa-code" onClick={() => insertText(editorFormat === 'html' ? '<pre><code>' : '```\n', editorFormat === 'html' ? '</code></pre>' : '\n```')} />
              </div>
-             <button onClick={() => setViewMode(viewMode === 'preview' ? 'edit' : 'preview')} className={`px-4 py-1.5 text-[9px] font-black uppercase rounded-xl ${viewMode === 'preview' ? 'bg-slate-900 text-white' : 'bg-white border border-slate-200'}`}>
-                {viewMode === 'preview' ? 'Editor' : 'Preview'}
+             <button onClick={() => setViewMode(viewMode === 'preview' ? 'edit' : 'preview')} className={`px-4 py-1.5 text-[9px] font-black uppercase rounded-xl transition-all ${viewMode === 'preview' ? 'bg-slate-900 text-white' : 'bg-white border border-slate-200 text-slate-500'}`}>
+                {viewMode === 'preview' ? 'Editor View' : 'Preview Artifact'}
              </button>
           </div>
           <div className="flex-1 overflow-y-auto custom-scrollbar">
             {viewMode === 'edit' ? (
-              <textarea value={content} onChange={(e) => setContent(e.target.value)} ref={textAreaRef} className="w-full h-full p-12 text-slate-700 leading-relaxed resize-none text-lg outline-none font-medium" placeholder="Edit content..." />
+              <textarea 
+                value={content} 
+                onChange={(e) => setContent(e.target.value)} 
+                ref={textAreaRef} 
+                className="w-full h-full p-12 text-slate-700 leading-relaxed resize-none text-lg outline-none font-medium placeholder:text-slate-300" 
+                placeholder="Edit content using the rich toolbar..." 
+              />
             ) : (
-              <div className="p-12 max-w-5xl mx-auto"><WikiPageDisplay page={{ title, content, spaceId, bundleId, applicationId, milestoneId, documentTypeId, themeKey }} bundles={bundles} applications={applications} /></div>
+              <div className="p-12 max-w-5xl mx-auto">
+                <WikiPageDisplay page={{ title, content, spaceId, bundleId, applicationId, milestoneId, documentTypeId, themeKey }} bundles={bundles} applications={applications} />
+              </div>
             )}
           </div>
         </div>
@@ -182,7 +195,7 @@ const WikiForm: React.FC<WikiFormProps> = ({
             
             <div className="space-y-2">
               <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Document Type</label>
-              <select value={documentTypeId} onChange={(e) => setDocumentTypeId(e.target.value)} className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-4 text-xs font-bold text-slate-700 outline-none shadow-sm">
+              <select value={documentTypeId} onChange={(e) => setDocumentTypeId(e.target.value)} className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-4 text-xs font-bold text-slate-700 outline-none shadow-sm focus:border-blue-500 transition-all">
                 <option value="">None Selected</option>
                 {categories.map(cat => (
                   <optgroup key={cat._id} label={cat.name}>
@@ -207,20 +220,32 @@ const WikiForm: React.FC<WikiFormProps> = ({
             <SidebarField label="Milestone" value={milestoneId} onChange={setMilestoneId} options={[...Array(10)].map((_, i) => ({ id: `M${i+1}`, name: `M${i+1}` }))} />
             <SidebarField label="Visual Theme" value={themeKey} onChange={setThemeKey} options={themes.map(t => ({ id: t.key, name: t.name }))} />
           </div>
+          
+          {saveError && (
+            <div className="p-4 bg-red-50 border border-red-100 rounded-2xl text-red-500 text-[10px] font-black uppercase tracking-widest flex items-center gap-2 animate-fadeIn">
+              <i className="fas fa-exclamation-triangle"></i>
+              {saveError}
+            </div>
+          )}
         </aside>
       </div>
+      <style jsx>{`
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+      `}</style>
     </div>
   );
 };
 
 const ToolbarButton = ({ icon, onClick }: any) => (
-  <button onClick={onClick} className="w-9 h-9 flex items-center justify-center text-slate-500 hover:text-blue-600 hover:bg-white rounded-xl transition-all"><i className={`fas ${icon} text-sm`}></i></button>
+  <button onClick={onClick} className="w-9 h-9 flex items-center justify-center text-slate-400 hover:text-blue-600 hover:bg-white hover:shadow-sm rounded-xl transition-all"><i className={`fas ${icon} text-sm`}></i></button>
 );
 
 const SidebarField = ({ label, value, onChange, options }: any) => (
   <div className="space-y-2">
     <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">{label}</label>
-    <select value={value} onChange={(e) => onChange(e.target.value)} className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-4 text-xs font-bold text-slate-700 outline-none shadow-sm">
+    <select value={value} onChange={(e) => onChange(e.target.value)} className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-4 text-xs font-bold text-slate-700 outline-none shadow-sm focus:border-blue-500 transition-all">
       <option value="">None Selected</option>
       {options.map((o: any) => <option key={o.id} value={o.id}>{o.name}</option>)}
     </select>
