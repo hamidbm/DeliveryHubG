@@ -217,6 +217,23 @@ const WikiForm: React.FC<WikiFormProps> = ({
     return [...Array(10)].map((_, i) => ({ id: `M${i + 1}`, name: `M${i + 1}` }));
   }, []);
 
+  // Filter applications based on selected bundle
+  const filteredApplications = useMemo(() => {
+    if (!bundleId || bundleId === 'all') return applications;
+    return applications.filter(app => String(app.bundleId) === String(bundleId));
+  }, [bundleId, applications]);
+
+  // Handle bundle change to also reset app if it doesn't belong to the new bundle
+  const handleBundleChange = (newBundleId: string) => {
+    setBundleId(newBundleId);
+    if (newBundleId && newBundleId !== 'all') {
+      const app = applications.find(a => String(a._id || a.id) === String(applicationId));
+      if (app && String(app.bundleId) !== String(newBundleId)) {
+        setApplicationId('');
+      }
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-[100] bg-slate-50 flex flex-col animate-fadeIn">
       <header className="px-10 py-5 bg-white border-b border-slate-200 flex items-center justify-between shadow-sm shrink-0">
@@ -404,8 +421,8 @@ const WikiForm: React.FC<WikiFormProps> = ({
             </h4>
             <SidebarField label="Type" value={category} onChange={setCategory} options={WIKI_CATEGORIES} />
             <SidebarField label="Visual Theme" value={themeKey} onChange={setThemeKey} options={[{ id: '', name: 'Use Space Default' }, ...themes.map(t => ({ id: t.key, name: t.name }))]} />
-            <SidebarField label="Business Bundle" value={bundleId} onChange={setBundleId} options={bundles.map(b => ({ id: b._id, name: b.name }))} />
-            <SidebarField label="App Context" value={applicationId} onChange={setApplicationId} options={applications.map(a => ({ id: a._id || a.id, name: a.name }))} />
+            <SidebarField label="Business Bundle" value={bundleId} onChange={handleBundleChange} options={bundles.map(b => ({ id: b._id, name: b.name }))} />
+            <SidebarField label="App Context" value={applicationId} onChange={setApplicationId} options={filteredApplications.map(a => ({ id: a._id || a.id, name: a.name }))} />
             <SidebarField label="Milestone" value={milestoneId} onChange={setMilestoneId} options={milestoneOptions} />
           </div>
         </aside>
