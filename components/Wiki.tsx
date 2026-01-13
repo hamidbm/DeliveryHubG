@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { WikiPage, WikiTheme, HierarchyMode, Application, WikiSpace, Bundle } from '../types';
 import WikiForm from './WikiForm';
@@ -19,8 +18,8 @@ interface WikiProps {
   searchQuery: string;
   externalTrigger?: string | null;
   onTriggerProcessed?: () => void;
-  bundles: Bundle[];
-  applications: Application[];
+  bundles?: Bundle[];
+  applications?: Application[];
 }
 
 const Wiki: React.FC<WikiProps> = ({ 
@@ -32,8 +31,8 @@ const Wiki: React.FC<WikiProps> = ({
   searchQuery,
   externalTrigger,
   onTriggerProcessed,
-  bundles,
-  applications
+  bundles = [],
+  applications = []
 }) => {
   const [spaces, setSpaces] = useState<WikiSpace[]>([]);
   const [themes, setThemes] = useState<WikiTheme[]>([]);
@@ -92,6 +91,8 @@ const Wiki: React.FC<WikiProps> = ({
   }, []);
 
   const treeData = useMemo(() => {
+    if (!applications || !bundles) return [];
+
     let filtered = pages;
     if (selSpaceId !== 'all') filtered = filtered.filter(p => p.spaceId === selSpaceId);
     if (selBundleId !== 'all') filtered = filtered.filter(p => p.bundleId === selBundleId);
@@ -134,7 +135,7 @@ const Wiki: React.FC<WikiProps> = ({
     };
 
     filtered.forEach(page => {
-      const app = applications.find(a => a._id === page.applicationId || a.id === page.applicationId)?.name || 'Unassigned App';
+      const app = applications.find(a => (a._id === page.applicationId || a.id === page.applicationId))?.name || 'Unassigned App';
       const ms = page.milestoneId || 'No Milestone';
       const type = page.category || 'General Documentation';
       const space = spaces.find(s => s._id === page.spaceId || s.id === page.spaceId)?.name || 'Registry';
@@ -149,13 +150,6 @@ const Wiki: React.FC<WikiProps> = ({
         case HierarchyMode.SPACE_TYPE_APP_MILESTONE: path = [space, type, app, ms]; break;
       }
       buildPath(path, page);
-    });
-
-    // Expand everything by default on first load or mode change
-    setExpandedNodes(prev => {
-      const next = new Set(prev);
-      allFolderIds.forEach(id => next.add(id));
-      return next;
     });
 
     return tree;

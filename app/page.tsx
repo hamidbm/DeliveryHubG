@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -8,7 +7,7 @@ import Dashboard from '../components/Dashboard';
 import Applications from '../components/Applications';
 import AIInsights from '../components/AIInsights';
 import WorkItems from '../components/WorkItems';
-import Wiki from '../components/Wiki';
+import Wiki from './../components/Wiki';
 import Milestones from '../components/Milestones';
 import GovernanceDocuments from '../components/GovernanceDocuments';
 import Admin from '../components/Admin';
@@ -101,6 +100,8 @@ export default function Home() {
             searchQuery={searchQuery}
             externalTrigger={wikiTrigger}
             onTriggerProcessed={() => setWikiTrigger(null)}
+            bundles={bundles}
+            applications={applications}
           />
         );
       case 'reviews':
