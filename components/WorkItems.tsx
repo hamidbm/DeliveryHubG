@@ -8,40 +8,58 @@ interface WorkItemsProps {
   selBundleId: string;
   selAppId: string;
   selMilestone: string;
+  selEpicId: string;
   searchQuery: string;
+  externalTrigger?: string | null;
+  onTriggerProcessed?: () => void;
 }
 
-const WorkItems: React.FC<WorkItemsProps> = ({ applications, bundles, selBundleId, selAppId, selMilestone, searchQuery }) => {
+const WorkItems: React.FC<WorkItemsProps> = ({ 
+  applications, bundles, selBundleId, selAppId, selMilestone, selEpicId, searchQuery, externalTrigger, onTriggerProcessed 
+}) => {
   const [treeData, setTreeData] = useState<any[]>([]);
   const [activeItem, setActiveItem] = useState<WorkItem | null>(null);
   const [loading, setLoading] = useState(false);
   const [treeMode, setTreeMode] = useState<'hierarchy' | 'milestone'>('hierarchy');
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
+
+  // Trigger handling from Layout
+  useEffect(() => {
+    if (externalTrigger === 'create-item') {
+      setIsCreating(true);
+      onTriggerProcessed?.();
+    }
+  }, [externalTrigger, onTriggerProcessed]);
 
   // Fetch tree data
+  const fetchTree = async () => {
+    setLoading(true);
+    const params = new URLSearchParams({
+      bundleId: selBundleId,
+      applicationId: selAppId,
+      milestoneId: selMilestone,
+      q: searchQuery,
+      treeMode
+    });
+    // If a specific epic is filtered, we might want to focus the tree there
+    if (selEpicId !== 'all') params.set('epicId', selEpicId);
+
+    try {
+      const res = await fetch(`/api/work-items/tree?${params.toString()}`);
+      const data = await res.json();
+      setTreeData(data);
+    } catch (err) {
+      console.error("Failed to fetch tree", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchTree = async () => {
-      setLoading(true);
-      const params = new URLSearchParams({
-        bundleId: selBundleId,
-        applicationId: selAppId,
-        milestoneId: selMilestone,
-        q: searchQuery,
-        treeMode
-      });
-      try {
-        const res = await fetch(`/api/work-items/tree?${params.toString()}`);
-        const data = await res.json();
-        setTreeData(data);
-      } catch (err) {
-        console.error("Failed to fetch tree", err);
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchTree();
-  }, [selBundleId, selAppId, selMilestone, searchQuery, treeMode]);
+  }, [selBundleId, selAppId, selMilestone, selEpicId, searchQuery, treeMode]);
 
   const handleNodeSelect = async (node: any) => {
     if (node.nodeType === 'WORK_ITEM') {
@@ -65,8 +83,8 @@ const WorkItems: React.FC<WorkItemsProps> = ({ applications, bundles, selBundleI
         body: JSON.stringify(updates)
       });
       if (res.ok) {
-        const updated = await res.json();
         setActiveItem(prev => prev ? { ...prev, ...updates } : null);
+        fetchTree();
       }
     } catch (err) {
       console.error("Update failed", err);
@@ -151,7 +169,7 @@ const WorkItems: React.FC<WorkItemsProps> = ({ applications, bundles, selBundleI
                   onClick={() => setTreeMode('hierarchy')}
                   className={`px-2 py-1 text-[8px] font-black uppercase rounded ${treeMode === 'hierarchy' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400'}`}
                 >
-                  Logic
+                  Delivery
                 </button>
                 <button 
                   onClick={() => setTreeMode('milestone')}
@@ -292,11 +310,211 @@ const WorkItems: React.FC<WorkItemsProps> = ({ applications, bundles, selBundleI
         )}
       </main>
 
+      {/* Creation Modal */}
+      {isCreating && (
+        <CreateWorkItemModal 
+          bundles={bundles}
+          applications={applications}
+          initialBundleId={selBundleId !== 'all' ? selBundleId : ''}
+          initialAppId={selAppId !== 'all' ? selAppId : ''}
+          onClose={() => setIsCreating(false)}
+          onSuccess={(item) => {
+            setIsCreating(false);
+            fetchTree();
+            handleNodeSelect({ nodeType: 'WORK_ITEM', workItemId: item.insertedId || item.id });
+          }}
+        />
+      )}
+
       <style jsx>{`
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
       `}</style>
+    </div>
+  );
+};
+
+interface CreateWorkItemModalProps {
+  bundles: Bundle[];
+  applications: Application[];
+  initialBundleId: string;
+  initialAppId: string;
+  onClose: () => void;
+  onSuccess: (result: any) => void;
+}
+
+const CreateWorkItemModal: React.FC<CreateWorkItemModalProps> = ({ bundles, applications, initialBundleId, initialAppId, onClose, onSuccess }) => {
+  const [formData, setFormData] = useState<Partial<WorkItem>>({
+    type: WorkItemType.STORY,
+    title: '',
+    description: '',
+    bundleId: initialBundleId || bundles[0]?._id,
+    applicationId: initialAppId || '',
+    priority: 'MEDIUM',
+    status: WorkItemStatus.TODO,
+    assignedTo: ''
+  });
+  const [loading, setLoading] = useState(false);
+  const [potentialParents, setPotentialParents] = useState<WorkItem[]>([]);
+
+  useEffect(() => {
+    // Fetch potential parents based on type
+    // Epic -> None
+    // Feature -> Epic
+    // Story -> Feature or Epic
+    // Task/Bug -> Story or Feature
+    let parentType = '';
+    if (formData.type === WorkItemType.FEATURE) parentType = WorkItemType.EPIC;
+    else if (formData.type === WorkItemType.STORY) parentType = WorkItemType.FEATURE;
+    else if (formData.type === WorkItemType.TASK || formData.type === WorkItemType.BUG) parentType = WorkItemType.STORY;
+
+    if (parentType) {
+      const params = new URLSearchParams();
+      if (formData.bundleId) params.set('bundleId', formData.bundleId);
+      if (formData.applicationId) params.set('applicationId', formData.applicationId);
+      fetch(`/api/work-items?${params.toString()}`)
+        .then(r => r.json())
+        .then(items => {
+          setPotentialParents(items.filter((i: WorkItem) => i.type === parentType));
+        });
+    } else {
+      setPotentialParents([]);
+    }
+  }, [formData.type, formData.bundleId, formData.applicationId]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      const res = await fetch('/api/work-items', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData)
+      });
+      const data = await res.json();
+      if (res.ok) onSuccess(data.result);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-6">
+      <div className="absolute inset-0 bg-slate-950/40 backdrop-blur-md" onClick={onClose}></div>
+      <div className="bg-white rounded-[3rem] w-full max-w-2xl p-12 shadow-2xl relative animate-fadeIn max-h-[90vh] overflow-y-auto custom-scrollbar">
+        <header className="mb-10 flex justify-between items-start">
+           <div>
+             <h3 className="text-3xl font-black text-slate-900 tracking-tight italic">Initialize Work Item</h3>
+             <p className="text-slate-500 font-medium mt-1">Provision a new artifact in the delivery stream.</p>
+           </div>
+           <button onClick={onClose} className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 hover:text-red-500 transition-colors">
+             <i className="fas fa-times"></i>
+           </button>
+        </header>
+
+        <form onSubmit={handleSubmit} className="space-y-8">
+           <div className="grid grid-cols-2 gap-8">
+              <DetailField label="Type">
+                 <select 
+                    value={formData.type}
+                    onChange={(e) => setFormData({...formData, type: e.target.value as WorkItemType})}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:ring-2 focus:ring-blue-500/10 transition-all"
+                 >
+                    {Object.values(WorkItemType).map(t => <option key={t} value={t}>{t}</option>)}
+                 </select>
+              </DetailField>
+              <DetailField label="Priority">
+                 <select 
+                    value={formData.priority}
+                    onChange={(e) => setFormData({...formData, priority: e.target.value as any})}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:ring-2 focus:ring-blue-500/10 transition-all"
+                 >
+                    <option value="CRITICAL">Critical</option>
+                    <option value="HIGH">High</option>
+                    <option value="MEDIUM">Medium</option>
+                    <option value="LOW">Low</option>
+                 </select>
+              </DetailField>
+           </div>
+
+           <DetailField label="Title">
+              <input 
+                required
+                type="text" 
+                value={formData.title}
+                onChange={(e) => setFormData({...formData, title: e.target.value})}
+                placeholder="Brief summary of the work..."
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500/10 transition-all"
+              />
+           </DetailField>
+
+           <DetailField label="Description">
+              <textarea 
+                value={formData.description}
+                onChange={(e) => setFormData({...formData, description: e.target.value})}
+                rows={4}
+                placeholder="Detailed acceptance criteria or implementation notes..."
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500/10 transition-all resize-none"
+              />
+           </DetailField>
+
+           <div className="grid grid-cols-2 gap-8">
+              <DetailField label="Bundle">
+                 <select 
+                    value={formData.bundleId}
+                    onChange={(e) => setFormData({...formData, bundleId: e.target.value})}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:ring-2 focus:ring-blue-500/10 transition-all"
+                 >
+                    {bundles.map(b => <option key={b._id} value={b._id}>{b.name}</option>)}
+                 </select>
+              </DetailField>
+              <DetailField label="Application">
+                 <select 
+                    value={formData.applicationId}
+                    onChange={(e) => setFormData({...formData, applicationId: e.target.value})}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:ring-2 focus:ring-blue-500/10 transition-all"
+                 >
+                    <option value="">Cross-App / General</option>
+                    {applications.filter(a => a.bundleId === formData.bundleId).map(a => <option key={a._id} value={a._id}>{a.name}</option>)}
+                 </select>
+              </DetailField>
+           </div>
+
+           {potentialParents.length > 0 && (
+              <DetailField label="Parent Association">
+                 <select 
+                    value={formData.parentId}
+                    onChange={(e) => setFormData({...formData, parentId: e.target.value})}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:ring-2 focus:ring-blue-500/10 transition-all"
+                 >
+                    <option value="">No Parent (Root Item)</option>
+                    {potentialParents.map(p => <option key={p._id || p.id} value={p._id || p.id}>{p.key}: {p.title}</option>)}
+                 </select>
+              </DetailField>
+           )}
+
+           <footer className="pt-10 flex gap-4">
+              <button 
+                type="button" 
+                onClick={onClose}
+                className="flex-1 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-800 transition-colors"
+              >
+                Discard
+              </button>
+              <button 
+                type="submit" 
+                disabled={loading}
+                className="flex-[2] py-4 bg-slate-900 text-white text-[10px] font-black rounded-2xl shadow-2xl hover:bg-slate-800 transition-all uppercase tracking-widest flex items-center justify-center gap-2"
+              >
+                {loading ? <i className="fas fa-circle-notch fa-spin"></i> : <i className="fas fa-paper-plane"></i>}
+                Create Artifact
+              </button>
+           </footer>
+        </form>
+      </div>
     </div>
   );
 };

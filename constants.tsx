@@ -15,11 +15,12 @@ export const VENDORS = [
 export const APPLICATIONS: Application[] = [];
 
 // Fix: Corrected WorkItem properties to use defined enums (WorkItemType, WorkItemStatus) and exact uppercase string literals for priority.
+// Added missing required properties 'key' and 'bundleId' to satisfy WorkItem interface.
 export const WORK_ITEMS: WorkItem[] = [
-  { id: 'wi1', title: 'Implement JWT Authentication', type: WorkItemType.FEATURE, status: WorkItemStatus.DONE, applicationId: 'app2', assignedTo: 'John Doe', priority: 'HIGH' },
-  { id: 'wi2', title: 'Migrate DB to MongoDB Atlas', type: WorkItemType.EPIC, status: WorkItemStatus.IN_PROGRESS, applicationId: 'app2', assignedTo: 'Sarah Smith', priority: 'CRITICAL' },
-  { id: 'wi3', title: 'Refactor Legacy API Endpoints', type: WorkItemType.TASK, status: WorkItemStatus.TODO, applicationId: 'app3', assignedTo: 'Mike Ross', priority: 'MEDIUM' },
-  { id: 'wi4', title: 'Azure Load Balancer Config', type: WorkItemType.FEATURE, status: WorkItemStatus.REVIEW, applicationId: 'app1', assignedTo: 'Emma Watson', priority: 'HIGH' },
+  { id: 'wi1', key: 'WI-1', bundleId: 'b1', title: 'Implement JWT Authentication', type: WorkItemType.FEATURE, status: WorkItemStatus.DONE, applicationId: 'app2', assignedTo: 'John Doe', priority: 'HIGH' },
+  { id: 'wi2', key: 'WI-2', bundleId: 'b1', title: 'Migrate DB to MongoDB Atlas', type: WorkItemType.EPIC, status: WorkItemStatus.IN_PROGRESS, applicationId: 'app2', assignedTo: 'Sarah Smith', priority: 'CRITICAL' },
+  { id: 'wi3', key: 'WI-3', bundleId: 'b2', title: 'Refactor Legacy API Endpoints', type: WorkItemType.TASK, status: WorkItemStatus.TODO, applicationId: 'app3', assignedTo: 'Mike Ross', priority: 'MEDIUM' },
+  { id: 'wi4', key: 'WI-4', bundleId: 'b1', title: 'Azure Load Balancer Config', type: WorkItemType.FEATURE, status: WorkItemStatus.REVIEW, applicationId: 'app1', assignedTo: 'Emma Watson', priority: 'HIGH' },
 ];
 
 export const MILESTONES: Milestone[] = [

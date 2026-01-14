@@ -12,7 +12,7 @@ import Wiki from './../components/Wiki';
 import Milestones from '../components/Milestones';
 import GovernanceDocuments from '../components/GovernanceDocuments';
 import Admin from '../components/Admin';
-import { Bundle, Application } from '../types';
+import { Bundle, Application, WorkItem, WorkItemType } from '../types';
 
 export default function Home() {
   return (
@@ -34,6 +34,7 @@ function HomeContent() {
   // Dynamic Data Lists
   const [bundles, setBundles] = useState<Bundle[]>([]);
   const [applications, setApplications] = useState<Application[]>([]);
+  const [epics, setEpics] = useState<WorkItem[]>([]);
 
   // Global / Contextual Filters
   const [activeBundle, setActiveBundle] = useState('all');
@@ -41,9 +42,11 @@ function HomeContent() {
   const [selSpaceId, setSelSpaceId] = useState('all');
   const [activeApp, setActiveApp] = useState('all');
   const [selMilestone, setSelMilestone] = useState('all');
+  const [activeEpic, setActiveEpic] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   
   const [wikiTrigger, setWikiTrigger] = useState<string | null>(null);
+  const [workItemTrigger, setWorkItemTrigger] = useState<string | null>(null);
 
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -60,8 +63,6 @@ function HomeContent() {
     setActiveTab(tab);
     const params = new URLSearchParams(searchParams.toString());
     params.set('tab', tab);
-    // Preserving pageId if switching back to wiki, otherwise clear it for clean state? 
-    // Usually better to keep it if we are on wiki, but let's keep it simple.
     router.push(`?${params.toString()}`);
   };
 
@@ -73,7 +74,6 @@ function HomeContent() {
           const authData = await authRes.json();
           setUser(authData.user);
           
-          // Parallel fetch of bundles and applications
           const [bRes, aRes] = await Promise.all([
             fetch('/api/bundles?active=true'),
             fetch('/api/applications?active=true')
@@ -91,6 +91,21 @@ function HomeContent() {
     }
     init();
   }, [router]);
+
+  // Fetch Epics for filters when relevant filters change
+  useEffect(() => {
+    if (activeTab === 'work-items' || activeTab === 'wiki') {
+      const params = new URLSearchParams();
+      if (activeBundle !== 'all') params.set('bundleId', activeBundle);
+      if (activeApp !== 'all') params.set('applicationId', activeApp);
+      // Epic filter doesn't apply to the filter list itself usually, but parentId=all might be useful
+      fetch(`/api/work-items?${params.toString()}`)
+        .then(r => r.json())
+        .then(items => {
+          setEpics(items.filter((i: WorkItem) => i.type === WorkItemType.EPIC));
+        });
+    }
+  }, [activeBundle, activeApp, activeTab]);
 
   const handleLogout = async () => {
     await fetch('/api/auth/logout', { method: 'POST' });
@@ -119,7 +134,19 @@ function HomeContent() {
       case 'ai-insights':
         return <AIInsights applications={applications} bundles={bundles} />;
       case 'work-items':
-        return <WorkItems applications={applications} />;
+        return (
+          <WorkItems 
+            applications={applications} 
+            bundles={bundles}
+            selBundleId={activeBundle}
+            selAppId={activeApp}
+            selMilestone={selMilestone}
+            selEpicId={activeEpic}
+            searchQuery={searchQuery}
+            externalTrigger={workItemTrigger}
+            onTriggerProcessed={() => setWorkItemTrigger(null)}
+          />
+        );
       case 'wiki':
         return (
           <Wiki 
@@ -165,11 +192,15 @@ function HomeContent() {
       setActiveVendor={setActiveVendor}
       selMilestone={selMilestone}
       setSelMilestone={setSelMilestone}
+      activeEpic={activeEpic}
+      setActiveEpic={setActiveEpic}
       searchQuery={searchQuery}
       setSearchQuery={setSearchQuery}
       bundles={bundles}
       applications={applications}
+      epics={epics}
       onCreateSpace={() => setWikiTrigger('create-space')}
+      onCreateWorkItem={() => setWorkItemTrigger('create-item')}
       userName={user.name}
       userRole={user.role}
       onLogout={handleLogout}

@@ -1,14 +1,14 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { NAV_ITEMS, VENDORS, MILESTONES } from '../constants';
-import { WikiSpace, Application, Bundle } from '../types';
+import { NAV_ITEMS } from '../constants';
+import { WikiSpace, Application, Bundle, WorkItem, WorkItemType } from '../types';
 
 interface LayoutProps {
   children: React.ReactNode;
   activeTab: string;
   setActiveTab: (tab: string) => void;
-  // Global / Wiki Filter States
+  // Global / Filter States
   selSpaceId?: string;
   setSelSpaceId?: (id: string) => void;
   activeBundle: string;
@@ -19,12 +19,15 @@ interface LayoutProps {
   setActiveVendor?: (id: string) => void;
   selMilestone?: string;
   setSelMilestone?: (m: string) => void;
+  activeEpic?: string;
+  setActiveEpic?: (id: string) => void;
   searchQuery?: string;
   setSearchQuery?: (q: string) => void;
   
   // Data lists fetched from parent
   bundles: Bundle[];
   applications: Application[];
+  epics?: WorkItem[];
   
   // Actions
   onCreateSpace?: () => void;
@@ -50,10 +53,13 @@ const Layout: React.FC<LayoutProps> = ({
   setActiveVendor,
   selMilestone = 'all',
   setSelMilestone,
+  activeEpic = 'all',
+  setActiveEpic,
   searchQuery = '',
   setSearchQuery,
   bundles = [],
   applications = [],
+  epics = [],
   onCreateSpace,
   onCreateWorkItem,
   userName = 'Alex Architect',
@@ -132,6 +138,9 @@ const Layout: React.FC<LayoutProps> = ({
             <FilterSelect label="Bundle" value={activeBundle} onChange={setActiveBundle} options={bundles.map(b => ({ id: b._id, name: b.name }))} />
             <FilterSelect label="App" value={activeApp} onChange={setActiveApp!} options={filteredApps.map(a => ({ id: a._id, name: a.name }))} />
             <FilterSelect label="Milestone" value={selMilestone} onChange={setSelMilestone!} options={[...Array(10)].map((_, i) => ({ id: `M${i+1}`, name: `M${i+1}` }))} />
+            {activeTab === 'work-items' && (
+              <FilterSelect label="Epic" value={activeEpic} onChange={setActiveEpic!} options={epics.map(e => ({ id: e._id || e.id!, name: e.title }))} />
+            )}
           </div>
           
           <div className="flex items-center gap-4 shrink-0">
