@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { WorkItem, WorkItemType, WorkItemStatus, Bundle, Application } from '../types';
 
 interface WorkItemsProps {
@@ -43,7 +43,6 @@ const WorkItems: React.FC<WorkItemsProps> = ({
       q: searchQuery,
       treeMode
     });
-    // If a specific epic is filtered, we might want to focus the tree there
     if (selEpicId !== 'all') params.set('epicId', selEpicId);
 
     try {
@@ -89,7 +88,7 @@ const WorkItems: React.FC<WorkItemsProps> = ({
     } catch (err) {
       console.error("Update failed", err);
     } finally {
-      setSaving(false);
+      setLoading(false);
     }
   };
 
@@ -122,20 +121,20 @@ const WorkItems: React.FC<WorkItemsProps> = ({
             }
             handleNodeSelect(node);
           }}
-          className={`flex items-center gap-2 px-3 py-1 rounded-xl transition-all text-left ${
+          className={`flex items-center gap-3 px-3 py-1 rounded-xl transition-all text-left ${
             isActive ? 'bg-blue-50 text-blue-700 ring-1 ring-blue-100' : 'hover:bg-slate-50 text-slate-600'
           }`}
-          style={{ marginLeft: `${depth * 16}px` }}
+          style={{ marginLeft: `${depth * 14}px` }}
         >
           <div className="w-4 flex justify-center shrink-0">
             {hasChildren ? (
-              <i className={`fas fa-caret-${isExpanded ? 'down' : 'right'} text-[10px] opacity-40`}></i>
+              <i className={`fas fa-caret-${isExpanded ? 'down' : 'right'} text-[12px] opacity-40`}></i>
             ) : (
               <div className="w-1 h-1 bg-slate-200 rounded-full"></div>
             )}
           </div>
-          <i className={`fas ${getIcon(node.type)} text-base shrink-0`}></i>
-          <span className={`text-sm font-semibold truncate ${isActive ? 'text-blue-800' : 'text-slate-700'}`}>
+          <i className={`fas ${getIcon(node.type)} text-xl shrink-0`}></i>
+          <span className={`text-base font-semibold truncate ${isActive ? 'text-blue-800' : 'text-slate-700'}`}>
             {node.label}
           </span>
           {node.status && (
@@ -158,9 +157,9 @@ const WorkItems: React.FC<WorkItemsProps> = ({
   };
 
   return (
-    <div className="flex h-[800px] bg-white rounded-[3rem] border border-slate-200 shadow-2xl overflow-hidden animate-fadeIn">
+    <div className="flex h-[850px] bg-white rounded-[3rem] border border-slate-200 shadow-2xl overflow-hidden animate-fadeIn">
       {/* Sidebar Navigation */}
-      <aside className="w-[400px] border-r border-slate-100 flex flex-col bg-slate-50/30 shrink-0">
+      <aside className="w-[450px] border-r border-slate-100 flex flex-col bg-slate-50/30 shrink-0">
         <header className="p-8 border-b border-slate-100 bg-white/50 backdrop-blur shrink-0">
           <div className="flex items-center justify-between mb-4">
              <h3 className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Work Hierarchy</h3>
@@ -183,9 +182,9 @@ const WorkItems: React.FC<WorkItemsProps> = ({
 
         <nav className="flex-1 overflow-y-auto p-4 custom-scrollbar">
           {loading ? (
-             <div className="space-y-2 p-4">
-                {[1, 2, 3, 4, 5, 6, 7].map(i => (
-                  <div key={i} className="h-8 bg-slate-100 rounded-lg animate-pulse" style={{ opacity: 1 - i * 0.1 }}></div>
+             <div className="space-y-1 p-4">
+                {[...Array(12)].map((_, i) => (
+                  <div key={i} className="h-10 bg-slate-100 rounded-lg animate-pulse" style={{ opacity: 1 - i * 0.05 }}></div>
                 ))}
              </div>
           ) : treeData.length === 0 ? (
@@ -368,6 +367,7 @@ const AssigneeSearch = ({ currentAssignee, onSelect }: { currentAssignee?: strin
     const handleClickOutside = (e: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setIsSearching(false);
+        setQuery('');
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -378,17 +378,17 @@ const AssigneeSearch = ({ currentAssignee, onSelect }: { currentAssignee?: strin
     return (
       <div 
         onClick={() => setIsSearching(true)}
-        className="flex items-center gap-3 p-2 bg-slate-50 rounded-xl border border-slate-100 cursor-pointer hover:bg-slate-100 transition-colors group"
+        className="flex items-center gap-3 p-2 bg-slate-50 rounded-xl border border-slate-100 cursor-pointer hover:bg-slate-100 transition-colors group h-10"
       >
         <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(currentAssignee || 'Unassigned')}&background=random`} className="w-6 h-6 rounded-full shrink-0" />
         <span className="text-xs font-bold text-slate-700 truncate">{currentAssignee || 'Unassigned'}</span>
-        <i className="fas fa-chevron-down text-[8px] text-slate-300 ml-auto opacity-0 group-hover:opacity-100 transition-opacity"></i>
+        <i className="fas fa-search text-[10px] text-slate-300 ml-auto opacity-0 group-hover:opacity-100 transition-opacity"></i>
       </div>
     );
   }
 
   return (
-    <div ref={containerRef} className="relative">
+    <div ref={containerRef} className="relative h-10">
       <div className="flex items-center gap-2 p-1.5 bg-white rounded-xl border-2 border-blue-500 shadow-lg shadow-blue-500/10">
         <i className="fas fa-search text-[10px] text-blue-500 ml-2"></i>
         <input 
@@ -396,22 +396,23 @@ const AssigneeSearch = ({ currentAssignee, onSelect }: { currentAssignee?: strin
           type="text" 
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search name/email..."
+          placeholder="Type name or email..."
           className="w-full text-xs font-bold text-slate-700 outline-none p-1"
         />
         {loading && <i className="fas fa-circle-notch fa-spin text-[10px] text-slate-300 mr-2"></i>}
       </div>
 
-      {isSearching && (query.length >= 2 || results.length > 0) && (
+      {(query.length >= 2 || results.length > 0) && (
         <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl shadow-2xl border border-slate-100 z-50 overflow-hidden animate-fadeIn">
           {results.length > 0 ? (
             <div className="max-h-60 overflow-y-auto custom-scrollbar">
               {results.map((user) => (
                 <button
-                  key={user._id}
+                  key={user._id || user.id}
                   onClick={() => {
                     onSelect(user.name);
                     setIsSearching(false);
+                    setQuery('');
                   }}
                   className="w-full text-left p-3 hover:bg-slate-50 flex items-center gap-3 transition-colors border-b border-slate-50 last:border-0"
                 >
@@ -424,7 +425,7 @@ const AssigneeSearch = ({ currentAssignee, onSelect }: { currentAssignee?: strin
               ))}
             </div>
           ) : !loading && query.length >= 2 && (
-            <div className="p-6 text-center text-slate-400 italic text-[10px]">No users found matching query.</div>
+            <div className="p-6 text-center text-slate-400 italic text-[10px]">No users found.</div>
           )}
         </div>
       )}
@@ -456,11 +457,6 @@ const CreateWorkItemModal: React.FC<CreateWorkItemModalProps> = ({ bundles, appl
   const [potentialParents, setPotentialParents] = useState<WorkItem[]>([]);
 
   useEffect(() => {
-    // Fetch potential parents based on type
-    // Epic -> None
-    // Feature -> Epic
-    // Story -> Feature or Epic
-    // Task/Bug -> Story or Feature
     let parentType = '';
     if (formData.type === WorkItemType.FEATURE) parentType = WorkItemType.EPIC;
     else if (formData.type === WorkItemType.STORY) parentType = WorkItemType.FEATURE;
@@ -553,7 +549,7 @@ const CreateWorkItemModal: React.FC<CreateWorkItemModalProps> = ({ bundles, appl
                 value={formData.description}
                 onChange={(e) => setFormData({...formData, description: e.target.value})}
                 rows={4}
-                placeholder="Detailed acceptance criteria or implementation notes..."
+                placeholder="Detailed acceptance criteria..."
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500/10 transition-all resize-none"
               />
            </DetailField>
