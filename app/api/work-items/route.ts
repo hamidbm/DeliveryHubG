@@ -13,6 +13,7 @@ export async function GET(request: Request) {
     applicationId: searchParams.get('applicationId'),
     milestoneId: searchParams.get('milestoneId'),
     parentId: searchParams.get('parentId'),
+    epicId: searchParams.get('epicId'),
     q: searchParams.get('q')
   };
   const items = await fetchWorkItems(filters);

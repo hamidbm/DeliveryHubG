@@ -8,7 +8,6 @@ export const getDb = async () => {
   return client.db('deliveryhub');
 };
 
-// Fix: Implementation of seedDatabase to initialize registry with base content.
 export const seedDatabase = async (applications: any[], workItems: any[], wikiPages: any[]) => {
   try {
     const db = await getDb();
@@ -22,7 +21,6 @@ export const seedDatabase = async (applications: any[], workItems: any[], wikiPa
   }
 };
 
-// Fix: Wiki service implementations including history and comments.
 export const fetchWikiPages = async () => {
   const db = await getDb();
   return await db.collection('wikipages').find({}).toArray();
@@ -100,7 +98,6 @@ export const saveWikiComment = async (commentData: any) => {
   );
 };
 
-// Fix: Bundle service implementations.
 export const fetchBundles = async (activeOnly: boolean = false) => {
   const db = await getDb();
   const query = activeOnly ? { isActive: true } : {};
@@ -118,7 +115,6 @@ export const saveBundle = async (bundle: Partial<Bundle>, user?: any) => {
   }
 };
 
-// Fix: Wiki Theme service implementations.
 export const fetchWikiThemes = async (activeOnly: boolean = false) => {
   const db = await getDb();
   const query = activeOnly ? { isActive: true } : {};
@@ -140,11 +136,10 @@ export const deleteWikiTheme = async (id: string) => {
   return await db.collection('themes').deleteOne({ _id: new ObjectId(id) });
 };
 
-// Fix: Application service implementations.
 export const fetchApplications = async (bundleId?: string, activeOnly: boolean = false) => {
   const db = await getDb();
   const query: any = {};
-  if (bundleId) query.bundleId = bundleId;
+  if (bundleId && bundleId !== 'all') query.bundleId = bundleId;
   if (activeOnly) query.isActive = true;
   return await db.collection('applications').find(query).toArray();
 };
@@ -160,7 +155,6 @@ export const saveApplication = async (app: Partial<Application>, user?: any) => 
   }
 };
 
-// Fix: Taxonomy service implementations.
 export const fetchTaxonomyCategories = async (activeOnly: boolean = false) => {
   const db = await getDb();
   const query = activeOnly ? { isActive: true } : {};
@@ -195,22 +189,46 @@ export const saveTaxonomyDocumentType = async (type: Partial<TaxonomyDocumentTyp
   }
 };
 
-// Fix: WorkItem service implementations.
 export const fetchWorkItems = async (filters: any) => {
   const db = await getDb();
   const query: any = {};
+  
   if (filters.bundleId && filters.bundleId !== 'all') query.bundleId = filters.bundleId;
   if (filters.applicationId && filters.applicationId !== 'all') query.applicationId = filters.applicationId;
-  if (filters.milestoneId && filters.milestoneId !== 'all') query.milestoneIds = filters.milestoneId;
-  if (filters.parentId && filters.parentId !== 'all') query.parentId = filters.parentId;
-  if (filters.q) query.title = { $regex: filters.q, $options: 'i' };
   
-  return await db.collection('workitems').find(query).sort({ rank: 1 }).toArray();
+  // Resilient Milestone filtering (checks plural and singular, case-insensitive)
+  if (filters.milestoneId && filters.milestoneId !== 'all') {
+    const msRegex = new RegExp(`^${filters.milestoneId}$`, 'i');
+    query.$or = [
+      { milestoneIds: msRegex },
+      { milestoneId: msRegex }
+    ];
+  }
+
+  // Handle both parentId and epicId (aliased in frontend)
+  const pId = filters.parentId || filters.epicId;
+  if (pId && pId !== 'all') {
+    query.parentId = pId;
+  }
+  
+  if (filters.q) {
+    query.$or = [
+      ...(query.$or || []),
+      { title: { $regex: filters.q, $options: 'i' } },
+      { key: { $regex: filters.q, $options: 'i' } }
+    ];
+  }
+  
+  return await db.collection('workitems').find(query).sort({ rank: 1, createdAt: -1 }).toArray();
 };
 
 export const fetchWorkItemById = async (id: string) => {
   const db = await getDb();
-  return await db.collection('workitems').findOne({ _id: new ObjectId(id) });
+  try {
+    return await db.collection('workitems').findOne({ _id: new ObjectId(id) });
+  } catch {
+    return await db.collection('workitems').findOne({ id: id });
+  }
 };
 
 export const saveWorkItem = async (item: Partial<WorkItem>, user?: any) => {
@@ -234,20 +252,47 @@ export const updateWorkItemStatus = async (id: string, toStatus: string, newRank
 
 export const fetchWorkItemTree = async (filters: any) => {
   const items = await fetchWorkItems(filters);
+  
   const buildTree = (parentId: string | null = null): any[] => {
     return items
-      .filter(item => (item.parentId || null) === parentId)
+      .filter(item => {
+        const itemPid = item.parentId || null;
+        // Match null, undefined, or empty string as root
+        if (parentId === null) {
+          return itemPid === null || itemPid === "";
+        }
+        return itemPid === parentId;
+      })
       .map(item => ({
-        id: item._id,
+        id: item._id?.toString() || item.id,
         label: item.title,
         type: item.type,
         status: item.status,
-        workItemId: item._id,
+        workItemId: item._id?.toString() || item.id,
         nodeType: 'WORK_ITEM',
-        children: buildTree(item._id!.toString())
+        children: buildTree(item._id?.toString() || item.id)
       }));
   };
-  return buildTree(null);
+  
+  // If we are filtering by a specific Epic/Parent, we start the tree from there
+  const startPid = (filters.parentId && filters.parentId !== 'all') ? filters.parentId : null;
+  const tree = buildTree(startPid);
+  
+  // Fallback: If filtering by criteria (like bundle) makes root nodes invisible, 
+  // show matching items as a flat list if tree is empty
+  if (tree.length === 0 && items.length > 0 && (filters.bundleId !== 'all' || filters.applicationId !== 'all')) {
+    return items.map(item => ({
+      id: item._id?.toString() || item.id,
+      label: item.title,
+      type: item.type,
+      status: item.status,
+      workItemId: item._id?.toString() || item.id,
+      nodeType: 'WORK_ITEM',
+      children: []
+    }));
+  }
+
+  return tree;
 };
 
 export const fetchWorkItemsBoard = async (filters: any) => {
@@ -261,7 +306,6 @@ export const fetchWorkItemsBoard = async (filters: any) => {
   return { columns };
 };
 
-// Fix: Search users service implementation.
 export const searchUsers = async (query: string) => {
   const db = await getDb();
   return await db.collection('users').find({
@@ -272,7 +316,6 @@ export const searchUsers = async (query: string) => {
   }).limit(10).toArray();
 };
 
-// Fix: Sprint service implementations.
 export const fetchSprints = async (filters: any) => {
   const db = await getDb();
   const query: any = {};
@@ -291,7 +334,6 @@ export const saveSprint = async (sprint: Partial<Sprint>) => {
   }
 };
 
-// Milestones
 export const fetchMilestones = async (filters: any) => {
   const db = await getDb();
   const query: any = {};
