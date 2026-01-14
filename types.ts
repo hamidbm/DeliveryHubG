@@ -11,8 +11,9 @@ export enum Role {
 
 export enum MilestoneStatus {
   PLANNED = 'Planned',
-  IN_PROGRESS = 'In Progress',
-  COMPLETED = 'Completed',
+  ACTIVE = 'Active',
+  RELEASED = 'Released',
+  CANCELLED = 'Cancelled',
   DELAYED = 'Delayed'
 }
 
@@ -56,7 +57,7 @@ export interface WorkItemComment {
 
 export interface WorkItemLink {
   type: 'BLOCKS' | 'IS_BLOCKED_BY' | 'RELATES_TO' | 'DUPLICATES' | 'IS_DUPLICATED_BY';
-  targetId: string; // ID of the target work item
+  targetId: string;
   targetKey?: string;
   targetTitle?: string;
 }
@@ -64,7 +65,7 @@ export interface WorkItemLink {
 export interface WorkItemActivity {
   _id?: string;
   user: string;
-  action: string; // e.g., 'CHANGED_STATUS', 'ASSIGNED_TO', 'UPDATED_FIELD'
+  action: string;
   field?: string;
   from?: any;
   to?: any;
@@ -106,7 +107,7 @@ export interface WorkItem {
   applicationId?: string;
   milestoneIds?: string[];
   parentId?: string;
-  sprintId?: string; // Associated Sprint
+  sprintId?: string;
   assignedTo?: string;
   createdBy?: string;
   updatedBy?: string;
@@ -115,9 +116,9 @@ export interface WorkItem {
   links?: WorkItemLink[];
   rank?: number;
   storyPoints?: number;
-  timeEstimate?: number; // In hours
-  timeLogged?: number; // In hours
-  watchers?: string[]; // Array of user names or IDs
+  timeEstimate?: number;
+  timeLogged?: number;
+  watchers?: string[];
   labels?: string[];
   comments?: WorkItemComment[];
   activity?: WorkItemActivity[];
@@ -145,11 +146,8 @@ export interface TaxonomyDocumentType {
   icon?: string;
   isActive: boolean;
   sortOrder: number;
-  
-  // Enterprise Metadata
   audience?: ('engineering' | 'security' | 'operations' | 'leadership' | 'program_management' | 'product' | 'finance' | 'audit')[];
   lifecyclePhases?: ('strategy' | 'plan' | 'design' | 'build' | 'test' | 'release' | 'operate' | 'improve' | 'retire')[];
-  
   defaultTemplate?: string;
   requiredMetadata?: {
     requiresBundle: boolean;
@@ -205,11 +203,16 @@ export interface Milestone {
   id?: string;
   name: string;
   applicationId?: string;
+  bundleId?: string;
   vendorCompany?: string;
   status: MilestoneStatus;
+  goal?: string;
   dueDate: string;
-  startDate?: string;
-  endDate?: string;
+  startDate: string;
+  endDate: string;
+  targetCapacity?: number;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface WikiPage {

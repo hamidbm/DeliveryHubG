@@ -23,10 +23,12 @@ export const WORK_ITEMS: WorkItem[] = [
   { id: 'wi4', key: 'WI-4', bundleId: 'b1', title: 'Azure Load Balancer Config', type: WorkItemType.FEATURE, status: WorkItemStatus.REVIEW, applicationId: 'app1', assignedTo: 'Emma Watson', priority: 'HIGH' },
 ];
 
+// Fix: Added required 'startDate' and 'endDate' properties to Milestone entries.
+// Fix: Replaced invalid 'COMPLETED' with 'RELEASED' and 'IN_PROGRESS' with 'ACTIVE' to match MilestoneStatus enum.
 export const MILESTONES: Milestone[] = [
-  { id: 'm1', name: 'Environment Setup', applicationId: 'app2', vendorCompany: 'Wipro', status: MilestoneStatus.COMPLETED, dueDate: '2024-11-01' },
-  { id: 'm2', name: 'MVP Launch', applicationId: 'app2', vendorCompany: 'Wipro', status: MilestoneStatus.IN_PROGRESS, dueDate: '2025-02-15' },
-  { id: 'm3', name: 'Production Cutover', applicationId: 'app1', vendorCompany: 'Infosys', status: MilestoneStatus.PLANNED, dueDate: '2025-05-20' },
+  { id: 'm1', name: 'Environment Setup', applicationId: 'app2', vendorCompany: 'Wipro', status: MilestoneStatus.RELEASED, dueDate: '2024-11-01', startDate: '2024-10-01', endDate: '2024-11-01' },
+  { id: 'm2', name: 'MVP Launch', applicationId: 'app2', vendorCompany: 'Wipro', status: MilestoneStatus.ACTIVE, dueDate: '2025-02-15', startDate: '2024-11-15', endDate: '2025-02-15' },
+  { id: 'm3', name: 'Production Cutover', applicationId: 'app1', vendorCompany: 'Infosys', status: MilestoneStatus.PLANNED, dueDate: '2025-05-20', startDate: '2025-03-01', endDate: '2025-05-20' },
 ];
 
 export const WIKI_PAGES: WikiPage[] = [
