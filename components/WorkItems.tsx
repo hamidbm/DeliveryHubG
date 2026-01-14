@@ -6,6 +6,7 @@ import WorkItemsTreeView from './WorkItemsTreeView';
 import WorkItemsBoardView from './WorkItemsBoardView';
 import WorkItemsListView from './WorkItemsListView';
 import WorkItemsAnalyticsView from './WorkItemsAnalyticsView';
+import WorkItemsBacklogView from './WorkItemsBacklogView';
 
 interface WorkItemsProps {
   applications: Application[];
@@ -34,19 +35,26 @@ const WorkItems: React.FC<WorkItemsProps> = (props) => {
     <div className="flex flex-col gap-6">
       {/* View Switcher Header */}
       <div className="flex items-center justify-between bg-white px-8 py-4 rounded-[2rem] border border-slate-200 shadow-sm">
-        <div className="flex items-center gap-6">
+        <div className="flex items-center gap-6 overflow-x-auto no-scrollbar">
           <div>
             <h2 className="text-xl font-black text-slate-800 tracking-tight">Work Delivery Hub</h2>
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Enterprise Execution Plane</p>
           </div>
-          <div className="h-8 w-[1px] bg-slate-100"></div>
-          <div className="flex bg-slate-100 p-1 rounded-xl">
+          <div className="h-8 w-[1px] bg-slate-100 hidden md:block"></div>
+          <div className="flex bg-slate-100 p-1 rounded-xl shrink-0">
             <button 
               onClick={() => setView('tree')}
               className={`px-4 py-2 text-[10px] font-black uppercase rounded-lg transition-all flex items-center gap-2 ${activeView === 'tree' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400'}`}
             >
               <i className="fas fa-sitemap"></i>
               Hierarchy
+            </button>
+            <button 
+              onClick={() => setView('backlog')}
+              className={`px-4 py-2 text-[10px] font-black uppercase rounded-lg transition-all flex items-center gap-2 ${activeView === 'backlog' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400'}`}
+            >
+              <i className="fas fa-layer-group"></i>
+              Backlog
             </button>
             <button 
               onClick={() => setView('board')}
@@ -85,6 +93,8 @@ const WorkItems: React.FC<WorkItemsProps> = (props) => {
           <WorkItemsListView {...props} />
         ) : activeView === 'analytics' ? (
           <WorkItemsAnalyticsView {...props} />
+        ) : activeView === 'backlog' ? (
+          <WorkItemsBacklogView {...props} />
         ) : (
           <WorkItemsTreeView {...props} />
         )}

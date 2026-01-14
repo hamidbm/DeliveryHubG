@@ -101,6 +101,9 @@ export interface WorkItem {
   links?: WorkItemLink[];
   rank?: number;
   storyPoints?: number;
+  timeEstimate?: number; // In hours
+  timeLogged?: number; // In hours
+  watchers?: string[]; // Array of user names or IDs
   labels?: string[];
   comments?: WorkItemComment[];
   activity?: WorkItemActivity[];

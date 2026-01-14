@@ -136,6 +136,15 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
     setLinkSearch('');
   };
 
+  const toggleWatching = async () => {
+    const userName = 'Current User'; // Session user
+    const watchers = item.watchers || [];
+    const nextWatchers = watchers.includes(userName) 
+      ? watchers.filter(w => w !== userName)
+      : [...watchers, userName];
+    await handleUpdateItem({ watchers: nextWatchers });
+  };
+
   const simulateFileUpload = async () => {
     const newAttach: WorkItemAttachment = {
       name: `artifact_evidence_${Math.floor(Math.random()*1000)}.pdf`,
@@ -158,6 +167,8 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
     }
   };
 
+  const isWatching = item.watchers?.includes('Current User');
+
   return (
     <div className="h-full flex flex-col bg-white overflow-hidden relative">
       <header className="px-10 py-8 border-b border-slate-100 flex items-center justify-between shrink-0 bg-slate-50/20">
@@ -178,8 +189,17 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
             <h3 className="text-xl font-black text-slate-800 tracking-tight leading-tight">{item.title}</h3>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-           {saving && <i className="fas fa-circle-notch fa-spin text-blue-500 text-xs mr-2"></i>}
+        <div className="flex items-center gap-3">
+           <button 
+            onClick={toggleWatching}
+            className={`w-10 h-10 rounded-xl border flex items-center justify-center transition-all ${
+              isWatching ? 'bg-amber-50 border-amber-200 text-amber-500 shadow-inner' : 'bg-white border-slate-200 text-slate-300 hover:text-amber-400'
+            }`}
+            title={isWatching ? "Stop watching" : "Watch item"}
+           >
+              <i className={`fas fa-eye ${isWatching ? 'animate-pulse' : ''}`}></i>
+           </button>
+           <div className="h-8 w-[1px] bg-slate-200"></div>
            <span className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest ${
              item.type === WorkItemType.EPIC ? 'bg-purple-50 text-purple-700' : 'bg-blue-50 text-blue-700'
            }`}>
@@ -238,7 +258,7 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
                     onSelect={(name) => handleUpdateItem({ assignedTo: name })} 
                   />
                </DetailField>
-               <DetailField label="Estimation (Pts)">
+               <DetailField label="Estimation (Story Pts)">
                   <input 
                     type="number"
                     value={item.storyPoints || 0}
@@ -247,6 +267,52 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
                     placeholder="0"
                   />
                </DetailField>
+            </div>
+
+            {/* Time Tracking Section */}
+            <div className="p-8 bg-slate-900 rounded-[2rem] text-white space-y-6 shadow-2xl">
+               <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                 <i className="fas fa-clock text-blue-400"></i>
+                 Delivery Time Tracking (Hours)
+               </h4>
+               <div className="grid grid-cols-2 gap-8">
+                  <div className="space-y-2">
+                    <label className="text-[9px] font-bold text-slate-500 uppercase tracking-tighter ml-1">Estimated Effort</label>
+                    <input 
+                      type="number"
+                      value={item.timeEstimate || 0}
+                      onChange={(e) => handleUpdateItem({ timeEstimate: parseFloat(e.target.value) || 0 })}
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold text-white outline-none focus:ring-2 focus:ring-blue-500/30"
+                      placeholder="0.0"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[9px] font-bold text-slate-500 uppercase tracking-tighter ml-1">Logged Actuals</label>
+                    <input 
+                      type="number"
+                      value={item.timeLogged || 0}
+                      onChange={(e) => handleUpdateItem({ timeLogged: parseFloat(e.target.value) || 0 })}
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold text-emerald-400 outline-none focus:ring-2 focus:ring-emerald-500/30"
+                      placeholder="0.0"
+                    />
+                  </div>
+               </div>
+               {item.timeEstimate ? (
+                 <div className="pt-2">
+                    <div className="flex justify-between text-[10px] font-black uppercase tracking-widest mb-2">
+                       <span className="text-slate-500">Utilization</span>
+                       <span className={item.timeLogged! > item.timeEstimate! ? 'text-red-400' : 'text-emerald-400'}>
+                         {Math.round((item.timeLogged! / item.timeEstimate!) * 100)}%
+                       </span>
+                    </div>
+                    <div className="h-2 bg-white/5 rounded-full overflow-hidden">
+                       <div 
+                        className={`h-full transition-all duration-1000 ${item.timeLogged! > item.timeEstimate! ? 'bg-red-500' : 'bg-blue-500'}`} 
+                        style={{ width: `${Math.min((item.timeLogged! / item.timeEstimate!) * 100, 100)}%` }}
+                       />
+                    </div>
+                 </div>
+               ) : null}
             </div>
 
             {/* Labels UI */}
@@ -277,6 +343,22 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
                   {item.description || 'No execution blueprints provided.'}
                </div>
             </DetailField>
+
+            {/* Watchers UI */}
+            <div className="pt-6 border-t border-slate-100">
+               <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Interested Stakeholders ({item.watchers?.length || 0})</h4>
+               <div className="flex flex-wrap gap-3">
+                  {item.watchers?.map(watcher => (
+                    <div key={watcher} className="flex items-center gap-2 bg-slate-50 border border-slate-100 px-3 py-1.5 rounded-xl shadow-sm">
+                       <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(watcher)}&background=random&size=24`} className="w-4 h-4 rounded-full" />
+                       <span className="text-[10px] font-bold text-slate-700">{watcher}</span>
+                    </div>
+                  ))}
+                  {(!item.watchers || item.watchers.length === 0) && (
+                    <p className="text-[10px] font-medium text-slate-300 italic">No active watchers established.</p>
+                  )}
+               </div>
+            </div>
 
             {/* Subtasks UI */}
             <div className="pt-10 border-t border-slate-50 space-y-6">
