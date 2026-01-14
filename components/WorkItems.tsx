@@ -122,27 +122,27 @@ const WorkItems: React.FC<WorkItemsProps> = ({
             }
             handleNodeSelect(node);
           }}
-          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all text-left ${
-            isActive ? 'bg-blue-50 text-blue-700 ring-1 ring-blue-100' : 'hover:bg-slate-50 text-slate-600'
+          className={`flex items-center gap-4 px-4 py-4 rounded-2xl transition-all text-left ${
+            isActive ? 'bg-blue-50 text-blue-700 ring-2 ring-blue-100' : 'hover:bg-slate-50 text-slate-600'
           }`}
-          style={{ marginLeft: `${depth * 16}px` }}
+          style={{ marginLeft: `${depth * 28}px` }}
         >
-          <div className="w-4 flex justify-center">
+          <div className="w-6 flex justify-center shrink-0">
             {hasChildren ? (
-              <i className={`fas fa-caret-${isExpanded ? 'down' : 'right'} text-[10px] opacity-40`}></i>
+              <i className={`fas fa-caret-${isExpanded ? 'down' : 'right'} text-xl opacity-40`}></i>
             ) : (
-              <div className="w-1 h-1 bg-slate-200 rounded-full"></div>
+              <div className="w-2 h-2 bg-slate-200 rounded-full"></div>
             )}
           </div>
-          <i className={`fas ${getIcon(node.type)} text-[10px]`}></i>
-          <span className={`text-[11px] font-medium truncate ${isActive ? 'font-bold' : ''}`}>
+          <i className={`fas ${getIcon(node.type)} text-2xl shrink-0`}></i>
+          <span className={`text-xl font-semibold truncate ${isActive ? 'text-blue-800' : 'text-slate-700'}`}>
             {node.label}
           </span>
           {node.status && (
-             <span className={`ml-auto text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-tighter ${
-               node.status === WorkItemStatus.DONE ? 'bg-emerald-100 text-emerald-700' :
-               node.status === WorkItemStatus.IN_PROGRESS ? 'bg-blue-100 text-blue-700' :
-               'bg-slate-100 text-slate-400'
+             <span className={`ml-auto text-[12px] font-black px-3 py-1 rounded-lg uppercase tracking-wider border ${
+               node.status === WorkItemStatus.DONE ? 'bg-emerald-100 text-emerald-700 border-emerald-200' :
+               node.status === WorkItemStatus.IN_PROGRESS ? 'bg-blue-100 text-blue-700 border-blue-200' :
+               'bg-slate-100 text-slate-500 border-slate-200'
              }`}>
                {node.status}
              </span>
@@ -160,20 +160,20 @@ const WorkItems: React.FC<WorkItemsProps> = ({
   return (
     <div className="flex h-[800px] bg-white rounded-[3rem] border border-slate-200 shadow-2xl overflow-hidden animate-fadeIn">
       {/* Sidebar Navigation */}
-      <aside className="w-96 border-r border-slate-100 flex flex-col bg-slate-50/30 shrink-0">
+      <aside className="w-[500px] border-r border-slate-100 flex flex-col bg-slate-50/30 shrink-0">
         <header className="p-8 border-b border-slate-100 bg-white/50 backdrop-blur shrink-0">
           <div className="flex items-center justify-between mb-4">
-             <h3 className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Work Hierarchy</h3>
-             <div className="flex bg-slate-200 p-0.5 rounded-lg">
+             <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Work Hierarchy</h3>
+             <div className="flex bg-slate-200 p-0.5 rounded-xl">
                 <button 
                   onClick={() => setTreeMode('hierarchy')}
-                  className={`px-2 py-1 text-[8px] font-black uppercase rounded ${treeMode === 'hierarchy' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400'}`}
+                  className={`px-4 py-2 text-[10px] font-black uppercase rounded-lg transition-all ${treeMode === 'hierarchy' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400'}`}
                 >
                   Delivery
                 </button>
                 <button 
                   onClick={() => setTreeMode('milestone')}
-                  className={`px-2 py-1 text-[8px] font-black uppercase rounded ${treeMode === 'milestone' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400'}`}
+                  className={`px-4 py-2 text-[10px] font-black uppercase rounded-lg transition-all ${treeMode === 'milestone' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400'}`}
                 >
                   Milestone
                 </button>
@@ -181,20 +181,22 @@ const WorkItems: React.FC<WorkItemsProps> = ({
           </div>
         </header>
 
-        <nav className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+        <nav className="flex-1 overflow-y-auto p-6 custom-scrollbar">
           {loading ? (
-             <div className="space-y-2 p-4">
+             <div className="space-y-4 p-4">
                 {[1, 2, 3, 4, 5].map(i => (
-                  <div key={i} className="h-8 bg-slate-100 rounded-lg animate-pulse" style={{ opacity: 1 - i * 0.1 }}></div>
+                  <div key={i} className="h-16 bg-slate-100 rounded-2xl animate-pulse" style={{ opacity: 1 - i * 0.1 }}></div>
                 ))}
              </div>
           ) : treeData.length === 0 ? (
              <div className="p-10 text-center">
-                <i className="fas fa-search text-slate-200 text-3xl mb-3"></i>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-relaxed">No items match current criteria.</p>
+                <i className="fas fa-search text-slate-200 text-5xl mb-6 opacity-50"></i>
+                <p className="text-sm font-bold text-slate-400 uppercase tracking-widest leading-relaxed">No items match current criteria.</p>
              </div>
           ) : (
-            treeData.map(node => renderTreeNode(node))
+            <div className="space-y-1">
+               {treeData.map(node => renderTreeNode(node))}
+            </div>
           )}
         </nav>
       </aside>
@@ -210,7 +212,7 @@ const WorkItems: React.FC<WorkItemsProps> = ({
                      activeItem.type === WorkItemType.EPIC ? 'bg-purple-50 text-purple-700' :
                      activeItem.type === WorkItemType.BUG ? 'bg-red-50 text-red-700' : 'bg-blue-50 text-blue-700'
                    }`}>
-                      <i className={`fas ${getIcon(activeItem.type)}`}></i>
+                      <i className={`fas ${getIcon(activeItem.type).split(' ')[0]}`}></i>
                       {activeItem.type}
                    </span>
                 </div>
