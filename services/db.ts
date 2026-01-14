@@ -8,6 +8,18 @@ export const getDb = async () => {
   return client.db('deliveryhub');
 };
 
+// Users
+export const searchUsers = async (query: string) => {
+  const db = await getDb();
+  if (!query) return [];
+  return await db.collection('users').find({
+    $or: [
+      { name: { $regex: query, $options: 'i' } },
+      { email: { $regex: query, $options: 'i' } }
+    ]
+  }).project({ name: 1, email: 1, role: 1 }).limit(10).toArray();
+};
+
 // Sequences for Work Item Keys (e.g., WI-101)
 export const getNextSequence = async (name: string) => {
   const db = await getDb();
