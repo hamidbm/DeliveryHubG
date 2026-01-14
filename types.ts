@@ -80,6 +80,19 @@ export interface WorkItemAttachment {
   createdAt: string;
 }
 
+export interface Sprint {
+  _id?: string;
+  id?: string;
+  name: string;
+  startDate?: string;
+  endDate?: string;
+  goal?: string;
+  status: 'PLANNED' | 'ACTIVE' | 'CLOSED';
+  bundleId?: string;
+  applicationId?: string;
+  createdAt?: string;
+}
+
 export interface WorkItem {
   _id?: string;
   id?: string;
@@ -93,6 +106,7 @@ export interface WorkItem {
   applicationId?: string;
   milestoneIds?: string[];
   parentId?: string;
+  sprintId?: string; // Associated Sprint
   assignedTo?: string;
   createdBy?: string;
   updatedBy?: string;

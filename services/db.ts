@@ -1,7 +1,7 @@
 
 import clientPromise from '../lib/mongodb';
 import { ObjectId } from 'mongodb';
-import { WikiPage, WikiSpace, WikiTheme, Bundle, Application, TaxonomyCategory, TaxonomyDocumentType, WorkItem, WorkItemType, WorkItemStatus, WorkItemActivity } from '../types';
+import { WikiPage, WikiSpace, WikiTheme, Bundle, Application, TaxonomyCategory, TaxonomyDocumentType, WorkItem, WorkItemType, WorkItemStatus, WorkItemActivity, Sprint } from '../types';
 
 export const getDb = async () => {
   const client = await clientPromise;
@@ -20,7 +20,7 @@ export const searchUsers = async (query: string) => {
   }).project({ name: 1, email: 1, role: 1 }).limit(10).toArray();
 };
 
-// Sequences for Work Item Keys (e.g., WI-101)
+// Sequences for Work Item Keys
 export const getNextSequence = async (name: string) => {
   const db = await getDb();
   const res = await db.collection('counters').findOneAndUpdate(
@@ -40,6 +40,9 @@ export const fetchWorkItems = async (filters: any) => {
   if (filters.milestoneId && filters.milestoneId !== 'all') query.milestoneIds = filters.milestoneId;
   if (filters.parentId && filters.parentId !== 'all') query.parentId = filters.parentId;
   if (filters.epicId && filters.epicId !== 'all') query.parentId = filters.epicId;
+  if (filters.sprintId && filters.sprintId !== 'all') query.sprintId = filters.sprintId;
+  if (filters.backlog === 'true') query.sprintId = { $exists: false };
+  
   if (filters.q) {
     query.$or = [
       { title: { $regex: filters.q, $options: 'i' } },
@@ -94,8 +97,7 @@ export const saveWorkItem = async (item: Partial<WorkItem>, user?: any) => {
     const existing = await db.collection('work_items').findOne({ _id: new ObjectId(_id) });
     const activities: Partial<WorkItemActivity>[] = [];
 
-    // Diffing for activity log
-    const fieldsToTrack = ['status', 'priority', 'assignedTo', 'title', 'parentId', 'storyPoints'];
+    const fieldsToTrack = ['status', 'priority', 'assignedTo', 'title', 'parentId', 'storyPoints', 'sprintId'];
     fieldsToTrack.forEach(field => {
       if (data[field as keyof typeof data] !== undefined && data[field as keyof typeof data] !== existing?.[field]) {
         activities.push({
@@ -144,28 +146,12 @@ export const saveWorkItem = async (item: Partial<WorkItem>, user?: any) => {
   }
 };
 
-const ALLOWED_TRANSITIONS: Record<WorkItemStatus, WorkItemStatus[]> = {
-  [WorkItemStatus.TODO]: [WorkItemStatus.IN_PROGRESS, WorkItemStatus.BLOCKED],
-  [WorkItemStatus.IN_PROGRESS]: [WorkItemStatus.REVIEW, WorkItemStatus.BLOCKED, WorkItemStatus.TODO],
-  [WorkItemStatus.REVIEW]: [WorkItemStatus.DONE, WorkItemStatus.IN_PROGRESS, WorkItemStatus.BLOCKED],
-  [WorkItemStatus.DONE]: [WorkItemStatus.TODO, WorkItemStatus.IN_PROGRESS],
-  [WorkItemStatus.BLOCKED]: [WorkItemStatus.TODO, WorkItemStatus.IN_PROGRESS, WorkItemStatus.REVIEW]
-};
-
 export const updateWorkItemStatus = async (id: string, toStatus: WorkItemStatus, newRank: number, user?: any) => {
   const db = await getDb();
   const now = new Date().toISOString();
   const existing = await db.collection('work_items').findOne({ _id: new ObjectId(id) });
   
   if (!existing) throw new Error("Item not found");
-
-  // Validate workflow if not the same status (reordering)
-  if (existing.status !== toStatus) {
-    const allowed = ALLOWED_TRANSITIONS[existing.status as WorkItemStatus] || [];
-    if (!allowed.includes(toStatus)) {
-      throw new Error(`Invalid transition: ${existing.status} to ${toStatus}`);
-    }
-  }
 
   const activity = {
     user: user?.name || 'System',
@@ -192,6 +178,33 @@ export const updateWorkItemStatus = async (id: string, toStatus: WorkItemStatus,
 export const fetchWorkItemById = async (id: string) => {
   const db = await getDb();
   return await db.collection('work_items').findOne({ _id: new ObjectId(id) });
+};
+
+// Sprints
+export const fetchSprints = async (filters: any) => {
+  const db = await getDb();
+  const query: any = {};
+  if (filters.bundleId && filters.bundleId !== 'all') query.bundleId = filters.bundleId;
+  if (filters.applicationId && filters.applicationId !== 'all') query.applicationId = filters.applicationId;
+  if (filters.status) query.status = filters.status;
+  
+  return await db.collection('sprints').find(query).sort({ createdAt: -1 }).toArray();
+};
+
+export const saveSprint = async (sprint: Partial<Sprint>) => {
+  const db = await getDb();
+  const { _id, ...data } = sprint;
+  if (_id) {
+    return await db.collection('sprints').updateOne(
+      { _id: new ObjectId(_id) },
+      { $set: data }
+    );
+  } else {
+    return await db.collection('sprints').insertOne({
+      ...data,
+      createdAt: new Date().toISOString()
+    });
+  }
 };
 
 // Taxonomy - Categories

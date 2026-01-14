@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { WorkItem, WorkItemType, WorkItemStatus, Bundle, Application } from '../types';
 import WorkItemDetails from './WorkItemDetails';
 import CreateWorkItemModal from './CreateWorkItemModal';
@@ -16,6 +16,9 @@ interface WorkItemsListViewProps {
   onTriggerProcessed?: () => void;
 }
 
+type SortKey = 'key' | 'title' | 'status' | 'assignedTo' | 'updatedAt';
+type SortDirection = 'asc' | 'desc';
+
 const WorkItemsListView: React.FC<WorkItemsListViewProps> = ({ 
   applications, bundles, selBundleId, selAppId, selMilestone, selEpicId, searchQuery, externalTrigger, onTriggerProcessed 
 }) => {
@@ -24,6 +27,10 @@ const WorkItemsListView: React.FC<WorkItemsListViewProps> = ({
   const [loading, setLoading] = useState(false);
   const [activeItem, setActiveItem] = useState<WorkItem | null>(null);
   const [isCreating, setIsCreating] = useState(false);
+  const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection } | null>({
+    key: 'updatedAt',
+    direction: 'desc'
+  });
 
   useEffect(() => {
     if (externalTrigger === 'create-item') {
@@ -57,6 +64,37 @@ const WorkItemsListView: React.FC<WorkItemsListViewProps> = ({
     fetchItems();
   }, [selBundleId, selAppId, selMilestone, selEpicId, searchQuery]);
 
+  const sortedItems = useMemo(() => {
+    if (!sortConfig) return items;
+
+    return [...items].sort((a, b) => {
+      let aVal: any = a[sortConfig.key] || '';
+      let bVal: any = b[sortConfig.key] || '';
+
+      // Handle special cases
+      if (sortConfig.key === 'updatedAt') {
+        aVal = a.updatedAt || a.createdAt || '';
+        bVal = b.updatedAt || b.createdAt || '';
+      }
+
+      if (aVal < bVal) {
+        return sortConfig.direction === 'asc' ? -1 : 1;
+      }
+      if (aVal > bVal) {
+        return sortConfig.direction === 'asc' ? 1 : -1;
+      }
+      return 0;
+    });
+  }, [items, sortConfig]);
+
+  const handleSort = (key: SortKey) => {
+    let direction: SortDirection = 'asc';
+    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    }
+    setSortConfig({ key, direction });
+  };
+
   const toggleSelectAll = () => {
     if (selectedIds.size === items.length) {
       setSelectedIds(new Set());
@@ -83,6 +121,24 @@ const WorkItemsListView: React.FC<WorkItemsListViewProps> = ({
     }
   };
 
+  const formatDate = (dateStr?: string) => {
+    if (!dateStr) return '-';
+    return new Date(dateStr).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    });
+  };
+
+  const SortIndicator = ({ columnKey }: { columnKey: SortKey }) => {
+    if (!sortConfig || sortConfig.key !== columnKey) {
+      return <i className="fas fa-sort ml-2 opacity-20 text-[8px]"></i>;
+    }
+    return (
+      <i className={`fas ${sortConfig.direction === 'asc' ? 'fa-sort-up' : 'fa-sort-down'} ml-2 text-blue-600 text-[10px]`}></i>
+    );
+  };
+
   return (
     <div className="flex h-[800px] bg-white rounded-[3rem] border border-slate-200 shadow-2xl overflow-hidden animate-fadeIn relative">
       <div className="flex-1 flex flex-col overflow-hidden">
@@ -107,20 +163,62 @@ const WorkItemsListView: React.FC<WorkItemsListViewProps> = ({
           <table className="w-full text-left border-collapse">
             <thead className="bg-white sticky top-0 z-10 border-b border-slate-100 shadow-sm">
               <tr>
-                <th className="px-6 py-4 w-10">
+                <th className="px-6 py-4 w-10 text-center">
                    <input 
                     type="checkbox" 
                     checked={items.length > 0 && selectedIds.size === items.length} 
                     onChange={toggleSelectAll}
-                    className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                    className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
                    />
                 </th>
-                <th className="px-6 py-4 text-[9px] font-black text-slate-300 uppercase tracking-widest">Key</th>
-                <th className="px-6 py-4 text-[9px] font-black text-slate-300 uppercase tracking-widest">Title</th>
-                <th className="px-6 py-4 text-[9px] font-black text-slate-300 uppercase tracking-widest">Type</th>
-                <th className="px-6 py-4 text-[9px] font-black text-slate-300 uppercase tracking-widest">Status</th>
-                <th className="px-6 py-4 text-[9px] font-black text-slate-300 uppercase tracking-widest text-center">Estimation</th>
-                <th className="px-6 py-4 text-[9px] font-black text-slate-300 uppercase tracking-widest">Assignee</th>
+                <th 
+                  className="px-6 py-4 text-[9px] font-black text-slate-300 uppercase tracking-widest cursor-pointer hover:text-blue-600 transition-colors group"
+                  onClick={() => handleSort('key')}
+                >
+                  <div className="flex items-center">
+                    Key
+                    <SortIndicator columnKey="key" />
+                  </div>
+                </th>
+                <th 
+                  className="px-6 py-4 text-[9px] font-black text-slate-300 uppercase tracking-widest cursor-pointer hover:text-blue-600 transition-colors group"
+                  onClick={() => handleSort('title')}
+                >
+                  <div className="flex items-center">
+                    Title
+                    <SortIndicator columnKey="title" />
+                  </div>
+                </th>
+                <th className="px-6 py-4 text-[9px] font-black text-slate-300 uppercase tracking-widest">
+                  Type
+                </th>
+                <th 
+                  className="px-6 py-4 text-[9px] font-black text-slate-300 uppercase tracking-widest cursor-pointer hover:text-blue-600 transition-colors group"
+                  onClick={() => handleSort('status')}
+                >
+                  <div className="flex items-center">
+                    Status
+                    <SortIndicator columnKey="status" />
+                  </div>
+                </th>
+                <th 
+                  className="px-6 py-4 text-[9px] font-black text-slate-300 uppercase tracking-widest cursor-pointer hover:text-blue-600 transition-colors group"
+                  onClick={() => handleSort('assignedTo')}
+                >
+                  <div className="flex items-center">
+                    Assignee
+                    <SortIndicator columnKey="assignedTo" />
+                  </div>
+                </th>
+                <th 
+                  className="px-6 py-4 text-[9px] font-black text-slate-300 uppercase tracking-widest text-right cursor-pointer hover:text-blue-600 transition-colors group"
+                  onClick={() => handleSort('updatedAt')}
+                >
+                  <div className="flex items-center justify-end">
+                    Updated
+                    <SortIndicator columnKey="updatedAt" />
+                  </div>
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
@@ -130,7 +228,7 @@ const WorkItemsListView: React.FC<WorkItemsListViewProps> = ({
                     <td colSpan={7} className="px-8 py-4"><div className="h-4 bg-slate-50 rounded w-full"></div></td>
                   </tr>
                 ))
-              ) : items.map(item => {
+              ) : sortedItems.map(item => {
                 const id = (item._id || item.id) as string;
                 return (
                   <tr 
@@ -138,12 +236,12 @@ const WorkItemsListView: React.FC<WorkItemsListViewProps> = ({
                     onClick={() => setActiveItem(item)}
                     className={`hover:bg-blue-50/30 cursor-pointer transition-colors group ${activeItem?._id === id ? 'bg-blue-50/50' : ''}`}
                   >
-                    <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
+                    <td className="px-6 py-4 text-center" onClick={(e) => e.stopPropagation()}>
                       <input 
                         type="checkbox" 
                         checked={selectedIds.has(id)} 
                         onChange={() => toggleSelect(id)}
-                        className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                        className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
                       />
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -162,19 +260,20 @@ const WorkItemsListView: React.FC<WorkItemsListViewProps> = ({
                       <span className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border ${
                         item.status === WorkItemStatus.DONE ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
                         item.status === WorkItemStatus.IN_PROGRESS ? 'bg-blue-50 text-blue-600 border-blue-100' :
+                        item.status === WorkItemStatus.BLOCKED ? 'bg-red-50 text-red-600 border-red-100' :
                         'bg-slate-50 text-slate-500 border-slate-100'
                       }`}>
                         {item.status.replace('_', ' ')}
                       </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-center">
-                      <span className="text-xs font-black text-slate-400">{item.storyPoints || '-'}</span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-2">
                          <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(item.assignedTo || 'U')}&background=random&size=24`} className="w-5 h-5 rounded-full shadow-sm" />
                          <span className="text-xs font-medium text-slate-500">{item.assignedTo || 'Unassigned'}</span>
                       </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">{formatDate(item.updatedAt || item.createdAt)}</span>
                     </td>
                   </tr>
                 );

@@ -7,6 +7,7 @@ import WorkItemsBoardView from './WorkItemsBoardView';
 import WorkItemsListView from './WorkItemsListView';
 import WorkItemsAnalyticsView from './WorkItemsAnalyticsView';
 import WorkItemsBacklogView from './WorkItemsBacklogView';
+import WorkItemsRoadmapView from './WorkItemsRoadmapView';
 
 interface WorkItemsProps {
   applications: Application[];
@@ -42,41 +43,23 @@ const WorkItems: React.FC<WorkItemsProps> = (props) => {
           </div>
           <div className="h-8 w-[1px] bg-slate-100 hidden md:block"></div>
           <div className="flex bg-slate-100 p-1 rounded-xl shrink-0">
-            <button 
-              onClick={() => setView('tree')}
-              className={`px-4 py-2 text-[10px] font-black uppercase rounded-lg transition-all flex items-center gap-2 ${activeView === 'tree' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400'}`}
-            >
-              <i className="fas fa-sitemap"></i>
-              Hierarchy
-            </button>
-            <button 
-              onClick={() => setView('backlog')}
-              className={`px-4 py-2 text-[10px] font-black uppercase rounded-lg transition-all flex items-center gap-2 ${activeView === 'backlog' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400'}`}
-            >
-              <i className="fas fa-layer-group"></i>
-              Backlog
-            </button>
-            <button 
-              onClick={() => setView('board')}
-              className={`px-4 py-2 text-[10px] font-black uppercase rounded-lg transition-all flex items-center gap-2 ${activeView === 'board' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400'}`}
-            >
-              <i className="fas fa-chalkboard"></i>
-              Board
-            </button>
-            <button 
-              onClick={() => setView('list')}
-              className={`px-4 py-2 text-[10px] font-black uppercase rounded-lg transition-all flex items-center gap-2 ${activeView === 'list' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400'}`}
-            >
-              <i className="fas fa-list"></i>
-              Navigator
-            </button>
-            <button 
-              onClick={() => setView('analytics')}
-              className={`px-4 py-2 text-[10px] font-black uppercase rounded-lg transition-all flex items-center gap-2 ${activeView === 'analytics' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400'}`}
-            >
-              <i className="fas fa-chart-line"></i>
-              Analytics
-            </button>
+            {[
+              { id: 'roadmap', label: 'Roadmap', icon: 'fa-route' },
+              { id: 'tree', label: 'Hierarchy', icon: 'fa-sitemap' },
+              { id: 'backlog', label: 'Backlog', icon: 'fa-layer-group' },
+              { id: 'board', label: 'Board', icon: 'fa-chalkboard' },
+              { id: 'list', label: 'List View', icon: 'fa-list' },
+              { id: 'analytics', label: 'Analytics', icon: 'fa-chart-line' }
+            ].map(view => (
+              <button 
+                key={view.id}
+                onClick={() => setView(view.id)}
+                className={`px-4 py-2 text-[10px] font-black uppercase rounded-lg transition-all flex items-center gap-2 ${activeView === view.id ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
+              >
+                <i className={`fas ${view.icon}`}></i>
+                {view.label}
+              </button>
+            ))}
           </div>
         </div>
       </div>
@@ -87,7 +70,9 @@ const WorkItems: React.FC<WorkItemsProps> = (props) => {
           <p className="text-slate-400 font-bold text-[10px] uppercase tracking-widest animate-pulse">Initializing Hub...</p>
         </div>
       }>
-        {activeView === 'board' ? (
+        {activeView === 'roadmap' ? (
+          <WorkItemsRoadmapView {...props} />
+        ) : activeView === 'board' ? (
           <WorkItemsBoardView {...props} />
         ) : activeView === 'list' ? (
           <WorkItemsListView {...props} />
