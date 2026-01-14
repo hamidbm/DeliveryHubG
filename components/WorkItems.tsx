@@ -8,6 +8,7 @@ import WorkItemsListView from './WorkItemsListView';
 import WorkItemsAnalyticsView from './WorkItemsAnalyticsView';
 import WorkItemsBacklogView from './WorkItemsBacklogView';
 import WorkItemsRoadmapView from './WorkItemsRoadmapView';
+import WorkItemsMilestonePlanningView from './WorkItemsMilestonePlanningView';
 
 interface WorkItemsProps {
   applications: Application[];
@@ -47,6 +48,7 @@ const WorkItems: React.FC<WorkItemsProps> = (props) => {
               { id: 'roadmap', label: 'Roadmap', icon: 'fa-route' },
               { id: 'tree', label: 'Hierarchy', icon: 'fa-sitemap' },
               { id: 'backlog', label: 'Backlog', icon: 'fa-layer-group' },
+              { id: 'milestone-plan', label: 'Milestone Plan', icon: 'fa-map-signs' },
               { id: 'board', label: 'Board', icon: 'fa-chalkboard' },
               { id: 'list', label: 'List View', icon: 'fa-list' },
               { id: 'analytics', label: 'Analytics', icon: 'fa-chart-line' }
@@ -80,6 +82,8 @@ const WorkItems: React.FC<WorkItemsProps> = (props) => {
           <WorkItemsAnalyticsView {...props} />
         ) : activeView === 'backlog' ? (
           <WorkItemsBacklogView {...props} />
+        ) : activeView === 'milestone-plan' ? (
+          <WorkItemsMilestonePlanningView {...props} />
         ) : (
           <WorkItemsTreeView {...props} />
         )}
