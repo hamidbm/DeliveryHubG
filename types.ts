@@ -71,6 +71,15 @@ export interface WorkItemActivity {
   createdAt: string;
 }
 
+export interface WorkItemAttachment {
+  name: string;
+  size: number;
+  type: string;
+  url: string;
+  uploadedBy: string;
+  createdAt: string;
+}
+
 export interface WorkItem {
   _id?: string;
   id?: string;
@@ -95,6 +104,7 @@ export interface WorkItem {
   labels?: string[];
   comments?: WorkItemComment[];
   activity?: WorkItemActivity[];
+  attachments?: WorkItemAttachment[];
 }
 
 export interface TaxonomyCategory {

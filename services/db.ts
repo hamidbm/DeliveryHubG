@@ -95,7 +95,7 @@ export const saveWorkItem = async (item: Partial<WorkItem>, user?: any) => {
     const activities: Partial<WorkItemActivity>[] = [];
 
     // Diffing for activity log
-    const fieldsToTrack = ['status', 'priority', 'assignedTo', 'title', 'parentId'];
+    const fieldsToTrack = ['status', 'priority', 'assignedTo', 'title', 'parentId', 'storyPoints'];
     fieldsToTrack.forEach(field => {
       if (data[field as keyof typeof data] !== undefined && data[field as keyof typeof data] !== existing?.[field]) {
         activities.push({
@@ -138,9 +138,18 @@ export const saveWorkItem = async (item: Partial<WorkItem>, user?: any) => {
       updatedAt: now,
       createdBy: user?.name,
       updatedBy: user?.name,
-      activity: [initialActivity]
+      activity: [initialActivity],
+      attachments: []
     });
   }
+};
+
+const ALLOWED_TRANSITIONS: Record<WorkItemStatus, WorkItemStatus[]> = {
+  [WorkItemStatus.TODO]: [WorkItemStatus.IN_PROGRESS, WorkItemStatus.BLOCKED],
+  [WorkItemStatus.IN_PROGRESS]: [WorkItemStatus.REVIEW, WorkItemStatus.BLOCKED, WorkItemStatus.TODO],
+  [WorkItemStatus.REVIEW]: [WorkItemStatus.DONE, WorkItemStatus.IN_PROGRESS, WorkItemStatus.BLOCKED],
+  [WorkItemStatus.DONE]: [WorkItemStatus.TODO, WorkItemStatus.IN_PROGRESS],
+  [WorkItemStatus.BLOCKED]: [WorkItemStatus.TODO, WorkItemStatus.IN_PROGRESS, WorkItemStatus.REVIEW]
 };
 
 export const updateWorkItemStatus = async (id: string, toStatus: WorkItemStatus, newRank: number, user?: any) => {
@@ -148,6 +157,16 @@ export const updateWorkItemStatus = async (id: string, toStatus: WorkItemStatus,
   const now = new Date().toISOString();
   const existing = await db.collection('work_items').findOne({ _id: new ObjectId(id) });
   
+  if (!existing) throw new Error("Item not found");
+
+  // Validate workflow if not the same status (reordering)
+  if (existing.status !== toStatus) {
+    const allowed = ALLOWED_TRANSITIONS[existing.status as WorkItemStatus] || [];
+    if (!allowed.includes(toStatus)) {
+      throw new Error(`Invalid transition: ${existing.status} to ${toStatus}`);
+    }
+  }
+
   const activity = {
     user: user?.name || 'System',
     action: 'CHANGED_STATUS',

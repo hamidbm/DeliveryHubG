@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { WorkItem, WorkItemType, WorkItemStatus, Bundle, Application, WorkItemLink } from '../types';
+import { WorkItem, WorkItemType, WorkItemStatus, Bundle, Application, WorkItemLink, WorkItemAttachment } from '../types';
 import AssigneeSearch from './AssigneeSearch';
 
 interface WorkItemDetailsProps {
@@ -14,7 +14,7 @@ interface WorkItemDetailsProps {
 const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bundles, applications, onUpdate, onClose }) => {
   const [item, setItem] = useState<WorkItem>(initialItem);
   const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState<'details' | 'comments' | 'links' | 'activity'>('details');
+  const [activeTab, setActiveTab] = useState<'details' | 'comments' | 'links' | 'activity' | 'attachments'>('details');
   const [newComment, setNewComment] = useState('');
   
   // Linking States
@@ -88,6 +88,19 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
     setLinkSearch('');
   };
 
+  const simulateFileUpload = async () => {
+    const newAttach: WorkItemAttachment = {
+      name: `document_${Math.floor(Math.random()*1000)}.pdf`,
+      size: Math.floor(Math.random()*500000),
+      type: 'application/pdf',
+      url: '#',
+      uploadedBy: 'Current User',
+      createdAt: new Date().toISOString()
+    };
+    const updatedAttachments = [...(item.attachments || []), newAttach];
+    await handleUpdateItem({ attachments: updatedAttachments });
+  };
+
   const getIcon = (type: WorkItemType) => {
     switch (type) {
       case WorkItemType.EPIC: return 'fa-layer-group text-purple-500';
@@ -121,7 +134,7 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
 
       {/* Navigation Tabs */}
       <div className="flex px-10 border-b border-slate-100 bg-slate-50/50 overflow-x-auto no-scrollbar">
-        {['details', 'comments', 'links', 'activity'].map(tab => (
+        {['details', 'comments', 'links', 'attachments', 'activity'].map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab as any)}
@@ -161,12 +174,23 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
                </DetailField>
             </div>
 
-            <DetailField label="Assignee">
-               <AssigneeSearch 
-                 currentAssignee={item.assignedTo} 
-                 onSelect={(name) => handleUpdateItem({ assignedTo: name })} 
-               />
-            </DetailField>
+            <div className="grid grid-cols-2 gap-6">
+               <DetailField label="Assignee">
+                  <AssigneeSearch 
+                    currentAssignee={item.assignedTo} 
+                    onSelect={(name) => handleUpdateItem({ assignedTo: name })} 
+                  />
+               </DetailField>
+               <DetailField label="Story Points">
+                  <input 
+                    type="number"
+                    value={item.storyPoints || 0}
+                    onChange={(e) => handleUpdateItem({ storyPoints: parseInt(e.target.value) || 0 })}
+                    className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:ring-2 focus:ring-blue-500/10"
+                    placeholder="0"
+                  />
+               </DetailField>
+            </div>
 
             <DetailField label="Description">
                <div className="p-6 bg-slate-50 rounded-[1.5rem] border border-slate-100 min-h-[150px] prose prose-slate text-sm">
@@ -305,6 +329,45 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
           </div>
         )}
 
+        {activeTab === 'attachments' && (
+          <div className="space-y-8 animate-fadeIn">
+             <div className="flex justify-between items-center">
+                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Execution Evidence</h4>
+                <button 
+                  onClick={simulateFileUpload}
+                  className="px-4 py-1.5 bg-emerald-600 text-white text-[9px] font-black rounded-lg uppercase tracking-widest flex items-center gap-2 shadow-sm hover:bg-emerald-700 transition-colors"
+                >
+                  <i className="fas fa-upload"></i>
+                  Upload Evidence
+                </button>
+             </div>
+
+             <div className="grid grid-cols-2 gap-4">
+                {(item.attachments || []).length === 0 ? (
+                  <div className="col-span-2 py-20 text-center text-slate-300">
+                    <i className="fas fa-paperclip text-4xl mb-4 opacity-10"></i>
+                    <p className="text-xs font-bold uppercase tracking-widest">No artifacts attached.</p>
+                  </div>
+                ) : (
+                  item.attachments?.map((a, i) => (
+                    <div key={i} className="bg-slate-50 border border-slate-100 rounded-2xl p-4 flex items-center gap-4 hover:bg-white hover:shadow-sm transition-all group">
+                       <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-blue-500 shadow-sm">
+                          <i className="fas fa-file-pdf"></i>
+                       </div>
+                       <div className="flex-1 min-w-0">
+                          <p className="text-xs font-bold text-slate-700 truncate">{a.name}</p>
+                          <p className="text-[9px] text-slate-400 uppercase font-black">{Math.round(a.size/1024)} KB • {a.uploadedBy}</p>
+                       </div>
+                       <button className="w-8 h-8 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 transition-all opacity-0 group-hover:opacity-100">
+                          <i className="fas fa-trash-alt text-[10px]"></i>
+                       </button>
+                    </div>
+                  ))
+                )}
+             </div>
+          </div>
+        )}
+
         {activeTab === 'activity' && (
           <div className="space-y-6 animate-fadeIn">
              {(item.activity || []).length === 0 ? (
@@ -323,8 +386,8 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
                              {act.action === 'CREATED' ? 'initialized this artifact' : (
                                <span>
                                   updated <span className="font-bold text-blue-600">{act.field}</span>
-                                  {act.from && <span className="mx-1">from <span className="italic text-slate-400">{act.from}</span></span>}
-                                  to <span className="font-bold text-slate-800">{act.to}</span>
+                                  {act.from !== undefined && <span className="mx-1">from <span className="italic text-slate-400">{String(act.from)}</span></span>}
+                                  to <span className="font-bold text-slate-800">{String(act.to)}</span>
                                </span>
                              )}
                           </p>

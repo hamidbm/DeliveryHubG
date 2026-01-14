@@ -45,6 +45,7 @@ const WorkItemsBoardView: React.FC<WorkItemsBoardViewProps> = ({
   const [loading, setLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
   const [groupBy, setGroupBy] = useState<'status' | 'assignee' | 'epic'>('status');
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   // WIP Limits configuration
   const wipLimits: Record<string, number> = {
@@ -94,6 +95,7 @@ const WorkItemsBoardView: React.FC<WorkItemsBoardViewProps> = ({
     const { active } = event;
     const item = boardData.columns.flatMap(c => c.items).find(i => (i._id || i.id) === active.id);
     setDraggedItem(item);
+    setErrorMsg(null);
   };
 
   const handleDragOver = (event: DragOverEvent) => {
@@ -155,28 +157,21 @@ const WorkItemsBoardView: React.FC<WorkItemsBoardViewProps> = ({
     item.rank = newRank;
 
     try {
-      await fetch(`/api/work-items/${active.id}/status`, {
+      const res = await fetch(`/api/work-items/${active.id}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ toStatus: activeCol.statusId, newRank })
       });
+      if (!res.ok) {
+        const err = await res.json();
+        setErrorMsg(err.error || "Workflow restriction encountered.");
+        fetchBoard(); // Revert
+      }
     } catch (err) {
-      console.error("Failed to sync drag status", err);
+      setErrorMsg("Network error during sync.");
       fetchBoard();
     }
   };
-
-  // Grouping logic for swimlanes (Phase 2)
-  const swimlanes = useMemo(() => {
-    if (groupBy === 'status') return null;
-    const rows: Record<string, any[]> = {};
-    boardData.columns.flatMap(c => c.items).forEach(item => {
-      const key = groupBy === 'assignee' ? (item.assignedTo || 'Unassigned') : (item.parentId || 'Backlog');
-      if (!rows[key]) rows[key] = [];
-      rows[key].push(item);
-    });
-    return rows;
-  }, [boardData, groupBy]);
 
   if (loading && boardData.columns.length === 0) {
     return (
@@ -203,6 +198,12 @@ const WorkItemsBoardView: React.FC<WorkItemsBoardViewProps> = ({
               </button>
             ))}
          </div>
+         {errorMsg && (
+           <div className="px-6 py-2 bg-red-50 text-red-600 text-[10px] font-black uppercase tracking-widest rounded-xl border border-red-100 animate-bounce flex items-center gap-3">
+             <i className="fas fa-triangle-exclamation"></i>
+             {errorMsg}
+           </div>
+         )}
       </div>
 
       <DndContext 
