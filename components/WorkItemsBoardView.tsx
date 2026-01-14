@@ -173,6 +173,25 @@ const WorkItemsBoardView: React.FC<WorkItemsBoardViewProps> = ({
     }
   };
 
+  // Horizontal Swimlane Data Generation
+  const swimlaneRows = useMemo(() => {
+    if (groupBy === 'status') return null;
+    
+    const allItems = boardData.columns.flatMap(c => c.items);
+    const rowMap: Record<string, any[]> = {};
+
+    allItems.forEach(item => {
+      const key = groupBy === 'assignee' 
+        ? (item.assignedTo || 'Unassigned') 
+        : (item.parentId ? `EPIC: ${item.parentId}` : 'No Epic');
+      
+      if (!rowMap[key]) rowMap[key] = [];
+      rowMap[key].push(item);
+    });
+
+    return Object.entries(rowMap).sort(([a], [b]) => a.localeCompare(b));
+  }, [boardData, groupBy]);
+
   if (loading && boardData.columns.length === 0) {
     return (
       <div className="h-[600px] flex flex-col items-center justify-center bg-white rounded-[3rem] border border-slate-100">
@@ -185,7 +204,7 @@ const WorkItemsBoardView: React.FC<WorkItemsBoardViewProps> = ({
   return (
     <div className="flex flex-col h-[850px] overflow-hidden relative">
       {/* Board Controls */}
-      <div className="flex items-center justify-between mb-6 px-4">
+      <div className="flex items-center justify-between mb-6 px-4 shrink-0">
          <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-xl">
             <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest px-3">Swimlanes:</span>
             {['status', 'assignee', 'epic'].map(mode => (
@@ -213,15 +232,54 @@ const WorkItemsBoardView: React.FC<WorkItemsBoardViewProps> = ({
         onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
       >
-        <div className="flex-1 flex gap-6 overflow-x-auto pb-6 px-4 custom-scrollbar-h">
-          {boardData.columns.map(col => (
-            <KanbanColumn 
-              key={col.statusId} 
-              column={col} 
-              onItemClick={(item) => setActiveItem(item)}
-              wipLimit={wipLimits[col.statusId]}
-            />
-          ))}
+        <div className="flex-1 overflow-auto custom-scrollbar no-scrollbar">
+          {groupBy === 'status' ? (
+            <div className="flex gap-6 h-full min-w-max px-4 pb-6">
+              {boardData.columns.map(col => (
+                <KanbanColumn 
+                  key={col.statusId} 
+                  column={col} 
+                  onItemClick={(item) => setActiveItem(item)}
+                  wipLimit={wipLimits[col.statusId]}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="flex flex-col gap-10 px-4 min-w-max pb-20">
+              <div className="flex gap-6 sticky top-0 bg-[#F8FAFC]/80 backdrop-blur-sm z-20 py-2">
+                {boardData.columns.map(col => (
+                   <div key={col.statusId} className="w-80 flex items-center justify-between px-4">
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{col.statusName}</span>
+                   </div>
+                ))}
+              </div>
+              
+              {swimlaneRows?.map(([rowName, rowItems]) => (
+                <div key={rowName} className="space-y-4">
+                   <div className="flex items-center gap-4">
+                      <div className="h-[1px] flex-1 bg-slate-200"></div>
+                      <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] bg-white border border-slate-200 px-4 py-1 rounded-full shadow-sm">
+                        {rowName}
+                      </span>
+                      <div className="h-[1px] flex-1 bg-slate-200"></div>
+                   </div>
+                   <div className="flex gap-6 min-h-[150px]">
+                      {boardData.columns.map(col => (
+                        <KanbanColumn 
+                          key={`${rowName}-${col.statusId}`}
+                          column={{
+                            ...col,
+                            items: rowItems.filter(i => i.status === col.statusId)
+                          }}
+                          onItemClick={(item) => setActiveItem(item)}
+                          hideHeader
+                        />
+                      ))}
+                   </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         <DragOverlay>

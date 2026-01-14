@@ -13,23 +13,30 @@ interface WorkItemDetailsProps {
 
 const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bundles, applications, onUpdate, onClose }) => {
   const [item, setItem] = useState<WorkItem>(initialItem);
+  const [subtasks, setSubtasks] = useState<WorkItem[]>([]);
   const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState<'details' | 'comments' | 'links' | 'activity' | 'attachments'>('details');
+  const [activeTab, setActiveTab] = useState<'details' | 'comments' | 'links' | 'attachments' | 'activity'>('details');
   const [newComment, setNewComment] = useState('');
   
-  // Linking States
+  // Linking & Tagging States
   const [isLinking, setIsLinking] = useState(false);
   const [linkSearch, setLinkSearch] = useState('');
   const [linkResults, setLinkResults] = useState<WorkItem[]>([]);
   const [linkType, setLinkType] = useState<WorkItemLink['type']>('RELATES_TO');
+  const [newLabel, setNewLabel] = useState('');
 
-  // Load detailed item data including links and activity
+  // Load detailed item data including links, activity, and subtasks
   useEffect(() => {
     const loadFullDetails = async () => {
       try {
-        const res = await fetch(`/api/work-items/${initialItem._id || initialItem.id}`);
-        const data = await res.json();
-        setItem(data);
+        const [itemRes, subRes] = await Promise.all([
+          fetch(`/api/work-items/${initialItem._id || initialItem.id}`),
+          fetch(`/api/work-items?parentId=${initialItem._id || initialItem.id}`)
+        ]);
+        const itemData = await itemRes.json();
+        const subData = await subRes.json();
+        setItem(itemData);
+        setSubtasks(subData);
       } catch (err) { console.error(err); }
     };
     loadFullDetails();
@@ -58,7 +65,7 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
   const addComment = async () => {
     if (!newComment.trim()) return;
     const comment = {
-      author: 'Current User', // Real implementation would use session user
+      author: 'Current User', 
       body: newComment,
       createdAt: new Date().toISOString()
     };
@@ -67,12 +74,53 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
     setNewComment('');
   };
 
+  const addLabel = async () => {
+    if (!newLabel.trim()) return;
+    const labels = item.labels || [];
+    if (!labels.includes(newLabel.trim())) {
+      await handleUpdateItem({ labels: [...labels, newLabel.trim()] });
+    }
+    setNewLabel('');
+  };
+
+  const removeLabel = async (label: string) => {
+    const labels = (item.labels || []).filter(l => l !== label);
+    await handleUpdateItem({ labels });
+  };
+
+  const createSubtask = async () => {
+    const title = window.prompt("Enter subtask summary:");
+    if (!title) return;
+    
+    setSaving(true);
+    try {
+      const res = await fetch('/api/work-items', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: WorkItemType.SUBTASK,
+          title,
+          parentId: item._id || item.id,
+          bundleId: item.bundleId,
+          applicationId: item.applicationId,
+          status: WorkItemStatus.TODO,
+          priority: 'MEDIUM'
+        })
+      });
+      if (res.ok) {
+        const subRes = await fetch(`/api/work-items?parentId=${item._id || item.id}`);
+        setSubtasks(await subRes.json());
+      }
+    } catch (err) { console.error(err); }
+    finally { setSaving(false); }
+  };
+
   const handleLinkSearch = async (q: string) => {
     setLinkSearch(q);
     if (q.length < 2) return;
     const res = await fetch(`/api/work-items?q=${encodeURIComponent(q)}`);
     const data = await res.json();
-    setLinkResults(data.filter((i: WorkItem) => i._id !== item._id));
+    setLinkResults(data.filter((i: WorkItem) => (i._id || i.id) !== (item._id || item.id)));
   };
 
   const createLink = async (target: WorkItem) => {
@@ -90,7 +138,7 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
 
   const simulateFileUpload = async () => {
     const newAttach: WorkItemAttachment = {
-      name: `document_${Math.floor(Math.random()*1000)}.pdf`,
+      name: `artifact_evidence_${Math.floor(Math.random()*1000)}.pdf`,
       size: Math.floor(Math.random()*500000),
       type: 'application/pdf',
       url: '#',
@@ -105,19 +153,28 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
     switch (type) {
       case WorkItemType.EPIC: return 'fa-layer-group text-purple-500';
       case WorkItemType.BUG: return 'fa-bug text-red-500';
+      case WorkItemType.SUBTASK: return 'fa-diagram-project text-slate-400';
       default: return 'fa-file-lines text-blue-500';
     }
   };
 
   return (
     <div className="h-full flex flex-col bg-white overflow-hidden relative">
-      <header className="px-10 py-8 border-b border-slate-100 flex items-center justify-between shrink-0">
+      <header className="px-10 py-8 border-b border-slate-100 flex items-center justify-between shrink-0 bg-slate-50/20">
         <div className="flex items-center gap-4">
-          <button onClick={onClose} className="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-400">
+          <button onClick={onClose} className="w-8 h-8 rounded-full hover:bg-white hover:shadow-sm flex items-center justify-center text-slate-400 border border-transparent hover:border-slate-100">
             <i className="fas fa-arrow-left"></i>
           </button>
           <div>
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{item.key}</span>
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+               {item.key}
+               {item.parentId && (
+                 <>
+                   <i className="fas fa-chevron-right text-[8px]"></i>
+                   <span className="text-blue-500">Parent Association Detected</span>
+                 </>
+               )}
+            </span>
             <h3 className="text-xl font-black text-slate-800 tracking-tight leading-tight">{item.title}</h3>
           </div>
         </div>
@@ -133,7 +190,7 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
       </header>
 
       {/* Navigation Tabs */}
-      <div className="flex px-10 border-b border-slate-100 bg-slate-50/50 overflow-x-auto no-scrollbar">
+      <div className="flex px-10 border-b border-slate-100 bg-white overflow-x-auto no-scrollbar">
         {['details', 'comments', 'links', 'attachments', 'activity'].map(tab => (
           <button
             key={tab}
@@ -181,7 +238,7 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
                     onSelect={(name) => handleUpdateItem({ assignedTo: name })} 
                   />
                </DetailField>
-               <DetailField label="Story Points">
+               <DetailField label="Estimation (Pts)">
                   <input 
                     type="number"
                     value={item.storyPoints || 0}
@@ -192,15 +249,66 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
                </DetailField>
             </div>
 
-            <DetailField label="Description">
-               <div className="p-6 bg-slate-50 rounded-[1.5rem] border border-slate-100 min-h-[150px] prose prose-slate text-sm">
-                  {item.description || 'No system documentation available.'}
+            {/* Labels UI */}
+            <DetailField label="Tags & Labels">
+               <div className="flex flex-wrap gap-2 p-3 bg-slate-50 border border-slate-100 rounded-2xl min-h-[50px]">
+                  {item.labels?.map(label => (
+                    <span key={label} className="bg-white border border-slate-200 px-3 py-1 rounded-full text-[10px] font-bold text-slate-600 flex items-center gap-2 group">
+                       {label}
+                       <button onClick={() => removeLabel(label)} className="text-slate-300 hover:text-red-500 transition-colors">
+                          <i className="fas fa-times scale-75"></i>
+                       </button>
+                    </span>
+                  ))}
+                  <div className="relative">
+                    <input 
+                      value={newLabel}
+                      onChange={(e) => setNewLabel(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && addLabel()}
+                      className="bg-transparent border-none p-1 text-[10px] font-bold outline-none w-24 placeholder:text-slate-300"
+                      placeholder="+ Add label..."
+                    />
+                  </div>
                </div>
             </DetailField>
 
-            <div className="pt-6 border-t border-slate-50 grid grid-cols-2 gap-4">
-                <ContextItem label="Business Cluster" value={bundles.find(b => b._id === item.bundleId)?.name || 'General'} />
-                <ContextItem label="Delivery System" value={applications.find(a => a._id === item.applicationId || a.id === item.applicationId)?.name || 'Platform Shared'} />
+            <DetailField label="Core Implementation Notes">
+               <div className="p-6 bg-slate-50 rounded-[1.5rem] border border-slate-100 min-h-[150px] prose prose-slate text-sm">
+                  {item.description || 'No execution blueprints provided.'}
+               </div>
+            </DetailField>
+
+            {/* Subtasks UI */}
+            <div className="pt-10 border-t border-slate-50 space-y-6">
+               <div className="flex items-center justify-between">
+                  <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                    <i className="fas fa-diagram-project"></i>
+                    Sub-tasks / Decomposition
+                  </h4>
+                  <button onClick={createSubtask} className="text-[9px] font-black text-blue-600 uppercase hover:underline">
+                    + Add Task
+                  </button>
+               </div>
+               <div className="space-y-2">
+                  {subtasks.length === 0 ? (
+                    <p className="text-[10px] font-medium text-slate-300 italic px-2">No decomposed subtasks established.</p>
+                  ) : subtasks.map(sub => (
+                    <div key={sub._id} className="flex items-center justify-between p-3 bg-white border border-slate-100 rounded-xl hover:shadow-sm transition-all group">
+                       <div className="flex items-center gap-3">
+                          <i className="fas fa-check-circle text-slate-200 group-hover:text-blue-500"></i>
+                          <span className={`text-[11px] font-bold ${sub.status === WorkItemStatus.DONE ? 'line-through text-slate-400' : 'text-slate-700'}`}>
+                             {sub.title}
+                          </span>
+                       </div>
+                       <span className="text-[8px] font-black text-slate-300 uppercase">{sub.status}</span>
+                    </div>
+                  ))}
+               </div>
+            </div>
+
+            <div className="pt-6 grid grid-cols-2 gap-4 border-t border-slate-50">
+                <ContextItem label="Cluster Scope" value={bundles.find(b => b._id === item.bundleId)?.name || 'Shared'} />
+                <ContextItem label="System Scope" value={applications.find(a => a._id === item.applicationId || a.id === item.applicationId)?.name || 'Platform'} />
             </div>
           </div>
         )}
@@ -285,7 +393,7 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
                           <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-100 shadow-2xl rounded-2xl overflow-hidden z-20 max-h-48 overflow-y-auto">
                              {linkResults.map(res => (
                                <button 
-                                 key={res._id}
+                                 key={res._id || res.id}
                                  onClick={() => createLink(res)}
                                  className="w-full text-left p-3 hover:bg-blue-50 transition-colors border-b border-slate-50 last:border-0"
                                >

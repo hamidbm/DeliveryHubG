@@ -5,6 +5,7 @@ import { WorkItem, WorkItemType, WorkItemStatus, Bundle, Application } from '../
 import WorkItemsTreeView from './WorkItemsTreeView';
 import WorkItemsBoardView from './WorkItemsBoardView';
 import WorkItemsListView from './WorkItemsListView';
+import WorkItemsAnalyticsView from './WorkItemsAnalyticsView';
 
 interface WorkItemsProps {
   applications: Application[];
@@ -61,6 +62,13 @@ const WorkItems: React.FC<WorkItemsProps> = (props) => {
               <i className="fas fa-list"></i>
               Navigator
             </button>
+            <button 
+              onClick={() => setView('analytics')}
+              className={`px-4 py-2 text-[10px] font-black uppercase rounded-lg transition-all flex items-center gap-2 ${activeView === 'analytics' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400'}`}
+            >
+              <i className="fas fa-chart-line"></i>
+              Analytics
+            </button>
           </div>
         </div>
       </div>
@@ -75,6 +83,8 @@ const WorkItems: React.FC<WorkItemsProps> = (props) => {
           <WorkItemsBoardView {...props} />
         ) : activeView === 'list' ? (
           <WorkItemsListView {...props} />
+        ) : activeView === 'analytics' ? (
+          <WorkItemsAnalyticsView {...props} />
         ) : (
           <WorkItemsTreeView {...props} />
         )}

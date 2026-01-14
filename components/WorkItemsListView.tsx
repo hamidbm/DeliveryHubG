@@ -20,6 +20,7 @@ const WorkItemsListView: React.FC<WorkItemsListViewProps> = ({
   applications, bundles, selBundleId, selAppId, selMilestone, selEpicId, searchQuery, externalTrigger, onTriggerProcessed 
 }) => {
   const [items, setItems] = useState<WorkItem[]>([]);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
   const [activeItem, setActiveItem] = useState<WorkItem | null>(null);
   const [isCreating, setIsCreating] = useState(false);
@@ -56,6 +57,20 @@ const WorkItemsListView: React.FC<WorkItemsListViewProps> = ({
     fetchItems();
   }, [selBundleId, selAppId, selMilestone, selEpicId, searchQuery]);
 
+  const toggleSelectAll = () => {
+    if (selectedIds.size === items.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(items.map(i => (i._id || i.id) as string)));
+    }
+  };
+
+  const toggleSelect = (id: string) => {
+    const next = new Set(selectedIds);
+    next.has(id) ? next.delete(id) : next.add(id);
+    setSelectedIds(next);
+  };
+
   const getIcon = (type: WorkItemType) => {
     switch (type) {
       case WorkItemType.EPIC: return 'fa-layer-group text-purple-500';
@@ -63,6 +78,7 @@ const WorkItemsListView: React.FC<WorkItemsListViewProps> = ({
       case WorkItemType.STORY: return 'fa-file-lines text-blue-500';
       case WorkItemType.TASK: return 'fa-check text-slate-400';
       case WorkItemType.BUG: return 'fa-bug text-red-500';
+      case WorkItemType.SUBTASK: return 'fa-diagram-project text-slate-400';
       default: return 'fa-circle text-slate-300';
     }
   };
@@ -71,7 +87,16 @@ const WorkItemsListView: React.FC<WorkItemsListViewProps> = ({
     <div className="flex h-[800px] bg-white rounded-[3rem] border border-slate-200 shadow-2xl overflow-hidden animate-fadeIn relative">
       <div className="flex-1 flex flex-col overflow-hidden">
         <header className="px-10 py-6 border-b border-slate-100 flex items-center justify-between shrink-0 bg-slate-50/30">
-           <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Artifact Navigator ({items.length})</h3>
+           <div className="flex items-center gap-6">
+              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Artifact Navigator ({items.length})</h3>
+              {selectedIds.size > 0 && (
+                <div className="flex items-center gap-3 animate-fadeIn">
+                   <span className="text-[9px] font-black text-blue-600 bg-blue-50 px-3 py-1 rounded-full uppercase tracking-widest">{selectedIds.size} Selected</span>
+                   <button className="text-[9px] font-black text-slate-400 uppercase hover:text-red-500 transition-colors">Bulk Delete</button>
+                   <button className="text-[9px] font-black text-slate-400 uppercase hover:text-blue-600 transition-colors">Update Status</button>
+                </div>
+              )}
+           </div>
            <div className="flex gap-4">
               <button className="p-2 text-slate-400 hover:text-blue-600 transition-colors"><i className="fas fa-file-export"></i></button>
               <button className="p-2 text-slate-400 hover:text-blue-600 transition-colors"><i className="fas fa-filter"></i></button>
@@ -82,62 +107,78 @@ const WorkItemsListView: React.FC<WorkItemsListViewProps> = ({
           <table className="w-full text-left border-collapse">
             <thead className="bg-white sticky top-0 z-10 border-b border-slate-100 shadow-sm">
               <tr>
-                <th className="px-8 py-4 text-[9px] font-black text-slate-300 uppercase tracking-widest">Key</th>
-                <th className="px-8 py-4 text-[9px] font-black text-slate-300 uppercase tracking-widest">Title</th>
-                <th className="px-8 py-4 text-[9px] font-black text-slate-300 uppercase tracking-widest">Type</th>
-                <th className="px-8 py-4 text-[9px] font-black text-slate-300 uppercase tracking-widest">Status</th>
-                <th className="px-8 py-4 text-[9px] font-black text-slate-300 uppercase tracking-widest">Priority</th>
-                <th className="px-8 py-4 text-[9px] font-black text-slate-300 uppercase tracking-widest">Assignee</th>
+                <th className="px-6 py-4 w-10">
+                   <input 
+                    type="checkbox" 
+                    checked={items.length > 0 && selectedIds.size === items.length} 
+                    onChange={toggleSelectAll}
+                    className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                   />
+                </th>
+                <th className="px-6 py-4 text-[9px] font-black text-slate-300 uppercase tracking-widest">Key</th>
+                <th className="px-6 py-4 text-[9px] font-black text-slate-300 uppercase tracking-widest">Title</th>
+                <th className="px-6 py-4 text-[9px] font-black text-slate-300 uppercase tracking-widest">Type</th>
+                <th className="px-6 py-4 text-[9px] font-black text-slate-300 uppercase tracking-widest">Status</th>
+                <th className="px-6 py-4 text-[9px] font-black text-slate-300 uppercase tracking-widest text-center">Estimation</th>
+                <th className="px-6 py-4 text-[9px] font-black text-slate-300 uppercase tracking-widest">Assignee</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
               {loading ? (
                 [...Array(10)].map((_, i) => (
                   <tr key={i} className="animate-pulse">
-                    <td colSpan={6} className="px-8 py-4"><div className="h-4 bg-slate-50 rounded w-full"></div></td>
+                    <td colSpan={7} className="px-8 py-4"><div className="h-4 bg-slate-50 rounded w-full"></div></td>
                   </tr>
                 ))
-              ) : items.map(item => (
-                <tr 
-                  key={item._id} 
-                  onClick={() => setActiveItem(item)}
-                  className={`hover:bg-blue-50/30 cursor-pointer transition-colors group ${activeItem?._id === item._id ? 'bg-blue-50/50' : ''}`}
-                >
-                  <td className="px-8 py-4 whitespace-nowrap">
-                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{item.key}</span>
-                  </td>
-                  <td className="px-8 py-4 max-w-md">
-                    <span className="text-sm font-bold text-slate-700 group-hover:text-blue-600 truncate block">{item.title}</span>
-                  </td>
-                  <td className="px-8 py-4 whitespace-nowrap">
-                    <div className="flex items-center gap-2">
-                       <i className={`fas ${getIcon(item.type)} text-xs`}></i>
-                       <span className="text-[9px] font-bold text-slate-500 uppercase">{item.type}</span>
-                    </div>
-                  </td>
-                  <td className="px-8 py-4 whitespace-nowrap">
-                    <span className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border ${
-                      item.status === WorkItemStatus.DONE ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
-                      item.status === WorkItemStatus.IN_PROGRESS ? 'bg-blue-50 text-blue-600 border-blue-100' :
-                      'bg-slate-50 text-slate-500 border-slate-100'
-                    }`}>
-                      {item.status.replace('_', ' ')}
-                    </span>
-                  </td>
-                  <td className="px-8 py-4 whitespace-nowrap">
-                    <span className={`text-[9px] font-bold uppercase ${
-                      item.priority === 'CRITICAL' ? 'text-red-500' :
-                      item.priority === 'HIGH' ? 'text-orange-500' : 'text-slate-400'
-                    }`}>{item.priority}</span>
-                  </td>
-                  <td className="px-8 py-4 whitespace-nowrap">
-                    <div className="flex items-center gap-2">
-                       <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(item.assignedTo || 'U')}&background=random&size=24`} className="w-5 h-5 rounded-full shadow-sm" />
-                       <span className="text-xs font-medium text-slate-500">{item.assignedTo || 'Unassigned'}</span>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              ) : items.map(item => {
+                const id = (item._id || item.id) as string;
+                return (
+                  <tr 
+                    key={id} 
+                    onClick={() => setActiveItem(item)}
+                    className={`hover:bg-blue-50/30 cursor-pointer transition-colors group ${activeItem?._id === id ? 'bg-blue-50/50' : ''}`}
+                  >
+                    <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
+                      <input 
+                        type="checkbox" 
+                        checked={selectedIds.has(id)} 
+                        onChange={() => toggleSelect(id)}
+                        className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                      />
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{item.key}</span>
+                    </td>
+                    <td className="px-6 py-4 max-w-md">
+                      <span className="text-sm font-bold text-slate-700 group-hover:text-blue-600 truncate block">{item.title}</span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center gap-2">
+                         <i className={`fas ${getIcon(item.type)} text-xs`}></i>
+                         <span className="text-[9px] font-bold text-slate-500 uppercase">{item.type}</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border ${
+                        item.status === WorkItemStatus.DONE ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
+                        item.status === WorkItemStatus.IN_PROGRESS ? 'bg-blue-50 text-blue-600 border-blue-100' :
+                        'bg-slate-50 text-slate-500 border-slate-100'
+                      }`}>
+                        {item.status.replace('_', ' ')}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-center">
+                      <span className="text-xs font-black text-slate-400">{item.storyPoints || '-'}</span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center gap-2">
+                         <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(item.assignedTo || 'U')}&background=random&size=24`} className="w-5 h-5 rounded-full shadow-sm" />
+                         <span className="text-xs font-medium text-slate-500">{item.assignedTo || 'Unassigned'}</span>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
