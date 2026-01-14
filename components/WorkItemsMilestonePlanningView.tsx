@@ -137,6 +137,10 @@ const WorkItemsMilestonePlanningView: React.FC<WorkItemsMilestonePlanningViewPro
   const [loading, setLoading] = useState(true);
   const [activeItem, setActiveItem] = useState<WorkItem | null>(null);
   const [draggedItem, setDraggedItem] = useState<WorkItem | null>(null);
+  const [isMilestoneModalOpen, setIsMilestoneModalOpen] = useState(false);
+  const [newMilestone, setNewMilestone] = useState<Partial<Milestone>>({
+    name: '', status: MilestoneStatus.PLANNED, startDate: new Date().toISOString().split('T')[0], endDate: new Date().toISOString().split('T')[0], targetCapacity: 0
+  });
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
@@ -173,6 +177,17 @@ const WorkItemsMilestonePlanningView: React.FC<WorkItemsMilestonePlanningViewPro
     });
   };
 
+  const handleCreateMilestone = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await fetch('/api/milestones', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...newMilestone, bundleId: selBundleId !== 'all' ? selBundleId : undefined, applicationId: selAppId !== 'all' ? selAppId : undefined })
+    });
+    setIsMilestoneModalOpen(false);
+    fetchData();
+  };
+
   const unassignedItems = useMemo(() => items.filter(i => !i.milestoneIds || i.milestoneIds.length === 0), [items]);
   const { setNodeRef: setBacklogRef, isOver: isOverBacklog } = useDroppable({ id: 'backlog' });
 
@@ -197,11 +212,30 @@ const WorkItemsMilestonePlanningView: React.FC<WorkItemsMilestonePlanningViewPro
              <div className="flex-1 flex flex-col items-center justify-center text-center p-20 opacity-40">
                 <i className="fas fa-route text-6xl mb-6"></i>
                 <h4 className="text-lg font-black text-slate-900 tracking-tight uppercase">No Delivery Milestones Defined</h4>
-                <p className="text-sm font-medium text-slate-500 max-w-sm mt-2">Visit the "Reviews" or "Admin" module to initialize your release schedule.</p>
+                <p className="text-sm font-medium text-slate-500 max-w-sm mt-2 mb-6">Initialize your release schedule to start mapping work items to delivery windows.</p>
+                <button 
+                  onClick={() => setIsMilestoneModalOpen(true)}
+                  className="px-8 py-3 bg-slate-900 text-white text-[10px] font-black rounded-xl uppercase tracking-widest hover:bg-blue-600 transition-all shadow-xl"
+                >
+                  Provision First Milestone
+                </button>
              </div>
-           ) : milestones.map(m => (
-             <MilestoneColumn key={m._id} milestone={m} items={items.filter(i => i.milestoneIds?.includes(m._id!))} onCardClick={setActiveItem} />
-           ))}
+           ) : (
+             <>
+               {milestones.map(m => (
+                 <MilestoneColumn key={m._id} milestone={m} items={items.filter(i => i.milestoneIds?.includes(m._id!))} onCardClick={setActiveItem} />
+               ))}
+               <button 
+                onClick={() => setIsMilestoneModalOpen(true)}
+                className="w-80 shrink-0 border-2 border-dashed border-slate-100 rounded-[2.5rem] flex flex-col items-center justify-center group hover:border-blue-200 transition-all hover:bg-blue-50/10"
+               >
+                  <div className="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-300 group-hover:bg-blue-100 group-hover:text-blue-500 transition-all mb-4">
+                    <i className="fas fa-plus"></i>
+                  </div>
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest group-hover:text-blue-600 transition-colors">Add Milestone</span>
+               </button>
+             </>
+           )}
         </main>
 
         <DragOverlay>
@@ -218,6 +252,38 @@ const WorkItemsMilestonePlanningView: React.FC<WorkItemsMilestonePlanningViewPro
         {activeItem && (
           <div className="absolute inset-y-0 right-0 w-[650px] bg-white shadow-2xl border-l border-slate-200 z-50 animate-slideIn">
              <WorkItemDetails item={activeItem} bundles={bundles} applications={applications} onUpdate={fetchData} onClose={() => setActiveItem(null)} />
+          </div>
+        )}
+
+        {isMilestoneModalOpen && (
+          <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-md z-[210] flex items-center justify-center p-6">
+            <div className="bg-white rounded-[3rem] w-full max-w-xl p-12 shadow-2xl animate-fadeIn border border-slate-100">
+              <h3 className="text-3xl font-black text-slate-900 tracking-tight mb-8 italic">Quick Milestone Provision</h3>
+              <form onSubmit={handleCreateMilestone} className="space-y-6">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Release Name</label>
+                  <input required value={newMilestone.name} onChange={(e) => setNewMilestone({...newMilestone, name: e.target.value})} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-slate-700 font-bold outline-none focus:border-blue-500 transition-all" placeholder="e.g. Q4 Platform Readiness" />
+                </div>
+                <div className="grid grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Start Date</label>
+                    <input type="date" required value={newMilestone.startDate} onChange={(e) => setNewMilestone({...newMilestone, startDate: e.target.value})} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-slate-700 font-bold" />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">End Date</label>
+                    <input type="date" required value={newMilestone.endDate} onChange={(e) => setNewMilestone({...newMilestone, endDate: e.target.value})} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-slate-700 font-bold" />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Target Capacity (Story Points)</label>
+                  <input type="number" value={newMilestone.targetCapacity} onChange={(e) => setNewMilestone({...newMilestone, targetCapacity: parseInt(e.target.value)})} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-slate-700 font-bold" />
+                </div>
+                <div className="flex gap-4 pt-8">
+                  <button type="button" onClick={() => setIsMilestoneModalOpen(false)} className="flex-1 py-4 text-[10px] font-black text-slate-400 uppercase">Discard</button>
+                  <button type="submit" className="flex-[2] py-4 bg-slate-900 text-white text-[10px] font-black rounded-2xl shadow-xl hover:bg-blue-600 transition-all uppercase tracking-widest">Commit Milestone</button>
+                </div>
+              </form>
+            </div>
           </div>
         )}
       </div>

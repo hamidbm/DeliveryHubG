@@ -71,8 +71,9 @@ const WorkItemsTreeView: React.FC<WorkItemsTreeViewProps> = ({
     }
   };
 
-  const getIcon = (type: WorkItemType) => {
+  const getIcon = (type: any) => {
     switch (type) {
+      case 'MILESTONE': return 'fa-flag-checkered text-emerald-500';
       case WorkItemType.EPIC: return 'fa-layer-group text-purple-500';
       case WorkItemType.FEATURE: return 'fa-star text-amber-500';
       case WorkItemType.STORY: return 'fa-file-lines text-blue-500';
@@ -118,8 +119,8 @@ const WorkItemsTreeView: React.FC<WorkItemsTreeViewProps> = ({
           </span>
           {node.status && (
              <span className={`ml-auto text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider border ${
-               node.status === WorkItemStatus.DONE ? 'bg-emerald-100 text-emerald-700 border-emerald-200' :
-               node.status === WorkItemStatus.IN_PROGRESS ? 'bg-blue-100 text-blue-700 border-blue-200' :
+               node.status === WorkItemStatus.DONE || node.status === 'Released' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' :
+               node.status === WorkItemStatus.IN_PROGRESS || node.status === 'Active' ? 'bg-blue-100 text-blue-700 border-blue-200' :
                'bg-slate-100 text-slate-500 border-slate-200'
              }`}>
                {node.status}

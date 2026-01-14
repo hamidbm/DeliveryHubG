@@ -10,22 +10,18 @@ export const getDb = async () => {
 
 /**
  * Helper to create a query condition that matches either a string ID or a MongoDB ObjectId.
- * This solves issues where foreign keys are stored inconsistently.
  */
 const safeIdMatch = (id: string) => {
   if (!id || id === 'all') return null;
-  const conditions: any[] = [{ [id.includes('-') ? 'key' : 'id']: id }]; // Try matching custom string IDs
-  
-  // Try matching as the field itself (string)
+  const conditions: any[] = [{ [id.includes('-') ? 'key' : 'id']: id }];
   conditions.push(id);
-
-  // Try matching as ObjectId if valid
   if (ObjectId.isValid(id)) {
     conditions.push(new ObjectId(id));
   }
   return { $in: conditions };
 };
 
+// ... (seedDatabase, Wiki services, Bundle services, etc. remain unchanged)
 export const seedDatabase = async (applications: any[], workItems: any[], wikiPages: any[]) => {
   try {
     const db = await getDb();
@@ -227,16 +223,11 @@ export const fetchWorkItems = async (filters: any) => {
     if (match) query.applicationId = match;
   }
   
-  // Resilient Milestone filtering (checks plural and singular, case-insensitive)
   if (filters.milestoneId && filters.milestoneId !== 'all') {
     const msRegex = new RegExp(`^${filters.milestoneId}$`, 'i');
-    query.$or = [
-      { milestoneIds: msRegex },
-      { milestoneId: msRegex }
-    ];
+    query.$or = [{ milestoneIds: msRegex }, { milestoneId: msRegex }];
   }
 
-  // Handle both parentId and epicId (aliased in frontend)
   const pId = filters.parentId || filters.epicId;
   if (pId && pId !== 'all') {
     const match = safeIdMatch(pId);
@@ -290,15 +281,45 @@ export const updateWorkItemStatus = async (id: string, toStatus: string, newRank
 };
 
 export const fetchWorkItemTree = async (filters: any) => {
+  const db = await getDb();
   const items = await fetchWorkItems(filters);
-  
+  const treeMode = filters.treeMode || 'hierarchy';
+
+  if (treeMode === 'milestone') {
+    // Group by Milestones
+    const milestones = await fetchMilestones(filters);
+    return milestones.map(m => {
+      const mIdStr = m._id?.toString();
+      const mItems = items.filter(i => {
+         const ids = i.milestoneIds || [];
+         const id = i.milestoneId;
+         return ids.includes(mIdStr) || id === mIdStr || id === m.name;
+      });
+      
+      return {
+        id: `ms-node-${mIdStr}`,
+        label: m.name,
+        type: 'MILESTONE',
+        status: m.status,
+        children: mItems.map(i => ({
+          id: i._id?.toString() || i.id,
+          label: i.title,
+          type: i.type,
+          status: i.status,
+          workItemId: i._id?.toString() || i.id,
+          nodeType: 'WORK_ITEM',
+          children: []
+        }))
+      };
+    });
+  }
+
+  // Standard Hierarchy Mode
   const buildTree = (parentId: any = null): any[] => {
     return items
       .filter(item => {
         const itemPid = item.parentId?.toString() || null;
         const comparePid = parentId?.toString() || null;
-        
-        // Match null, undefined, or empty string as root
         if (comparePid === null) {
           return itemPid === null || itemPid === "";
         }
@@ -315,14 +336,10 @@ export const fetchWorkItemTree = async (filters: any) => {
       }));
   };
   
-  // If we are filtering by a specific Epic/Parent, we start the tree from there
   const startPid = (filters.parentId && filters.parentId !== 'all') ? filters.parentId : 
                    (filters.epicId && filters.epicId !== 'all') ? filters.epicId : null;
   
   const tree = buildTree(startPid);
-  
-  // FALLBACK: If the tree is empty but we have items, it means parent/child links are broken 
-  // or filtered out. Return flat list so user at least sees the data.
   if (tree.length === 0 && items.length > 0) {
     return items.map(item => ({
       id: item._id?.toString() || item.id,
@@ -334,10 +351,10 @@ export const fetchWorkItemTree = async (filters: any) => {
       children: []
     }));
   }
-
   return tree;
 };
 
+// ... (fetchWorkItemsBoard, searchUsers, fetchSprints remain unchanged)
 export const fetchWorkItemsBoard = async (filters: any) => {
   const items = await fetchWorkItems(filters);
   const statuses = [WorkItemStatus.TODO, WorkItemStatus.IN_PROGRESS, WorkItemStatus.REVIEW, WorkItemStatus.DONE, WorkItemStatus.BLOCKED];
@@ -383,7 +400,6 @@ export const saveSprint = async (sprint: Partial<Sprint>) => {
   }
 };
 
-// Milestones
 export const fetchMilestones = async (filters: any) => {
   const db = await getDb();
   const query: any = {};
