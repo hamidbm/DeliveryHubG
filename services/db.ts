@@ -8,6 +8,24 @@ export const getDb = async () => {
   return client.db('deliveryhub');
 };
 
+/**
+ * Helper to create a query condition that matches either a string ID or a MongoDB ObjectId.
+ * This solves issues where foreign keys are stored inconsistently.
+ */
+const safeIdMatch = (id: string) => {
+  if (!id || id === 'all') return null;
+  const conditions: any[] = [{ [id.includes('-') ? 'key' : 'id']: id }]; // Try matching custom string IDs
+  
+  // Try matching as the field itself (string)
+  conditions.push(id);
+
+  // Try matching as ObjectId if valid
+  if (ObjectId.isValid(id)) {
+    conditions.push(new ObjectId(id));
+  }
+  return { $in: conditions };
+};
+
 export const seedDatabase = async (applications: any[], workItems: any[], wikiPages: any[]) => {
   try {
     const db = await getDb();
@@ -139,7 +157,10 @@ export const deleteWikiTheme = async (id: string) => {
 export const fetchApplications = async (bundleId?: string, activeOnly: boolean = false) => {
   const db = await getDb();
   const query: any = {};
-  if (bundleId && bundleId !== 'all') query.bundleId = bundleId;
+  if (bundleId && bundleId !== 'all') {
+    const bundleMatch = safeIdMatch(bundleId);
+    if (bundleMatch) query.bundleId = bundleMatch;
+  }
   if (activeOnly) query.isActive = true;
   return await db.collection('applications').find(query).toArray();
 };
@@ -175,7 +196,10 @@ export const fetchTaxonomyDocumentTypes = async (activeOnly: boolean = false, ca
   const db = await getDb();
   const query: any = {};
   if (activeOnly) query.isActive = true;
-  if (categoryId) query.categoryId = categoryId;
+  if (categoryId) {
+    const catMatch = safeIdMatch(categoryId);
+    if (catMatch) query.categoryId = catMatch;
+  }
   return await db.collection('taxonomy_document_types').find(query).sort({ sortOrder: 1 }).toArray();
 };
 
@@ -193,8 +217,15 @@ export const fetchWorkItems = async (filters: any) => {
   const db = await getDb();
   const query: any = {};
   
-  if (filters.bundleId && filters.bundleId !== 'all') query.bundleId = filters.bundleId;
-  if (filters.applicationId && filters.applicationId !== 'all') query.applicationId = filters.applicationId;
+  if (filters.bundleId && filters.bundleId !== 'all') {
+    const match = safeIdMatch(filters.bundleId);
+    if (match) query.bundleId = match;
+  }
+  
+  if (filters.applicationId && filters.applicationId !== 'all') {
+    const match = safeIdMatch(filters.applicationId);
+    if (match) query.applicationId = match;
+  }
   
   // Resilient Milestone filtering (checks plural and singular, case-insensitive)
   if (filters.milestoneId && filters.milestoneId !== 'all') {
@@ -208,7 +239,8 @@ export const fetchWorkItems = async (filters: any) => {
   // Handle both parentId and epicId (aliased in frontend)
   const pId = filters.parentId || filters.epicId;
   if (pId && pId !== 'all') {
-    query.parentId = pId;
+    const match = safeIdMatch(pId);
+    if (match) query.parentId = match;
   }
   
   if (filters.q) {
@@ -225,9 +257,16 @@ export const fetchWorkItems = async (filters: any) => {
 export const fetchWorkItemById = async (id: string) => {
   const db = await getDb();
   try {
-    return await db.collection('workitems').findOne({ _id: new ObjectId(id) });
+    if (ObjectId.isValid(id)) {
+      return await db.collection('workitems').findOne({ 
+        $or: [{ _id: new ObjectId(id) }, { id: id }, { key: id }] 
+      });
+    }
+    return await db.collection('workitems').findOne({ 
+      $or: [{ id: id }, { key: id }] 
+    });
   } catch {
-    return await db.collection('workitems').findOne({ id: id });
+    return null;
   }
 };
 
@@ -253,15 +292,17 @@ export const updateWorkItemStatus = async (id: string, toStatus: string, newRank
 export const fetchWorkItemTree = async (filters: any) => {
   const items = await fetchWorkItems(filters);
   
-  const buildTree = (parentId: string | null = null): any[] => {
+  const buildTree = (parentId: any = null): any[] => {
     return items
       .filter(item => {
-        const itemPid = item.parentId || null;
+        const itemPid = item.parentId?.toString() || null;
+        const comparePid = parentId?.toString() || null;
+        
         // Match null, undefined, or empty string as root
-        if (parentId === null) {
+        if (comparePid === null) {
           return itemPid === null || itemPid === "";
         }
-        return itemPid === parentId;
+        return itemPid === comparePid;
       })
       .map(item => ({
         id: item._id?.toString() || item.id,
@@ -270,17 +311,19 @@ export const fetchWorkItemTree = async (filters: any) => {
         status: item.status,
         workItemId: item._id?.toString() || item.id,
         nodeType: 'WORK_ITEM',
-        children: buildTree(item._id?.toString() || item.id)
+        children: buildTree(item._id || item.id)
       }));
   };
   
   // If we are filtering by a specific Epic/Parent, we start the tree from there
-  const startPid = (filters.parentId && filters.parentId !== 'all') ? filters.parentId : null;
+  const startPid = (filters.parentId && filters.parentId !== 'all') ? filters.parentId : 
+                   (filters.epicId && filters.epicId !== 'all') ? filters.epicId : null;
+  
   const tree = buildTree(startPid);
   
-  // Fallback: If filtering by criteria (like bundle) makes root nodes invisible, 
-  // show matching items as a flat list if tree is empty
-  if (tree.length === 0 && items.length > 0 && (filters.bundleId !== 'all' || filters.applicationId !== 'all')) {
+  // FALLBACK: If the tree is empty but we have items, it means parent/child links are broken 
+  // or filtered out. Return flat list so user at least sees the data.
+  if (tree.length === 0 && items.length > 0) {
     return items.map(item => ({
       id: item._id?.toString() || item.id,
       label: item.title,
@@ -319,8 +362,14 @@ export const searchUsers = async (query: string) => {
 export const fetchSprints = async (filters: any) => {
   const db = await getDb();
   const query: any = {};
-  if (filters.bundleId && filters.bundleId !== 'all') query.bundleId = filters.bundleId;
-  if (filters.applicationId && filters.applicationId !== 'all') query.applicationId = filters.applicationId;
+  if (filters.bundleId && filters.bundleId !== 'all') {
+    const match = safeIdMatch(filters.bundleId);
+    if (match) query.bundleId = match;
+  }
+  if (filters.applicationId && filters.applicationId !== 'all') {
+    const match = safeIdMatch(filters.applicationId);
+    if (match) query.applicationId = match;
+  }
   return await db.collection('sprints').find(query).sort({ createdAt: -1 }).toArray();
 };
 
@@ -334,11 +383,18 @@ export const saveSprint = async (sprint: Partial<Sprint>) => {
   }
 };
 
+// Milestones
 export const fetchMilestones = async (filters: any) => {
   const db = await getDb();
   const query: any = {};
-  if (filters.bundleId && filters.bundleId !== 'all') query.bundleId = filters.bundleId;
-  if (filters.applicationId && filters.applicationId !== 'all') query.applicationId = filters.applicationId;
+  if (filters.bundleId && filters.bundleId !== 'all') {
+    const match = safeIdMatch(filters.bundleId);
+    if (match) query.bundleId = match;
+  }
+  if (filters.applicationId && filters.applicationId !== 'all') {
+    const match = safeIdMatch(filters.applicationId);
+    if (match) query.applicationId = match;
+  }
   if (filters.status) query.status = filters.status;
   
   return await db.collection('milestones').find(query).sort({ startDate: 1 }).toArray();

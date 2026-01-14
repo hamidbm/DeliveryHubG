@@ -33,6 +33,12 @@ const WorkItems: React.FC<WorkItemsProps> = (props) => {
     router.push(`?${params.toString()}`);
   };
 
+  // Ensure selEpicId is never undefined when passed to children
+  const sanitizedProps = {
+    ...props,
+    selEpicId: props.selEpicId || 'all'
+  };
+
   return (
     <div className="flex flex-col gap-6">
       {/* View Switcher Header */}
@@ -73,19 +79,19 @@ const WorkItems: React.FC<WorkItemsProps> = (props) => {
         </div>
       }>
         {activeView === 'roadmap' ? (
-          <WorkItemsRoadmapView {...props} />
+          <WorkItemsRoadmapView {...sanitizedProps} />
         ) : activeView === 'board' ? (
-          <WorkItemsBoardView {...props} />
+          <WorkItemsBoardView {...sanitizedProps} />
         ) : activeView === 'list' ? (
-          <WorkItemsListView {...props} />
+          <WorkItemsListView {...sanitizedProps} />
         ) : activeView === 'analytics' ? (
-          <WorkItemsAnalyticsView {...props} />
+          <WorkItemsAnalyticsView {...sanitizedProps} />
         ) : activeView === 'backlog' ? (
-          <WorkItemsBacklogView {...props} />
+          <WorkItemsBacklogView {...sanitizedProps} />
         ) : activeView === 'milestone-plan' ? (
-          <WorkItemsMilestonePlanningView {...props} />
+          <WorkItemsMilestonePlanningView {...sanitizedProps} />
         ) : (
-          <WorkItemsTreeView {...props} />
+          <WorkItemsTreeView {...sanitizedProps} />
         )}
       </Suspense>
     </div>
