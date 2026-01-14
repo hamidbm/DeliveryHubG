@@ -41,15 +41,28 @@ export const fetchWorkItems = async (filters: any) => {
   if (filters.parentId) query.parentId = filters.parentId;
   if (filters.q) query.title = { $regex: filters.q, $options: 'i' };
   
-  return await db.collection('work_items').find(query).sort({ key: 1 }).toArray();
+  return await db.collection('work_items').find(query).sort({ rank: 1, key: 1 }).toArray();
+};
+
+export const fetchWorkItemsBoard = async (filters: any) => {
+  const db = await getDb();
+  const items = await fetchWorkItems(filters);
+  
+  const statuses = Object.values(WorkItemStatus);
+  const board: any = {
+    columns: statuses.map(s => ({
+      statusId: s,
+      statusName: s.replace('_', ' '),
+      items: items.filter((i: any) => i.status === s).sort((a: any, b: any) => (a.rank || 0) - (b.rank || 0))
+    }))
+  };
+  
+  return board;
 };
 
 export const fetchWorkItemTree = async (filters: any) => {
-  const db = await getDb();
   const items = await fetchWorkItems(filters) as unknown as WorkItem[];
   
-  // Basic tree builder - for MVT we build the whole visible tree
-  // In a real app with 10k items, this would be lazy-loaded
   const buildTree = (parentId: string | null = null): any[] => {
     return items
       .filter(item => (parentId ? item.parentId === parentId : !item.parentId))
@@ -80,9 +93,14 @@ export const saveWorkItem = async (item: Partial<WorkItem>, user?: any) => {
   } else {
     const seq = await getNextSequence('work_item_key');
     const key = `WI-${seq}`;
+    // Get max rank in current status
+    const lastItem = await db.collection('work_items').find({ status: data.status || WorkItemStatus.TODO }).sort({ rank: -1 }).limit(1).toArray();
+    const rank = (lastItem[0]?.rank || 0) + 1000;
+
     return await db.collection('work_items').insertOne({
       ...data,
       key,
+      rank,
       status: data.status || WorkItemStatus.TODO,
       priority: data.priority || 'MEDIUM',
       createdAt: now,
@@ -91,6 +109,22 @@ export const saveWorkItem = async (item: Partial<WorkItem>, user?: any) => {
       updatedBy: user?.name
     });
   }
+};
+
+export const updateWorkItemStatus = async (id: string, toStatus: WorkItemStatus, newRank: number, user?: any) => {
+  const db = await getDb();
+  const now = new Date().toISOString();
+  return await db.collection('work_items').updateOne(
+    { _id: new ObjectId(id) },
+    { 
+      $set: { 
+        status: toStatus, 
+        rank: newRank, 
+        updatedAt: now, 
+        updatedBy: user?.name 
+      } 
+    }
+  );
 };
 
 export const fetchWorkItemById = async (id: string) => {

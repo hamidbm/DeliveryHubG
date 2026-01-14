@@ -47,6 +47,13 @@ export enum WorkItemStatus {
   BLOCKED = 'BLOCKED'
 }
 
+export interface WorkItemComment {
+  _id?: string;
+  author: string;
+  body: string;
+  createdAt: string;
+}
+
 export interface WorkItem {
   _id?: string;
   id?: string;
@@ -66,6 +73,10 @@ export interface WorkItem {
   createdAt?: string;
   updatedAt?: string;
   links?: { type: string; targetId: string }[];
+  rank?: number;
+  storyPoints?: number;
+  labels?: string[];
+  comments?: WorkItemComment[];
 }
 
 export interface TaxonomyCategory {
