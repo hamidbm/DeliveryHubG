@@ -1,7 +1,7 @@
 
 import clientPromise from '../lib/mongodb';
 import { ObjectId } from 'mongodb';
-import { WikiPage, WikiSpace, WikiTheme, Bundle, Application, TaxonomyCategory, TaxonomyDocumentType, WorkItem, WorkItemType, WorkItemStatus } from '../types';
+import { WikiPage, WikiSpace, WikiTheme, Bundle, Application, TaxonomyCategory, TaxonomyDocumentType, WorkItem, WorkItemType, WorkItemStatus, WorkItemActivity } from '../types';
 
 export const getDb = async () => {
   const client = await clientPromise;
@@ -38,14 +38,19 @@ export const fetchWorkItems = async (filters: any) => {
   if (filters.bundleId && filters.bundleId !== 'all') query.bundleId = filters.bundleId;
   if (filters.applicationId && filters.applicationId !== 'all') query.applicationId = filters.applicationId;
   if (filters.milestoneId && filters.milestoneId !== 'all') query.milestoneIds = filters.milestoneId;
-  if (filters.parentId) query.parentId = filters.parentId;
-  if (filters.q) query.title = { $regex: filters.q, $options: 'i' };
+  if (filters.parentId && filters.parentId !== 'all') query.parentId = filters.parentId;
+  if (filters.epicId && filters.epicId !== 'all') query.parentId = filters.epicId;
+  if (filters.q) {
+    query.$or = [
+      { title: { $regex: filters.q, $options: 'i' } },
+      { key: { $regex: filters.q, $options: 'i' } }
+    ];
+  }
   
   return await db.collection('work_items').find(query).sort({ rank: 1, key: 1 }).toArray();
 };
 
 export const fetchWorkItemsBoard = async (filters: any) => {
-  const db = await getDb();
   const items = await fetchWorkItems(filters);
   
   const statuses = Object.values(WorkItemStatus);
@@ -86,16 +91,42 @@ export const saveWorkItem = async (item: Partial<WorkItem>, user?: any) => {
   const now = new Date().toISOString();
 
   if (_id) {
+    const existing = await db.collection('work_items').findOne({ _id: new ObjectId(_id) });
+    const activities: Partial<WorkItemActivity>[] = [];
+
+    // Diffing for activity log
+    const fieldsToTrack = ['status', 'priority', 'assignedTo', 'title', 'parentId'];
+    fieldsToTrack.forEach(field => {
+      if (data[field as keyof typeof data] !== undefined && data[field as keyof typeof data] !== existing?.[field]) {
+        activities.push({
+          user: user?.name || 'System',
+          action: 'UPDATED_FIELD',
+          field,
+          from: existing?.[field],
+          to: data[field as keyof typeof data],
+          createdAt: now
+        });
+      }
+    });
+
     return await db.collection('work_items').updateOne(
       { _id: new ObjectId(_id) },
-      { $set: { ...data, updatedAt: now, updatedBy: user?.name } }
+      { 
+        $set: { ...data, updatedAt: now, updatedBy: user?.name },
+        $push: { activity: { $each: activities } } as any
+      }
     );
   } else {
     const seq = await getNextSequence('work_item_key');
     const key = `WI-${seq}`;
-    // Get max rank in current status
     const lastItem = await db.collection('work_items').find({ status: data.status || WorkItemStatus.TODO }).sort({ rank: -1 }).limit(1).toArray();
     const rank = (lastItem[0]?.rank || 0) + 1000;
+
+    const initialActivity = {
+      user: user?.name || 'System',
+      action: 'CREATED',
+      createdAt: now
+    };
 
     return await db.collection('work_items').insertOne({
       ...data,
@@ -106,7 +137,8 @@ export const saveWorkItem = async (item: Partial<WorkItem>, user?: any) => {
       createdAt: now,
       updatedAt: now,
       createdBy: user?.name,
-      updatedBy: user?.name
+      updatedBy: user?.name,
+      activity: [initialActivity]
     });
   }
 };
@@ -114,6 +146,16 @@ export const saveWorkItem = async (item: Partial<WorkItem>, user?: any) => {
 export const updateWorkItemStatus = async (id: string, toStatus: WorkItemStatus, newRank: number, user?: any) => {
   const db = await getDb();
   const now = new Date().toISOString();
+  const existing = await db.collection('work_items').findOne({ _id: new ObjectId(id) });
+  
+  const activity = {
+    user: user?.name || 'System',
+    action: 'CHANGED_STATUS',
+    from: existing?.status,
+    to: toStatus,
+    createdAt: now
+  };
+
   return await db.collection('work_items').updateOne(
     { _id: new ObjectId(id) },
     { 
@@ -122,7 +164,8 @@ export const updateWorkItemStatus = async (id: string, toStatus: WorkItemStatus,
         rank: newRank, 
         updatedAt: now, 
         updatedBy: user?.name 
-      } 
+      },
+      $push: { activity: activity as any }
     }
   );
 };

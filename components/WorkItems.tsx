@@ -4,6 +4,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { WorkItem, WorkItemType, WorkItemStatus, Bundle, Application } from '../types';
 import WorkItemsTreeView from './WorkItemsTreeView';
 import WorkItemsBoardView from './WorkItemsBoardView';
+import WorkItemsListView from './WorkItemsListView';
 
 interface WorkItemsProps {
   applications: Application[];
@@ -44,14 +45,21 @@ const WorkItems: React.FC<WorkItemsProps> = (props) => {
               className={`px-4 py-2 text-[10px] font-black uppercase rounded-lg transition-all flex items-center gap-2 ${activeView === 'tree' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400'}`}
             >
               <i className="fas fa-sitemap"></i>
-              Hierarchy View
+              Hierarchy
             </button>
             <button 
               onClick={() => setView('board')}
               className={`px-4 py-2 text-[10px] font-black uppercase rounded-lg transition-all flex items-center gap-2 ${activeView === 'board' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400'}`}
             >
-              <i className="fas fa- chalkboard"></i>
-              Kanban Board
+              <i className="fas fa-chalkboard"></i>
+              Board
+            </button>
+            <button 
+              onClick={() => setView('list')}
+              className={`px-4 py-2 text-[10px] font-black uppercase rounded-lg transition-all flex items-center gap-2 ${activeView === 'list' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400'}`}
+            >
+              <i className="fas fa-list"></i>
+              Navigator
             </button>
           </div>
         </div>
@@ -60,11 +68,13 @@ const WorkItems: React.FC<WorkItemsProps> = (props) => {
       <Suspense fallback={
         <div className="h-[600px] flex flex-col items-center justify-center bg-white rounded-[3rem] border border-slate-100">
           <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-          <p className="text-slate-400 font-bold text-[10px] uppercase tracking-widest animate-pulse">Initializing Board...</p>
+          <p className="text-slate-400 font-bold text-[10px] uppercase tracking-widest animate-pulse">Initializing Hub...</p>
         </div>
       }>
         {activeView === 'board' ? (
           <WorkItemsBoardView {...props} />
+        ) : activeView === 'list' ? (
+          <WorkItemsListView {...props} />
         ) : (
           <WorkItemsTreeView {...props} />
         )}

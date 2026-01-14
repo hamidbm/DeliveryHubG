@@ -54,6 +54,23 @@ export interface WorkItemComment {
   createdAt: string;
 }
 
+export interface WorkItemLink {
+  type: 'BLOCKS' | 'IS_BLOCKED_BY' | 'RELATES_TO' | 'DUPLICATES' | 'IS_DUPLICATED_BY';
+  targetId: string; // ID of the target work item
+  targetKey?: string;
+  targetTitle?: string;
+}
+
+export interface WorkItemActivity {
+  _id?: string;
+  user: string;
+  action: string; // e.g., 'CHANGED_STATUS', 'ASSIGNED_TO', 'UPDATED_FIELD'
+  field?: string;
+  from?: any;
+  to?: any;
+  createdAt: string;
+}
+
 export interface WorkItem {
   _id?: string;
   id?: string;
@@ -72,11 +89,12 @@ export interface WorkItem {
   updatedBy?: string;
   createdAt?: string;
   updatedAt?: string;
-  links?: { type: string; targetId: string }[];
+  links?: WorkItemLink[];
   rank?: number;
   storyPoints?: number;
   labels?: string[];
   comments?: WorkItemComment[];
+  activity?: WorkItemActivity[];
 }
 
 export interface TaxonomyCategory {

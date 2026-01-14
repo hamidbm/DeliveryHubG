@@ -39,11 +39,19 @@ interface WorkItemsBoardViewProps {
 const WorkItemsBoardView: React.FC<WorkItemsBoardViewProps> = ({ 
   applications, bundles, selBundleId, selAppId, selMilestone, selEpicId, searchQuery, externalTrigger, onTriggerProcessed 
 }) => {
-  const [columns, setColumns] = useState<any[]>([]);
+  const [boardData, setBoardData] = useState<{ columns: any[] }>({ columns: [] });
   const [activeItem, setActiveItem] = useState<WorkItem | null>(null);
   const [draggedItem, setDraggedItem] = useState<WorkItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
+  const [groupBy, setGroupBy] = useState<'status' | 'assignee' | 'epic'>('status');
+
+  // WIP Limits configuration
+  const wipLimits: Record<string, number> = {
+    'IN_PROGRESS': 5,
+    'REVIEW': 3,
+    'BLOCKED': 2
+  };
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -70,7 +78,7 @@ const WorkItemsBoardView: React.FC<WorkItemsBoardViewProps> = ({
     try {
       const res = await fetch(`/api/work-items/board?${params.toString()}`);
       const data = await res.json();
-      setColumns(data.columns || []);
+      setBoardData(data);
     } catch (err) {
       console.error("Failed to fetch board", err);
     } finally {
@@ -84,7 +92,7 @@ const WorkItemsBoardView: React.FC<WorkItemsBoardViewProps> = ({
 
   const handleDragStart = (event: DragStartEvent) => {
     const { active } = event;
-    const item = columns.flatMap(c => c.items).find(i => (i._id || i.id) === active.id);
+    const item = boardData.columns.flatMap(c => c.items).find(i => (i._id || i.id) === active.id);
     setDraggedItem(item);
   };
 
@@ -95,26 +103,29 @@ const WorkItemsBoardView: React.FC<WorkItemsBoardViewProps> = ({
     const activeId = active.id;
     const overId = over.id;
 
-    const activeCol = columns.find(c => c.items.some((i: any) => (i._id || i.id) === activeId));
-    const overCol = columns.find(c => c.statusId === overId || c.items.some((i: any) => (i._id || i.id) === overId));
+    const activeCol = boardData.columns.find(c => c.items.some((i: any) => (i._id || i.id) === activeId));
+    const overCol = boardData.columns.find(c => c.statusId === overId || c.items.some((i: any) => (i._id || i.id) === overId));
 
     if (!activeCol || !overCol || activeCol === overCol) return;
 
-    setColumns(prev => {
-      const newCols = [...prev];
-      const activeItemIndex = activeCol.items.findIndex((i: any) => (i._id || i.id) === activeId);
-      const [movedItem] = activeCol.items.splice(activeItemIndex, 1);
+    setBoardData(prev => {
+      const newCols = [...prev.columns];
+      const activeIdx = newCols.findIndex(c => c.statusId === activeCol.statusId);
+      const overIdx = newCols.findIndex(c => c.statusId === overCol.statusId);
+      
+      const activeItemIndex = newCols[activeIdx].items.findIndex((i: any) => (i._id || i.id) === activeId);
+      const [movedItem] = newCols[activeIdx].items.splice(activeItemIndex, 1);
       
       movedItem.status = overCol.statusId;
       
-      const overItemIndex = overCol.items.findIndex((i: any) => (i._id || i.id) === overId);
+      const overItemIndex = newCols[overIdx].items.findIndex((i: any) => (i._id || i.id) === overId);
       if (overItemIndex === -1) {
-        overCol.items.push(movedItem);
+        newCols[overIdx].items.push(movedItem);
       } else {
-        overCol.items.splice(overItemIndex, 0, movedItem);
+        newCols[overIdx].items.splice(overItemIndex, 0, movedItem);
       }
       
-      return newCols;
+      return { columns: newCols };
     });
   };
 
@@ -123,13 +134,12 @@ const WorkItemsBoardView: React.FC<WorkItemsBoardViewProps> = ({
     setDraggedItem(null);
     if (!over) return;
 
-    const activeCol = columns.find(c => c.items.some((i: any) => (i._id || i.id) === active.id));
+    const activeCol = boardData.columns.find(c => c.items.some((i: any) => (i._id || i.id) === active.id));
     if (!activeCol) return;
 
     const item = activeCol.items.find((i: any) => (i._id || i.id) === active.id);
     const index = activeCol.items.indexOf(item);
     
-    // Simple numeric ranking: midpoint between neighbors
     let newRank = 1000;
     const prevItem = activeCol.items[index - 1];
     const nextItem = activeCol.items[index + 1];
@@ -152,21 +162,49 @@ const WorkItemsBoardView: React.FC<WorkItemsBoardViewProps> = ({
       });
     } catch (err) {
       console.error("Failed to sync drag status", err);
-      fetchBoard(); // Revert on failure
+      fetchBoard();
     }
   };
 
-  if (loading && columns.length === 0) {
+  // Grouping logic for swimlanes (Phase 2)
+  const swimlanes = useMemo(() => {
+    if (groupBy === 'status') return null;
+    const rows: Record<string, any[]> = {};
+    boardData.columns.flatMap(c => c.items).forEach(item => {
+      const key = groupBy === 'assignee' ? (item.assignedTo || 'Unassigned') : (item.parentId || 'Backlog');
+      if (!rows[key]) rows[key] = [];
+      rows[key].push(item);
+    });
+    return rows;
+  }, [boardData, groupBy]);
+
+  if (loading && boardData.columns.length === 0) {
     return (
       <div className="h-[600px] flex flex-col items-center justify-center bg-white rounded-[3rem] border border-slate-100">
         <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-        <p className="text-slate-400 font-bold text-[10px] uppercase tracking-widest animate-pulse">Provisioning Board Data...</p>
+        <p className="text-slate-400 font-bold text-[10px] uppercase tracking-widest animate-pulse">Mapping Delivery Stream...</p>
       </div>
     );
   }
 
   return (
-    <div className="flex h-[800px] overflow-hidden relative">
+    <div className="flex flex-col h-[850px] overflow-hidden relative">
+      {/* Board Controls */}
+      <div className="flex items-center justify-between mb-6 px-4">
+         <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-xl">
+            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest px-3">Swimlanes:</span>
+            {['status', 'assignee', 'epic'].map(mode => (
+              <button 
+                key={mode}
+                onClick={() => setGroupBy(mode as any)}
+                className={`px-4 py-1.5 text-[9px] font-black uppercase rounded-lg transition-all ${groupBy === mode ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400'}`}
+              >
+                {mode}
+              </button>
+            ))}
+         </div>
+      </div>
+
       <DndContext 
         sensors={sensors}
         collisionDetection={closestCorners}
@@ -174,12 +212,13 @@ const WorkItemsBoardView: React.FC<WorkItemsBoardViewProps> = ({
         onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
       >
-        <div className="flex-1 flex gap-6 overflow-x-auto pb-4 custom-scrollbar-h no-scrollbar">
-          {columns.map(col => (
+        <div className="flex-1 flex gap-6 overflow-x-auto pb-6 px-4 custom-scrollbar-h">
+          {boardData.columns.map(col => (
             <KanbanColumn 
               key={col.statusId} 
               column={col} 
               onItemClick={(item) => setActiveItem(item)}
+              wipLimit={wipLimits[col.statusId]}
             />
           ))}
         </div>
@@ -189,9 +228,8 @@ const WorkItemsBoardView: React.FC<WorkItemsBoardViewProps> = ({
         </DragOverlay>
       </DndContext>
 
-      {/* Side Panel for Details */}
       {activeItem && (
-        <div className="absolute inset-y-0 right-0 w-[600px] bg-white shadow-2xl border-l border-slate-200 z-50 animate-slideIn">
+        <div className="absolute inset-y-0 right-0 w-[650px] bg-white shadow-2xl border-l border-slate-200 z-[100] animate-slideIn">
            <WorkItemDetails 
              item={activeItem} 
              bundles={bundles} 
@@ -215,14 +253,6 @@ const WorkItemsBoardView: React.FC<WorkItemsBoardViewProps> = ({
           }}
         />
       )}
-
-      <style jsx global>{`
-        @keyframes slideIn {
-          from { transform: translateX(100%); }
-          to { transform: translateX(0); }
-        }
-        .animate-slideIn { animation: slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
-      `}</style>
     </div>
   );
 };

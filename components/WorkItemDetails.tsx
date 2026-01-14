@@ -1,7 +1,7 @@
 
-import React, { useState } from 'react';
-import { WorkItem, WorkItemType, WorkItemStatus, Bundle, Application } from '../types';
-import AssigneeSearch from './AssigneeSearch'; // Assuming AssigneeSearch is factored out as used in previous turn
+import React, { useState, useEffect, useRef } from 'react';
+import { WorkItem, WorkItemType, WorkItemStatus, Bundle, Application, WorkItemLink } from '../types';
+import AssigneeSearch from './AssigneeSearch';
 
 interface WorkItemDetailsProps {
   item: WorkItem;
@@ -14,8 +14,26 @@ interface WorkItemDetailsProps {
 const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bundles, applications, onUpdate, onClose }) => {
   const [item, setItem] = useState<WorkItem>(initialItem);
   const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState<'details' | 'comments' | 'links'>('details');
+  const [activeTab, setActiveTab] = useState<'details' | 'comments' | 'links' | 'activity'>('details');
   const [newComment, setNewComment] = useState('');
+  
+  // Linking States
+  const [isLinking, setIsLinking] = useState(false);
+  const [linkSearch, setLinkSearch] = useState('');
+  const [linkResults, setLinkResults] = useState<WorkItem[]>([]);
+  const [linkType, setLinkType] = useState<WorkItemLink['type']>('RELATES_TO');
+
+  // Load detailed item data including links and activity
+  useEffect(() => {
+    const loadFullDetails = async () => {
+      try {
+        const res = await fetch(`/api/work-items/${initialItem._id || initialItem.id}`);
+        const data = await res.json();
+        setItem(data);
+      } catch (err) { console.error(err); }
+    };
+    loadFullDetails();
+  }, [initialItem]);
 
   const handleUpdateItem = async (updates: Partial<WorkItem>) => {
     setSaving(true);
@@ -40,13 +58,34 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
   const addComment = async () => {
     if (!newComment.trim()) return;
     const comment = {
-      author: 'Current User', // Replace with real user
+      author: 'Current User', // Real implementation would use session user
       body: newComment,
       createdAt: new Date().toISOString()
     };
     const updatedComments = [...(item.comments || []), comment];
     await handleUpdateItem({ comments: updatedComments });
     setNewComment('');
+  };
+
+  const handleLinkSearch = async (q: string) => {
+    setLinkSearch(q);
+    if (q.length < 2) return;
+    const res = await fetch(`/api/work-items?q=${encodeURIComponent(q)}`);
+    const data = await res.json();
+    setLinkResults(data.filter((i: WorkItem) => i._id !== item._id));
+  };
+
+  const createLink = async (target: WorkItem) => {
+    const newLink: WorkItemLink = {
+      type: linkType,
+      targetId: (target._id || target.id) as string,
+      targetKey: target.key,
+      targetTitle: target.title
+    };
+    const updatedLinks = [...(item.links || []), newLink];
+    await handleUpdateItem({ links: updatedLinks });
+    setIsLinking(false);
+    setLinkSearch('');
   };
 
   const getIcon = (type: WorkItemType) => {
@@ -80,13 +119,13 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
         </div>
       </header>
 
-      {/* Tabs */}
-      <div className="flex px-10 border-b border-slate-100 bg-slate-50/50">
-        {['details', 'comments', 'links'].map(tab => (
+      {/* Navigation Tabs */}
+      <div className="flex px-10 border-b border-slate-100 bg-slate-50/50 overflow-x-auto no-scrollbar">
+        {['details', 'comments', 'links', 'activity'].map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab as any)}
-            className={`px-6 py-4 text-[10px] font-black uppercase tracking-widest transition-all border-b-2 ${
+            className={`px-6 py-4 text-[10px] font-black uppercase tracking-widest transition-all border-b-2 whitespace-nowrap ${
               activeTab === tab ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-400 hover:text-slate-600'
             }`}
           >
@@ -103,16 +142,16 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
                   <select 
                     value={item.status} 
                     onChange={(e) => handleUpdateItem({ status: e.target.value as WorkItemStatus })}
-                    className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold outline-none"
+                    className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:ring-2 focus:ring-blue-500/10"
                   >
-                     {Object.values(WorkItemStatus).map(s => <option key={s} value={s}>{s}</option>)}
+                     {Object.values(WorkItemStatus).map(s => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
                   </select>
                </DetailField>
                <DetailField label="Priority">
                   <select 
                     value={item.priority} 
                     onChange={(e) => handleUpdateItem({ priority: e.target.value as any })}
-                    className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold outline-none"
+                    className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:ring-2 focus:ring-blue-500/10"
                   >
                      <option value="CRITICAL">Critical</option>
                      <option value="HIGH">High</option>
@@ -135,15 +174,9 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
                </div>
             </DetailField>
 
-            <div className="pt-6 border-t border-slate-50 space-y-4">
-              <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                <i className="fas fa-sitemap"></i>
-                Environment Scope
-              </h4>
-              <div className="grid grid-cols-2 gap-4">
-                <ContextItem label="Cluster" value={bundles.find(b => b._id === item.bundleId)?.name || 'General'} />
-                <ContextItem label="System" value={applications.find(a => a._id === item.applicationId || a.id === item.applicationId)?.name || 'Platform Shared'} />
-              </div>
+            <div className="pt-6 border-t border-slate-50 grid grid-cols-2 gap-4">
+                <ContextItem label="Business Cluster" value={bundles.find(b => b._id === item.bundleId)?.name || 'General'} />
+                <ContextItem label="Delivery System" value={applications.find(a => a._id === item.applicationId || a.id === item.applicationId)?.name || 'Platform Shared'} />
             </div>
           </div>
         )}
@@ -153,17 +186,17 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
              <div className="space-y-6">
                 {(item.comments || []).length === 0 ? (
                   <div className="py-20 text-center text-slate-300">
-                    <i className="fas fa-comments text-4xl mb-4 opacity-20"></i>
-                    <p className="text-xs font-bold uppercase tracking-widest">No conversation logs yet.</p>
+                    <i className="fas fa-comments text-4xl mb-4 opacity-10"></i>
+                    <p className="text-xs font-bold uppercase tracking-widest">No conversation logs established.</p>
                   </div>
                 ) : (
                   item.comments?.map((c, i) => (
-                    <div key={i} className="flex gap-4">
-                       <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(c.author)}&background=random`} className="w-8 h-8 rounded-xl shadow-sm shrink-0" />
-                       <div className="flex-1 bg-slate-50 p-4 rounded-2xl rounded-tl-none border border-slate-100">
+                    <div key={i} className="flex gap-4 group">
+                       <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(c.author)}&background=random&size=40`} className="w-8 h-8 rounded-xl shadow-sm shrink-0" />
+                       <div className="flex-1 bg-slate-50 p-4 rounded-2xl rounded-tl-none border border-slate-100 group-hover:bg-white transition-colors group-hover:shadow-sm">
                           <div className="flex justify-between items-center mb-1">
                              <span className="text-[10px] font-black text-slate-700 uppercase tracking-tight">{c.author}</span>
-                             <span className="text-[8px] text-slate-400">{new Date(c.createdAt).toLocaleDateString()}</span>
+                             <span className="text-[8px] text-slate-400 font-bold">{new Date(c.createdAt).toLocaleString()}</span>
                           </div>
                           <p className="text-xs text-slate-600 leading-relaxed">{c.body}</p>
                        </div>
@@ -175,17 +208,132 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
                 <textarea 
                   value={newComment}
                   onChange={(e) => setNewComment(e.target.value)}
-                  placeholder="Record execution notes or findings..."
+                  placeholder="Record findings or execution notes..."
                   className="w-full bg-slate-50 border border-slate-100 rounded-2xl p-4 text-xs font-medium outline-none focus:ring-2 focus:ring-blue-500/10 h-24 resize-none mb-3"
                 />
                 <button 
                   onClick={addComment}
                   disabled={saving || !newComment.trim()}
-                  className="w-full py-3 bg-slate-900 text-white text-[10px] font-black rounded-xl uppercase tracking-widest shadow-lg active:scale-[0.98] transition-all disabled:opacity-50"
+                  className="w-full py-3.5 bg-slate-900 text-white text-[10px] font-black rounded-xl uppercase tracking-widest shadow-lg active:scale-[0.98] transition-all disabled:opacity-50"
                 >
-                  Post to Registry
+                  Post To Log
                 </button>
              </div>
+          </div>
+        )}
+
+        {activeTab === 'links' && (
+          <div className="space-y-8 animate-fadeIn">
+             <div className="flex justify-between items-center">
+                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Traceability Links</h4>
+                <button 
+                  onClick={() => setIsLinking(true)}
+                  className="px-4 py-1.5 bg-blue-600 text-white text-[9px] font-black rounded-lg uppercase tracking-widest flex items-center gap-2 shadow-sm"
+                >
+                  <i className="fas fa-plus"></i>
+                  Add Relationship
+                </button>
+             </div>
+
+             {isLinking && (
+               <div className="bg-slate-50 p-6 rounded-[2rem] border border-blue-100 shadow-inner space-y-4">
+                  <div className="flex gap-4">
+                     <select 
+                       value={linkType} 
+                       onChange={(e) => setLinkType(e.target.value as any)}
+                       className="bg-white border border-slate-200 rounded-xl px-4 py-2 text-[10px] font-black uppercase outline-none"
+                     >
+                        <option value="RELATES_TO">Relates To</option>
+                        <option value="BLOCKS">Blocks</option>
+                        <option value="IS_BLOCKED_BY">Is Blocked By</option>
+                        <option value="DUPLICATES">Duplicates</option>
+                     </select>
+                     <div className="flex-1 relative">
+                        <input 
+                          autoFocus
+                          type="text" 
+                          placeholder="Search key or title..."
+                          value={linkSearch}
+                          onChange={(e) => handleLinkSearch(e.target.value)}
+                          className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold outline-none"
+                        />
+                        {linkResults.length > 0 && linkSearch.length >= 2 && (
+                          <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-100 shadow-2xl rounded-2xl overflow-hidden z-20 max-h-48 overflow-y-auto">
+                             {linkResults.map(res => (
+                               <button 
+                                 key={res._id}
+                                 onClick={() => createLink(res)}
+                                 className="w-full text-left p-3 hover:bg-blue-50 transition-colors border-b border-slate-50 last:border-0"
+                               >
+                                  <div className="flex items-center gap-2">
+                                     <span className="text-[10px] font-black text-blue-600 uppercase">{res.key}</span>
+                                     <span className="text-xs font-bold text-slate-700 truncate">{res.title}</span>
+                                  </div>
+                               </button>
+                             ))}
+                          </div>
+                        )}
+                     </div>
+                  </div>
+                  <button onClick={() => { setIsLinking(false); setLinkSearch(''); }} className="text-[9px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-600">Cancel linking</button>
+               </div>
+             )}
+
+             <div className="space-y-3">
+                {(item.links || []).length === 0 ? (
+                  <div className="py-20 text-center text-slate-300">
+                    <i className="fas fa-link text-4xl mb-4 opacity-10"></i>
+                    <p className="text-xs font-bold uppercase tracking-widest">No cross-item dependencies.</p>
+                  </div>
+                ) : (
+                  item.links?.map((l, i) => (
+                    <div key={i} className="flex items-center justify-between p-4 bg-white border border-slate-100 rounded-2xl hover:border-blue-200 transition-all shadow-sm">
+                       <div className="flex items-center gap-4">
+                          <span className={`px-2 py-0.5 rounded-md text-[8px] font-black uppercase ${
+                            l.type === 'BLOCKS' ? 'bg-red-50 text-red-500' : 'bg-slate-100 text-slate-500'
+                          }`}>{l.type.replace('_', ' ')}</span>
+                          <div className="flex flex-col">
+                             <span className="text-[10px] font-black text-slate-400">{l.targetKey}</span>
+                             <span className="text-xs font-bold text-slate-700 truncate max-w-[200px]">{l.targetTitle}</span>
+                          </div>
+                       </div>
+                       <button className="text-slate-200 hover:text-red-500 transition-colors"><i className="fas fa-times"></i></button>
+                    </div>
+                  ))
+                )}
+             </div>
+          </div>
+        )}
+
+        {activeTab === 'activity' && (
+          <div className="space-y-6 animate-fadeIn">
+             {(item.activity || []).length === 0 ? (
+               <div className="py-20 text-center text-slate-300">
+                  <i className="fas fa-timeline text-4xl mb-4 opacity-10"></i>
+                  <p className="text-xs font-bold uppercase tracking-widest">Activity stream empty.</p>
+               </div>
+             ) : (
+               <div className="relative pl-6 space-y-8 before:content-[''] before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-[2px] before:bg-slate-100">
+                  {item.activity?.map((act, i) => (
+                    <div key={i} className="relative">
+                       <div className="absolute -left-[23px] top-1 w-3 h-3 rounded-full bg-white border-2 border-slate-200 shadow-sm z-10"></div>
+                       <div className="space-y-1">
+                          <p className="text-xs text-slate-600">
+                             <span className="font-black text-slate-800 uppercase text-[9px] mr-2">{act.user}</span>
+                             {act.action === 'CREATED' ? 'initialized this artifact' : (
+                               <span>
+                                  updated <span className="font-bold text-blue-600">{act.field}</span>
+                                  {act.from && <span className="mx-1">from <span className="italic text-slate-400">{act.from}</span></span>}
+                                  to <span className="font-bold text-slate-800">{act.to}</span>
+                               </span>
+                             )}
+                          </p>
+                          <span className="text-[8px] font-black text-slate-300 uppercase tracking-widest">{new Date(act.createdAt).toLocaleString()}</span>
+                       </div>
+                    </div>
+                  ))}
+               </div>
+             )}
           </div>
         )}
       </div>
@@ -203,7 +351,7 @@ const DetailField = ({ label, children }: any) => (
 const ContextItem = ({ label, value }: any) => (
   <div className="flex items-center justify-between p-3 bg-slate-50 border border-slate-100 rounded-xl">
      <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">{label}</span>
-     <span className="text-[10px] font-bold text-slate-700 truncate ml-2">{value}</span>
+     <span className="text-[10px] font-bold text-slate-700 truncate ml-2 text-right">{value}</span>
   </div>
 );
 
