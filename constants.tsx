@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Bundle, Application, WorkItem, Milestone, MilestoneStatus, WikiPage } from './types';
+import { Bundle, Application, WorkItem, Milestone, MilestoneStatus, WikiPage, WorkItemType, WorkItemStatus } from './types';
 
 // Hard-coded lists removed to enforce dynamic fetching from MongoDB
 export const BUNDLES: Bundle[] = [];
@@ -14,11 +14,12 @@ export const VENDORS = [
 
 export const APPLICATIONS: Application[] = [];
 
+// Fix: Corrected WorkItem properties to use defined enums (WorkItemType, WorkItemStatus) and exact uppercase string literals for priority.
 export const WORK_ITEMS: WorkItem[] = [
-  { id: 'wi1', title: 'Implement JWT Authentication', type: 'Feature', status: 'Done', applicationId: 'app2', assignedTo: 'John Doe', priority: 'High' },
-  { id: 'wi2', title: 'Migrate DB to MongoDB Atlas', type: 'Epic', status: 'In Progress', applicationId: 'app2', assignedTo: 'Sarah Smith', priority: 'Critical' },
-  { id: 'wi3', title: 'Refactor Legacy API Endpoints', type: 'Task', status: 'To Do', applicationId: 'app3', assignedTo: 'Mike Ross', priority: 'Medium' },
-  { id: 'wi4', title: 'Azure Load Balancer Config', type: 'Feature', status: 'Review', applicationId: 'app1', assignedTo: 'Emma Watson', priority: 'High' },
+  { id: 'wi1', title: 'Implement JWT Authentication', type: WorkItemType.FEATURE, status: WorkItemStatus.DONE, applicationId: 'app2', assignedTo: 'John Doe', priority: 'HIGH' },
+  { id: 'wi2', title: 'Migrate DB to MongoDB Atlas', type: WorkItemType.EPIC, status: WorkItemStatus.IN_PROGRESS, applicationId: 'app2', assignedTo: 'Sarah Smith', priority: 'CRITICAL' },
+  { id: 'wi3', title: 'Refactor Legacy API Endpoints', type: WorkItemType.TASK, status: WorkItemStatus.TODO, applicationId: 'app3', assignedTo: 'Mike Ross', priority: 'MEDIUM' },
+  { id: 'wi4', title: 'Azure Load Balancer Config', type: WorkItemType.FEATURE, status: WorkItemStatus.REVIEW, applicationId: 'app1', assignedTo: 'Emma Watson', priority: 'HIGH' },
 ];
 
 export const MILESTONES: Milestone[] = [

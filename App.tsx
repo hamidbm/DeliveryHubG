@@ -26,8 +26,9 @@ const App: React.FC = () => {
   const [selMilestone, setSelMilestone] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   
-  // Trigger for child components (e.g. opening "Create Space" modal in Wiki)
+  // Trigger for child components
   const [wikiTrigger, setWikiTrigger] = useState<string | null>(null);
+  const [workItemTrigger, setWorkItemTrigger] = useState<string | null>(null);
 
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -40,7 +41,6 @@ const App: React.FC = () => {
           const authData = await authRes.json();
           setUser(authData.user);
           
-          // Parallel fetch of bundles and applications from MongoDB
           const [bRes, aRes] = await Promise.all([
             fetch('/api/bundles?active=true'),
             fetch('/api/applications?active=true')
@@ -71,7 +71,16 @@ const App: React.FC = () => {
       case 'ai-insights':
         return <AIInsights applications={applications} bundles={bundles} />;
       case 'work-items':
-        return <WorkItems applications={applications} />;
+        return (
+          <WorkItems 
+            applications={applications} 
+            bundles={bundles}
+            selBundleId={activeBundle}
+            selAppId={activeApp}
+            selMilestone={selMilestone}
+            searchQuery={searchQuery}
+          />
+        );
       case 'wiki':
         return (
           <Wiki 
@@ -119,7 +128,6 @@ const App: React.FC = () => {
     <Layout 
       activeTab={activeTab} 
       setActiveTab={setActiveTab}
-      // Contextual Filter Props
       selSpaceId={selSpaceId}
       setSelSpaceId={setSelSpaceId}
       activeBundle={activeBundle}
@@ -132,15 +140,10 @@ const App: React.FC = () => {
       setSelMilestone={setSelMilestone}
       searchQuery={searchQuery}
       setSearchQuery={setSearchQuery}
-      
-      // Data Propagation
       bundles={bundles}
       applications={applications}
-
-      // Actions
       onCreateSpace={() => setWikiTrigger('create-space')}
-
-      // User Props
+      onCreateWorkItem={() => setWorkItemTrigger('create-item')}
       userName={user?.name}
       userRole={user?.role}
       onLogout={handleLogout}

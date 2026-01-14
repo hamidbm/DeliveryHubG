@@ -28,6 +28,7 @@ interface LayoutProps {
   
   // Actions
   onCreateSpace?: () => void;
+  onCreateWorkItem?: () => void;
   
   // User
   userName?: string;
@@ -54,6 +55,7 @@ const Layout: React.FC<LayoutProps> = ({
   bundles = [],
   applications = [],
   onCreateSpace,
+  onCreateWorkItem,
   userName = 'Alex Architect',
   userRole = 'Enterprise Architect',
   onLogout
@@ -124,7 +126,9 @@ const Layout: React.FC<LayoutProps> = ({
       {showFilterBar && (
         <div className="bg-white border-b border-slate-200 h-14 fixed top-16 w-full z-40 flex items-center px-8 justify-between shadow-sm">
           <div className="flex items-center gap-6 overflow-x-auto no-scrollbar shrink-0">
-            <FilterSelect label="Space" value={selSpaceId} onChange={setSelSpaceId!} options={spaces.map(s => ({ id: s._id || s.id!, name: s.name }))} />
+            {activeTab === 'wiki' && (
+              <FilterSelect label="Space" value={selSpaceId} onChange={setSelSpaceId!} options={spaces.map(s => ({ id: s._id || s.id!, name: s.name }))} />
+            )}
             <FilterSelect label="Bundle" value={activeBundle} onChange={setActiveBundle} options={bundles.map(b => ({ id: b._id, name: b.name }))} />
             <FilterSelect label="App" value={activeApp} onChange={setActiveApp!} options={filteredApps.map(a => ({ id: a._id, name: a.name }))} />
             <FilterSelect label="Milestone" value={selMilestone} onChange={setSelMilestone!} options={[...Array(10)].map((_, i) => ({ id: `M${i+1}`, name: `M${i+1}` }))} />
@@ -135,20 +139,30 @@ const Layout: React.FC<LayoutProps> = ({
               <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-300 text-[10px]"></i>
               <input 
                 type="text" 
-                placeholder="Search repository..." 
+                placeholder="Search items..." 
                 value={searchQuery}
                 onChange={(e) => setSearchQuery?.(e.target.value)}
                 className="bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-1.5 text-[11px] font-bold focus:border-blue-500 outline-none w-44 transition-all"
               />
             </div>
             
-            <button 
-              onClick={onCreateSpace}
-              className="px-4 py-1.5 bg-slate-900 text-white text-[9px] font-black rounded-lg hover:bg-slate-800 transition-all uppercase tracking-widest flex items-center gap-2 shadow-lg shadow-black/10"
-            >
-              <i className="fas fa-plus"></i>
-              Create Space
-            </button>
+            {activeTab === 'wiki' ? (
+              <button 
+                onClick={onCreateSpace}
+                className="px-4 py-1.5 bg-slate-900 text-white text-[9px] font-black rounded-lg hover:bg-slate-800 transition-all uppercase tracking-widest flex items-center gap-2 shadow-lg shadow-black/10"
+              >
+                <i className="fas fa-plus"></i>
+                Create Space
+              </button>
+            ) : activeTab === 'work-items' ? (
+              <button 
+                onClick={onCreateWorkItem}
+                className="px-4 py-1.5 bg-blue-600 text-white text-[9px] font-black rounded-lg hover:bg-blue-700 transition-all uppercase tracking-widest flex items-center gap-2 shadow-lg shadow-blue-500/10"
+              >
+                <i className="fas fa-plus"></i>
+                New Work Item
+              </button>
+            ) : null}
           </div>
         </div>
       )}

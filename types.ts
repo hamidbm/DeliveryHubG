@@ -30,6 +30,44 @@ export enum HierarchyMode {
   SPACE_TYPE_APP_MILESTONE = 'Space → Type → Application → Milestone'
 }
 
+export enum WorkItemType {
+  EPIC = 'EPIC',
+  FEATURE = 'FEATURE',
+  STORY = 'STORY',
+  TASK = 'TASK',
+  BUG = 'BUG',
+  SUBTASK = 'SUBTASK'
+}
+
+export enum WorkItemStatus {
+  TODO = 'TODO',
+  IN_PROGRESS = 'IN_PROGRESS',
+  REVIEW = 'REVIEW',
+  DONE = 'DONE',
+  BLOCKED = 'BLOCKED'
+}
+
+export interface WorkItem {
+  _id?: string;
+  id?: string;
+  key: string;
+  type: WorkItemType;
+  title: string;
+  description?: string;
+  status: WorkItemStatus;
+  priority: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+  bundleId: string;
+  applicationId?: string;
+  milestoneIds?: string[];
+  parentId?: string;
+  assignedTo?: string;
+  createdBy?: string;
+  updatedBy?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  links?: { type: string; targetId: string }[];
+}
+
 export interface TaxonomyCategory {
   _id?: string;
   id?: string;
@@ -106,23 +144,16 @@ export interface Application {
   }[];
 }
 
-export interface WorkItem {
-  id: string;
-  title: string;
-  type: string;
-  status: string;
-  applicationId: string;
-  assignedTo: string;
-  priority: string;
-}
-
 export interface Milestone {
-  id: string;
+  _id?: string;
+  id?: string;
   name: string;
-  applicationId: string;
-  vendorCompany: string;
+  applicationId?: string;
+  vendorCompany?: string;
   status: MilestoneStatus;
   dueDate: string;
+  startDate?: string;
+  endDate?: string;
 }
 
 export interface WikiPage {

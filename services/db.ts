@@ -1,11 +1,89 @@
 
 import clientPromise from '../lib/mongodb';
 import { ObjectId } from 'mongodb';
-import { WikiPage, WikiSpace, WikiTheme, Bundle, Application, TaxonomyCategory, TaxonomyDocumentType } from '../types';
+import { WikiPage, WikiSpace, WikiTheme, Bundle, Application, TaxonomyCategory, TaxonomyDocumentType, WorkItem, WorkItemType, WorkItemStatus } from '../types';
 
 export const getDb = async () => {
   const client = await clientPromise;
   return client.db('deliveryhub');
+};
+
+// Sequences for Work Item Keys (e.g., WI-101)
+export const getNextSequence = async (name: string) => {
+  const db = await getDb();
+  const res = await db.collection('counters').findOneAndUpdate(
+    { _id: name as any },
+    { $inc: { seq: 1 } },
+    { upsert: true, returnDocument: 'after' }
+  );
+  return res?.seq || 1;
+};
+
+// Work Items
+export const fetchWorkItems = async (filters: any) => {
+  const db = await getDb();
+  const query: any = {};
+  if (filters.bundleId && filters.bundleId !== 'all') query.bundleId = filters.bundleId;
+  if (filters.applicationId && filters.applicationId !== 'all') query.applicationId = filters.applicationId;
+  if (filters.milestoneId && filters.milestoneId !== 'all') query.milestoneIds = filters.milestoneId;
+  if (filters.parentId) query.parentId = filters.parentId;
+  if (filters.q) query.title = { $regex: filters.q, $options: 'i' };
+  
+  return await db.collection('work_items').find(query).sort({ key: 1 }).toArray();
+};
+
+export const fetchWorkItemTree = async (filters: any) => {
+  const db = await getDb();
+  const items = await fetchWorkItems(filters) as unknown as WorkItem[];
+  
+  // Basic tree builder - for MVT we build the whole visible tree
+  // In a real app with 10k items, this would be lazy-loaded
+  const buildTree = (parentId: string | null = null): any[] => {
+    return items
+      .filter(item => (parentId ? item.parentId === parentId : !item.parentId))
+      .map(item => ({
+        id: item._id?.toString() || item.id,
+        label: `${item.key}: ${item.title}`,
+        workItemId: item._id?.toString() || item.id,
+        nodeType: 'WORK_ITEM',
+        type: item.type,
+        status: item.status,
+        children: buildTree(item._id?.toString() || item.id)
+      }));
+  };
+
+  return buildTree();
+};
+
+export const saveWorkItem = async (item: Partial<WorkItem>, user?: any) => {
+  const db = await getDb();
+  const { _id, ...data } = item;
+  const now = new Date().toISOString();
+
+  if (_id) {
+    return await db.collection('work_items').updateOne(
+      { _id: new ObjectId(_id) },
+      { $set: { ...data, updatedAt: now, updatedBy: user?.name } }
+    );
+  } else {
+    const seq = await getNextSequence('work_item_key');
+    const key = `WI-${seq}`;
+    return await db.collection('work_items').insertOne({
+      ...data,
+      key,
+      status: data.status || WorkItemStatus.TODO,
+      priority: data.priority || 'MEDIUM',
+      createdAt: now,
+      updatedAt: now,
+      createdBy: user?.name,
+      updatedBy: user?.name
+    });
+  }
+};
+
+export const fetchWorkItemById = async (id: string) => {
+  const db = await getDb();
+  return await db.collection('work_items').findOne({ _id: new ObjectId(id) });
 };
 
 // Taxonomy - Categories
