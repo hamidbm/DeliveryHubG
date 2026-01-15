@@ -167,6 +167,7 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
       const attachments = [...(item.attachments || []), { name: file.name, size: file.size, type: file.type, url: base64, uploadedBy: 'Current User', createdAt: new Date().toISOString() }];
       await handleUpdateItem({ attachments });
       setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
     };
     reader.readAsDataURL(file);
   };
@@ -175,6 +176,8 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
     const links = [...(item.links || []), { type: linkType, targetId: (target._id || target.id) as string, targetKey: target.key, targetTitle: target.title }];
     await handleUpdateItem({ links });
     setIsLinking(false);
+    setLinkSearch('');
+    setLinkResults([]);
   };
 
   const getIcon = (type: WorkItemType) => {
@@ -207,7 +210,7 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
         </div>
         <div className="flex items-center gap-3 shrink-0">
            <button onClick={() => handleUpdateItem({ isFlagged: !item.isFlagged })} className={`w-10 h-10 rounded-xl border flex items-center justify-center transition-all ${item.isFlagged ? 'bg-red-50 border-red-200 text-red-600 shadow-inner' : 'bg-white border-slate-200 text-slate-300 hover:text-red-400'}`} title="Impediment"><i className="fas fa-flag"></i></button>
-           <button onClick={() => handleUpdateItem({ watchers: isWatching ? item.watchers?.filter(w => w !== 'Current User') : [...(item.watchers || []), 'Current User'] })} className={`w-10 h-10 rounded-xl border flex items-center justify-center transition-all ${isWatching ? 'bg-amber-50 border-amber-200 text-amber-500' : 'bg-white border-slate-200 text-slate-300'}`}><i className="fas fa-eye"></i></button>
+           <button onClick={() => handleUpdateItem({ watchers: isWatching ? item.watchers?.filter(w => w !== 'Current User') : [...(item.watchers || []), 'Current User'] })} className={`w-10 h-10 rounded-xl border flex items-center justify-center transition-all ${isWatching ? 'bg-amber-50 border-amber-200 text-amber-500 shadow-inner' : 'bg-white border-slate-200 text-slate-300'}`}><i className="fas fa-eye"></i></button>
            <div className="h-8 w-[1px] bg-slate-200"></div>
            <span className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest ${item.type === WorkItemType.EPIC ? 'bg-purple-50 text-purple-700' : 'bg-blue-50 text-blue-700'}`}>{item.type}</span>
         </div>
@@ -323,7 +326,72 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
           </div>
         )}
 
-        {/* Other tabs remain largely identical but optimized ... */}
+        {activeTab === 'links' && (
+          <div className="p-10 space-y-6 animate-fadeIn">
+             <div className="flex justify-between items-center mb-4">
+               <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Linked Artifacts</h4>
+               <button onClick={() => setIsLinking(true)} className="px-4 py-2 bg-slate-900 text-white text-[9px] font-black rounded-xl uppercase tracking-widest hover:bg-blue-600 transition-all">+ Add Link</button>
+             </div>
+             <div className="space-y-3">
+                {(item.links || []).map((link, idx) => (
+                  <div key={idx} className="bg-white p-4 rounded-2xl border border-slate-100 flex items-center justify-between group">
+                     <div className="flex items-center gap-4">
+                        <span className={`text-[8px] font-black px-2 py-1 rounded uppercase ${link.type.includes('BLOCK') ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-600'}`}>{link.type.replace(/_/g, ' ')}</span>
+                        <div>
+                           <p className="text-xs font-bold text-slate-800">{link.targetTitle}</p>
+                           <p className="text-[9px] font-black text-slate-400 uppercase">{link.targetKey}</p>
+                        </div>
+                     </div>
+                     <button onClick={() => handleUpdateItem({ links: item.links?.filter((_, i) => i !== idx) })} className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 transition-all"><i className="fas fa-trash-alt text-xs"></i></button>
+                  </div>
+                ))}
+                {(!item.links || item.links.length === 0) && (
+                   <div className="py-20 text-center text-slate-300 italic text-xs border-2 border-dashed border-slate-100 rounded-[2rem]">No dependencies established.</div>
+                )}
+             </div>
+          </div>
+        )}
+
+        {activeTab === 'attachments' && (
+          <div className="p-10 space-y-6 animate-fadeIn">
+             <div className="flex justify-between items-center mb-4">
+               <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Delivery Artifacts</h4>
+               <label className="px-4 py-2 bg-slate-900 text-white text-[9px] font-black rounded-xl uppercase tracking-widest hover:bg-blue-600 transition-all cursor-pointer">
+                  {uploading ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-upload"></i>} Upload File
+                  <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" />
+               </label>
+             </div>
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {(item.attachments || []).map((file, idx) => (
+                  <div key={idx} className="bg-white p-4 rounded-2xl border border-slate-100 flex items-center gap-4 hover:shadow-md transition-all">
+                     <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-slate-400 shrink-0">
+                        <i className={`fas ${file.type.includes('image') ? 'fa-file-image text-blue-400' : 'fa-file-alt text-slate-400'} text-xl`}></i>
+                     </div>
+                     <div className="min-w-0 flex-1">
+                        <p className="text-xs font-bold text-slate-800 truncate">{file.name}</p>
+                        <p className="text-[9px] font-black text-slate-400 uppercase">{(file.size / 1024).toFixed(1)} KB • {file.uploadedBy}</p>
+                     </div>
+                     <div className="flex items-center gap-1 shrink-0">
+                        <button 
+                          onClick={() => setViewingAttachment(file)}
+                          className="w-8 h-8 rounded-lg hover:bg-blue-50 text-slate-300 hover:text-blue-600 transition-all flex items-center justify-center"
+                          title="Preview Content"
+                        >
+                          <i className="fas fa-eye text-xs"></i>
+                        </button>
+                        <a href={file.url} download={file.name} className="w-8 h-8 rounded-lg hover:bg-blue-50 text-slate-300 hover:text-blue-600 transition-all flex items-center justify-center" title="Download Source">
+                           <i className="fas fa-download text-xs"></i>
+                        </a>
+                     </div>
+                  </div>
+                ))}
+                {(!item.attachments || item.attachments.length === 0) && (
+                   <div className="col-span-full py-20 text-center text-slate-300 italic text-xs border-2 border-dashed border-slate-100 rounded-[2rem]">No artifacts uploaded.</div>
+                )}
+             </div>
+          </div>
+        )}
+
         {activeTab === 'ai' && (
           <div className="p-10 space-y-10 animate-fadeIn">
              <div className="bg-gradient-to-br from-slate-900 to-blue-900 p-10 rounded-[3rem] text-white shadow-2xl relative overflow-hidden">
@@ -346,7 +414,6 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
           </div>
         )}
 
-        {/* Audit Trail and Artifacts Tabs ... */}
         {activeTab === 'comments' && (
           <div className="p-10 space-y-8 animate-fadeIn">
              <div className="space-y-6">
@@ -395,6 +462,55 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
         )}
       </div>
 
+      {/* Artifact Previewer Overlay */}
+      {viewingAttachment && (
+        <div className="fixed inset-0 z-[500] bg-slate-950/95 backdrop-blur-2xl flex flex-col animate-fadeIn">
+          <header className="px-10 py-6 flex items-center justify-between border-b border-white/10 shrink-0">
+            <div className="flex items-center gap-6">
+               <div className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-blue-400">
+                  <i className={`fas ${viewingAttachment.type.includes('image') ? 'fa-file-image' : 'fa-file-pdf'} text-xl`}></i>
+               </div>
+               <div>
+                  <h3 className="text-white font-black text-xl tracking-tight">{viewingAttachment.name}</h3>
+                  <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest">
+                    {(viewingAttachment.size / 1024).toFixed(1)} KB • Uploaded by {viewingAttachment.uploadedBy}
+                  </p>
+               </div>
+            </div>
+            <div className="flex items-center gap-4">
+               <a 
+                href={viewingAttachment.url} 
+                download={viewingAttachment.name} 
+                className="px-6 py-3 bg-white/5 hover:bg-white/10 text-white border border-white/10 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
+               >
+                 <i className="fas fa-download mr-2"></i> Download
+               </a>
+               <button 
+                onClick={() => setViewingAttachment(null)}
+                className="w-12 h-12 rounded-full bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white transition-all flex items-center justify-center text-xl"
+               >
+                 <i className="fas fa-times"></i>
+               </button>
+            </div>
+          </header>
+          <main className="flex-1 p-10 flex items-center justify-center overflow-hidden">
+             <div className="w-full h-full max-w-6xl bg-white rounded-[2.5rem] shadow-2xl overflow-hidden relative border border-white/20">
+                {viewingAttachment.type.includes('image') ? (
+                  <img src={viewingAttachment.url} alt={viewingAttachment.name} className="w-full h-full object-contain" />
+                ) : viewingAttachment.type.includes('pdf') || viewingAttachment.type.includes('text') ? (
+                  <iframe src={viewingAttachment.url} className="w-full h-full border-none" title="Artifact Viewer" />
+                ) : (
+                  <div className="h-full flex flex-col items-center justify-center p-20 text-center">
+                    <i className="fas fa-file-circle-question text-slate-200 text-8xl mb-8"></i>
+                    <h4 className="text-2xl font-black text-slate-800 uppercase italic">Preview Unavailable</h4>
+                    <p className="text-slate-400 font-medium max-w-md mt-4">The browser cannot render this file type natively. Please download the artifact to review its contents locally.</p>
+                  </div>
+                )}
+             </div>
+          </main>
+        </div>
+      )}
+
       {isLoggingWork && (
         <div className="fixed inset-0 bg-slate-950/40 backdrop-blur-md z-[200] flex items-center justify-center p-6">
            <div className="bg-white rounded-[2.5rem] w-full max-w-md p-10 shadow-2xl animate-fadeIn border border-slate-100">
@@ -415,6 +531,66 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
           bundles={bundles} applications={applications} initialBundleId={item.bundleId} initialAppId={item.applicationId || ''} initialParentId={item._id || item.id} onClose={() => setIsCreatingSub(false)}
           onSuccess={() => { setIsCreatingSub(false); loadFullDetails(); onUpdate(); }}
         />
+      )}
+
+      {isLinking && (
+        <div className="fixed inset-0 bg-slate-950/40 backdrop-blur-md z-[200] flex items-center justify-center p-6">
+           <div className="bg-white rounded-[2.5rem] w-full max-w-lg p-10 shadow-2xl animate-fadeIn border border-slate-100">
+              <div className="flex justify-between items-start mb-8">
+                 <h3 className="text-2xl font-black text-slate-900 tracking-tight italic">Establish Relationship</h3>
+                 <button onClick={() => setIsLinking(false)} className="text-slate-300 hover:text-red-500 transition-colors"><i className="fas fa-times"></i></button>
+              </div>
+              <div className="space-y-6">
+                 <div className="space-y-2">
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Dependency Mode</label>
+                    <select value={linkType} onChange={(e) => setLinkType(e.target.value as any)} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-xs font-bold outline-none focus:border-blue-500 transition-all">
+                       <option value="RELATES_TO">Relates To</option>
+                       <option value="BLOCKS">Blocks</option>
+                       <option value="IS_BLOCKED_BY">Is Blocked By</option>
+                       <option value="DUPLICATES">Duplicates</option>
+                    </select>
+                 </div>
+                 <div className="space-y-2 relative">
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Target Artifact Search</label>
+                    <div className="relative group">
+                       <input 
+                         autoFocus
+                         type="text" 
+                         value={linkSearch} 
+                         onChange={(e) => setLinkSearch(e.target.value)} 
+                         placeholder="Search by key or title..." 
+                         className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl pl-12 pr-5 py-4 text-sm font-bold outline-none focus:border-blue-500 transition-all" 
+                       />
+                       <i className="fas fa-search absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-blue-500 transition-colors"></i>
+                       {linkLoading && <i className="fas fa-circle-notch fa-spin absolute right-5 top-1/2 -translate-y-1/2 text-slate-300"></i>}
+                    </div>
+
+                    {linkResults.length > 0 && (
+                       <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl shadow-2xl border border-slate-100 z-50 overflow-hidden animate-fadeIn">
+                          <div className="max-h-60 overflow-y-auto custom-scrollbar">
+                             {linkResults.map(res => (
+                                <button
+                                   key={res._id || res.id}
+                                   onClick={() => addLink(res)}
+                                   className="w-full text-left p-4 hover:bg-slate-50 flex items-center justify-between transition-colors border-b border-slate-50 last:border-0 group/item"
+                                >
+                                   <div className="min-w-0">
+                                      <p className="text-xs font-black text-slate-400 uppercase tracking-widest">{res.key}</p>
+                                      <p className="text-sm font-bold text-slate-800 truncate">{res.title}</p>
+                                   </div>
+                                   <i className="fas fa-plus text-slate-200 group-hover/item:text-blue-500 transition-colors"></i>
+                                </button>
+                             ))}
+                          </div>
+                       </div>
+                    )}
+                 </div>
+              </div>
+              <div className="flex justify-end gap-3 mt-12 pt-6 border-t border-slate-50">
+                 <button onClick={() => setIsLinking(false)} className="px-6 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">Cancel</button>
+              </div>
+           </div>
+        </div>
       )}
     </div>
   );
