@@ -34,7 +34,7 @@ export const getPortfolioSummary = async (portfolioData: any) => {
     return response.text || "Portfolio analysis is currently unavailable.";
   } catch (error) {
     console.error("Gemini Error:", error);
-    return "Error generating AI insights. Please verify your environment configuration and API key.";
+    return "Error generating AI insights.";
   }
 };
 
@@ -68,5 +68,38 @@ export const generateWorkPlan = async (workItem: any) => {
   } catch (error) {
     console.error("Gemini Task Error:", error);
     return "AI Refinement currently offline.";
+  }
+};
+
+/**
+ * AI Standup Synthesizer
+ * Converts raw activity logs into executive status updates.
+ */
+export const generateStandupDigest = async (item: any) => {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const prompt = `
+    Analyze the recent activity for artifact ${item.key}: "${item.title}".
+    
+    ACTIVITY LOG:
+    ${JSON.stringify((item.activity || []).slice(-10))}
+    
+    CURRENT STATUS: ${item.status}
+    PRIORITY: ${item.priority}
+    ASSIGNEE: ${item.assignedTo}
+
+    TASK: Summarize the progress of this item for a daily standup.
+    - Provide 3 bullet points: "Accomplishments", "Active Impediments", and "Next Protocol".
+    - Use highly professional, concise language.
+    - If the item is flagged or blocked, emphasize the risk.
+  `;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: prompt
+    });
+    return response.text || "Unable to synthesize standup update.";
+  } catch (error) {
+    return "Standup Intelligence offline.";
   }
 };
