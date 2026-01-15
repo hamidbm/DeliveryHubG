@@ -90,7 +90,6 @@ const WorkItemsTreeView: React.FC<WorkItemsTreeViewProps> = ({
     }
   };
 
-  // Helper to check for risk in a node or any of its recursive children
   const checkNodeRisk = (node: any): 'CRITICAL' | 'WARNING' | 'HEALTHY' => {
     if (node.status === WorkItemStatus.BLOCKED) return 'CRITICAL';
     
@@ -166,6 +165,12 @@ const WorkItemsTreeView: React.FC<WorkItemsTreeViewProps> = ({
     );
   };
 
+  const getSubArtifactType = (type?: string): WorkItemType => {
+    if (type === WorkItemType.EPIC) return WorkItemType.FEATURE;
+    if (type === WorkItemType.FEATURE) return WorkItemType.STORY;
+    return WorkItemType.TASK;
+  };
+
   return (
     <div className="flex h-[800px] bg-white rounded-[3rem] border border-slate-200 shadow-2xl overflow-hidden animate-fadeIn">
       <aside className="w-[450px] border-r border-slate-100 flex flex-col bg-slate-50/30 shrink-0">
@@ -173,18 +178,8 @@ const WorkItemsTreeView: React.FC<WorkItemsTreeViewProps> = ({
           <div className="flex items-center justify-between mb-4">
              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Work Hierarchy</h3>
              <div className="flex bg-slate-200 p-0.5 rounded-xl">
-                <button 
-                  onClick={() => setTreeMode('hierarchy')}
-                  className={`px-4 py-2 text-[10px] font-black uppercase rounded-lg transition-all ${treeMode === 'hierarchy' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400'}`}
-                >
-                  Delivery
-                </button>
-                <button 
-                  onClick={() => setTreeMode('milestone')}
-                  className={`px-4 py-2 text-[10px] font-black uppercase rounded-lg transition-all ${treeMode === 'milestone' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400'}`}
-                >
-                  Milestone
-                </button>
+                <button onClick={() => setTreeMode('hierarchy')} className={`px-4 py-2 text-[10px] font-black uppercase rounded-lg transition-all ${treeMode === 'hierarchy' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400'}`}>Delivery</button>
+                <button onClick={() => setTreeMode('milestone')} className={`px-4 py-2 text-[10px] font-black uppercase rounded-lg transition-all ${treeMode === 'milestone' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400'}`}>Milestone</button>
              </div>
           </div>
         </header>
@@ -207,6 +202,16 @@ const WorkItemsTreeView: React.FC<WorkItemsTreeViewProps> = ({
             </div>
           )}
         </nav>
+        
+        <div className="p-6 bg-white border-t border-slate-100">
+           <button 
+             onClick={() => setIsCreating(true)}
+             className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-blue-600/20 hover:bg-blue-700 transition-all flex items-center justify-center gap-2 group/add"
+           >
+              <i className="fas fa-plus group-hover/add:rotate-90 transition-transform"></i>
+              {activeItem ? `Create ${getSubArtifactType(activeItem.type)}` : 'New Work Item'}
+           </button>
+        </div>
       </aside>
 
       <main className="flex-1 overflow-y-auto bg-white relative custom-scrollbar">
@@ -233,8 +238,10 @@ const WorkItemsTreeView: React.FC<WorkItemsTreeViewProps> = ({
         <CreateWorkItemModal 
           bundles={bundles}
           applications={applications}
-          initialBundleId={selBundleId !== 'all' ? selBundleId : ''}
-          initialAppId={selAppId !== 'all' ? selAppId : ''}
+          initialBundleId={activeItem?.bundleId || (selBundleId !== 'all' ? selBundleId : '')}
+          initialAppId={activeItem?.applicationId || (selAppId !== 'all' ? selAppId : '')}
+          initialParentId={activeItem?._id || activeItem?.id}
+          initialType={getSubArtifactType(activeItem?.type)}
           onClose={() => setIsCreating(false)}
           onSuccess={(item) => {
             setIsCreating(false);

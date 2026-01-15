@@ -78,17 +78,18 @@ const MilestoneColumn: React.FC<{ milestone: Milestone; items: WorkItem[]; onCar
   const totalPoints = items.reduce((acc, curr) => acc + (curr.storyPoints || 0), 0);
   const doneItems = items.filter(i => i.status === WorkItemStatus.DONE).length;
   const progress = items.length > 0 ? Math.round((doneItems / items.length) * 100) : 0;
-  const capacityPct = milestone.targetCapacity ? Math.round((totalPoints / milestone.targetCapacity) * 100) : null;
+  const isOverCapacity = milestone.targetCapacity && totalPoints > milestone.targetCapacity;
+  const utilization = milestone.targetCapacity ? Math.round((totalPoints / milestone.targetCapacity) * 100) : null;
 
   return (
     <div className="w-80 flex flex-col shrink-0">
-      <header className="mb-6 px-4 space-y-4">
-         <div className="flex items-center gap-3">
-            <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-[10px] font-black transition-all ${isOver ? 'bg-blue-600 text-white animate-pulse' : 'bg-slate-900 text-white'}`}>
+      <header className={`mb-6 p-4 rounded-[2rem] transition-all duration-500 ${isOverCapacity ? 'bg-red-50 border border-red-100 shadow-lg shadow-red-500/5' : 'bg-transparent'}`}>
+         <div className="flex items-center gap-3 mb-4">
+            <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-[10px] font-black transition-all ${isOver ? 'bg-blue-600 text-white animate-pulse' : (isOverCapacity ? 'bg-red-600 text-white animate-pulse' : 'bg-slate-900 text-white')}`}>
               <i className="fas fa-flag-checkered"></i>
             </span>
             <div className="flex-1 min-w-0">
-              <h4 className="text-sm font-black text-slate-800 uppercase tracking-tight truncate">{milestone.name}</h4>
+              <h4 className={`text-sm font-black uppercase tracking-tight truncate ${isOverCapacity ? 'text-red-800' : 'text-slate-800'}`}>{milestone.name}</h4>
               <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">
                 {new Date(milestone.startDate).toLocaleDateString('en-US', {month: 'short', day: 'numeric'})} — {new Date(milestone.endDate).toLocaleDateString('en-US', {month: 'short', day: 'numeric'})}
               </span>
@@ -97,22 +98,25 @@ const MilestoneColumn: React.FC<{ milestone: Milestone; items: WorkItem[]; onCar
          
          <div className="space-y-1.5">
             <div className="flex justify-between text-[8px] font-black uppercase tracking-widest text-slate-400">
-               <span>Progress ({progress}%)</span>
-               <span>{totalPoints} / {milestone.targetCapacity || '-'} pts</span>
+               <span className={isOverCapacity ? 'text-red-500 font-black' : ''}>Capacity {utilization ? `(${utilization}%)` : ''}</span>
+               <span className={isOverCapacity ? 'text-red-600 font-black' : ''}>{totalPoints} / {milestone.targetCapacity || '-'} pts</span>
             </div>
-            <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden flex">
+            <div className="h-2 bg-slate-100 rounded-full overflow-hidden flex">
                <div className="h-full bg-emerald-500 transition-all duration-700" style={{ width: `${progress}%` }} />
-               {capacityPct !== null && totalPoints > (milestone.targetCapacity || 0) && (
-                 <div className="h-full bg-red-400 animate-pulse flex-1" />
+               {isOverCapacity && (
+                 <div className="h-full bg-red-500 animate-pulse flex-1" />
                )}
             </div>
+            {isOverCapacity && (
+               <p className="text-[7px] font-black text-red-500 uppercase tracking-widest text-center animate-bounce mt-1">Resource Breach</p>
+            )}
          </div>
       </header>
 
       <div 
         ref={setNodeRef}
-        className={`flex-1 rounded-[2.5rem] p-4 space-y-3 overflow-y-auto custom-scrollbar transition-all ${
-          isOver ? 'bg-blue-50/50 border-2 border-dashed border-blue-200 shadow-inner' : 'bg-slate-50/50 border border-slate-100 shadow-inner'
+        className={`flex-1 rounded-[2.5rem] p-4 space-y-3 overflow-y-auto custom-scrollbar transition-all duration-700 ${
+          isOver ? 'bg-blue-50/50 border-2 border-dashed border-blue-200 shadow-inner' : (isOverCapacity ? 'bg-red-50/20 border border-red-100/50 shadow-inner animate-[pulse_3s_infinite]' : 'bg-slate-50/50 border border-slate-100 shadow-inner')
         }`}
       >
          {items.map(item => (
@@ -170,6 +174,7 @@ const WorkItemsMilestonePlanningView: React.FC<WorkItemsMilestonePlanningViewPro
     const milestoneIds = targetId === 'backlog' ? [] : [targetId];
 
     setItems(prev => prev.map(i => (i._id || i.id) === itemId ? { ...i, milestoneIds } : i));
+    
     await fetch(`/api/work-items/${itemId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },

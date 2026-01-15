@@ -69,7 +69,6 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
       try {
         const res = await fetch(`/api/work-items?q=${encodeURIComponent(linkSearch)}`);
         const data = await res.json();
-        // Exclude current item from search results
         setLinkResults(data.filter((i: WorkItem) => (i._id || i.id) !== (item._id || item.id)));
       } catch (err) {
         console.error(err);
@@ -362,29 +361,37 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
                 <div className="absolute left-[15.5px] top-4 bottom-4 w-[2px] bg-slate-100"></div>
                 {(item.activity || []).slice().reverse().map((act, idx) => (act && (
                   <div key={idx} className="relative group/act">
-                     <div className={`absolute -left-[37px] w-8 h-8 rounded-xl bg-white border border-slate-200 z-10 flex items-center justify-center shadow-sm transition-all group-hover/act:border-blue-300 ${act.action.includes('AI') ? 'text-blue-500' : 'text-slate-400'}`}>
-                        <i className={`fas ${act.action === 'CREATED' ? 'fa-plus' : act.action === 'CHANGED_STATUS' ? 'fa-arrow-right-long' : act.action.includes('AI') ? 'fa-wand-magic-sparkles' : 'fa-pen-nib'} text-[10px]`}></i>
+                     <div className={`absolute -left-[37px] w-8 h-8 rounded-xl bg-white border border-slate-200 z-10 flex items-center justify-center shadow-sm transition-all group-hover/act:border-blue-300 ${act.action.includes('AI') || act.action.includes('LINK') ? 'text-blue-500' : 'text-slate-400'}`}>
+                        <i className={`fas ${act.action === 'CREATED' ? 'fa-plus' : act.action === 'CHANGED_STATUS' ? 'fa-arrow-right-long' : act.action.includes('AI') ? 'fa-wand-magic-sparkles' : act.action.includes('LINK') ? 'fa-link' : 'fa-pen-nib'} text-[10px]`}></i>
                      </div>
                      <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm space-y-2">
                         <div className="flex items-center gap-2">
                            <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(act.user || 'S')}&background=random&size=20`} className="w-5 h-5 rounded-lg" />
                            <span className="text-[11px] font-black text-slate-800">{act.user}</span>
-                           <span className="text-[10px] font-bold text-blue-600 uppercase tracking-widest bg-blue-50 px-2 py-0.5 rounded-md ml-auto">{act.action.replace(/_/g, ' ')}</span>
+                           <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-md ml-auto ${
+                             act.action.includes('AUTO') ? 'bg-slate-100 text-slate-500 border border-slate-200' : 'bg-blue-50 text-blue-600'
+                           }`}>{act.action.replace(/_/g, ' ')}</span>
                         </div>
                         <div className="pl-7">
                            {act.field ? (
-                              <p className="text-[11px] text-slate-500 font-medium">
-                                Refined <span className="font-bold text-slate-600">{act.field}</span> 
+                              <div className="text-[11px] text-slate-500 font-medium">
+                                Modified <span className="font-bold text-slate-600 uppercase tracking-tighter text-[9px]">{act.field}</span> 
                                 {act.from !== undefined && act.to !== undefined && (
-                                   <span className="block mt-1 bg-slate-50 p-2 rounded-lg border border-slate-100">
-                                      <span className="line-through text-slate-300 mr-2">{String(act.from).substring(0, 100)}{String(act.from).length > 100 ? '...' : ''}</span>
-                                      <i className="fas fa-chevron-right text-[8px] text-slate-300 mr-2"></i>
-                                      <span className="font-bold text-blue-600">{String(act.to).substring(0, 100)}{String(act.to).length > 100 ? '...' : ''}</span>
-                                   </span>
+                                   <div className="mt-2 grid grid-cols-1 gap-1">
+                                      <div className="bg-red-50/50 p-2 rounded-lg border border-red-100 text-red-700/60 line-through truncate">
+                                        {String(act.from).substring(0, 150)}{String(act.from).length > 150 ? '...' : ''}
+                                      </div>
+                                      <div className="bg-blue-50/50 p-2 rounded-lg border border-blue-100 text-blue-800 font-bold">
+                                        {String(act.to).substring(0, 200)}{String(act.to).length > 200 ? '...' : ''}
+                                      </div>
+                                   </div>
                                 )}
-                              </p>
+                                {act.from === undefined && act.to && (
+                                   <div className="mt-1 bg-blue-50 p-2 rounded-lg border border-blue-100 text-blue-800 font-bold">{String(act.to)}</div>
+                                )}
+                              </div>
                            ) : (
-                              <p className="text-[11px] text-slate-400 italic">No additional metadata tracked.</p>
+                              <p className="text-[11px] text-slate-400 italic">Audit record generated with no payload.</p>
                            )}
                            <p className="text-[9px] font-bold text-slate-300 uppercase tracking-widest mt-2">{new Date(act.createdAt).toLocaleString()}</p>
                         </div>
