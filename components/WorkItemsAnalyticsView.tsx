@@ -11,10 +11,11 @@ interface WorkItemsAnalyticsViewProps {
   selMilestone: string;
   selEpicId: string;
   searchQuery: string;
+  quickFilter?: string;
 }
 
 const WorkItemsAnalyticsView: React.FC<WorkItemsAnalyticsViewProps> = ({ 
-  selBundleId, selAppId, selMilestone, selEpicId, searchQuery 
+  selBundleId, selAppId, selMilestone, selEpicId, searchQuery, quickFilter 
 }) => {
   const [items, setItems] = useState<WorkItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -29,6 +30,8 @@ const WorkItemsAnalyticsView: React.FC<WorkItemsAnalyticsViewProps> = ({
         q: searchQuery,
         epicId: selEpicId
       });
+      if (quickFilter) params.set('quickFilter', quickFilter);
+
       try {
         const res = await fetch(`/api/work-items?${params.toString()}`);
         setItems(await res.json());
@@ -37,9 +40,8 @@ const WorkItemsAnalyticsView: React.FC<WorkItemsAnalyticsViewProps> = ({
       }
     };
     fetchStats();
-  }, [selBundleId, selAppId, selMilestone, selEpicId, searchQuery]);
+  }, [selBundleId, selAppId, selMilestone, selEpicId, searchQuery, quickFilter]);
 
-  // Fix: Added useMemo to React imports
   const statusData = useMemo(() => {
     const counts: Record<string, number> = {};
     Object.values(WorkItemStatus).forEach(s => counts[s] = 0);

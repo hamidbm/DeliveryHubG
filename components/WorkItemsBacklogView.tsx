@@ -30,6 +30,7 @@ interface WorkItemsBacklogViewProps {
   selMilestone: string;
   selEpicId: string;
   searchQuery: string;
+  quickFilter?: string;
   externalTrigger?: string | null;
   onTriggerProcessed?: () => void;
 }
@@ -104,7 +105,7 @@ const SprintContainer: React.FC<{ sprint: Sprint, items: WorkItem[], onItemClick
   );
 };
 
-const WorkItemsBacklogView: React.FC<WorkItemsBacklogViewProps> = ({ applications, bundles, selBundleId, selAppId, selMilestone, selEpicId, searchQuery, externalTrigger, onTriggerProcessed }) => {
+const WorkItemsBacklogView: React.FC<WorkItemsBacklogViewProps> = ({ applications, bundles, selBundleId, selAppId, selMilestone, selEpicId, searchQuery, quickFilter, externalTrigger, onTriggerProcessed }) => {
   const [items, setItems] = useState<WorkItem[]>([]);
   const [sprints, setSprints] = useState<Sprint[]>([]);
   const [loading, setLoading] = useState(true);
@@ -124,12 +125,13 @@ const WorkItemsBacklogView: React.FC<WorkItemsBacklogViewProps> = ({ application
   const fetchItems = async () => {
     setLoading(true);
     const params = new URLSearchParams({ bundleId: selBundleId, applicationId: selAppId, milestoneId: selMilestone, q: searchQuery, epicId: selEpicId });
+    if (quickFilter) params.set('quickFilter', quickFilter);
     const res = await fetch(`/api/work-items?${params.toString()}`);
     setItems(await res.json());
     setLoading(false);
   };
 
-  useEffect(() => { fetchSprintsData(); fetchItems(); }, [selBundleId, selAppId, selMilestone, selEpicId, searchQuery]);
+  useEffect(() => { fetchSprintsData(); fetchItems(); }, [selBundleId, selAppId, selMilestone, selEpicId, searchQuery, quickFilter]);
 
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;

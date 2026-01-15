@@ -10,10 +10,11 @@ interface WorkItemsRoadmapViewProps {
   selAppId: string;
   selEpicId: string;
   searchQuery: string;
+  quickFilter?: string;
 }
 
 const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({ 
-  applications, bundles, selBundleId, selAppId, selEpicId, searchQuery 
+  applications, bundles, selBundleId, selAppId, selEpicId, searchQuery, quickFilter 
 }) => {
   const [items, setItems] = useState<WorkItem[]>([]);
   const [milestones, setMilestones] = useState<Milestone[]>([]);
@@ -28,6 +29,7 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
       q: searchQuery 
     });
     if (selEpicId !== 'all') params.set('epicId', selEpicId);
+    if (quickFilter) params.set('quickFilter', quickFilter);
 
     const [wRes, mRes] = await Promise.all([
       fetch(`/api/work-items?${params.toString()}`),
@@ -40,7 +42,7 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
 
   useEffect(() => {
     fetchData();
-  }, [selBundleId, selAppId, selEpicId, searchQuery]);
+  }, [selBundleId, selAppId, selEpicId, searchQuery, quickFilter]);
 
   const timelineMonths = useMemo(() => {
     const today = new Date();
@@ -91,7 +93,7 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
       <div 
         onClick={() => setActiveItem(item)}
         className={`h-6 rounded-full shadow-lg relative transition-all hover:h-8 flex items-center px-4 cursor-pointer group/bar ${
-          item.status === WorkItemStatus.DONE ? 'bg-emerald-500 shadow-emerald-500/20' : 
+          item.status === WorkItemStatus.DONE ? 'bg-emerald-50 shadow-emerald-500/20' : 
           item.status === WorkItemStatus.IN_PROGRESS ? 'bg-blue-600 shadow-blue-500/20' : 
           'bg-slate-200'
         } ${isFeature ? 'opacity-80 scale-y-75' : ''}`}

@@ -13,6 +13,7 @@ interface WorkItemsListViewProps {
   selMilestone: string;
   selEpicId: string;
   searchQuery: string;
+  quickFilter?: string;
   externalTrigger?: string | null;
   onTriggerProcessed?: () => void;
 }
@@ -21,7 +22,7 @@ type SortKey = 'key' | 'title' | 'status' | 'assignedTo' | 'updatedAt';
 type SortDirection = 'asc' | 'desc';
 
 const WorkItemsListView: React.FC<WorkItemsListViewProps> = ({ 
-  applications, bundles, selBundleId, selAppId, selMilestone, selEpicId, searchQuery, externalTrigger, onTriggerProcessed 
+  applications, bundles, selBundleId, selAppId, selMilestone, selEpicId, searchQuery, quickFilter, externalTrigger, onTriggerProcessed 
 }) => {
   const [items, setItems] = useState<WorkItem[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -52,6 +53,7 @@ const WorkItemsListView: React.FC<WorkItemsListViewProps> = ({
       q: searchQuery,
       epicId: selEpicId
     });
+    if (quickFilter) params.set('quickFilter', quickFilter);
 
     try {
       const res = await fetch(`/api/work-items?${params.toString()}`);
@@ -66,7 +68,7 @@ const WorkItemsListView: React.FC<WorkItemsListViewProps> = ({
 
   useEffect(() => {
     fetchItems();
-  }, [selBundleId, selAppId, selMilestone, selEpicId, searchQuery]);
+  }, [selBundleId, selAppId, selMilestone, selEpicId, searchQuery, quickFilter]);
 
   const sortedItems = useMemo(() => {
     if (!sortConfig) return items;
