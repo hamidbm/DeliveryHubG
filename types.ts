@@ -101,7 +101,7 @@ export interface WorkItem {
   type: WorkItemType;
   title: string;
   description?: string;
-  aiWorkPlan?: string; // PERSISTED AI DATA
+  aiWorkPlan?: string; 
   status: WorkItemStatus;
   priority: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
   bundleId: string;
@@ -119,6 +119,7 @@ export interface WorkItem {
   storyPoints?: number;
   timeEstimate?: number;
   timeLogged?: number;
+  isFlagged?: boolean; // NEW: Impediment tracking
   watchers?: string[];
   labels?: string[];
   comments?: WorkItemComment[];
@@ -165,7 +166,7 @@ export interface Bundle {
   description?: string;
   isActive: boolean;
   sortOrder?: number;
-  wipLimits?: Record<string, number>; // DYNAMIC WIP CONFIG
+  wipLimits?: Record<string, number>; 
   createdAt?: string;
   updatedAt?: string;
 }

@@ -16,7 +16,7 @@ interface WorkItemDetailsProps {
 
 const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bundles, applications, onUpdate, onClose }) => {
   const [item, setItem] = useState<WorkItem>(initialItem);
-  const [subtasks, setSubtasks] = useState<WorkItem[]>([]);
+  const [children, setChildren] = useState<WorkItem[]>([]);
   const [milestones, setMilestones] = useState<Milestone[]>([]);
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState<'details' | 'comments' | 'links' | 'attachments' | 'activity' | 'ai'>('details');
@@ -24,6 +24,14 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
   const [uploading, setUploading] = useState(false);
   const [isCreatingSub, setIsCreatingSub] = useState(false);
   
+  // Effort Tracking
+  const [isLoggingWork, setIsLoggingWork] = useState(false);
+  const [logHours, setLogHours] = useState<number>(0);
+  const [logNote, setLogNote] = useState('');
+
+  // Governance Safety Rail State
+  const [closureError, setClosureError] = useState<string | null>(null);
+
   // AI States
   const [aiPlan, setAiPlan] = useState<string | null>(initialItem.aiWorkPlan || null);
   const [aiLoading, setAiLoading] = useState(false);
@@ -40,15 +48,14 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
 
   const loadFullDetails = async () => {
     try {
-      const [itemRes, subRes, msRes] = await Promise.all([
+      const [itemRes, childRes, msRes] = await Promise.all([
         fetch(`/api/work-items/${initialItem._id || initialItem.id}`),
         fetch(`/api/work-items?parentId=${initialItem._id || initialItem.id}`),
         fetch(`/api/milestones`)
       ]);
       const itemData = await itemRes.json();
-      const subData = await subRes.json();
       setItem(itemData);
-      setSubtasks(subData);
+      setChildren(await childRes.json());
       setMilestones(await msRes.json());
       if (itemData.aiWorkPlan) setAiPlan(itemData.aiWorkPlan);
     } catch (err) { console.error(err); }
@@ -56,9 +63,9 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
 
   useEffect(() => {
     loadFullDetails();
+    setClosureError(null);
   }, [initialItem]);
 
-  // Link search logic
   useEffect(() => {
     if (linkSearch.length < 2) {
       setLinkResults([]);
@@ -80,6 +87,17 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
   }, [linkSearch]);
 
   const handleUpdateItem = async (updates: Partial<WorkItem>) => {
+    setClosureError(null);
+
+    // Governance: Status Transition Constraint (Safety Rail)
+    if (updates.status === WorkItemStatus.DONE && children.length > 0) {
+      const incompleteChildren = children.filter(c => c.status !== WorkItemStatus.DONE);
+      if (incompleteChildren.length > 0) {
+        setClosureError(`Closure Blocked: Resolve ${incompleteChildren.length} active child artifacts first.`);
+        return;
+      }
+    }
+
     setSaving(true);
     try {
       const res = await fetch(`/api/work-items/${item._id || item.id}`, {
@@ -98,6 +116,15 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
     } finally {
       setSaving(false);
     }
+  };
+
+  const logWork = async () => {
+    if (logHours <= 0) return;
+    const newTotal = (item.timeLogged || 0) + logHours;
+    await handleUpdateItem({ timeLogged: newTotal });
+    setIsLoggingWork(false);
+    setLogHours(0);
+    setLogNote('');
   };
 
   const handleAiRefinement = async () => {
@@ -196,19 +223,28 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
             <i className="fas fa-arrow-left"></i>
           </button>
           <div className="min-w-0">
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-               {item.key}
-               {item.parentId && (
-                 <>
-                   <i className="fas fa-chevron-right text-[8px]"></i>
-                   <span className="text-blue-500">Child Artifact</span>
-                 </>
-               )}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                {item.key}
+              </span>
+              {item.isFlagged && (
+                <span className="animate-pulse text-red-600">
+                   <i className="fas fa-flag text-[10px]"></i>
+                </span>
+              )}
+            </div>
             <h3 className="text-xl font-black text-slate-800 tracking-tight leading-tight truncate">{item.title}</h3>
           </div>
         </div>
         <div className="flex items-center gap-3 shrink-0">
+           {/* Flag Toggle */}
+           <button 
+            onClick={() => handleUpdateItem({ isFlagged: !item.isFlagged })}
+            className={`w-10 h-10 rounded-xl border flex items-center justify-center transition-all ${item.isFlagged ? 'bg-red-50 border-red-200 text-red-600 shadow-inner' : 'bg-white border-slate-200 text-slate-300 hover:text-red-400'}`}
+            title={item.isFlagged ? "Clear Impediment" : "Flag as Impediment"}
+           >
+              <i className="fas fa-flag"></i>
+           </button>
            <button 
             onClick={() => handleUpdateItem({ watchers: isWatching ? item.watchers?.filter(w => w !== 'Current User') : [...(item.watchers || []), 'Current User'] })}
             className={`w-10 h-10 rounded-xl border flex items-center justify-center transition-all ${isWatching ? 'bg-amber-50 border-amber-200 text-amber-500 shadow-inner' : 'bg-white border-slate-200 text-slate-300 hover:text-amber-400'}`}
@@ -246,12 +282,30 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
       </div>
 
       <div className="flex-1 overflow-y-auto custom-scrollbar bg-[#FAFAFA]">
+        {closureError && (
+          <div className="mx-10 mt-8 p-4 bg-red-50 border border-red-100 rounded-2xl flex items-center gap-4 text-red-600 animate-fadeIn shadow-sm">
+             <i className="fas fa-shield-halved text-xl"></i>
+             <div className="flex-1">
+                <p className="text-xs font-black uppercase tracking-widest">Governance Rule Violation</p>
+                <p className="text-xs font-medium">{closureError}</p>
+             </div>
+             <button onClick={() => setClosureError(null)} className="w-8 h-8 rounded-full hover:bg-red-100 flex items-center justify-center transition-colors">
+                <i className="fas fa-times"></i>
+             </button>
+          </div>
+        )}
+
         {activeTab === 'details' && (
           <div className="p-10 space-y-10 animate-fadeIn">
             <div className="flex justify-between items-center bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
-               <div className="flex items-center gap-3">
-                  <div className="w-1.5 h-1.5 rounded-full bg-blue-500"></div>
-                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Contextual Operations</span>
+               <div className="flex items-center gap-6">
+                  <div className="flex items-center gap-3">
+                    <div className="w-1.5 h-1.5 rounded-full bg-blue-500"></div>
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Contextual Operations</span>
+                  </div>
+                  <button onClick={() => setIsLoggingWork(true)} className="text-[10px] font-black text-blue-600 uppercase tracking-widest hover:underline flex items-center gap-2">
+                     <i className="fas fa-clock"></i> Log Work
+                  </button>
                </div>
                <button onClick={() => setIsCreatingSub(true)} className="px-4 py-2 bg-slate-900 text-white text-[9px] font-black rounded-xl uppercase tracking-widest hover:bg-blue-600 transition-all flex items-center gap-2">
                  <i className="fas fa-plus"></i>
@@ -272,12 +326,18 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
                     </select>
                 </DetailField>
               </div>
-              <div className="grid grid-cols-2 gap-6">
+              <div className="grid grid-cols-3 gap-6">
                 <DetailField label="Assigned Personnel">
                     <AssigneeSearch currentAssignee={item.assignedTo} onSelect={(name) => handleUpdateItem({ assignedTo: name })} />
                 </DetailField>
-                <DetailField label="Story Points">
+                <DetailField label="Estimate (Pts)">
                     <input type="number" value={item.storyPoints || 0} onChange={(e) => handleUpdateItem({ storyPoints: parseInt(e.target.value) || 0 })} className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold outline-none" />
+                </DetailField>
+                <DetailField label="Effort Logged (Hrs)">
+                    <div className="bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold text-slate-700 flex items-center justify-between">
+                       <span>{item.timeLogged || 0} hrs</span>
+                       <i className="fas fa-lock text-slate-300 scale-75"></i>
+                    </div>
                 </DetailField>
               </div>
             </div>
@@ -297,6 +357,7 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
           </div>
         )}
 
+        {/* Existing Tabs Content Remains the Same... */}
         {activeTab === 'links' && (
           <div className="p-10 space-y-6 animate-fadeIn">
              <div className="flex justify-between items-center mb-4">
@@ -361,15 +422,16 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
                 <div className="absolute left-[15.5px] top-4 bottom-4 w-[2px] bg-slate-100"></div>
                 {(item.activity || []).slice().reverse().map((act, idx) => (act && (
                   <div key={idx} className="relative group/act">
-                     <div className={`absolute -left-[37px] w-8 h-8 rounded-xl bg-white border border-slate-200 z-10 flex items-center justify-center shadow-sm transition-all group-hover/act:border-blue-300 ${act.action.includes('AI') || act.action.includes('LINK') ? 'text-blue-500' : 'text-slate-400'}`}>
-                        <i className={`fas ${act.action === 'CREATED' ? 'fa-plus' : act.action === 'CHANGED_STATUS' ? 'fa-arrow-right-long' : act.action.includes('AI') ? 'fa-wand-magic-sparkles' : act.action.includes('LINK') ? 'fa-link' : 'fa-pen-nib'} text-[10px]`}></i>
+                     <div className={`absolute -left-[37px] w-8 h-8 rounded-xl bg-white border border-slate-200 z-10 flex items-center justify-center shadow-sm transition-all group-hover/act:border-blue-300 ${act.action.includes('AI') || act.action.includes('LINK') || act.action.includes('IMPEDIMENT') ? 'text-blue-500' : 'text-slate-400'}`}>
+                        <i className={`fas ${act.action === 'CREATED' ? 'fa-plus' : act.action === 'CHANGED_STATUS' ? 'fa-arrow-right-long' : act.action.includes('AI') ? 'fa-wand-magic-sparkles' : act.action.includes('LINK') ? 'fa-link' : act.action.includes('IMPEDIMENT') ? 'fa-flag' : 'fa-pen-nib'} text-[10px]`}></i>
                      </div>
                      <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm space-y-2">
                         <div className="flex items-center gap-2">
                            <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(act.user || 'S')}&background=random&size=20`} className="w-5 h-5 rounded-lg" />
                            <span className="text-[11px] font-black text-slate-800">{act.user}</span>
                            <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-md ml-auto ${
-                             act.action.includes('AUTO') ? 'bg-slate-100 text-slate-500 border border-slate-200' : 'bg-blue-50 text-blue-600'
+                             act.action.includes('AUTO') ? 'bg-slate-100 text-slate-500 border border-slate-200' : 
+                             act.action.includes('IMPEDIMENT') ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-600'
                            }`}>{act.action.replace(/_/g, ' ')}</span>
                         </div>
                         <div className="pl-7">
@@ -405,6 +467,7 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
           </div>
         )}
 
+        {/* AI, Comments Tabs */}
         {activeTab === 'ai' && (
           <div className="p-10 space-y-10 animate-fadeIn">
              <div className="bg-gradient-to-br from-slate-900 to-blue-900 p-10 rounded-[3rem] text-white shadow-2xl relative overflow-hidden">
@@ -478,6 +541,28 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
           </div>
         )}
       </div>
+
+      {isLoggingWork && (
+        <div className="fixed inset-0 bg-slate-950/40 backdrop-blur-md z-[200] flex items-center justify-center p-6">
+           <div className="bg-white rounded-[2.5rem] w-full max-w-md p-10 shadow-2xl animate-fadeIn border border-slate-100">
+              <h3 className="text-2xl font-black text-slate-900 tracking-tight italic mb-6">Effort Allocation</h3>
+              <div className="space-y-6">
+                 <div className="space-y-2">
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Time Spent (Hours)</label>
+                    <input type="number" step="0.5" value={logHours} onChange={(e) => setLogHours(parseFloat(e.target.value))} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-sm font-bold outline-none focus:border-blue-500" />
+                 </div>
+                 <div className="space-y-2">
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Activity Narrative</label>
+                    <textarea value={logNote} onChange={(e) => setLogNote(e.target.value)} placeholder="What was achieved?" className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-xs font-medium outline-none h-24 resize-none" />
+                 </div>
+                 <div className="flex gap-4 pt-4">
+                    <button onClick={() => setIsLoggingWork(false)} className="flex-1 py-3 text-[10px] font-black text-slate-400 uppercase">Discard</button>
+                    <button onClick={logWork} className="flex-[2] py-3 bg-slate-900 text-white text-[10px] font-black rounded-xl hover:bg-blue-600 transition-all uppercase tracking-widest">Commit Log</button>
+                 </div>
+              </div>
+           </div>
+        </div>
+      )}
 
       {isCreatingSub && (
         <CreateWorkItemModal 

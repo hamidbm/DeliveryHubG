@@ -77,9 +77,27 @@ const WorkItemsListView: React.FC<WorkItemsListViewProps> = ({
     }
   };
 
+  const exportToCsv = () => {
+    const headers = ['Key', 'Title', 'Type', 'Status', 'Priority', 'Assignee', 'Points', 'Logged Hours', 'Flagged'];
+    const rows = items.map(i => [
+      i.key, i.title, i.type, i.status, i.priority, i.assignedTo || 'Unassigned', i.storyPoints || 0, i.timeLogged || 0, i.isFlagged ? 'YES' : 'NO'
+    ]);
+    const csvContent = [headers, ...rows].map(e => e.join(",")).join("\n");
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `nexus_registry_export_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const getItemHealth = (item: WorkItem) => {
+    if (item.isFlagged) return { label: 'Flagged', color: 'text-red-600 bg-red-50', icon: 'fa-flag' };
     const selfBlocked = item.status === WorkItemStatus.BLOCKED || item.links?.some(l => l.type === 'IS_BLOCKED_BY');
-    if (selfBlocked) return { label: 'Blocked', color: 'text-red-500 bg-red-50', icon: 'fa-hand' };
+    if (selfBlocked) return { label: 'Blocked', color: 'text-amber-600 bg-amber-50', icon: 'fa-hand' };
     return { label: 'Healthy', color: 'text-emerald-600 bg-emerald-50', icon: 'fa-circle-check' };
   };
 
@@ -96,11 +114,20 @@ const WorkItemsListView: React.FC<WorkItemsListViewProps> = ({
              />
              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Registry Inventory ({items.length})</h3>
            </div>
-           {selectedIds.size > 0 && (
-             <span className="text-[10px] font-black text-blue-600 bg-blue-50 px-4 py-1.5 rounded-full animate-pulse uppercase tracking-widest">
-               {selectedIds.size} Artifacts Staged
-             </span>
-           )}
+           <div className="flex items-center gap-4">
+             <button 
+               onClick={exportToCsv}
+               className="px-4 py-1.5 bg-white border border-slate-200 text-slate-500 text-[10px] font-black rounded-lg hover:bg-slate-50 hover:text-blue-600 transition-all uppercase tracking-widest flex items-center gap-2"
+             >
+               <i className="fas fa-file-export"></i>
+               Export CSV
+             </button>
+             {selectedIds.size > 0 && (
+               <span className="text-[10px] font-black text-blue-600 bg-blue-50 px-4 py-1.5 rounded-full animate-pulse uppercase tracking-widest">
+                 {selectedIds.size} Artifacts Staged
+               </span>
+             )}
+           </div>
         </header>
 
         <div className="flex-1 overflow-auto custom-scrollbar">
@@ -134,7 +161,12 @@ const WorkItemsListView: React.FC<WorkItemsListViewProps> = ({
                         className="w-4 h-4 rounded border-slate-300 text-blue-600"
                        />
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-[10px] font-black text-slate-400 uppercase tracking-tighter">{item.key}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-[10px] font-black text-slate-400 uppercase tracking-tighter">
+                       <div className="flex items-center gap-2">
+                          {item.key}
+                          {item.isFlagged && <i className="fas fa-flag text-red-500 scale-75 animate-pulse"></i>}
+                       </div>
+                    </td>
                     <td className="px-6 py-4 text-sm font-bold text-slate-700 group-hover:text-blue-600 truncate">{item.title}</td>
                     <td className="px-6 py-4 text-center">
                        <span className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest ${health.color}`}>
@@ -177,7 +209,6 @@ const WorkItemsListView: React.FC<WorkItemsListViewProps> = ({
            </div>
 
            <div className="flex items-center gap-6">
-              {/* Status Action */}
               <div className="flex flex-col gap-2">
                 <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest ml-1">Workflow</span>
                 <div className="flex items-center gap-2">
@@ -196,7 +227,6 @@ const WorkItemsListView: React.FC<WorkItemsListViewProps> = ({
 
               <div className="h-10 w-[1px] bg-white/5"></div>
 
-              {/* Assignment/Milestone Actions */}
               <div className="flex items-center gap-4">
                  <button 
                   onClick={() => setActiveBulkAction(activeBulkAction === 'assignee' ? null : 'assignee')}
@@ -217,7 +247,6 @@ const WorkItemsListView: React.FC<WorkItemsListViewProps> = ({
               </div>
            </div>
 
-           {/* Contextual Bulk Action Inputs */}
            {activeBulkAction === 'assignee' && (
              <div className="absolute bottom-full left-0 right-0 mb-4 bg-slate-800 p-4 rounded-3xl border border-white/10 shadow-2xl animate-slideUp">
                 <AssigneeSearch onSelect={(name) => handleBulkUpdate({ assignedTo: name })} />
@@ -254,11 +283,6 @@ const WorkItemsListView: React.FC<WorkItemsListViewProps> = ({
            <WorkItemDetails item={activeItem} bundles={bundles} applications={applications} onUpdate={fetchItems} onClose={() => setActiveItem(null)} />
         </div>
       )}
-
-      <style jsx global>{`
-        @keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        .animate-slideUp { animation: slideUp 0.3s cubic-bezier(0.23, 1, 0.32, 1); }
-      `}</style>
     </div>
   );
 };

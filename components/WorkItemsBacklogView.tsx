@@ -22,6 +22,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
+// Fix: Defined the missing interface WorkItemsBacklogViewProps for component props
 interface WorkItemsBacklogViewProps {
   applications: Application[];
   bundles: Bundle[];
@@ -30,7 +31,7 @@ interface WorkItemsBacklogViewProps {
   selMilestone: string;
   selEpicId: string;
   searchQuery: string;
-  quickFilter?: string;
+  quickFilter: 'all' | 'my' | 'updated' | 'blocked';
   externalTrigger?: string | null;
   onTriggerProcessed?: () => void;
 }
@@ -50,7 +51,10 @@ const SortableBacklogItem: React.FC<{ item: WorkItem, onClick: () => void }> = (
       <div {...listeners} className="cursor-grab text-slate-200 hover:text-slate-400 px-1"><i className="fas fa-grip-vertical"></i></div>
       <div className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer" onClick={onClick}>
         <i className={`fas ${getIcon(item.type)} text-[10px]`}></i>
-        <span className="text-[10px] font-black text-slate-400 w-16 shrink-0">{item.key}</span>
+        <div className="flex items-center gap-2 w-20 shrink-0">
+          <span className="text-[10px] font-black text-slate-400">{item.key}</span>
+          {item.isFlagged && <i className="fas fa-flag text-red-500 text-[8px] animate-pulse"></i>}
+        </div>
         <span className="text-sm font-bold text-slate-700 truncate">{item.title}</span>
       </div>
       <div className="flex items-center gap-3 shrink-0">
@@ -73,7 +77,7 @@ const SprintContainer: React.FC<{ sprint: Sprint, items: WorkItem[], onItemClick
           <div className="flex items-center gap-3">
              <i className="fas fa-bolt text-amber-500"></i>
              <h4 className="font-black text-slate-800 uppercase tracking-tight">{sprint.name}</h4>
-             <span className={`text-[8px] font-black px-2 py-0.5 rounded uppercase ${sprint.status === 'ACTIVE' ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-600'}`}>{sprint.status}</span>
+             <span className={`text-[8px] font-black px-2 py-0.5 rounded uppercase ${sprint.status === 'ACTIVE' ? 'bg-emerald-50 text-white' : 'bg-slate-200 text-slate-600'}`}>{sprint.status}</span>
           </div>
           <div className="h-6 w-[1px] bg-slate-200"></div>
           <div className="flex flex-col">
@@ -105,6 +109,7 @@ const SprintContainer: React.FC<{ sprint: Sprint, items: WorkItem[], onItemClick
   );
 };
 
+// Fix: WorkItemsBacklogView now uses the defined WorkItemsBacklogViewProps interface
 const WorkItemsBacklogView: React.FC<WorkItemsBacklogViewProps> = ({ applications, bundles, selBundleId, selAppId, selMilestone, selEpicId, searchQuery, quickFilter, externalTrigger, onTriggerProcessed }) => {
   const [items, setItems] = useState<WorkItem[]>([]);
   const [sprints, setSprints] = useState<Sprint[]>([]);

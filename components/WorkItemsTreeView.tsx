@@ -102,7 +102,12 @@ const WorkItemsTreeView: React.FC<WorkItemsTreeViewProps> = ({
           <div className="w-4 flex justify-center shrink-0">
             {hasChildren ? <i className={`fas fa-caret-${isExpanded ? 'down' : 'right'} text-[12px] opacity-40`}></i> : <div className="w-1 h-1 bg-slate-200 rounded-full"></div>}
           </div>
-          <div className="relative shrink-0"><i className={`fas ${getIcon(node.type)} text-lg ${isActive ? 'text-white' : ''}`}></i></div>
+          <div className="relative shrink-0">
+            <i className={`fas ${getIcon(node.type)} text-lg ${isActive ? 'text-white' : ''}`}></i>
+            {node.isFlagged && (
+              <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-white animate-pulse" />
+            )}
+          </div>
           <div className="min-w-0 flex-1">
             <span className={`text-sm font-black truncate block tracking-tight ${isActive ? 'text-white' : 'text-slate-800'}`}>{node.label}</span>
             {hasChildren && node.completion !== undefined && (

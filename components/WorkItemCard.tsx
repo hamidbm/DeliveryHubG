@@ -57,7 +57,7 @@ const WorkItemCard: React.FC<WorkItemCardProps> = ({ item, onClick, isOverlay })
       onClick={onClick}
       className={`bg-white p-5 rounded-2xl border transition-all cursor-grab active:cursor-grabbing group ${
         isOverlay ? 'shadow-2xl ring-2 ring-blue-500 rotate-2' : 'shadow-sm border-slate-100 hover:shadow-xl hover:shadow-slate-200/50'
-      } ${isBlocked ? 'border-l-4 border-l-red-500' : ''}`}
+      } ${item.isFlagged ? 'border-l-4 border-l-red-500 ring-1 ring-red-100' : isBlocked ? 'border-l-4 border-l-amber-500' : ''}`}
     >
       <div className="flex justify-between items-start mb-3">
         <div className="flex items-center gap-2">
@@ -65,8 +65,13 @@ const WorkItemCard: React.FC<WorkItemCardProps> = ({ item, onClick, isOverlay })
            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{item.key}</span>
         </div>
         <div className="flex items-center gap-2">
-           {isBlocked && (
-             <span className="animate-pulse flex items-center justify-center w-5 h-5 bg-red-100 text-red-600 rounded-full" title="Artifact is Blocked">
+           {item.isFlagged && (
+             <span className="animate-pulse flex items-center justify-center w-5 h-5 bg-red-100 text-red-600 rounded-full" title="Artifact has active Impediment">
+               <i className="fas fa-flag text-[8px]"></i>
+             </span>
+           )}
+           {isBlocked && !item.isFlagged && (
+             <span className="flex items-center justify-center w-5 h-5 bg-amber-100 text-amber-600 rounded-full" title="Artifact is Blocked by Dependency">
                <i className="fas fa-hand text-[8px]"></i>
              </span>
            )}
@@ -87,6 +92,12 @@ const WorkItemCard: React.FC<WorkItemCardProps> = ({ item, onClick, isOverlay })
                {item.storyPoints}
              </span>
            )}
+           {item.timeLogged && item.timeLogged > 0 ? (
+             <span className="text-[9px] font-bold text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded flex items-center gap-1">
+               <i className="fas fa-clock text-[7px]"></i>
+               {item.timeLogged}h
+             </span>
+           ) : null}
            {item.links && item.links.length > 0 && (
              <i className="fas fa-link text-slate-200 text-[10px]"></i>
            )}

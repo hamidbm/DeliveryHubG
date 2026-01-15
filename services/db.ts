@@ -8,9 +8,6 @@ export const getDb = async () => {
   return client.db('deliveryhub');
 };
 
-/**
- * Helper to create a query condition that matches either a string ID or a MongoDB ObjectId.
- */
 const safeIdMatch = (id: string) => {
   if (!id || id === 'all') return null;
   const conditions: any[] = [{ [id.includes('-') ? 'key' : 'id']: id }];
@@ -242,7 +239,6 @@ export const fetchWorkItems = async (filters: any) => {
     query.status = filters.status;
   }
 
-  // Specialized Quick Filters
   if (filters.quickFilter) {
     switch (filters.quickFilter) {
       case 'my':
@@ -255,7 +251,10 @@ export const fetchWorkItems = async (filters: any) => {
         sort = { updatedAt: -1 };
         break;
       case 'blocked':
-        query.status = WorkItemStatus.BLOCKED;
+        query.$or = [
+          { status: WorkItemStatus.BLOCKED },
+          { isFlagged: true }
+        ];
         break;
     }
   }
@@ -287,9 +286,6 @@ export const fetchWorkItemById = async (id: string) => {
   }
 };
 
-/**
- * Enhanced Save with Auto-Key generation, Activity Diffing, and Bundle-Key Migration
- */
 export const saveWorkItem = async (item: Partial<WorkItem>, user?: any) => {
   const db = await getDb();
   const { _id, ...data } = item;
@@ -300,7 +296,6 @@ export const saveWorkItem = async (item: Partial<WorkItem>, user?: any) => {
     const existing = await db.collection('workitems').findOne({ _id: new ObjectId(_id) });
     if (!existing) throw new Error("Work item not found");
 
-    // Governance: Auto-Key Migration Logic
     let keyUpdate: any = {};
     if (data.bundleId && String(data.bundleId) !== String(existing.bundleId)) {
       const bundle = await db.collection('bundles').findOne(
@@ -326,9 +321,8 @@ export const saveWorkItem = async (item: Partial<WorkItem>, user?: any) => {
       };
     }
 
-    // Track Changes for Audit Log (Deep Diff)
     const activities: any[] = [];
-    const fieldsToTrack = ['status', 'priority', 'assignedTo', 'title', 'description', 'storyPoints', 'parentId', 'milestoneIds', 'timeEstimate', 'attachments', 'links', 'aiWorkPlan'];
+    const fieldsToTrack = ['status', 'priority', 'assignedTo', 'title', 'description', 'storyPoints', 'parentId', 'milestoneIds', 'timeEstimate', 'timeLogged', 'isFlagged', 'attachments', 'links', 'aiWorkPlan'];
     
     fieldsToTrack.forEach(field => {
       const oldVal = existing[field];
@@ -337,7 +331,10 @@ export const saveWorkItem = async (item: Partial<WorkItem>, user?: any) => {
       if (newVal !== undefined && JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
         activities.push({
           user: userName,
-          action: field === 'aiWorkPlan' ? 'AI_REFINEMENT_COMMITTED' : (field === 'status' ? 'CHANGED_STATUS' : 'UPDATED_FIELD'),
+          action: field === 'isFlagged' ? (newVal ? 'IMPEDIMENT_RAISED' : 'IMPEDIMENT_CLEARED') : 
+                  field === 'timeLogged' ? 'WORK_LOGGED' :
+                  field === 'aiWorkPlan' ? 'AI_REFINEMENT_COMMITTED' : 
+                  (field === 'status' ? 'CHANGED_STATUS' : 'UPDATED_FIELD'),
           field: field,
           from: oldVal,
           to: newVal,
@@ -356,7 +353,6 @@ export const saveWorkItem = async (item: Partial<WorkItem>, user?: any) => {
       { $set: finalSet, $push: finalPush }
     );
   } else {
-    // Automated Key Generation (Jira Style)
     let key = data.key;
     if (!key) {
       const bundle = await db.collection('bundles').findOne(
@@ -430,6 +426,7 @@ export const fetchWorkItemTree = async (filters: any) => {
           label: i.title,
           type: i.type,
           status: i.status,
+          isFlagged: i.isFlagged,
           workItemId: i._id?.toString() || i.id,
           nodeType: 'WORK_ITEM',
           children: []
@@ -438,7 +435,6 @@ export const fetchWorkItemTree = async (filters: any) => {
     });
   }
 
-  // Optimized Jira Hierarchy Builder
   const buildTree = (parentId: any = null): any[] => {
     return items
       .filter(item => {
@@ -452,7 +448,6 @@ export const fetchWorkItemTree = async (filters: any) => {
       .map(item => {
         const children = buildTree(item._id || item.id);
         
-        // Progress Roll-up logic
         let completion = 0;
         if (children.length > 0) {
           const done = children.filter(c => c.status === WorkItemStatus.DONE).length;
@@ -466,6 +461,7 @@ export const fetchWorkItemTree = async (filters: any) => {
           label: item.title,
           type: item.type,
           status: item.status,
+          isFlagged: item.isFlagged,
           completion, 
           workItemId: item._id?.toString() || item.id,
           nodeType: 'WORK_ITEM',
@@ -484,6 +480,7 @@ export const fetchWorkItemTree = async (filters: any) => {
       label: item.title,
       type: item.type,
       status: item.status,
+      isFlagged: item.isFlagged,
       workItemId: item._id?.toString() || item.id,
       nodeType: 'WORK_ITEM',
       children: []

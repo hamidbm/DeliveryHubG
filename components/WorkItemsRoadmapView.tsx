@@ -71,19 +71,19 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
   const features = useMemo(() => items.filter(i => i.type === WorkItemType.FEATURE), [items]);
   const stories = useMemo(() => items.filter(i => [WorkItemType.STORY, WorkItemType.BUG, WorkItemType.TASK].includes(i.type)), [items]);
 
-  // Risk Propagation Logic: Check if self or any child is blocked
+  // Risk Propagation Logic: Check if self or any child is blocked or flagged
   const getItemRisk = (item: WorkItem) => {
-    const selfBlocked = item.status === WorkItemStatus.BLOCKED || item.links?.some(l => l.type === 'IS_BLOCKED_BY');
-    if (selfBlocked) return 'CRITICAL';
+    const selfFlagged = item.isFlagged || item.status === WorkItemStatus.BLOCKED || item.links?.some(l => l.type === 'IS_BLOCKED_BY');
+    if (selfFlagged) return 'CRITICAL';
 
-    // Check children
+    // Check children recursively
     const childIds = items.filter(i => i.parentId === (item._id || item.id)).map(i => i._id || i.id);
-    const hasBlockedChild = items.some(i => 
+    const hasProblemChild = items.some(i => 
       (i.parentId === (item._id || item.id) || childIds.includes(i.parentId)) && 
-      (i.status === WorkItemStatus.BLOCKED || i.links?.some(l => l.type === 'IS_BLOCKED_BY'))
+      (i.isFlagged || i.status === WorkItemStatus.BLOCKED || i.links?.some(l => l.type === 'IS_BLOCKED_BY'))
     );
 
-    return hasBlockedChild ? 'WARNING' : 'HEALTHY';
+    return hasProblemChild ? 'WARNING' : 'HEALTHY';
   };
 
   const toggleEpic = (id: string) => {
@@ -119,8 +119,8 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
         <span className="text-[9px] font-black text-white uppercase tracking-tighter truncate">
           {item.status} {item.storyPoints ? `• ${item.storyPoints} pts` : ''}
         </span>
-        {risk === 'WARNING' && (
-           <div className="absolute -top-1 -right-1 w-4 h-4 bg-amber-500 border-2 border-white rounded-full flex items-center justify-center text-[8px] text-white animate-bounce shadow-lg">
+        {(risk === 'WARNING' || risk === 'CRITICAL') && (
+           <div className={`absolute -top-1 -right-1 w-4 h-4 rounded-full border-2 border-white flex items-center justify-center text-[8px] text-white animate-bounce shadow-lg ${risk === 'CRITICAL' ? 'bg-red-600' : 'bg-amber-500'}`}>
              <i className="fas fa-exclamation"></i>
            </div>
         )}
@@ -190,13 +190,13 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
                       <div className="flex items-center group py-6 hover:bg-slate-50/40 transition-colors">
                         <div className="w-80 pr-8 shrink-0 flex items-start gap-4">
                           <button onClick={() => toggleEpic(epic._id!)} className={`w-6 h-6 rounded-lg flex items-center justify-center transition-all ${epicFeatures.length > 0 ? 'bg-slate-100 text-slate-400 hover:bg-slate-900 hover:text-white' : 'opacity-0 pointer-events-none'}`}>
-                            <i className={`fas fa-chevron-${isExpanded ? 'down' : 'right'} text-[8px]`}></i>
+                            <i className={`fas ${isExpanded ? 'fa-chevron-down' : 'fa-chevron-right'} text-[8px]`}></i>
                           </button>
                           <div className="min-w-0">
                             <div className="flex items-center gap-2 mb-1">
                                <span className="text-[9px] font-black text-slate-300 bg-slate-50 px-2 py-0.5 rounded uppercase">{app?.name || 'Shared'}</span>
-                               {risk === 'WARNING' && <i className="fas fa-triangle-exclamation text-amber-500 text-[10px] animate-pulse" title="Child Dependency Blocked"></i>}
-                               {risk === 'CRITICAL' && <i className="fas fa-hand text-red-500 text-[10px] animate-pulse" title="Self Blocked"></i>}
+                               {risk === 'WARNING' && <i className="fas fa-triangle-exclamation text-amber-500 text-[10px] animate-pulse" title="Child Dependency Blocked/Flagged"></i>}
+                               {risk === 'CRITICAL' && <i className="fas fa-hand text-red-500 text-[10px] animate-pulse" title="Self Blocked/Flagged"></i>}
                             </div>
                             <h4 onClick={() => setActiveItem(epic)} className="text-sm font-black text-slate-800 truncate leading-tight group-hover:text-blue-600 transition-colors cursor-pointer">{epic.title}</h4>
                             <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">{epic.key}</span>
@@ -245,7 +245,7 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
       </div>
       
       <div className="pt-10 flex items-center gap-12 justify-center border-t border-slate-50 shrink-0">
-         <LegendItem color="bg-red-500" label="Critical Blockage" />
+         <LegendItem color="bg-red-500" label="Critical Impediment" />
          <LegendItem color="bg-amber-500" label="Dependency Risk" />
          <LegendItem color="bg-emerald-500" label="Verified Delivery" />
          <LegendItem color="bg-blue-600" label="Active Construction" />
