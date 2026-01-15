@@ -50,28 +50,17 @@ const WorkItemsAnalyticsView: React.FC<WorkItemsAnalyticsViewProps> = ({
     return Object.entries(counts).map(([name, value]) => ({ name: name.replace('_', ' '), value }));
   }, [items]);
 
-  // Velocity Calculation: Done points vs Target Capacity per Milestone
-  const velocityData = useMemo(() => {
-    return milestones.slice(-5).map(m => {
-      const msItems = items.filter(i => i.milestoneIds?.includes(m._id!));
-      const committed = msItems.reduce((acc, curr) => acc + (curr.storyPoints || 0), 0);
-      const completed = msItems.filter(i => i.status === WorkItemStatus.DONE).reduce((acc, curr) => acc + (curr.storyPoints || 0), 0);
-      return { name: m.name.substring(0, 10), committed, completed };
+  const loadData = useMemo(() => {
+    const load: Record<string, { points: number, tasks: number }> = {};
+    items.forEach(i => {
+      const name = i.assignedTo || 'Unassigned';
+      if (!load[name]) load[name] = { points: 0, tasks: 0 };
+      load[name].points += i.storyPoints || 0;
+      load[name].tasks += 1;
     });
-  }, [items, milestones]);
-
-  // Burndown prediction
-  const burndownData = useMemo(() => {
-    const totalPoints = items.reduce((acc, curr) => acc + (curr.storyPoints || 0), 0);
-    const steps = 10;
-    const data = [];
-    let remaining = totalPoints;
-    for (let i = 0; i <= steps; i++) {
-      data.push({ day: `Day ${i}`, ideal: Math.max(0, totalPoints - (totalPoints / steps) * i), actual: remaining });
-      remaining -= Math.random() * (totalPoints / (steps * 0.8));
-      if (remaining < 0) remaining = 0;
-    }
-    return data;
+    return Object.entries(load).map(([name, data]) => ({ name, points: data.points, tasks: data.tasks }))
+      .sort((a, b) => b.points - a.points)
+      .slice(0, 8);
   }, [items]);
 
   const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#64748b'];
@@ -88,32 +77,38 @@ const WorkItemsAnalyticsView: React.FC<WorkItemsAnalyticsViewProps> = ({
          <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-4 gap-6">
             <StatCard title="Throughput" value={items.filter(i => i.status === WorkItemStatus.DONE).length} icon="fa-check-double" color="emerald" />
             <StatCard title="Committed Points" value={items.reduce((acc, i) => acc + (i.storyPoints || 0), 0)} icon="fa-bolt" color="blue" />
-            <StatCard title="System Volatility" value="12%" icon="fa-wave-square" color="amber" />
-            <StatCard title="Blocker Impact" value={items.filter(i => i.status === WorkItemStatus.BLOCKED).length} icon="fa-shield-halved" color="red" />
+            <StatCard title="Cycle Velocity" value="84%" icon="fa-gauge-high" color="amber" />
+            <StatCard title="Critical Blockers" value={items.filter(i => i.status === WorkItemStatus.BLOCKED).length} icon="fa-shield-halved" color="red" />
          </div>
 
-         {/* Chart 1: Burn-down */}
+         {/* Personnel Load Balancing */}
          <div className="lg:col-span-2 bg-white p-10 rounded-[3rem] border border-slate-200 shadow-sm relative group">
-            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-10 flex items-center gap-2">
-              <i className="fas fa-chart-line text-blue-500"></i> Active Cycle Burn-down
-            </h3>
+            <div className="flex items-center justify-between mb-10">
+               <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                 <i className="fas fa-users-viewfinder text-blue-500"></i> Personnel Load Balancing
+               </h3>
+               <span className="text-[9px] font-black text-red-500 uppercase tracking-widest bg-red-50 px-3 py-1 rounded-full animate-pulse">Critical: 8+ pts</span>
+            </div>
             <div className="h-80">
                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={burndownData}>
-                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                     <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 'bold', fill: '#94a3b8' }} />
-                     <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 'bold', fill: '#94a3b8' }} />
-                     <Tooltip contentStyle={{ borderRadius: '1.5rem', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)' }} />
-                     <Line type="monotone" dataKey="ideal" stroke="#e2e8f0" strokeWidth={2} strokeDasharray="5 5" dot={false} name="Ideal" />
-                     <Line type="monotone" dataKey="actual" stroke="#3b82f6" strokeWidth={4} dot={{ r: 4, fill: '#3b82f6', strokeWidth: 2, stroke: '#fff' }} name="Remaining" />
-                  </LineChart>
+                  <BarChart data={loadData} layout="vertical">
+                     <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
+                     <XAxis type="number" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 'bold', fill: '#94a3b8' }} />
+                     <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} width={100} tick={{ fontSize: 10, fontWeight: 'bold', fill: '#475569' }} />
+                     <Tooltip cursor={{ fill: '#f8fafc' }} contentStyle={{ borderRadius: '1.5rem', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)' }} />
+                     <Bar dataKey="points" radius={[0, 6, 6, 0]} name="Assigned Points">
+                        {loadData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.points > 8 ? '#ef4444' : '#3b82f6'} />
+                        ))}
+                     </Bar>
+                  </BarChart>
                </ResponsiveContainer>
             </div>
          </div>
 
          {/* Chart 2: Artifact Composition */}
          <div className="bg-white p-10 rounded-[3rem] border border-slate-200 shadow-sm flex flex-col items-center">
-            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-10 w-full text-left">Workflow Distribution</h3>
+            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-10 w-full text-left">Workflow Mix</h3>
             <div className="h-64 w-full relative">
                <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
@@ -125,7 +120,7 @@ const WorkItemsAnalyticsView: React.FC<WorkItemsAnalyticsViewProps> = ({
                </ResponsiveContainer>
                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                   <span className="text-3xl font-black text-slate-800">{items.length}</span>
-                  <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Inventory</span>
+                  <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Items</span>
                </div>
             </div>
             <div className="mt-6 grid grid-cols-2 gap-4 w-full">
@@ -135,25 +130,6 @@ const WorkItemsAnalyticsView: React.FC<WorkItemsAnalyticsViewProps> = ({
                     <span className="text-[10px] font-bold text-slate-500 uppercase">{d.name}</span>
                  </div>
                ))}
-            </div>
-         </div>
-
-         {/* New Chart 3: Velocity Trend */}
-         <div className="lg:col-span-3 bg-white p-10 rounded-[3rem] border border-slate-200 shadow-sm">
-            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-10 flex items-center gap-2">
-               <i className="fas fa-bolt text-amber-500"></i> Performance Velocity Trend
-            </h3>
-            <div className="h-80">
-               <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={velocityData}>
-                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                     <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 'bold', fill: '#94a3b8' }} />
-                     <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 'bold', fill: '#94a3b8' }} />
-                     <Tooltip contentStyle={{ borderRadius: '1.5rem', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)' }} />
-                     <Bar dataKey="committed" fill="#e2e8f0" radius={[6, 6, 0, 0]} name="Commitment" />
-                     <Bar dataKey="completed" fill="#10b981" radius={[6, 6, 0, 0]} name="Delivery" />
-                  </BarChart>
-               </ResponsiveContainer>
             </div>
          </div>
       </div>
