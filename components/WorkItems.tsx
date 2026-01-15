@@ -28,6 +28,14 @@ const WorkItems: React.FC<WorkItemsProps> = (props) => {
   const router = useRouter();
   const activeView = searchParams.get('view') || 'tree';
   const [quickFilter, setQuickFilter] = useState<'all' | 'my' | 'updated' | 'blocked'>('all');
+  const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
+  
+  // Detailed Filtering State
+  const [filters, setFilters] = useState({
+    types: [] as string[],
+    priorities: [] as string[],
+    health: [] as string[]
+  });
 
   const setView = (view: string) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -35,15 +43,22 @@ const WorkItems: React.FC<WorkItemsProps> = (props) => {
     router.push(`?${params.toString()}`);
   };
 
-  // Enhance sanitizedProps with quick filter logic for child components
+  const toggleFilter = (cat: keyof typeof filters, val: string) => {
+    setFilters(prev => ({
+      ...prev,
+      [cat]: prev[cat].includes(val) ? prev[cat].filter(v => v !== val) : [...prev[cat], val]
+    }));
+  };
+
   const sanitizedProps = {
     ...props,
     selEpicId: props.selEpicId || 'all',
-    quickFilter
+    quickFilter,
+    activeFilters: filters
   };
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6 relative">
       {/* View Switcher & Quick Filters Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between bg-white px-8 py-4 rounded-[2rem] border border-slate-200 shadow-sm gap-4">
         <div className="flex items-center gap-6 overflow-x-auto no-scrollbar">
@@ -75,24 +90,84 @@ const WorkItems: React.FC<WorkItemsProps> = (props) => {
           </div>
         </div>
 
-        <div className="flex items-center gap-3 bg-slate-50 p-1.5 rounded-2xl border border-slate-100 self-end md:self-auto">
-           <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest px-2">Quick Filters:</span>
-           {[
-             { id: 'all', label: 'All' },
-             { id: 'my', label: 'My Issues' },
-             { id: 'updated', label: 'Recently Updated' },
-             { id: 'blocked', label: 'Critical Blockers' }
-           ].map(f => (
-             <button
-               key={f.id}
-               onClick={() => setQuickFilter(f.id as any)}
-               className={`px-4 py-1.5 text-[9px] font-black uppercase rounded-lg transition-all ${quickFilter === f.id ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-400 hover:text-slate-600'}`}
-             >
-               {f.label}
-             </button>
-           ))}
+        <div className="flex items-center gap-3">
+           <button 
+             onClick={() => setIsFilterDrawerOpen(true)}
+             className={`px-4 py-2 text-[9px] font-black uppercase rounded-xl border transition-all flex items-center gap-2 ${filters.types.length || filters.priorities.length ? 'bg-blue-50 border-blue-200 text-blue-600' : 'bg-white border-slate-200 text-slate-400 hover:text-slate-600'}`}
+           >
+              <i className="fas fa-filter"></i> 
+              Filters { (filters.types.length + filters.priorities.length) > 0 ? `(${filters.types.length + filters.priorities.length})` : '' }
+           </button>
+           <div className="h-6 w-[1px] bg-slate-100 mx-2"></div>
+           <div className="flex items-center gap-3 bg-slate-50 p-1.5 rounded-2xl border border-slate-100 self-end md:self-auto">
+              <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest px-2">Focus:</span>
+              {[
+                { id: 'all', label: 'All' },
+                { id: 'my', label: 'My Issues' },
+                { id: 'updated', label: 'Recent' },
+                { id: 'blocked', label: 'Blockers' }
+              ].map(f => (
+                <button
+                  key={f.id}
+                  onClick={() => setQuickFilter(f.id as any)}
+                  className={`px-4 py-1.5 text-[9px] font-black uppercase rounded-lg transition-all ${quickFilter === f.id ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-400 hover:text-slate-600'}`}
+                >
+                  {f.label}
+                </button>
+              ))}
+           </div>
         </div>
       </div>
+
+      {/* Filter Drawer */}
+      {isFilterDrawerOpen && (
+        <>
+          <div className="fixed inset-0 bg-slate-950/20 backdrop-blur-sm z-[150]" onClick={() => setIsFilterDrawerOpen(false)}></div>
+          <div className="fixed right-0 top-0 bottom-0 w-80 bg-white shadow-2xl z-[160] p-10 flex flex-col animate-slideIn">
+             <header className="flex justify-between items-center mb-10">
+                <h3 className="text-xl font-black text-slate-900 tracking-tighter uppercase italic">Precision Filters</h3>
+                <button onClick={() => setIsFilterDrawerOpen(false)} className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 hover:text-red-500 transition-all"><i className="fas fa-times"></i></button>
+             </header>
+
+             <div className="space-y-10 flex-1 overflow-y-auto custom-scrollbar pr-2">
+                <section>
+                   <h4 className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-4">Artifact Type</h4>
+                   <div className="space-y-2">
+                      {Object.values(WorkItemType).map(type => (
+                        <FilterToggle key={type} label={type} active={filters.types.includes(type)} onClick={() => toggleFilter('types', type)} />
+                      ))}
+                   </div>
+                </section>
+
+                <section>
+                   <h4 className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-4">Urgency Level</h4>
+                   <div className="space-y-2">
+                      {['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'].map(p => (
+                        <FilterToggle key={p} label={p} active={filters.priorities.includes(p)} onClick={() => toggleFilter('priorities', p)} />
+                      ))}
+                   </div>
+                </section>
+
+                <section>
+                   <h4 className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-4">Health Pulse</h4>
+                   <div className="space-y-2">
+                      <FilterToggle label="Flagged" active={filters.health.includes('FLAGGED')} onClick={() => toggleFilter('health', 'FLAGGED')} />
+                      <FilterToggle label="Blocked" active={filters.health.includes('BLOCKED')} onClick={() => toggleFilter('health', 'BLOCKED')} />
+                   </div>
+                </section>
+             </div>
+
+             <div className="pt-8 border-t border-slate-100">
+                <button 
+                  onClick={() => setFilters({ types: [], priorities: [], health: [] })}
+                  className="w-full py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-900 transition-colors"
+                >
+                  Clear All Filters
+                </button>
+             </div>
+          </div>
+        </>
+      )}
 
       <Suspense fallback={
         <div className="h-[600px] flex flex-col items-center justify-center bg-white rounded-[3rem] border border-slate-100">
@@ -100,31 +175,44 @@ const WorkItems: React.FC<WorkItemsProps> = (props) => {
           <p className="text-slate-400 font-bold text-[10px] uppercase tracking-widest animate-pulse">Initializing Hub...</p>
         </div>
       }>
-        {activeView === 'roadmap' ? (
-          <WorkItemsRoadmapView {...sanitizedProps} />
-        ) : activeView === 'board' ? (
-          <WorkItemsBoardView {...sanitizedProps} />
-        ) : activeView === 'list' ? (
-          <WorkItemsListView {...sanitizedProps} />
-        ) : activeView === 'analytics' ? (
-          <WorkItemsAnalyticsView {...sanitizedProps} />
-        ) : activeView === 'backlog' ? (
-          <WorkItemsBacklogView {...sanitizedProps} />
-        ) : activeView === 'milestone-plan' ? (
-          <WorkItemsMilestonePlanningView {...sanitizedProps} />
-        ) : activeView === 'milestones' ? (
-          <Milestones 
-            applications={props.applications} 
-            bundles={props.bundles} 
-            activeBundleId={props.selBundleId}
-            activeAppId={props.selAppId}
-          />
-        ) : (
-          <WorkItemsTreeView {...sanitizedProps} />
-        )}
+        <div className="animate-fadeIn">
+          {activeView === 'roadmap' ? (
+            <WorkItemsRoadmapView {...sanitizedProps} />
+          ) : activeView === 'board' ? (
+            <WorkItemsBoardView {...sanitizedProps} />
+          ) : activeView === 'list' ? (
+            <WorkItemsListView {...sanitizedProps} />
+          ) : activeView === 'analytics' ? (
+            <WorkItemsAnalyticsView {...sanitizedProps} />
+          ) : activeView === 'backlog' ? (
+            <WorkItemsBacklogView {...sanitizedProps} />
+          ) : activeView === 'milestone-plan' ? (
+            <WorkItemsMilestonePlanningView {...sanitizedProps} />
+          ) : activeView === 'milestones' ? (
+            <Milestones 
+              applications={props.applications} 
+              bundles={props.bundles} 
+              activeBundleId={props.selBundleId}
+              activeAppId={props.selAppId}
+            />
+          ) : (
+            <WorkItemsTreeView {...sanitizedProps} />
+          )}
+        </div>
       </Suspense>
     </div>
   );
 };
+
+// Fix: Changed FilterToggle to use React.FC to properly support key prop and ensure type safety during list mapping.
+const FilterToggle: React.FC<{ label: string; active: boolean; onClick: () => void }> = ({ label, active, onClick }) => (
+  <button 
+    onClick={onClick}
+    className={`w-full flex items-center justify-between px-4 py-2 rounded-xl transition-all border ${active ? 'bg-blue-600 border-blue-600 text-white shadow-lg' : 'bg-slate-50 border-slate-100 text-slate-600 hover:bg-white'}`}
+  >
+     <span className="text-[10px] font-black uppercase tracking-tight">{label.replace(/_/g, ' ')}</span>
+     {active ? <i className="fas fa-check-circle text-[10px]"></i> : <div className="w-3 h-3 rounded-full border border-slate-300"></div>}
+  </button>
+);
 
 export default WorkItems;

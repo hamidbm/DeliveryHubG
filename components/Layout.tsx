@@ -1,14 +1,13 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { NAV_ITEMS } from '../constants';
-import { WikiSpace, Application, Bundle, WorkItem, WorkItemType } from '../types';
+import { WikiSpace, Application, Bundle, WorkItem, Notification } from '../types';
 
 interface LayoutProps {
   children: React.ReactNode;
   activeTab: string;
   setActiveTab: (tab: string) => void;
-  // Global / Filter States
   selSpaceId?: string;
   setSelSpaceId?: (id: string) => void;
   activeBundle: string;
@@ -23,73 +22,53 @@ interface LayoutProps {
   setActiveEpic?: (id: string) => void;
   searchQuery?: string;
   setSearchQuery?: (q: string) => void;
-  
-  // Data lists fetched from parent
   bundles: Bundle[];
   applications: Application[];
   epics?: WorkItem[];
-  
-  // Actions
   onCreateSpace?: () => void;
   onCreateWorkItem?: () => void;
-  
-  // User
   userName?: string;
   userRole?: string;
   onLogout?: () => void;
 }
 
 const Layout: React.FC<LayoutProps> = ({ 
-  children, 
-  activeTab, 
-  setActiveTab,
-  selSpaceId = 'all',
-  setSelSpaceId,
-  activeBundle,
-  setActiveBundle,
-  activeApp = 'all',
-  setActiveApp,
-  activeVendor = 'all',
-  setActiveVendor,
-  selMilestone = 'all',
-  setSelMilestone,
-  activeEpic = 'all',
-  setActiveEpic,
-  searchQuery = '',
-  setSearchQuery,
-  bundles = [],
-  applications = [],
-  epics = [],
-  onCreateSpace,
-  onCreateWorkItem,
-  userName = 'Alex Architect',
-  userRole = 'Enterprise Architect',
-  onLogout
+  children, activeTab, setActiveTab, selSpaceId = 'all', setSelSpaceId, activeBundle, setActiveBundle, activeApp = 'all', setActiveApp,
+  activeVendor = 'all', setActiveVendor, selMilestone = 'all', setSelMilestone, activeEpic = 'all', setActiveEpic, searchQuery = '',
+  setSearchQuery, bundles = [], applications = [], epics = [], onCreateSpace, onCreateWorkItem, userName = 'Alex Architect',
+  userRole = 'Enterprise Architect', onLogout
 }) => {
   const [spaces, setSpaces] = useState<WikiSpace[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [isNotifOpen, setIsNotifOpen] = useState(false);
+  const notifRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetch('/api/wiki/spaces').then(r => r.json()).then(setSpaces).catch(() => []);
+    
+    const fetchNotifs = () => {
+      fetch('/api/notifications').then(r => r.json()).then(setNotifications).catch(() => []);
+    };
+    fetchNotifs();
+    const interval = setInterval(fetchNotifs, 30000); // Check every 30s
+    return () => clearInterval(interval);
   }, []);
 
-  // Keyboard Shortcuts (Jira Style)
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't trigger if user is typing in an input or textarea
-      if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) return;
-
-      if (e.key === 'c') {
-        e.preventDefault();
-        onCreateWorkItem?.();
-      } else if (e.key === '/') {
-        e.preventDefault();
-        const searchInput = document.getElementById('global-search-input');
-        searchInput?.focus();
-      }
+    const handleClickOutside = (e: MouseEvent) => {
+      if (notifRef.current && !notifRef.current.contains(e.target as Node)) setIsNotifOpen(false);
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onCreateWorkItem]);
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const unreadCount = notifications.filter(n => !n.read).length;
+  const hasImpediment = notifications.some(n => !n.read && n.type === 'IMPEDIMENT');
+
+  const markRead = async (id: string) => {
+    await fetch(`/api/notifications/${id}/read`, { method: 'PATCH' });
+    setNotifications(prev => prev.map(n => n._id === id ? { ...n, read: true } : n));
+  };
 
   const filteredApps = (applications || []).filter(a => activeBundle === 'all' || a.bundleId === activeBundle);
   const showFilterBar = ['dashboard', 'applications', 'work-items', 'wiki', 'reviews', 'documents'].includes(activeTab);
@@ -121,7 +100,60 @@ const Layout: React.FC<LayoutProps> = ({
           ))}
         </div>
 
-        <div className="ml-auto flex items-center space-x-4 shrink-0">
+        <div className="ml-auto flex items-center space-x-6 shrink-0">
+          {/* Notification Hub */}
+          <div className="relative" ref={notifRef}>
+             <button 
+               onClick={() => setIsNotifOpen(!isNotifOpen)}
+               className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all relative ${isNotifOpen ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-white'}`}
+             >
+                <i className={`fas fa-bell ${hasImpediment ? 'animate-bounce text-red-400' : ''}`}></i>
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 w-5 h-5 bg-blue-600 text-white text-[10px] font-black rounded-full flex items-center justify-center border-2 border-slate-900 shadow-lg">
+                    {unreadCount}
+                  </span>
+                )}
+             </button>
+             
+             {isNotifOpen && (
+               <div className="absolute right-0 top-14 w-96 bg-white rounded-[2rem] shadow-[0_20px_50px_rgba(0,0,0,0.3)] border border-slate-100 overflow-hidden animate-fadeIn z-[100]">
+                  <header className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Alert Registry</span>
+                     <button onClick={() => setNotifications(prev => prev.map(n => ({...n, read: true})))} className="text-[9px] font-bold text-blue-600 uppercase hover:underline">Mark all read</button>
+                  </header>
+                  <div className="max-h-[450px] overflow-y-auto custom-scrollbar">
+                     {notifications.length === 0 ? (
+                       <div className="p-12 text-center text-slate-300">
+                          <i className="fas fa- Inbox text-4xl mb-4 opacity-20"></i>
+                          <p className="text-[10px] font-black uppercase tracking-widest">System Clear</p>
+                       </div>
+                     ) : (
+                       notifications.map(notif => (
+                         <div key={notif._id} className={`p-5 border-b border-slate-50 flex gap-4 hover:bg-slate-50 transition-colors relative group ${!notif.read ? 'bg-blue-50/30' : ''}`}>
+                            {!notif.read && <div className="absolute left-0 top-0 bottom-0 w-1 bg-blue-600"></div>}
+                            <div className={`w-10 h-10 rounded-xl shrink-0 flex items-center justify-center text-sm ${
+                              notif.type === 'IMPEDIMENT' ? 'bg-red-50 text-red-600' :
+                              notif.type === 'ASSIGNMENT' ? 'bg-blue-50 text-blue-600' : 'bg-slate-100 text-slate-500'
+                            }`}>
+                               <i className={`fas ${notif.type === 'IMPEDIMENT' ? 'fa-flag' : notif.type === 'ASSIGNMENT' ? 'fa-user-plus' : 'fa-info-circle'}`}></i>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                               <p className={`text-xs leading-relaxed ${!notif.read ? 'font-bold text-slate-900' : 'text-slate-500'}`}>{notif.message}</p>
+                               <span className="text-[9px] font-bold text-slate-300 uppercase mt-1 block">{new Date(notif.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                            </div>
+                            {!notif.read && (
+                              <button onClick={() => markRead(notif._id!)} className="w-6 h-6 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-[8px] text-slate-400 hover:text-blue-600 hover:border-blue-300 transition-all shadow-sm">
+                                <i className="fas fa-check"></i>
+                              </button>
+                            )}
+                         </div>
+                       ))
+                     )}
+                  </div>
+               </div>
+             )}
+          </div>
+
           <div className="text-right hidden sm:block">
             <p className="text-sm font-semibold">{userName}</p>
             <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">{userRole}</p>
