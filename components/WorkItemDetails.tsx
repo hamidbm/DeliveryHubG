@@ -24,6 +24,9 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
   const [uploading, setUploading] = useState(false);
   const [isCreatingSub, setIsCreatingSub] = useState(false);
   
+  // Artifact Previewer State
+  const [viewingAttachment, setViewingAttachment] = useState<WorkItemAttachment | null>(null);
+
   // Effort Tracking
   const [isLoggingWork, setIsLoggingWork] = useState(false);
   const [logHours, setLogHours] = useState<number>(0);
@@ -66,6 +69,15 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
     setClosureError(null);
   }, [initialItem]);
 
+  // Handle ESC for previewer
+  useEffect(() => {
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setViewingAttachment(null);
+    };
+    window.addEventListener('keydown', handleEsc);
+    return () => window.removeEventListener('keydown', handleEsc);
+  }, []);
+
   useEffect(() => {
     if (linkSearch.length < 2) {
       setLinkResults([]);
@@ -89,7 +101,6 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
   const handleUpdateItem = async (updates: Partial<WorkItem>) => {
     setClosureError(null);
 
-    // Governance: Status Transition Constraint (Safety Rail)
     if (updates.status === WorkItemStatus.DONE && children.length > 0) {
       const incompleteChildren = children.filter(c => c.status !== WorkItemStatus.DONE);
       if (incompleteChildren.length > 0) {
@@ -237,7 +248,6 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
           </div>
         </div>
         <div className="flex items-center gap-3 shrink-0">
-           {/* Flag Toggle */}
            <button 
             onClick={() => handleUpdateItem({ isFlagged: !item.isFlagged })}
             className={`w-10 h-10 rounded-xl border flex items-center justify-center transition-all ${item.isFlagged ? 'bg-red-50 border-red-200 text-red-600 shadow-inner' : 'bg-white border-slate-200 text-slate-300 hover:text-red-400'}`}
@@ -357,7 +367,6 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
           </div>
         )}
 
-        {/* Existing Tabs Content Remains the Same... */}
         {activeTab === 'links' && (
           <div className="p-10 space-y-6 animate-fadeIn">
              <div className="flex justify-between items-center mb-4">
@@ -403,9 +412,18 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
                         <p className="text-xs font-bold text-slate-800 truncate">{file.name}</p>
                         <p className="text-[9px] font-black text-slate-400 uppercase">{(file.size / 1024).toFixed(1)} KB • {file.uploadedBy}</p>
                      </div>
-                     <a href={file.url} download={file.name} className="w-8 h-8 rounded-lg hover:bg-blue-50 text-slate-300 hover:text-blue-600 transition-all flex items-center justify-center shrink-0">
-                        <i className="fas fa-download text-xs"></i>
-                     </a>
+                     <div className="flex items-center gap-1 shrink-0">
+                        <button 
+                          onClick={() => setViewingAttachment(file)}
+                          className="w-8 h-8 rounded-lg hover:bg-blue-50 text-slate-300 hover:text-blue-600 transition-all flex items-center justify-center"
+                          title="Preview Content"
+                        >
+                          <i className="fas fa-eye text-xs"></i>
+                        </button>
+                        <a href={file.url} download={file.name} className="w-8 h-8 rounded-lg hover:bg-blue-50 text-slate-300 hover:text-blue-600 transition-all flex items-center justify-center" title="Download Source">
+                           <i className="fas fa-download text-xs"></i>
+                        </a>
+                     </div>
                   </div>
                 ))}
                 {(!item.attachments || item.attachments.length === 0) && (
@@ -460,14 +478,10 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
                      </div>
                   </div>
                 )))}
-                {(!item.activity || item.activity.length === 0) && (
-                   <div className="py-20 text-center text-slate-300 italic text-xs border-2 border-dashed border-slate-100 rounded-[2rem] mr-10">No history available for this record.</div>
-                )}
              </div>
           </div>
         )}
 
-        {/* AI, Comments Tabs */}
         {activeTab === 'ai' && (
           <div className="p-10 space-y-10 animate-fadeIn">
              <div className="bg-gradient-to-br from-slate-900 to-blue-900 p-10 rounded-[3rem] text-white shadow-2xl relative overflow-hidden">
@@ -530,9 +544,6 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
                      <p className="text-sm text-slate-600 leading-relaxed font-medium pl-1">{c.body}</p>
                   </div>
                 ))}
-                {(!item.comments || item.comments.length === 0) && (
-                   <div className="py-20 text-center text-slate-300 italic text-xs border-2 border-dashed border-slate-100 rounded-[2rem]">No annotations yet.</div>
-                )}
              </div>
              <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-xl shadow-slate-100 space-y-4">
                 <textarea value={newComment} onChange={(e) => setNewComment(e.target.value)} placeholder="Annotate this record..." className="w-full bg-slate-50 border border-slate-100 rounded-xl px-5 py-4 text-sm font-medium outline-none focus:border-blue-500 transition-all resize-none h-32" />
@@ -541,6 +552,55 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
           </div>
         )}
       </div>
+
+      {/* Artifact Previewer Overlay */}
+      {viewingAttachment && (
+        <div className="fixed inset-0 z-[500] bg-slate-950/95 backdrop-blur-2xl flex flex-col animate-fadeIn">
+          <header className="px-10 py-6 flex items-center justify-between border-b border-white/10 shrink-0">
+            <div className="flex items-center gap-6">
+               <div className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-blue-400">
+                  <i className={`fas ${viewingAttachment.type.includes('image') ? 'fa-file-image' : 'fa-file-pdf'} text-xl`}></i>
+               </div>
+               <div>
+                  <h3 className="text-white font-black text-xl tracking-tight">{viewingAttachment.name}</h3>
+                  <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest">
+                    {(viewingAttachment.size / 1024).toFixed(1)} KB • Uploaded by {viewingAttachment.uploadedBy}
+                  </p>
+               </div>
+            </div>
+            <div className="flex items-center gap-4">
+               <a 
+                href={viewingAttachment.url} 
+                download={viewingAttachment.name} 
+                className="px-6 py-3 bg-white/5 hover:bg-white/10 text-white border border-white/10 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
+               >
+                 <i className="fas fa-download mr-2"></i> Download
+               </a>
+               <button 
+                onClick={() => setViewingAttachment(null)}
+                className="w-12 h-12 rounded-full bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white transition-all flex items-center justify-center text-xl"
+               >
+                 <i className="fas fa-times"></i>
+               </button>
+            </div>
+          </header>
+          <main className="flex-1 p-10 flex items-center justify-center overflow-hidden">
+             <div className="w-full h-full max-w-6xl bg-white rounded-[2.5rem] shadow-2xl overflow-hidden relative border border-white/20">
+                {viewingAttachment.type.includes('image') ? (
+                  <img src={viewingAttachment.url} alt={viewingAttachment.name} className="w-full h-full object-contain" />
+                ) : viewingAttachment.type.includes('pdf') || viewingAttachment.type.includes('text') ? (
+                  <iframe src={viewingAttachment.url} className="w-full h-full border-none" title="Artifact Viewer" />
+                ) : (
+                  <div className="h-full flex flex-col items-center justify-center p-20 text-center">
+                    <i className="fas fa-file-circle-question text-slate-200 text-8xl mb-8"></i>
+                    <h4 className="text-2xl font-black text-slate-800 uppercase italic">Preview Unavailable</h4>
+                    <p className="text-slate-400 font-medium max-w-md mt-4">The browser cannot render this file type natively. Please download the artifact to review its contents locally.</p>
+                  </div>
+                )}
+             </div>
+          </main>
+        </div>
+      )}
 
       {isLoggingWork && (
         <div className="fixed inset-0 bg-slate-950/40 backdrop-blur-md z-[200] flex items-center justify-center p-6">
