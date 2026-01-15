@@ -46,6 +46,8 @@ const WorkItemCard: React.FC<WorkItemCardProps> = ({ item, onClick, isOverlay })
     }
   };
 
+  const isBlocked = item.links?.some(l => l.type === 'IS_BLOCKED_BY');
+
   return (
     <div 
       ref={setNodeRef}
@@ -53,16 +55,25 @@ const WorkItemCard: React.FC<WorkItemCardProps> = ({ item, onClick, isOverlay })
       {...attributes}
       {...listeners}
       onClick={onClick}
-      className={`bg-white p-5 rounded-2xl border border-slate-100 shadow-sm hover:shadow-xl hover:shadow-slate-200/50 transition-all cursor-grab active:cursor-grabbing group ${isOverlay ? 'shadow-2xl ring-2 ring-blue-500 rotate-2' : ''}`}
+      className={`bg-white p-5 rounded-2xl border transition-all cursor-grab active:cursor-grabbing group ${
+        isOverlay ? 'shadow-2xl ring-2 ring-blue-500 rotate-2' : 'shadow-sm border-slate-100 hover:shadow-xl hover:shadow-slate-200/50'
+      } ${isBlocked ? 'border-l-4 border-l-red-500' : ''}`}
     >
       <div className="flex justify-between items-start mb-3">
         <div className="flex items-center gap-2">
            <i className={`fas ${getIcon(item.type)} text-xs`}></i>
            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{item.key}</span>
         </div>
-        <span className={`text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-tighter ${getPriorityColor(item.priority)}`}>
-           {item.priority}
-        </span>
+        <div className="flex items-center gap-2">
+           {isBlocked && (
+             <span className="animate-pulse flex items-center justify-center w-5 h-5 bg-red-100 text-red-600 rounded-full" title="Artifact is Blocked">
+               <i className="fas fa-hand text-[8px]"></i>
+             </span>
+           )}
+           <span className={`text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-tighter ${getPriorityColor(item.priority)}`}>
+              {item.priority}
+           </span>
+        </div>
       </div>
       
       <h4 className="text-sm font-bold text-slate-800 leading-snug mb-4 group-hover:text-blue-600 transition-colors">

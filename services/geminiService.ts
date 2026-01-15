@@ -1,11 +1,11 @@
-import { GoogleGenAI } from "@google/genai";
+
+import { GoogleGenAI, Type } from "@google/genai";
 
 /**
  * AI Portfolio Analyst
  * Powered by Gemini 3 Pro for deep reasoning.
  */
 export const getPortfolioSummary = async (portfolioData: any) => {
-  // Always use process.env.API_KEY directly in the named parameter object as per guidelines.
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const prompt = `
     As an expert Enterprise Architecture AI, perform an in-depth analysis on this software delivery portfolio.
@@ -24,7 +24,6 @@ export const getPortfolioSummary = async (portfolioData: any) => {
   `;
 
   try {
-    // Calling generateContent directly on ai.models.
     const response = await ai.models.generateContent({
       model: 'gemini-3-pro-preview',
       contents: prompt,
@@ -32,10 +31,42 @@ export const getPortfolioSummary = async (portfolioData: any) => {
         thinkingConfig: { thinkingBudget: 0 }
       }
     });
-    // Accessing the .text property directly (not as a function).
     return response.text || "Portfolio analysis is currently unavailable.";
   } catch (error) {
     console.error("Gemini Error:", error);
     return "Error generating AI insights. Please verify your environment configuration and API key.";
+  }
+};
+
+/**
+ * AI Task Co-Pilot
+ * Refines individual work items with implementation plans and criteria.
+ */
+export const generateWorkPlan = async (workItem: any) => {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const prompt = `
+    As a Senior Technical Product Manager, analyze this work item and provide a structured implementation roadmap.
+    
+    ARTIFACT: ${workItem.key} - ${workItem.title}
+    DESCRIPTION: ${workItem.description || 'No description provided.'}
+    TYPE: ${workItem.type}
+    
+    RESPONSE REQUIREMENTS:
+    1. ACCEPTANCE CRITERIA: 5 clear, testable points.
+    2. IMPLEMENTATION STEPS: A logical sequence of technical tasks.
+    3. POTENTIAL RISKS: 2-3 technical or delivery blockers to watch for.
+    
+    FORMAT: Professional Markdown.
+  `;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: prompt
+    });
+    return response.text || "I was unable to analyze this artifact.";
+  } catch (error) {
+    console.error("Gemini Task Error:", error);
+    return "AI Refinement currently offline.";
   }
 };

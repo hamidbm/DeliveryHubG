@@ -7,17 +7,22 @@ interface CreateWorkItemModalProps {
   applications: Application[];
   initialBundleId: string;
   initialAppId: string;
+  initialParentId?: string;
+  initialType?: WorkItemType;
   onClose: () => void;
   onSuccess: (result: any) => void;
 }
 
-const CreateWorkItemModal: React.FC<CreateWorkItemModalProps> = ({ bundles, applications, initialBundleId, initialAppId, onClose, onSuccess }) => {
+const CreateWorkItemModal: React.FC<CreateWorkItemModalProps> = ({ 
+  bundles, applications, initialBundleId, initialAppId, initialParentId, initialType, onClose, onSuccess 
+}) => {
   const [formData, setFormData] = useState<Partial<WorkItem>>({
-    type: WorkItemType.STORY,
+    type: initialType || WorkItemType.STORY,
     title: '',
     description: '',
     bundleId: initialBundleId || bundles[0]?._id,
     applicationId: initialAppId || '',
+    parentId: initialParentId || '',
     priority: 'MEDIUM',
     status: WorkItemStatus.TODO,
     assignedTo: ''
@@ -145,7 +150,7 @@ const CreateWorkItemModal: React.FC<CreateWorkItemModalProps> = ({ bundles, appl
               </DetailField>
            </div>
 
-           {potentialParents.length > 0 && (
+           {(potentialParents.length > 0 || formData.parentId) && (
               <DetailField label="Parent Association">
                  <select 
                     value={formData.parentId}
@@ -154,6 +159,9 @@ const CreateWorkItemModal: React.FC<CreateWorkItemModalProps> = ({ bundles, appl
                  >
                     <option value="">No Parent (Root Item)</option>
                     {potentialParents.map(p => <option key={p._id || p.id} value={p._id || p.id}>{p.key}: {p.title}</option>)}
+                    {formData.parentId && !potentialParents.some(p => (p._id || p.id) === formData.parentId) && (
+                      <option value={formData.parentId}>Current Context Parent</option>
+                    )}
                  </select>
               </DetailField>
            )}
@@ -169,7 +177,7 @@ const CreateWorkItemModal: React.FC<CreateWorkItemModalProps> = ({ bundles, appl
               <button 
                 type="submit" 
                 disabled={loading}
-                className="flex-[2] py-4 bg-slate-900 text-white text-[10px] font-black rounded-2xl shadow-2xl hover:bg-slate-800 transition-all uppercase tracking-widest flex items-center justify-center gap-2"
+                className="flex-[2] py-4 bg-slate-900 text-white text-[10px] font-black rounded-2xl shadow-2xl hover:bg-blue-600 transition-all uppercase tracking-widest flex items-center justify-center gap-2"
               >
                 {loading ? <i className="fas fa-circle-notch fa-spin"></i> : <i className="fas fa-paper-plane"></i>}
                 Create Artifact
