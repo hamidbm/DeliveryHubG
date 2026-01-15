@@ -1,3 +1,4 @@
+
 import { NextResponse } from 'next/server';
 import { jwtVerify, SignJWT } from 'jose';
 import { cookies } from 'next/headers';
@@ -8,7 +9,6 @@ import { getDb } from '../../../../services/db';
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
 
 export async function POST(request: Request) {
-  // Await cookies() as it is now asynchronous in recent Next.js versions.
   const cookieStore = await cookies();
   const token = cookieStore.get('nexus_auth_token')?.value;
 
@@ -23,6 +23,7 @@ export async function POST(request: Request) {
 
     const db = await getDb();
     const updateData: any = {};
+    const now = new Date().toISOString();
 
     if (role) {
       updateData.role = role;
@@ -38,7 +39,16 @@ export async function POST(request: Request) {
 
     const result = await db.collection('users').findOneAndUpdate(
       { _id: new ObjectId(userId) },
-      { $set: updateData },
+      { 
+        $set: { ...updateData, updatedAt: now },
+        $push: { 
+          securityLog: { 
+            action: role ? 'ROLE_CHANGE' : 'PASSWORD_RESET', 
+            role: role || undefined, 
+            timestamp: now 
+          } as any
+        }
+      },
       { returnDocument: 'after' }
     );
 
@@ -46,7 +56,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    // Re-issue JWT with updated data (specifically role)
+    // Re-issue JWT with updated data
     const newToken = await new SignJWT({ 
       id: userId, 
       email: result.email, 

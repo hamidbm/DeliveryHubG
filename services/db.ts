@@ -302,7 +302,7 @@ export const saveWorkItem = async (item: Partial<WorkItem>, user?: any) => {
 
     // Track Changes for Audit Log (Deep Diff)
     const activities: any[] = [];
-    const fieldsToTrack = ['status', 'priority', 'assignedTo', 'title', 'description', 'storyPoints', 'parentId', 'milestoneIds', 'timeEstimate', 'attachments', 'links'];
+    const fieldsToTrack = ['status', 'priority', 'assignedTo', 'title', 'description', 'storyPoints', 'parentId', 'milestoneIds', 'timeEstimate', 'attachments', 'links', 'aiWorkPlan'];
     
     fieldsToTrack.forEach(field => {
       const oldVal = existing[field];
@@ -312,7 +312,7 @@ export const saveWorkItem = async (item: Partial<WorkItem>, user?: any) => {
       if (newVal !== undefined && JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
         activities.push({
           user: userName,
-          action: field === 'status' ? 'CHANGED_STATUS' : 'UPDATED_FIELD',
+          action: field === 'aiWorkPlan' ? 'AI_REFINEMENT_COMMITTED' : (field === 'status' ? 'CHANGED_STATUS' : 'UPDATED_FIELD'),
           field: field,
           from: oldVal,
           to: newVal,

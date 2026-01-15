@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { WorkItem, WorkItemType, WorkItemStatus, Bundle, Application } from '../types';
 import WorkItemDetails from './WorkItemDetails';
 import CreateWorkItemModal from './CreateWorkItemModal';
@@ -50,6 +50,11 @@ const WorkItemsTreeView: React.FC<WorkItemsTreeViewProps> = ({
       const res = await fetch(`/api/work-items/tree?${params.toString()}`);
       const data = await res.json();
       setTreeData(data);
+      
+      // Auto-expand top level on first load
+      if (expandedNodes.size === 0 && data.length > 0) {
+        setExpandedNodes(new Set(data.map((n: any) => n.id)));
+      }
     } catch (err) {
       console.error("Failed to fetch tree", err);
     } finally {
@@ -85,10 +90,24 @@ const WorkItemsTreeView: React.FC<WorkItemsTreeViewProps> = ({
     }
   };
 
+  // Helper to check for risk in a node or any of its recursive children
+  const checkNodeRisk = (node: any): 'CRITICAL' | 'WARNING' | 'HEALTHY' => {
+    if (node.status === WorkItemStatus.BLOCKED) return 'CRITICAL';
+    
+    if (node.children && node.children.length > 0) {
+      for (const child of node.children) {
+        const childRisk = checkNodeRisk(child);
+        if (childRisk === 'CRITICAL' || childRisk === 'WARNING') return 'WARNING';
+      }
+    }
+    return 'HEALTHY';
+  };
+
   const renderTreeNode = (node: any, depth = 0) => {
     const isExpanded = expandedNodes.has(node.id);
     const hasChildren = node.children && node.children.length > 0;
     const isActive = activeItem && (activeItem._id === node.workItemId || activeItem.id === node.workItemId);
+    const risk = checkNodeRisk(node);
 
     return (
       <div key={node.id} className="flex flex-col">
@@ -103,8 +122,8 @@ const WorkItemsTreeView: React.FC<WorkItemsTreeViewProps> = ({
             }
             handleNodeSelect(node);
           }}
-          className={`flex items-center gap-3 px-3 py-1 rounded-xl transition-all text-left ${
-            isActive ? 'bg-blue-50 text-blue-700 ring-1 ring-blue-100' : 'hover:bg-slate-50 text-slate-600'
+          className={`flex items-center gap-3 px-3 py-2.5 rounded-2xl transition-all text-left group border border-transparent mb-1 ${
+            isActive ? 'bg-blue-600 text-white shadow-xl shadow-blue-500/20' : 'hover:bg-white hover:shadow-sm text-slate-600 hover:border-slate-100'
           }`}
           style={{ marginLeft: `${depth * 14}px` }}
         >
@@ -115,17 +134,26 @@ const WorkItemsTreeView: React.FC<WorkItemsTreeViewProps> = ({
               <div className="w-1 h-1 bg-slate-200 rounded-full"></div>
             )}
           </div>
-          <i className={`fas ${getIcon(node.type)} text-xl shrink-0`}></i>
-          <span className={`text-base font-semibold truncate ${isActive ? 'text-blue-800' : 'text-slate-700'}`}>
-            {node.label}
-          </span>
+          <div className="relative shrink-0">
+            <i className={`fas ${getIcon(node.type)} text-lg ${isActive ? 'text-white' : ''}`}></i>
+            {risk !== 'HEALTHY' && (
+              <div className={`absolute -top-1 -right-1 w-3 h-3 rounded-full border-2 ${isActive ? 'border-blue-600' : 'border-white'} ${risk === 'CRITICAL' ? 'bg-red-500' : 'bg-amber-500 animate-pulse shadow-sm shadow-amber-200'}`}></div>
+            )}
+          </div>
+          <div className="min-w-0 flex-1">
+            <span className={`text-sm font-black truncate block tracking-tight ${isActive ? 'text-white' : 'text-slate-800'}`}>
+              {node.label}
+            </span>
+          </div>
           {node.status && (
-             <span className={`ml-auto text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider border ${
-               node.status === WorkItemStatus.DONE || node.status === 'Released' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' :
-               node.status === WorkItemStatus.IN_PROGRESS || node.status === 'Active' ? 'bg-blue-100 text-blue-700 border-blue-200' :
-               'bg-slate-100 text-slate-500 border-slate-200'
+             <span className={`shrink-0 text-[8px] font-black px-2 py-0.5 rounded uppercase tracking-wider border ${
+               isActive ? 'bg-white/20 border-white/30 text-white' :
+               node.status === WorkItemStatus.DONE || node.status === 'Released' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' :
+               node.status === WorkItemStatus.IN_PROGRESS || node.status === 'Active' ? 'bg-blue-50 text-blue-700 border-blue-100' :
+               node.status === WorkItemStatus.BLOCKED ? 'bg-red-50 text-red-700 border-red-100' :
+               'bg-slate-50 text-slate-500 border-slate-100'
              }`}>
-               {node.status}
+               {node.status.replace('_', ' ')}
              </span>
           )}
         </button>
@@ -143,7 +171,7 @@ const WorkItemsTreeView: React.FC<WorkItemsTreeViewProps> = ({
       <aside className="w-[450px] border-r border-slate-100 flex flex-col bg-slate-50/30 shrink-0">
         <header className="p-8 border-b border-slate-100 bg-white/50 backdrop-blur shrink-0">
           <div className="flex items-center justify-between mb-4">
-             <h3 className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Work Hierarchy</h3>
+             <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Work Hierarchy</h3>
              <div className="flex bg-slate-200 p-0.5 rounded-xl">
                 <button 
                   onClick={() => setTreeMode('hierarchy')}
@@ -161,11 +189,11 @@ const WorkItemsTreeView: React.FC<WorkItemsTreeViewProps> = ({
           </div>
         </header>
 
-        <nav className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+        <nav className="flex-1 overflow-y-auto p-6 custom-scrollbar">
           {loading ? (
-             <div className="space-y-1 p-4">
-                {[...Array(12)].map((_, i) => (
-                  <div key={i} className="h-10 bg-slate-100 rounded-lg animate-pulse" style={{ opacity: 1 - i * 0.05 }}></div>
+             <div className="space-y-4">
+                {[...Array(8)].map((_, i) => (
+                  <div key={i} className="h-12 bg-slate-100 rounded-2xl animate-pulse" style={{ opacity: 1 - i * 0.1 }}></div>
                 ))}
              </div>
           ) : treeData.length === 0 ? (
