@@ -9,6 +9,7 @@ import WorkItemsAnalyticsView from './WorkItemsAnalyticsView';
 import WorkItemsBacklogView from './WorkItemsBacklogView';
 import WorkItemsRoadmapView from './WorkItemsRoadmapView';
 import WorkItemsMilestonePlanningView from './WorkItemsMilestonePlanningView';
+import Milestones from './Milestones';
 
 interface WorkItemsProps {
   applications: Application[];
@@ -26,6 +27,7 @@ const WorkItems: React.FC<WorkItemsProps> = (props) => {
   const searchParams = useSearchParams();
   const router = useRouter();
   const activeView = searchParams.get('view') || 'tree';
+  const [quickFilter, setQuickFilter] = useState<'all' | 'my' | 'updated' | 'blocked'>('all');
 
   const setView = (view: string) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -33,16 +35,17 @@ const WorkItems: React.FC<WorkItemsProps> = (props) => {
     router.push(`?${params.toString()}`);
   };
 
-  // Ensure selEpicId is never undefined when passed to children
+  // Enhance sanitizedProps with quick filter logic for child components
   const sanitizedProps = {
     ...props,
-    selEpicId: props.selEpicId || 'all'
+    selEpicId: props.selEpicId || 'all',
+    quickFilter
   };
 
   return (
     <div className="flex flex-col gap-6">
-      {/* View Switcher Header */}
-      <div className="flex items-center justify-between bg-white px-8 py-4 rounded-[2rem] border border-slate-200 shadow-sm">
+      {/* View Switcher & Quick Filters Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between bg-white px-8 py-4 rounded-[2rem] border border-slate-200 shadow-sm gap-4">
         <div className="flex items-center gap-6 overflow-x-auto no-scrollbar">
           <div>
             <h2 className="text-xl font-black text-slate-800 tracking-tight">Work Delivery Hub</h2>
@@ -54,7 +57,8 @@ const WorkItems: React.FC<WorkItemsProps> = (props) => {
               { id: 'roadmap', label: 'Roadmap', icon: 'fa-route' },
               { id: 'tree', label: 'Hierarchy', icon: 'fa-sitemap' },
               { id: 'backlog', label: 'Backlog', icon: 'fa-layer-group' },
-              { id: 'milestone-plan', label: 'Milestone Plan', icon: 'fa-map-signs' },
+              { id: 'milestone-plan', label: 'Cycle Planning', icon: 'fa-map-signs' },
+              { id: 'milestones', label: 'Milestones', icon: 'fa-flag-checkered' },
               { id: 'board', label: 'Board', icon: 'fa-chalkboard' },
               { id: 'list', label: 'List View', icon: 'fa-list' },
               { id: 'analytics', label: 'Analytics', icon: 'fa-chart-line' }
@@ -69,6 +73,24 @@ const WorkItems: React.FC<WorkItemsProps> = (props) => {
               </button>
             ))}
           </div>
+        </div>
+
+        <div className="flex items-center gap-3 bg-slate-50 p-1.5 rounded-2xl border border-slate-100 self-end md:self-auto">
+           <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest px-2">Quick Filters:</span>
+           {[
+             { id: 'all', label: 'All' },
+             { id: 'my', label: 'My Issues' },
+             { id: 'updated', label: 'Recently Updated' },
+             { id: 'blocked', label: 'Critical Blockers' }
+           ].map(f => (
+             <button
+               key={f.id}
+               onClick={() => setQuickFilter(f.id as any)}
+               className={`px-4 py-1.5 text-[9px] font-black uppercase rounded-lg transition-all ${quickFilter === f.id ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-400 hover:text-slate-600'}`}
+             >
+               {f.label}
+             </button>
+           ))}
         </div>
       </div>
 
@@ -90,6 +112,13 @@ const WorkItems: React.FC<WorkItemsProps> = (props) => {
           <WorkItemsBacklogView {...sanitizedProps} />
         ) : activeView === 'milestone-plan' ? (
           <WorkItemsMilestonePlanningView {...sanitizedProps} />
+        ) : activeView === 'milestones' ? (
+          <Milestones 
+            applications={props.applications} 
+            bundles={props.bundles} 
+            activeBundleId={props.selBundleId}
+            activeAppId={props.selAppId}
+          />
         ) : (
           <WorkItemsTreeView {...sanitizedProps} />
         )}

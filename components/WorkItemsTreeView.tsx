@@ -12,12 +12,13 @@ interface WorkItemsTreeViewProps {
   selMilestone: string;
   selEpicId: string;
   searchQuery: string;
+  quickFilter?: string;
   externalTrigger?: string | null;
   onTriggerProcessed?: () => void;
 }
 
 const WorkItemsTreeView: React.FC<WorkItemsTreeViewProps> = ({ 
-  applications, bundles, selBundleId, selAppId, selMilestone, selEpicId, searchQuery, externalTrigger, onTriggerProcessed 
+  applications, bundles, selBundleId, selAppId, selMilestone, selEpicId, searchQuery, quickFilter, externalTrigger, onTriggerProcessed 
 }) => {
   const [treeData, setTreeData] = useState<any[]>([]);
   const [activeItem, setActiveItem] = useState<WorkItem | null>(null);
@@ -43,6 +44,7 @@ const WorkItemsTreeView: React.FC<WorkItemsTreeViewProps> = ({
       treeMode
     });
     if (selEpicId !== 'all') params.set('epicId', selEpicId);
+    if (quickFilter) params.set('quickFilter', quickFilter);
 
     try {
       const res = await fetch(`/api/work-items/tree?${params.toString()}`);
@@ -57,7 +59,7 @@ const WorkItemsTreeView: React.FC<WorkItemsTreeViewProps> = ({
 
   useEffect(() => {
     fetchTree();
-  }, [selBundleId, selAppId, selMilestone, selEpicId, searchQuery, treeMode]);
+  }, [selBundleId, selAppId, selMilestone, selEpicId, searchQuery, treeMode, quickFilter]);
 
   const handleNodeSelect = async (node: any) => {
     if (node.nodeType === 'WORK_ITEM') {

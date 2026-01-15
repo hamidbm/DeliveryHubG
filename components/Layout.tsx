@@ -72,8 +72,26 @@ const Layout: React.FC<LayoutProps> = ({
     fetch('/api/wiki/spaces').then(r => r.json()).then(setSpaces).catch(() => []);
   }, []);
 
-  const filteredApps = (applications || []).filter(a => activeBundle === 'all' || a.bundleId === activeBundle);
+  // Keyboard Shortcuts (Jira Style)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger if user is typing in an input or textarea
+      if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) return;
 
+      if (e.key === 'c') {
+        e.preventDefault();
+        onCreateWorkItem?.();
+      } else if (e.key === '/') {
+        e.preventDefault();
+        const searchInput = document.getElementById('global-search-input');
+        searchInput?.focus();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onCreateWorkItem]);
+
+  const filteredApps = (applications || []).filter(a => activeBundle === 'all' || a.bundleId === activeBundle);
   const showFilterBar = ['dashboard', 'applications', 'work-items', 'wiki', 'reviews', 'documents'].includes(activeTab);
 
   return (
@@ -147,8 +165,9 @@ const Layout: React.FC<LayoutProps> = ({
             <div className="relative">
               <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-300 text-[10px]"></i>
               <input 
+                id="global-search-input"
                 type="text" 
-                placeholder="Search items..." 
+                placeholder="Search items... (/)" 
                 value={searchQuery}
                 onChange={(e) => setSearchQuery?.(e.target.value)}
                 className="bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-1.5 text-[11px] font-bold focus:border-blue-500 outline-none w-44 transition-all"
@@ -169,7 +188,7 @@ const Layout: React.FC<LayoutProps> = ({
                 className="px-4 py-1.5 bg-blue-600 text-white text-[9px] font-black rounded-lg hover:bg-blue-700 transition-all uppercase tracking-widest flex items-center gap-2 shadow-lg shadow-blue-500/10"
               >
                 <i className="fas fa-plus"></i>
-                New Work Item
+                New Work Item (C)
               </button>
             ) : null}
           </div>

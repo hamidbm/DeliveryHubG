@@ -8,13 +8,26 @@ const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_sup
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
+  const cookieStore = await cookies();
+  const token = cookieStore.get('nexus_auth_token')?.value;
+  
+  let currentUser = null;
+  if (token) {
+    try {
+      const { payload } = await jwtVerify(token, JWT_SECRET);
+      currentUser = payload.name;
+    } catch {}
+  }
+
   const filters = {
     bundleId: searchParams.get('bundleId'),
     applicationId: searchParams.get('applicationId'),
     milestoneId: searchParams.get('milestoneId'),
     parentId: searchParams.get('parentId'),
     epicId: searchParams.get('epicId'),
-    q: searchParams.get('q')
+    q: searchParams.get('q'),
+    quickFilter: searchParams.get('quickFilter'),
+    currentUser
   };
   const items = await fetchWorkItems(filters);
   return NextResponse.json(items);

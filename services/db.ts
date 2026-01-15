@@ -21,7 +21,6 @@ const safeIdMatch = (id: string) => {
   return { $in: conditions };
 };
 
-// ... (seedDatabase, Wiki services, Bundle services, etc. remain unchanged)
 export const seedDatabase = async (applications: any[], workItems: any[], wikiPages: any[]) => {
   try {
     const db = await getDb();
@@ -212,6 +211,7 @@ export const saveTaxonomyDocumentType = async (type: Partial<TaxonomyDocumentTyp
 export const fetchWorkItems = async (filters: any) => {
   const db = await getDb();
   const query: any = {};
+  let sort: any = { rank: 1, createdAt: -1 };
   
   if (filters.bundleId && filters.bundleId !== 'all') {
     const match = safeIdMatch(filters.bundleId);
@@ -233,6 +233,32 @@ export const fetchWorkItems = async (filters: any) => {
     const match = safeIdMatch(pId);
     if (match) query.parentId = match;
   }
+
+  if (filters.assignedTo && filters.assignedTo !== 'all') {
+    query.assignedTo = filters.assignedTo;
+  }
+
+  if (filters.status && filters.status !== 'all') {
+    query.status = filters.status;
+  }
+
+  // Specialized Quick Filters
+  if (filters.quickFilter) {
+    switch (filters.quickFilter) {
+      case 'my':
+        if (filters.currentUser) query.assignedTo = filters.currentUser;
+        break;
+      case 'updated':
+        const recent = new Date();
+        recent.setDate(recent.getDate() - 7);
+        query.updatedAt = { $gte: recent.toISOString() };
+        sort = { updatedAt: -1 };
+        break;
+      case 'blocked':
+        query.status = WorkItemStatus.BLOCKED;
+        break;
+    }
+  }
   
   if (filters.q) {
     query.$or = [
@@ -242,7 +268,7 @@ export const fetchWorkItems = async (filters: any) => {
     ];
   }
   
-  return await db.collection('workitems').find(query).sort({ rank: 1, createdAt: -1 }).toArray();
+  return await db.collection('workitems').find(query).sort(sort).toArray();
 };
 
 export const fetchWorkItemById = async (id: string) => {
@@ -261,32 +287,107 @@ export const fetchWorkItemById = async (id: string) => {
   }
 };
 
+/**
+ * Enhanced Save with Auto-Key generation and Activity Diffing
+ */
 export const saveWorkItem = async (item: Partial<WorkItem>, user?: any) => {
   const db = await getDb();
   const { _id, ...data } = item;
   const now = new Date().toISOString();
+  const userName = user?.name || 'Nexus System';
+
   if (_id) {
-    return await db.collection('workitems').updateOne({ _id: new ObjectId(_id) }, { $set: { ...data, updatedAt: now } });
+    const existing = await db.collection('workitems').findOne({ _id: new ObjectId(_id) });
+    if (!existing) throw new Error("Work item not found");
+
+    // Track Changes for Audit Log (Deep Diff)
+    const activities: any[] = [];
+    const fieldsToTrack = ['status', 'priority', 'assignedTo', 'title', 'description', 'storyPoints', 'parentId', 'milestoneIds', 'timeEstimate', 'attachments', 'links'];
+    
+    fieldsToTrack.forEach(field => {
+      const oldVal = existing[field];
+      const newVal = data[field as keyof typeof data];
+      
+      // Basic comparison (works for strings/numbers/bools/arrays)
+      if (newVal !== undefined && JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
+        activities.push({
+          user: userName,
+          action: field === 'status' ? 'CHANGED_STATUS' : 'UPDATED_FIELD',
+          field: field,
+          from: oldVal,
+          to: newVal,
+          createdAt: now
+        });
+      }
+    });
+
+    return await db.collection('workitems').updateOne(
+      { _id: new ObjectId(_id) },
+      { 
+        $set: { ...data, updatedAt: now, updatedBy: userName },
+        $push: { activity: { $each: activities } }
+      }
+    );
   } else {
-    return await db.collection('workitems').insertOne({ ...data, createdAt: now, updatedAt: now });
+    // Automated Key Generation (Jira Style: PROJ-1)
+    let key = data.key;
+    if (!key) {
+      const bundle = await db.collection('bundles').findOne(
+        data.bundleId && ObjectId.isValid(data.bundleId) 
+          ? { _id: new ObjectId(data.bundleId) } 
+          : { key: data.bundleId }
+      );
+      const prefix = bundle?.key || 'TASK';
+      const count = await db.collection('workitems').countDocuments({ bundleId: data.bundleId });
+      key = `${prefix}-${count + 1}`;
+    }
+
+    const newItem = {
+      ...data,
+      key,
+      createdAt: now,
+      updatedAt: now,
+      createdBy: userName,
+      activity: [{
+        user: userName,
+        action: 'CREATED',
+        createdAt: now
+      }]
+    };
+    return await db.collection('workitems').insertOne(newItem);
   }
 };
 
 export const updateWorkItemStatus = async (id: string, toStatus: string, newRank: number, user: any) => {
   const db = await getDb();
+  const now = new Date().toISOString();
+  const userName = user?.name || 'Nexus System';
+  
+  const existing = await db.collection('workitems').findOne({ _id: new ObjectId(id) });
+  if (!existing) return null;
+
   return await db.collection('workitems').updateOne(
     { _id: new ObjectId(id) },
-    { $set: { status: toStatus, rank: newRank, updatedAt: new Date().toISOString() } }
+    { 
+      $set: { status: toStatus, rank: newRank, updatedAt: now },
+      $push: { 
+        activity: {
+          user: userName,
+          action: 'CHANGED_STATUS',
+          from: existing.status,
+          to: toStatus,
+          createdAt: now
+        }
+      }
+    }
   );
 };
 
 export const fetchWorkItemTree = async (filters: any) => {
-  const db = await getDb();
   const items = await fetchWorkItems(filters);
   const treeMode = filters.treeMode || 'hierarchy';
 
   if (treeMode === 'milestone') {
-    // Group by Milestones
     const milestones = await fetchMilestones(filters);
     return milestones.map(m => {
       const mIdStr = m._id?.toString();
@@ -314,7 +415,7 @@ export const fetchWorkItemTree = async (filters: any) => {
     });
   }
 
-  // Standard Hierarchy Mode
+  // Optimized Jira Hierarchy Builder
   const buildTree = (parentId: any = null): any[] => {
     return items
       .filter(item => {
@@ -325,15 +426,27 @@ export const fetchWorkItemTree = async (filters: any) => {
         }
         return itemPid === comparePid;
       })
-      .map(item => ({
-        id: item._id?.toString() || item.id,
-        label: item.title,
-        type: item.type,
-        status: item.status,
-        workItemId: item._id?.toString() || item.id,
-        nodeType: 'WORK_ITEM',
-        children: buildTree(item._id || item.id)
-      }));
+      .map(item => {
+        const children = buildTree(item._id || item.id);
+        
+        // Progress Roll-up logic
+        let completion = 0;
+        if (children.length > 0) {
+          const done = children.filter(c => c.status === WorkItemStatus.DONE).length;
+          completion = Math.round((done / children.length) * 100);
+        }
+
+        return {
+          id: item._id?.toString() || item.id,
+          label: item.title,
+          type: item.type,
+          status: item.status,
+          completion, 
+          workItemId: item._id?.toString() || item.id,
+          nodeType: 'WORK_ITEM',
+          children: children
+        };
+      });
   };
   
   const startPid = (filters.parentId && filters.parentId !== 'all') ? filters.parentId : 
@@ -354,7 +467,6 @@ export const fetchWorkItemTree = async (filters: any) => {
   return tree;
 };
 
-// ... (fetchWorkItemsBoard, searchUsers, fetchSprints remain unchanged)
 export const fetchWorkItemsBoard = async (filters: any) => {
   const items = await fetchWorkItems(filters);
   const statuses = [WorkItemStatus.TODO, WorkItemStatus.IN_PROGRESS, WorkItemStatus.REVIEW, WorkItemStatus.DONE, WorkItemStatus.BLOCKED];
