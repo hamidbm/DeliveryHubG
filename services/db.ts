@@ -288,7 +288,7 @@ export const fetchWorkItemById = async (id: string) => {
 };
 
 /**
- * Enhanced Save with Auto-Key generation and Activity Diffing
+ * Enhanced Save with Auto-Key generation, Activity Diffing, and Bundle-Key Migration
  */
 export const saveWorkItem = async (item: Partial<WorkItem>, user?: any) => {
   const db = await getDb();
@@ -300,6 +300,32 @@ export const saveWorkItem = async (item: Partial<WorkItem>, user?: any) => {
     const existing = await db.collection('workitems').findOne({ _id: new ObjectId(_id) });
     if (!existing) throw new Error("Work item not found");
 
+    // Governance: Auto-Key Migration Logic
+    let keyUpdate: any = {};
+    if (data.bundleId && String(data.bundleId) !== String(existing.bundleId)) {
+      const bundle = await db.collection('bundles').findOne(
+        ObjectId.isValid(data.bundleId) ? { _id: new ObjectId(data.bundleId) } : { key: data.bundleId }
+      );
+      const prefix = bundle?.key || 'TASK';
+      const count = await db.collection('workitems').countDocuments({ bundleId: data.bundleId });
+      const newKey = `${prefix}-${count + 1}`;
+      
+      keyUpdate = { 
+        key: newKey,
+        $push: { 
+          legacyKeys: { key: existing.key, date: now, migratedBy: userName },
+          activity: {
+            user: userName,
+            action: 'KEY_MIGRATED',
+            field: 'key',
+            from: existing.key,
+            to: newKey,
+            createdAt: now
+          }
+        }
+      };
+    }
+
     // Track Changes for Audit Log (Deep Diff)
     const activities: any[] = [];
     const fieldsToTrack = ['status', 'priority', 'assignedTo', 'title', 'description', 'storyPoints', 'parentId', 'milestoneIds', 'timeEstimate', 'attachments', 'links', 'aiWorkPlan'];
@@ -308,7 +334,6 @@ export const saveWorkItem = async (item: Partial<WorkItem>, user?: any) => {
       const oldVal = existing[field];
       const newVal = data[field as keyof typeof data];
       
-      // Basic comparison (works for strings/numbers/bools/arrays)
       if (newVal !== undefined && JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
         activities.push({
           user: userName,
@@ -321,15 +346,17 @@ export const saveWorkItem = async (item: Partial<WorkItem>, user?: any) => {
       }
     });
 
+    const { $push: keyPush, ...keyData } = keyUpdate;
+    const finalSet = { ...data, ...keyData, updatedAt: now, updatedBy: userName };
+    const finalPush = { activity: { $each: [...(keyPush?.$push?.activity || []), ...activities] } };
+    if (keyPush?.$push?.legacyKeys) (finalPush as any).legacyKeys = keyPush.$push.legacyKeys;
+
     return await db.collection('workitems').updateOne(
       { _id: new ObjectId(_id) },
-      { 
-        $set: { ...data, updatedAt: now, updatedBy: userName },
-        $push: { activity: { $each: activities } }
-      }
+      { $set: finalSet, $push: finalPush }
     );
   } else {
-    // Automated Key Generation (Jira Style: PROJ-1)
+    // Automated Key Generation (Jira Style)
     let key = data.key;
     if (!key) {
       const bundle = await db.collection('bundles').findOne(
@@ -348,11 +375,7 @@ export const saveWorkItem = async (item: Partial<WorkItem>, user?: any) => {
       createdAt: now,
       updatedAt: now,
       createdBy: userName,
-      activity: [{
-        user: userName,
-        action: 'CREATED',
-        createdAt: now
-      }]
+      activity: [{ user: userName, action: 'CREATED', createdAt: now }]
     };
     return await db.collection('workitems').insertOne(newItem);
   }
@@ -434,6 +457,8 @@ export const fetchWorkItemTree = async (filters: any) => {
         if (children.length > 0) {
           const done = children.filter(c => c.status === WorkItemStatus.DONE).length;
           completion = Math.round((done / children.length) * 100);
+        } else if (item.status === WorkItemStatus.DONE) {
+          completion = 100;
         }
 
         return {
