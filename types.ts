@@ -48,6 +48,24 @@ export enum WorkItemStatus {
   BLOCKED = 'BLOCKED'
 }
 
+export interface Notification {
+  _id?: string;
+  recipient: string; // user name or email
+  sender: string;
+  type: 'MENTION' | 'IMPEDIMENT' | 'ASSIGNMENT' | 'SYSTEM';
+  message: string;
+  link?: string;
+  read: boolean;
+  createdAt: string;
+}
+
+export interface ChecklistItem {
+  id: string;
+  label: string;
+  isCompleted: boolean;
+  createdAt: string;
+}
+
 export interface WorkItemComment {
   _id?: string;
   author: string;
@@ -119,12 +137,13 @@ export interface WorkItem {
   storyPoints?: number;
   timeEstimate?: number;
   timeLogged?: number;
-  isFlagged?: boolean; // NEW: Impediment tracking
+  isFlagged?: boolean;
   watchers?: string[];
   labels?: string[];
   comments?: WorkItemComment[];
   activity?: WorkItemActivity[];
   attachments?: WorkItemAttachment[];
+  checklists?: ChecklistItem[]; 
 }
 
 export interface TaxonomyCategory {

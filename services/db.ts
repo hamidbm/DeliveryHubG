@@ -1,7 +1,6 @@
-
 import clientPromise from '../lib/mongodb';
 import { ObjectId } from 'mongodb';
-import { WikiPage, WikiSpace, WikiTheme, Bundle, Application, TaxonomyCategory, TaxonomyDocumentType, WorkItem, WorkItemType, WorkItemStatus, WorkItemActivity, Sprint, Milestone } from '../types';
+import { WikiPage, WikiSpace, WikiTheme, Bundle, Application, TaxonomyCategory, TaxonomyDocumentType, WorkItem, WorkItemType, WorkItemStatus, WorkItemActivity, Sprint, Milestone, Notification } from '../types';
 
 export const getDb = async () => {
   const client = await clientPromise;
@@ -16,6 +15,25 @@ const safeIdMatch = (id: string) => {
     conditions.push(new ObjectId(id));
   }
   return { $in: conditions };
+};
+
+export const fetchNotifications = async (userEmail: string) => {
+  const db = await getDb();
+  return await db.collection('notifications').find({ recipient: userEmail }).sort({ createdAt: -1 }).toArray();
+};
+
+export const saveNotification = async (notification: Partial<Notification>) => {
+  const db = await getDb();
+  return await db.collection('notifications').insertOne({
+    ...notification,
+    read: false,
+    createdAt: new Date().toISOString()
+  });
+};
+
+export const markNotificationRead = async (id: string) => {
+  const db = await getDb();
+  return await db.collection('notifications').updateOne({ _id: new ObjectId(id) }, { $set: { read: true } });
 };
 
 export const seedDatabase = async (applications: any[], workItems: any[], wikiPages: any[]) => {
@@ -296,33 +314,8 @@ export const saveWorkItem = async (item: Partial<WorkItem>, user?: any) => {
     const existing = await db.collection('workitems').findOne({ _id: new ObjectId(_id) });
     if (!existing) throw new Error("Work item not found");
 
-    let keyUpdate: any = {};
-    if (data.bundleId && String(data.bundleId) !== String(existing.bundleId)) {
-      const bundle = await db.collection('bundles').findOne(
-        ObjectId.isValid(data.bundleId) ? { _id: new ObjectId(data.bundleId) } : { key: data.bundleId }
-      );
-      const prefix = bundle?.key || 'TASK';
-      const count = await db.collection('workitems').countDocuments({ bundleId: data.bundleId });
-      const newKey = `${prefix}-${count + 1}`;
-      
-      keyUpdate = { 
-        key: newKey,
-        $push: { 
-          legacyKeys: { key: existing.key, date: now, migratedBy: userName },
-          activity: {
-            user: userName,
-            action: 'KEY_MIGRATED',
-            field: 'key',
-            from: existing.key,
-            to: newKey,
-            createdAt: now
-          }
-        }
-      };
-    }
-
     const activities: any[] = [];
-    const fieldsToTrack = ['status', 'priority', 'assignedTo', 'title', 'description', 'storyPoints', 'parentId', 'milestoneIds', 'timeEstimate', 'timeLogged', 'isFlagged', 'attachments', 'links', 'aiWorkPlan'];
+    const fieldsToTrack = ['status', 'priority', 'assignedTo', 'title', 'description', 'storyPoints', 'parentId', 'milestoneIds', 'timeEstimate', 'timeLogged', 'isFlagged', 'attachments', 'links', 'aiWorkPlan', 'checklists'];
     
     fieldsToTrack.forEach(field => {
       const oldVal = existing[field];
@@ -331,7 +324,8 @@ export const saveWorkItem = async (item: Partial<WorkItem>, user?: any) => {
       if (newVal !== undefined && JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
         activities.push({
           user: userName,
-          action: field === 'isFlagged' ? (newVal ? 'IMPEDIMENT_RAISED' : 'IMPEDIMENT_CLEARED') : 
+          action: field === 'checklists' ? 'CHECKLIST_UPDATED' : 
+                  field === 'isFlagged' ? (newVal ? 'IMPEDIMENT_RAISED' : 'IMPEDIMENT_CLEARED') : 
                   field === 'timeLogged' ? 'WORK_LOGGED' :
                   field === 'aiWorkPlan' ? 'AI_REFINEMENT_COMMITTED' : 
                   (field === 'status' ? 'CHANGED_STATUS' : 'UPDATED_FIELD'),
@@ -340,13 +334,37 @@ export const saveWorkItem = async (item: Partial<WorkItem>, user?: any) => {
           to: newVal,
           createdAt: now
         });
+
+        // Smart Logic: System Notifications
+        if (field === 'isFlagged' && newVal === true) {
+          // Notify stakeholders if an artifact is flagged
+          db.collection('notifications').insertOne({
+            recipient: existing.assignedTo || 'Unassigned',
+            sender: userName,
+            type: 'IMPEDIMENT',
+            message: `Impediment raised on ${existing.key}: ${existing.title}`,
+            link: `/work-items?view=tree&pageId=${existing._id}`,
+            read: false,
+            createdAt: now
+          });
+        }
+
+        if (field === 'assignedTo' && newVal) {
+          db.collection('notifications').insertOne({
+            recipient: newVal,
+            sender: userName,
+            type: 'ASSIGNMENT',
+            message: `You have been assigned to artifact ${existing.key}`,
+            link: `/work-items?view=tree&pageId=${existing._id}`,
+            read: false,
+            createdAt: now
+          });
+        }
       }
     });
 
-    const { $push: keyPush, ...keyData } = keyUpdate;
-    const finalSet = { ...data, ...keyData, updatedAt: now, updatedBy: userName };
-    const finalPush = { activity: { $each: [...(keyPush?.$push?.activity || []), ...activities] } };
-    if (keyPush?.$push?.legacyKeys) (finalPush as any).legacyKeys = keyPush.$push.legacyKeys;
+    const finalSet = { ...data, updatedAt: now, updatedBy: userName };
+    const finalPush = { activity: { $each: activities } };
 
     return await db.collection('workitems').updateOne(
       { _id: new ObjectId(_id) },
@@ -402,6 +420,103 @@ export const updateWorkItemStatus = async (id: string, toStatus: string, newRank
   );
 };
 
+// Fix: Implemented missing fetchMilestones function
+export const fetchMilestones = async (filters: any) => {
+  const db = await getDb();
+  const query: any = {};
+  if (filters.bundleId && filters.bundleId !== 'all') {
+    const match = safeIdMatch(filters.bundleId);
+    if (match) query.bundleId = match;
+  }
+  if (filters.applicationId && filters.applicationId !== 'all') {
+    const match = safeIdMatch(filters.applicationId);
+    if (match) query.applicationId = match;
+  }
+  if (filters.status && filters.status !== 'all') {
+    query.status = filters.status;
+  }
+  return await db.collection('milestones').find(query).sort({ dueDate: 1 }).toArray();
+};
+
+// Fix: Implemented missing saveMilestone function
+export const saveMilestone = async (milestone: Partial<Milestone>) => {
+  const db = await getDb();
+  const { _id, ...data } = milestone;
+  const now = new Date().toISOString();
+  if (_id) {
+    return await db.collection('milestones').updateOne({ _id: new ObjectId(_id) }, { $set: { ...data, updatedAt: now } });
+  } else {
+    return await db.collection('milestones').insertOne({ ...data, createdAt: now, updatedAt: now });
+  }
+};
+
+// Fix: Implemented missing deleteMilestone function
+export const deleteMilestone = async (id: string) => {
+  const db = await getDb();
+  return await db.collection('milestones').deleteOne({ _id: new ObjectId(id) });
+};
+
+// Fix: Implemented missing searchUsers function
+export const searchUsers = async (query: string) => {
+  const db = await getDb();
+  return await db.collection('users').find({
+    $or: [
+      { name: { $regex: query, $options: 'i' } },
+      { email: { $regex: query, $options: 'i' } }
+    ]
+  }).limit(10).project({ password: 0 }).toArray();
+};
+
+// Fix: Implemented missing fetchWorkItemsBoard function
+export const fetchWorkItemsBoard = async (filters: any) => {
+  const items = await fetchWorkItems(filters);
+  const statuses = [
+    { id: WorkItemStatus.TODO, name: 'To Do' },
+    { id: WorkItemStatus.IN_PROGRESS, name: 'In Progress' },
+    { id: WorkItemStatus.REVIEW, name: 'Review' },
+    { id: WorkItemStatus.DONE, name: 'Done' },
+    { id: WorkItemStatus.BLOCKED, name: 'Blocked' }
+  ];
+
+  const columns = statuses.map(s => ({
+    statusId: s.id,
+    statusName: s.name,
+    items: items.filter(i => i.status === s.id)
+  }));
+
+  return { columns };
+};
+
+// Fix: Implemented missing fetchSprints function
+export const fetchSprints = async (filters: any) => {
+  const db = await getDb();
+  const query: any = {};
+  if (filters.bundleId && filters.bundleId !== 'all') {
+    const match = safeIdMatch(filters.bundleId);
+    if (match) query.bundleId = match;
+  }
+  if (filters.applicationId && filters.applicationId !== 'all') {
+    const match = safeIdMatch(filters.applicationId);
+    if (match) query.applicationId = match;
+  }
+  if (filters.status) {
+    query.status = filters.status;
+  }
+  return await db.collection('sprints').find(query).sort({ startDate: 1 }).toArray();
+};
+
+// Fix: Implemented missing saveSprint function
+export const saveSprint = async (sprint: Partial<Sprint>) => {
+  const db = await getDb();
+  const { _id, ...data } = sprint;
+  const now = new Date().toISOString();
+  if (_id) {
+    return await db.collection('sprints').updateOne({ _id: new ObjectId(_id) }, { $set: data });
+  } else {
+    return await db.collection('sprints').insertOne({ ...data, createdAt: now });
+  }
+};
+
 export const fetchWorkItemTree = async (filters: any) => {
   const items = await fetchWorkItems(filters);
   const treeMode = filters.treeMode || 'hierarchy';
@@ -412,7 +527,7 @@ export const fetchWorkItemTree = async (filters: any) => {
       const mIdStr = m._id?.toString();
       const mItems = items.filter(i => {
          const ids = i.milestoneIds || [];
-         const id = i.milestoneId;
+         const id = (i as any).milestoneId;
          return ids.includes(mIdStr) || id === mIdStr || id === m.name;
       });
       
@@ -452,8 +567,6 @@ export const fetchWorkItemTree = async (filters: any) => {
         if (children.length > 0) {
           const done = children.filter(c => c.status === WorkItemStatus.DONE).length;
           completion = Math.round((done / children.length) * 100);
-        } else if (item.status === WorkItemStatus.DONE) {
-          completion = 100;
         }
 
         return {
@@ -462,114 +575,13 @@ export const fetchWorkItemTree = async (filters: any) => {
           type: item.type,
           status: item.status,
           isFlagged: item.isFlagged,
-          completion, 
           workItemId: item._id?.toString() || item.id,
           nodeType: 'WORK_ITEM',
-          children: children
+          completion,
+          children
         };
       });
   };
-  
-  const startPid = (filters.parentId && filters.parentId !== 'all') ? filters.parentId : 
-                   (filters.epicId && filters.epicId !== 'all') ? filters.epicId : null;
-  
-  const tree = buildTree(startPid);
-  if (tree.length === 0 && items.length > 0) {
-    return items.map(item => ({
-      id: item._id?.toString() || item.id,
-      label: item.title,
-      type: item.type,
-      status: item.status,
-      isFlagged: item.isFlagged,
-      workItemId: item._id?.toString() || item.id,
-      nodeType: 'WORK_ITEM',
-      children: []
-    }));
-  }
-  return tree;
-};
 
-export const fetchWorkItemsBoard = async (filters: any) => {
-  const items = await fetchWorkItems(filters);
-  const statuses = [WorkItemStatus.TODO, WorkItemStatus.IN_PROGRESS, WorkItemStatus.REVIEW, WorkItemStatus.DONE, WorkItemStatus.BLOCKED];
-  const columns = statuses.map(s => ({
-    statusId: s,
-    statusName: s.replace('_', ' '),
-    items: items.filter(i => i.status === s)
-  }));
-  return { columns };
-};
-
-export const searchUsers = async (query: string) => {
-  const db = await getDb();
-  return await db.collection('users').find({
-    $or: [
-      { name: { $regex: query, $options: 'i' } },
-      { email: { $regex: query, $options: 'i' } }
-    ]
-  }).limit(10).toArray();
-};
-
-export const fetchSprints = async (filters: any) => {
-  const db = await getDb();
-  const query: any = {};
-  if (filters.bundleId && filters.bundleId !== 'all') {
-    const match = safeIdMatch(filters.bundleId);
-    if (match) query.bundleId = match;
-  }
-  if (filters.applicationId && filters.applicationId !== 'all') {
-    const match = safeIdMatch(filters.applicationId);
-    if (match) query.applicationId = match;
-  }
-  return await db.collection('sprints').find(query).sort({ createdAt: -1 }).toArray();
-};
-
-export const saveSprint = async (sprint: Partial<Sprint>) => {
-  const db = await getDb();
-  const { _id, ...data } = sprint;
-  if (_id) {
-    return await db.collection('sprints').updateOne({ _id: new ObjectId(_id) }, { $set: data });
-  } else {
-    return await db.collection('sprints').insertOne({ ...data, createdAt: new Date().toISOString() });
-  }
-};
-
-export const fetchMilestones = async (filters: any) => {
-  const db = await getDb();
-  const query: any = {};
-  if (filters.bundleId && filters.bundleId !== 'all') {
-    const match = safeIdMatch(filters.bundleId);
-    if (match) query.bundleId = match;
-  }
-  if (filters.applicationId && filters.applicationId !== 'all') {
-    const match = safeIdMatch(filters.applicationId);
-    if (match) query.applicationId = match;
-  }
-  if (filters.status) query.status = filters.status;
-  
-  return await db.collection('milestones').find(query).sort({ startDate: 1 }).toArray();
-};
-
-export const saveMilestone = async (milestone: Partial<Milestone>) => {
-  const db = await getDb();
-  const { _id, ...data } = milestone;
-  const now = new Date().toISOString();
-
-  if (_id) {
-    return await db.collection('milestones').updateOne(
-      { _id: new ObjectId(_id) },
-      { $set: { ...data, updatedAt: now } }
-    );
-  } else {
-    return await db.collection('milestones').insertOne({
-      ...data,
-      createdAt: now,
-      updatedAt: now
-    });
-  }
-};
-
-export const deleteMilestone = async (id: string) => {
-  const db = await getDb();
-  return await db.collection('milestones').deleteOne({ _id: new ObjectId(id) });
+  return buildTree();
 };
