@@ -24,7 +24,6 @@ const WorkItemsListView: React.FC<WorkItemsListViewProps> = ({
   const [items, setItems] = useState<WorkItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [activeItem, setActiveItem] = useState<WorkItem | null>(null);
-  const [isCreating, setIsCreating] = useState(false);
 
   const fetchItems = async () => {
     setLoading(true);
@@ -40,13 +39,15 @@ const WorkItemsListView: React.FC<WorkItemsListViewProps> = ({
 
   useEffect(() => { fetchItems(); }, [selBundleId, selAppId, selMilestone, selEpicId, searchQuery, quickFilter]);
 
-  const getIcon = (type: WorkItemType) => {
-    switch (type) {
-      case WorkItemType.EPIC: return 'fa-layer-group text-purple-500';
-      case WorkItemType.FEATURE: return 'fa-star text-amber-500';
-      case WorkItemType.BUG: return 'fa-bug text-red-500';
-      default: return 'fa-file-lines text-blue-500';
-    }
+  const getItemHealth = (item: WorkItem) => {
+    const selfBlocked = item.status === WorkItemStatus.BLOCKED || item.links?.some(l => l.type === 'IS_BLOCKED_BY');
+    if (selfBlocked) return { label: 'Blocked', color: 'text-red-500 bg-red-50', icon: 'fa-hand' };
+    
+    // Simple child check logic for the list view context
+    const hasBlockedChild = items.some(i => i.parentId === (item._id || item.id) && (i.status === WorkItemStatus.BLOCKED));
+    if (hasBlockedChild) return { label: 'Risk', color: 'text-amber-600 bg-amber-50', icon: 'fa-triangle-exclamation' };
+    
+    return { label: 'Healthy', color: 'text-emerald-600 bg-emerald-50', icon: 'fa-circle-check' };
   };
 
   return (
@@ -62,20 +63,23 @@ const WorkItemsListView: React.FC<WorkItemsListViewProps> = ({
               <tr>
                 <th className="px-6 py-4 text-[9px] font-black text-slate-300 uppercase tracking-widest">Key</th>
                 <th className="px-6 py-4 text-[9px] font-black text-slate-300 uppercase tracking-widest">Title</th>
-                <th className="px-6 py-4 text-[9px] font-black text-slate-300 uppercase tracking-widest text-center">Blocked</th>
+                <th className="px-6 py-4 text-[9px] font-black text-slate-300 uppercase tracking-widest text-center">Health</th>
                 <th className="px-6 py-4 text-[9px] font-black text-slate-300 uppercase tracking-widest">Status</th>
                 <th className="px-6 py-4 text-[9px] font-black text-slate-300 uppercase tracking-widest">Assignee</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
               {items.map(item => {
-                const isBlocked = item.links?.some(l => l.type === 'IS_BLOCKED_BY');
+                const health = getItemHealth(item);
                 return (
                   <tr key={item._id || item.id} onClick={() => setActiveItem(item)} className="hover:bg-blue-50/30 cursor-pointer transition-colors group">
                     <td className="px-6 py-4 whitespace-nowrap text-[10px] font-black text-slate-400 uppercase tracking-tighter">{item.key}</td>
                     <td className="px-6 py-4 text-sm font-bold text-slate-700 group-hover:text-blue-600 truncate">{item.title}</td>
                     <td className="px-6 py-4 text-center">
-                       {isBlocked ? <i className="fas fa-hand-holding-hand text-red-500 animate-pulse"></i> : <span className="text-slate-100 text-[8px]">NONE</span>}
+                       <span className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest ${health.color}`}>
+                          <i className={`fas ${health.icon}`}></i>
+                          {health.label}
+                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border ${

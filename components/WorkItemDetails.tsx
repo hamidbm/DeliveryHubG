@@ -27,15 +27,9 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
   const [isCreatingSub, setIsCreatingSub] = useState(false);
   
   // AI States
-  const [aiPlan, setAiPlan] = useState<string | null>(null);
+  const [aiPlan, setAiPlan] = useState<string | null>(initialItem.aiWorkPlan || null);
   const [aiLoading, setAiLoading] = useState(false);
-
-  // Linking States
-  const [isLinking, setIsLinking] = useState(false);
-  const [linkSearch, setLinkSearch] = useState('');
-  const [linkResults, setLinkResults] = useState<WorkItem[]>([]);
-  const [linkType, setLinkType] = useState<WorkItemLink['type']>('RELATES_TO');
-  const [searchingLinks, setSearchingLinks] = useState(false);
+  const [aiSuccessFeedback, setAiSuccessFeedback] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -51,6 +45,7 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
       setItem(itemData);
       setSubtasks(subData);
       setMilestones(await msRes.json());
+      if (itemData.aiWorkPlan) setAiPlan(itemData.aiWorkPlan);
     } catch (err) { console.error(err); }
   };
 
@@ -81,6 +76,7 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
 
   const handleAiRefinement = async () => {
     setAiLoading(true);
+    setAiSuccessFeedback(false);
     try {
       const res = await fetch('/api/ai/refine-task', {
         method: 'POST',
@@ -94,6 +90,13 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
     } finally {
       setAiLoading(false);
     }
+  };
+
+  const persistAiPlan = async () => {
+    if (!aiPlan) return;
+    await handleUpdateItem({ aiWorkPlan: aiPlan });
+    setAiSuccessFeedback(true);
+    setTimeout(() => setAiSuccessFeedback(false), 3000);
   };
 
   const addComment = async () => {
@@ -115,7 +118,7 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
     const reader = new FileReader();
     reader.onload = async (event) => {
       const base64 = event.target?.result as string;
-      const newAttachment: WorkItemAttachment = {
+      const newAttachment = {
         name: file.name, size: file.size, type: file.type, url: base64, uploadedBy: 'Current User', createdAt: new Date().toISOString()
       };
       const attachments = [...(item.attachments || []), newAttachment];
@@ -137,7 +140,6 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
   };
 
   const isWatching = item.watchers?.includes('Current User');
-  const activityStream = [...(item.activity || [])].reverse();
 
   const getSubArtifactType = () => {
     if (item.type === WorkItemType.EPIC) return WorkItemType.FEATURE;
@@ -240,6 +242,19 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
                 </DetailField>
               </div>
             </div>
+
+            {item.aiWorkPlan && (
+               <div className="bg-blue-50 border border-blue-100 p-6 rounded-[2rem] flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                     <i className="fas fa-wand-magic-sparkles text-blue-500"></i>
+                     <div>
+                        <p className="text-[10px] font-black text-blue-700 uppercase tracking-widest">AI Blueprint Active</p>
+                        <p className="text-xs font-medium text-blue-600">Last refined on {new Date(item.updatedAt || '').toLocaleDateString()}</p>
+                     </div>
+                  </div>
+                  <button onClick={() => setActiveTab('ai')} className="text-[9px] font-black text-blue-700 uppercase tracking-[0.2em] hover:underline">View Roadmap</button>
+               </div>
+            )}
           </div>
         )}
 
@@ -248,14 +263,30 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
              <div className="bg-gradient-to-br from-slate-900 to-blue-900 p-10 rounded-[3rem] text-white shadow-2xl relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-32 -mt-32 blur-3xl"></div>
                 <div className="relative z-10">
-                   <div className="flex items-center gap-4 mb-6">
-                      <div className="w-14 h-14 bg-white/10 rounded-[1.5rem] flex items-center justify-center border border-white/10 backdrop-blur-md">
-                         <i className="fas fa-wand-magic-sparkles text-2xl text-blue-300"></i>
+                   <div className="flex items-center justify-between mb-6">
+                      <div className="flex items-center gap-4">
+                        <div className="w-14 h-14 bg-white/10 rounded-[1.5rem] flex items-center justify-center border border-white/10 backdrop-blur-md">
+                           <i className="fas fa-wand-magic-sparkles text-2xl text-blue-300"></i>
+                        </div>
+                        <div>
+                           <h4 className="text-xl font-black tracking-tight">Requirement Refinement</h4>
+                           <p className="text-blue-200 text-xs font-bold uppercase tracking-widest">Powered by Gemini 3 Flash</p>
+                        </div>
                       </div>
-                      <div>
-                         <h4 className="text-xl font-black tracking-tight">Requirement Refinement</h4>
-                         <p className="text-blue-200 text-xs font-bold uppercase tracking-widest">Powered by Gemini 3 Flash</p>
-                      </div>
+                      {aiPlan && (
+                        <button 
+                          onClick={persistAiPlan}
+                          className={`px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg flex items-center gap-2 ${
+                            aiSuccessFeedback ? 'bg-emerald-500 text-white' : 'bg-blue-500 text-white hover:bg-blue-400'
+                          }`}
+                        >
+                          {aiSuccessFeedback ? (
+                             <><i className="fas fa-check-circle"></i> Blueprint Committed</>
+                          ) : (
+                             <><i className="fas fa-database"></i> Commit to Registry</>
+                          )}
+                        </button>
+                      )}
                    </div>
                    <p className="text-blue-100/80 text-sm mb-8 leading-relaxed max-w-lg font-medium">Generate standard acceptance criteria, technical implementation steps, and risk assessments based on the artifact description.</p>
                    <button 
@@ -264,7 +295,7 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
                     className="bg-white text-slate-900 px-8 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-50 transition-all flex items-center gap-3 shadow-xl disabled:opacity-50"
                    >
                      {aiLoading ? <i className="fas fa-circle-notch fa-spin"></i> : <i className="fas fa-bolt"></i>}
-                     {aiLoading ? 'Reasoning...' : 'Generate Work Plan'}
+                     {aiLoading ? 'Reasoning...' : (aiPlan ? 'Regenerate Work Plan' : 'Generate Work Plan')}
                    </button>
                 </div>
              </div>
@@ -280,7 +311,6 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
           </div>
         )}
 
-        {/* ... Rest of the tabs handled similarly to the user's provided code ... */}
         {activeTab === 'comments' && (
           <div className="p-10 space-y-8 animate-fadeIn">
              <div className="space-y-6">

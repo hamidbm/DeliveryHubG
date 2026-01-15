@@ -40,7 +40,10 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({ column, onItemClick, wipLim
             </div>
           </div>
           {isOverWip && (
-             <i className="fas fa-triangle-exclamation text-red-500 text-xs animate-pulse"></i>
+             <div className="flex items-center gap-2 text-red-500 animate-pulse">
+                <span className="text-[8px] font-black uppercase tracking-tighter">Capacity Breach</span>
+                <i className="fas fa-triangle-exclamation text-[10px]"></i>
+             </div>
           )}
         </div>
       )}
@@ -49,7 +52,7 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({ column, onItemClick, wipLim
         ref={setNodeRef}
         className={`flex-1 rounded-[2.5rem] p-3 flex flex-col gap-3 min-h-[100px] border transition-all duration-500 ${
           isOverWip 
-          ? 'bg-red-50/20 border-red-200 ring-2 ring-red-500/5' 
+          ? 'bg-red-50/30 border-red-200 ring-2 ring-red-500/10 shadow-inner' 
           : 'bg-slate-50/50 border-slate-100/50 group-hover/col:bg-slate-50 transition-colors'
         }`}
       >
@@ -64,8 +67,9 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({ column, onItemClick, wipLim
         </SortableContext>
         
         {column.items.length === 0 && (
-          <div className="flex-1 flex items-center justify-center border-2 border-dashed border-slate-100/30 rounded-[2rem] opacity-20">
-             <i className="fas fa-plus-circle text-slate-400"></i>
+          <div className="flex-1 flex flex-col items-center justify-center border-2 border-dashed border-slate-100/30 rounded-[2rem] opacity-20 py-12">
+             <i className="fas fa-plus-circle text-3xl mb-2 text-slate-400"></i>
+             <p className="text-[9px] font-black uppercase tracking-widest">LANE EMPTY</p>
           </div>
         )}
       </div>

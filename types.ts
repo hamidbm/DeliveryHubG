@@ -101,6 +101,7 @@ export interface WorkItem {
   type: WorkItemType;
   title: string;
   description?: string;
+  aiWorkPlan?: string; // PERSISTED AI DATA
   status: WorkItemStatus;
   priority: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
   bundleId: string;
@@ -164,6 +165,7 @@ export interface Bundle {
   description?: string;
   isActive: boolean;
   sortOrder?: number;
+  wipLimits?: Record<string, number>; // DYNAMIC WIP CONFIG
   createdAt?: string;
   updatedAt?: string;
 }

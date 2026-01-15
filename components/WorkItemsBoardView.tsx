@@ -35,16 +35,13 @@ const WorkItemsBoardView: React.FC<WorkItemsBoardViewProps> = ({
   const [isCreating, setIsCreating] = useState(false);
   const [groupBy, setGroupBy] = useState<'status' | 'assignee' | 'epic'>('status');
 
-  // Point WIP Limits (Hardcoded for this demo, usually defined in Admin/Team settings)
-  const wipLimits: Record<string, number> = {
-    'IN_PROGRESS': 5,
-    'REVIEW': 3
-  };
-
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
+
+  const activeBundle = useMemo(() => bundles.find(b => b._id === selBundleId), [bundles, selBundleId]);
+  const wipLimits = activeBundle?.wipLimits || {};
 
   const fetchBoard = async () => {
     setLoading(true);
@@ -116,10 +113,12 @@ const WorkItemsBoardView: React.FC<WorkItemsBoardViewProps> = ({
                ))}
             </div>
          </div>
-         <div className="flex items-center gap-2 text-[9px] font-black text-slate-400 uppercase tracking-widest bg-amber-50 border border-amber-100 px-4 py-2 rounded-xl">
-            <i className="fas fa-shield-halved text-amber-500"></i>
-            WIP Enforcement Active
-         </div>
+         {Object.keys(wipLimits).length > 0 && (
+           <div className="flex items-center gap-2 text-[9px] font-black text-amber-600 uppercase tracking-widest bg-amber-50 border border-amber-100 px-4 py-2 rounded-xl">
+              <i className="fas fa-shield-halved text-amber-500"></i>
+              Adaptive WIP Control Active
+           </div>
+         )}
       </div>
 
       <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>

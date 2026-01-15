@@ -47,7 +47,6 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
   const timelineMonths = useMemo(() => {
     const today = new Date();
     const months = [];
-    // Show 2 months back and 8 months forward
     for (let i = -2; i < 8; i++) {
       const d = new Date(today.getFullYear(), today.getMonth() + i, 1);
       months.push({
@@ -70,6 +69,22 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
 
   const epics = useMemo(() => items.filter(i => i.type === WorkItemType.EPIC), [items]);
   const features = useMemo(() => items.filter(i => i.type === WorkItemType.FEATURE), [items]);
+  const stories = useMemo(() => items.filter(i => [WorkItemType.STORY, WorkItemType.BUG, WorkItemType.TASK].includes(i.type)), [items]);
+
+  // Risk Propagation Logic: Check if self or any child is blocked
+  const getItemRisk = (item: WorkItem) => {
+    const selfBlocked = item.status === WorkItemStatus.BLOCKED || item.links?.some(l => l.type === 'IS_BLOCKED_BY');
+    if (selfBlocked) return 'CRITICAL';
+
+    // Check children
+    const childIds = items.filter(i => i.parentId === (item._id || item.id)).map(i => i._id || i.id);
+    const hasBlockedChild = items.some(i => 
+      (i.parentId === (item._id || item.id) || childIds.includes(i.parentId)) && 
+      (i.status === WorkItemStatus.BLOCKED || i.links?.some(l => l.type === 'IS_BLOCKED_BY'))
+    );
+
+    return hasBlockedChild ? 'WARNING' : 'HEALTHY';
+  };
 
   const toggleEpic = (id: string) => {
     const next = new Set(expandedEpics);
@@ -79,7 +94,6 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
 
   const renderTimelineBar = (item: WorkItem, isFeature = false) => {
     const start = item.createdAt || new Date().toISOString();
-    // Logic: Features are shorter than Epics by default for visualization
     const durationDays = isFeature ? 20 : 60;
     const end = new Date(new Date(start).getTime() + (durationDays * 24 * 60 * 60 * 1000)).toISOString();
     
@@ -89,11 +103,14 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
 
     if (left >= 100 || right <= 0) return null;
 
+    const risk = getItemRisk(item);
+
     return (
       <div 
         onClick={() => setActiveItem(item)}
         className={`h-6 rounded-full shadow-lg relative transition-all hover:h-8 flex items-center px-4 cursor-pointer group/bar ${
-          item.status === WorkItemStatus.DONE ? 'bg-emerald-50 shadow-emerald-500/20' : 
+          risk === 'CRITICAL' ? 'bg-red-500 shadow-red-500/30' :
+          item.status === WorkItemStatus.DONE ? 'bg-emerald-500 shadow-emerald-500/20' : 
           item.status === WorkItemStatus.IN_PROGRESS ? 'bg-blue-600 shadow-blue-500/20' : 
           'bg-slate-200'
         } ${isFeature ? 'opacity-80 scale-y-75' : ''}`}
@@ -102,8 +119,13 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
         <span className="text-[9px] font-black text-white uppercase tracking-tighter truncate">
           {item.status} {item.storyPoints ? `• ${item.storyPoints} pts` : ''}
         </span>
+        {risk === 'WARNING' && (
+           <div className="absolute -top-1 -right-1 w-4 h-4 bg-amber-500 border-2 border-white rounded-full flex items-center justify-center text-[8px] text-white animate-bounce shadow-lg">
+             <i className="fas fa-exclamation"></i>
+           </div>
+        )}
         <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 bg-slate-900 text-white text-[10px] px-3 py-1 rounded-lg opacity-0 group-hover/bar:opacity-100 transition-opacity whitespace-nowrap z-50 pointer-events-none">
-          {item.title} ({item.key})
+          {item.title} ({item.key}) {risk !== 'HEALTHY' ? `[RISK: ${risk}]` : ''}
         </div>
       </div>
     );
@@ -114,17 +136,18 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
       <header className="flex justify-between items-center border-b border-slate-50 pb-8 shrink-0">
         <div>
           <h3 className="text-3xl font-black text-slate-800 tracking-tighter uppercase italic">Strategic Delivery Roadmap</h3>
-          <p className="text-slate-400 font-medium text-lg">Hierarchical multi-cycle release visualization.</p>
+          <p className="text-slate-400 font-medium text-lg">Hierarchical multi-cycle release visualization with risk propagation.</p>
         </div>
-        <div className="flex bg-slate-100 p-1 rounded-xl">
-           <button className="px-6 py-2 bg-white text-blue-600 text-[9px] font-black uppercase rounded-lg shadow-sm">Monthly</button>
-           <button className="px-6 py-2 text-slate-400 text-[9px] font-black uppercase rounded-lg">Quarterly</button>
+        <div className="flex items-center gap-4">
+           <div className="flex bg-slate-100 p-1 rounded-xl">
+              <button className="px-6 py-2 bg-white text-blue-600 text-[9px] font-black uppercase rounded-lg shadow-sm">Monthly</button>
+              <button className="px-6 py-2 text-slate-400 text-[9px] font-black uppercase rounded-lg">Quarterly</button>
+           </div>
         </div>
       </header>
 
       <div className="flex-1 overflow-auto custom-scrollbar">
         <div className="relative min-w-[1200px] pb-20">
-          {/* Timeline Header */}
           <div className="flex pl-80 mb-6 sticky top-0 bg-white z-40">
             {timelineMonths.map((m, idx) => (
               <div key={idx} className="flex-1 text-center py-4 border-l border-slate-50 first:border-l-0">
@@ -133,7 +156,6 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
             ))}
           </div>
 
-          {/* Milestone Track (Top) */}
           <div className="h-24 relative pl-80 mb-10">
               {milestones.map(m => {
                 const left = getPosition(m.startDate);
@@ -142,11 +164,7 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
                 if (left >= 100 || right <= 0) return null;
                 
                 return (
-                  <div 
-                    key={m._id} 
-                    className="absolute h-16 top-0 bg-indigo-600/10 border-2 border-indigo-500/20 rounded-[1.5rem] p-3 shadow-sm hover:shadow-lg transition-all cursor-pointer group overflow-hidden"
-                    style={{ left: `${left}%`, width: `${width}%` }}
-                  >
+                  <div key={m._id} className="absolute h-16 top-0 bg-indigo-600/10 border-2 border-indigo-500/20 rounded-[1.5rem] p-3 shadow-sm hover:shadow-lg transition-all cursor-pointer group overflow-hidden" style={{ left: `${left}%`, width: `${width}%` }}>
                     <div className="flex items-center gap-2">
                         <span className="w-6 h-6 rounded-lg bg-indigo-600 text-white flex items-center justify-center text-[10px] font-black shrink-0 shadow-lg shadow-indigo-600/20"><i className="fas fa-flag-checkered"></i></span>
                         <div>
@@ -159,27 +177,27 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
               })}
           </div>
 
-          {/* Roadmap Grid */}
           <div className="relative">
-             {/* Epic Rows */}
             <div className="divide-y divide-slate-50 border-t border-slate-100">
                 {epics.map(epic => {
                   const app = applications.find(a => a._id === epic.applicationId);
                   const epicFeatures = features.filter(f => f.parentId === epic._id || f.parentId === epic.id);
                   const isExpanded = expandedEpics.has(epic._id!);
+                  const risk = getItemRisk(epic);
 
                   return (
                     <React.Fragment key={epic._id}>
                       <div className="flex items-center group py-6 hover:bg-slate-50/40 transition-colors">
                         <div className="w-80 pr-8 shrink-0 flex items-start gap-4">
-                          <button 
-                            onClick={() => toggleEpic(epic._id!)}
-                            className={`w-6 h-6 rounded-lg flex items-center justify-center transition-all ${epicFeatures.length > 0 ? 'bg-slate-100 text-slate-400 hover:bg-slate-900 hover:text-white' : 'opacity-0 pointer-events-none'}`}
-                          >
+                          <button onClick={() => toggleEpic(epic._id!)} className={`w-6 h-6 rounded-lg flex items-center justify-center transition-all ${epicFeatures.length > 0 ? 'bg-slate-100 text-slate-400 hover:bg-slate-900 hover:text-white' : 'opacity-0 pointer-events-none'}`}>
                             <i className={`fas fa-chevron-${isExpanded ? 'down' : 'right'} text-[8px]`}></i>
                           </button>
                           <div className="min-w-0">
-                            <span className="text-[9px] font-black text-slate-300 bg-slate-50 px-2 py-0.5 rounded mb-1 inline-block uppercase">{app?.name || 'Shared Platform'}</span>
+                            <div className="flex items-center gap-2 mb-1">
+                               <span className="text-[9px] font-black text-slate-300 bg-slate-50 px-2 py-0.5 rounded uppercase">{app?.name || 'Shared'}</span>
+                               {risk === 'WARNING' && <i className="fas fa-triangle-exclamation text-amber-500 text-[10px] animate-pulse" title="Child Dependency Blocked"></i>}
+                               {risk === 'CRITICAL' && <i className="fas fa-hand text-red-500 text-[10px] animate-pulse" title="Self Blocked"></i>}
+                            </div>
                             <h4 onClick={() => setActiveItem(epic)} className="text-sm font-black text-slate-800 truncate leading-tight group-hover:text-blue-600 transition-colors cursor-pointer">{epic.title}</h4>
                             <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">{epic.key}</span>
                           </div>
@@ -189,37 +207,34 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
                         </div>
                       </div>
                       
-                      {isExpanded && epicFeatures.map(feat => (
-                        <div key={feat._id} className="flex items-center group py-4 hover:bg-blue-50/20 transition-colors bg-slate-50/10">
-                          <div className="w-80 pr-8 pl-14 shrink-0 relative">
-                             <div className="absolute left-10 top-0 bottom-0 w-[1px] bg-slate-200"></div>
-                             <div className="absolute left-10 top-1/2 w-4 h-[1px] bg-slate-200"></div>
-                             <h4 onClick={() => setActiveItem(feat)} className="text-xs font-bold text-slate-600 truncate leading-tight group-hover:text-blue-600 transition-colors cursor-pointer">{feat.title}</h4>
-                             <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">{feat.key}</span>
+                      {isExpanded && epicFeatures.map(feat => {
+                        const featRisk = getItemRisk(feat);
+                        return (
+                          <div key={feat._id} className="flex items-center group py-4 hover:bg-blue-50/20 transition-colors bg-slate-50/10">
+                            <div className="w-80 pr-8 pl-14 shrink-0 relative">
+                               <div className="absolute left-10 top-0 bottom-0 w-[1px] bg-slate-200"></div>
+                               <div className="absolute left-10 top-1/2 w-4 h-[1px] bg-slate-200"></div>
+                               <div className="flex items-center gap-2">
+                                  <h4 onClick={() => setActiveItem(feat)} className="text-xs font-bold text-slate-600 truncate leading-tight group-hover:text-blue-600 transition-colors cursor-pointer">{feat.title}</h4>
+                                  {featRisk !== 'HEALTHY' && <i className={`fas fa-circle text-[6px] ${featRisk === 'CRITICAL' ? 'text-red-500' : 'text-amber-500'} animate-pulse`}></i>}
+                               </div>
+                               <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">{feat.key}</span>
+                            </div>
+                            <div className="flex-1 h-8 relative flex items-center">
+                              {renderTimelineBar(feat, true)}
+                            </div>
                           </div>
-                          <div className="flex-1 h-8 relative flex items-center">
-                            {renderTimelineBar(feat, true)}
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </React.Fragment>
                   );
                 })}
-
-                {epics.length === 0 && !loading && (
-                  <div className="py-32 text-center text-slate-300 italic uppercase font-black text-sm tracking-widest bg-slate-50/20 rounded-[2rem]">
-                    <i className="fas fa-route text-5xl mb-6 opacity-10"></i>
-                    <p>No Roadmap Items Tracked in Current Context</p>
-                  </div>
-                )}
             </div>
 
-            {/* Today Line */}
             <div className="absolute top-0 bottom-0 w-[3px] bg-red-500/40 z-[10]" style={{ left: `calc(320px + ${getPosition(new Date().toISOString())}%)` }}>
                 <div className="bg-red-500 text-white text-[8px] font-black px-2 py-1 rounded-full absolute -top-1 -translate-x-1/2 uppercase tracking-widest shadow-lg">TODAY</div>
             </div>
 
-            {/* Grid Lines */}
             <div className="absolute top-0 bottom-0 left-80 right-0 pointer-events-none flex">
               {timelineMonths.map((_, i) => (
                 <div key={i} className="flex-1 border-l border-slate-50 h-full first:border-l-0"></div>
@@ -230,32 +245,17 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
       </div>
       
       <div className="pt-10 flex items-center gap-12 justify-center border-t border-slate-50 shrink-0">
-         <div className="flex items-center gap-3">
-            <div className="w-12 h-4 bg-indigo-600/10 border-2 border-indigo-500/20 rounded-lg shadow-inner"></div>
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Milestone Cycle</span>
-         </div>
+         <LegendItem color="bg-red-500" label="Critical Blockage" />
+         <LegendItem color="bg-amber-500" label="Dependency Risk" />
          <LegendItem color="bg-emerald-500" label="Verified Delivery" />
          <LegendItem color="bg-blue-600" label="Active Construction" />
-         <LegendItem color="bg-slate-200" label="Planned / Backlog" />
       </div>
 
       {activeItem && (
         <div className="fixed inset-y-0 right-0 w-[650px] bg-white shadow-[0_0_100px_rgba(0,0,0,0.2)] border-l border-slate-200 z-[100] animate-slideIn">
-           <WorkItemDetails 
-            item={activeItem} 
-            bundles={bundles} 
-            applications={applications} 
-            onUpdate={fetchData} 
-            onClose={() => setActiveItem(null)} 
-          />
+           <WorkItemDetails item={activeItem} bundles={bundles} applications={applications} onUpdate={fetchData} onClose={() => setActiveItem(null)} />
         </div>
       )}
-      
-      <style jsx>{`
-        .custom-scrollbar::-webkit-scrollbar { height: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
-      `}</style>
     </div>
   );
 };
