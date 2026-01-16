@@ -14,6 +14,9 @@ import GovernanceDocuments from './components/GovernanceDocuments';
 import Admin from './components/Admin';
 import InfrastructureExplorer from './components/InfrastructureExplorer';
 import OpsCenter from './components/OpsCenter';
+import CapabilityMap from './components/CapabilityMap';
+import PortfolioStrategy from './components/PortfolioStrategy';
+import IntegrationMatrix from './components/IntegrationMatrix';
 import { Bundle, Application, WorkItem, WorkItemType } from './types';
 
 export default function Home() {
@@ -86,6 +89,9 @@ function HomeContent() {
     switch (activeTab) {
       case 'dashboard': return <Dashboard applications={applications} bundles={bundles} />;
       case 'applications': return <Applications filterBundle={activeBundle} applications={applications} bundles={bundles} />;
+      case 'capability-map': return <CapabilityMap applications={applications} />;
+      case 'portfolio-strategy': return <PortfolioStrategy applications={applications} />;
+      case 'integration-matrix': return <IntegrationMatrix applications={applications} />;
       case 'infrastructure': return <InfrastructureExplorer applications={applications} />;
       case 'ops-center': return <OpsCenter applications={applications} />;
       case 'ai-insights': return <AIInsights applications={applications} bundles={bundles} />;

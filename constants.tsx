@@ -17,6 +17,9 @@ export const WIKI_PAGES: WikiPage[] = [];
 export const NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboards', icon: 'fa-chart-pie' },
   { id: 'applications', label: 'Applications', icon: 'fa-cubes' },
+  { id: 'capability-map', label: 'Capability Map', icon: 'fa-sitemap' },
+  { id: 'integration-matrix', label: 'Integrations', icon: 'fa-network-wired' },
+  { id: 'portfolio-strategy', label: 'Time Matrix', icon: 'fa-compass' },
   { id: 'work-items', label: 'Work Items', icon: 'fa-tasks' },
   { id: 'infrastructure', label: 'Infrastructure', icon: 'fa-server' },
   { id: 'ops-center', label: 'Ops Center', icon: 'fa-microscope' },

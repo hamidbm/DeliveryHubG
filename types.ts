@@ -48,68 +48,90 @@ export enum WorkItemStatus {
   BLOCKED = 'BLOCKED'
 }
 
-export interface Notification {
+// LeanIX: Portfolio Management Categories
+export enum TimeModelStatus {
+  TOLERATE = 'TOLERATE',
+  INVEST = 'INVEST',
+  MIGRATE = 'MIGRATE',
+  ELIMINATE = 'ELIMINATE'
+}
+
+export interface BusinessCapability {
   _id?: string;
-  recipient: string; 
-  sender: string;
-  type: 'MENTION' | 'IMPEDIMENT' | 'ASSIGNMENT' | 'SYSTEM';
-  message: string;
-  link?: string;
-  read: boolean;
-  createdAt: string;
-}
-
-export interface ChecklistItem {
-  id: string;
-  label: string;
-  isCompleted: boolean;
-  createdAt: string;
-}
-
-export interface WorkItemComment {
-  _id?: string;
-  author: string;
-  body: string;
-  createdAt: string;
-}
-
-export interface WorkItemLink {
-  type: 'BLOCKS' | 'IS_BLOCKED_BY' | 'RELATES_TO' | 'DUPLICATES' | 'IS_DUPLICATED_BY';
-  targetId: string;
-  targetKey?: string;
-  targetTitle?: string;
-}
-
-export interface WorkItemActivity {
-  _id?: string;
-  user: string;
-  action: string;
-  field?: string;
-  from?: any;
-  to?: any;
-  createdAt: string;
-}
-
-export interface WorkItemAttachment {
   name: string;
-  size: number;
-  type: string;
-  url: string;
-  uploadedBy: string;
-  createdAt: string;
+  description: string;
+  parentId?: string;
+  level: number;
 }
 
-export interface Sprint {
+export interface AppInterface {
+  _id?: string;
+  sourceAppId: string;
+  targetAppId: string;
+  type: 'REST' | 'SOAP' | 'KAFKA' | 'DB_LINK' | 'FILE';
+  dataCriticality: 'LOW' | 'MEDIUM' | 'HIGH';
+  status: 'ACTIVE' | 'DEPRECATED' | 'PLANNED';
+}
+
+export interface InfrastructureNode {
+  _id?: string;
+  name: string;
+  type: 'K8S_CLUSTER' | 'VM_SCALE_SET' | 'SERVERLESS_FUNCTION' | 'DATABASE_INST';
+  provider: 'AZURE' | 'AWS' | 'GCP' | 'ON_PREM';
+  region: string;
+  status: 'HEALTHY' | 'WARNING' | 'CRITICAL';
+  cpuUsage: number;
+  memUsage: number;
+  appsCount: number;
+}
+
+export interface AppTelemetry {
+  timestamp: string;
+  cpu: number;
+  memory: number;
+  latency: number;
+  errorRate: number;
+}
+
+export interface Application {
+  _id?: string;
+  id?: string; 
+  aid: string; 
+  name: string;
+  bundleId: string;
+  bundleKey?: string;
+  description?: string;
+  tags?: string[];
+  capabilityIds?: string[];
+  techStack?: string[];
+  lifecycle?: {
+    goLiveDate?: string;
+    sunsetDate?: string;
+    timeStatus?: TimeModelStatus;
+    businessCriticality: 'MISSION_CRITICAL' | 'BUSINESS_CRITICAL' | 'SUPPORT';
+  };
+  status: {
+    phase?: string;
+    health: 'Healthy' | 'Risk' | 'Critical';
+    lastStatusUpdateAt?: string;
+    telemetry?: AppTelemetry[]; 
+  };
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface Bundle {
   _id?: string;
   id?: string;
+  key: string;
   name: string;
-  startDate?: string;
-  endDate?: string;
-  goal?: string;
-  status: 'PLANNED' | 'ACTIVE' | 'CLOSED';
-  bundleId?: string;
-  applicationId?: string;
+  description?: string;
+  isActive: boolean;
+  wipLimits?: Record<string, number>;
+  sortOrder?: number;
   createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface WorkItem {
@@ -146,58 +168,13 @@ export interface WorkItem {
   checklists?: ChecklistItem[]; 
 }
 
-export interface InfrastructureNode {
-  _id?: string;
-  name: string;
-  type: 'K8S_CLUSTER' | 'VM_SCALE_SET' | 'SERVERLESS_FUNCTION' | 'DATABASE_INST';
-  provider: 'AZURE' | 'AWS' | 'GCP' | 'ON_PREM';
-  region: string;
-  status: 'HEALTHY' | 'WARNING' | 'CRITICAL';
-  cpuUsage: number;
-  memUsage: number;
-  appsCount: number;
-}
-
-export interface AppTelemetry {
-  timestamp: string;
-  cpu: number;
-  memory: number;
-  latency: number;
-  errorRate: number;
-}
-
-export interface Application {
-  _id?: string;
-  id?: string; 
-  aid: string; 
-  name: string;
-  bundleId: string;
-  bundleKey?: string;
-  description?: string;
-  tags?: string[];
-  status: {
-    phase?: string;
-    health: 'Healthy' | 'Risk' | 'Critical';
-    lastStatusUpdateAt?: string;
-    telemetry?: AppTelemetry[]; 
-  };
-  isActive: boolean;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
-export interface Bundle {
-  _id?: string;
-  id?: string;
-  key: string;
-  name: string;
-  description?: string;
-  isActive: boolean;
-  wipLimits?: Record<string, number>;
-  sortOrder?: number;
-  createdAt?: string;
-  updatedAt?: string;
-}
+export interface ChecklistItem { id: string; label: string; isCompleted: boolean; createdAt: string; }
+export interface WorkItemComment { _id?: string; author: string; body: string; createdAt: string; }
+export interface WorkItemLink { type: 'BLOCKS' | 'IS_BLOCKED_BY' | 'RELATES_TO' | 'DUPLICATES' | 'IS_DUPLICATED_BY'; targetId: string; targetKey?: string; targetTitle?: string; }
+export interface WorkItemActivity { _id?: string; user: string; action: string; field?: string; from?: any; to?: any; createdAt: string; }
+export interface WorkItemAttachment { name: string; size: number; type: string; url: string; uploadedBy: string; createdAt: string; }
+export interface Notification { _id?: string; recipient: string; sender: string; type: 'MENTION' | 'IMPEDIMENT' | 'ASSIGNMENT' | 'SYSTEM'; message: string; link?: string; read: boolean; createdAt: string; }
+export interface Sprint { _id?: string; id?: string; name: string; startDate?: string; endDate?: string; goal?: string; status: 'PLANNED' | 'ACTIVE' | 'CLOSED'; bundleId?: string; applicationId?: string; createdAt?: string; }
 
 export interface Milestone {
   _id?: string;
@@ -216,84 +193,9 @@ export interface Milestone {
   updatedAt?: string;
 }
 
-export interface WikiPage {
-  id?: string;
-  _id?: string;
-  slug?: string;
-  title: string;
-  content: string;
-  parentId?: string;
-  spaceId: string; 
-  bundleId?: string;
-  applicationId?: string;
-  milestoneId?: string;
-  documentTypeId?: string; 
-  createdAt?: string;
-  updatedAt?: string;
-  author?: string;
-  lastModifiedBy?: string;
-  version?: number;
-  status?: 'Draft' | 'Published' | 'Archived';
-  themeKey?: string; 
-}
-
-export interface WikiVersion extends WikiPage {
-  versionedAt: string;
-  pageId: string;
-}
-
-export interface WikiSpace {
-  _id?: string;
-  id?: string;
-  key: string;
-  name: string;
-  description?: string;
-  icon?: string;
-  color?: string;
-  visibility: 'internal' | 'vendors' | 'specific';
-  createdAt?: string;
-  defaultThemeKey?: string; 
-}
-
-export interface WikiTheme {
-  _id?: string;
-  key: string;
-  name: string;
-  description?: string;
-  css: string;
-  isActive: boolean;
-  isDefault: boolean;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
-export interface TaxonomyCategory {
-  _id?: string;
-  id?: string;
-  key: string;
-  name: string;
-  description?: string;
-  icon?: string;
-  isActive: boolean;
-  sortOrder: number;
-}
-
-export interface TaxonomyDocumentType {
-  _id?: string;
-  id?: string;
-  key: string;
-  name: string;
-  categoryId: string;
-  description?: string;
-  icon?: string;
-  isActive: boolean;
-  sortOrder: number;
-  audience?: string[];
-  lifecyclePhases?: string[];
-  defaultTemplate?: string;
-  requiredMetadata?: {
-    requiresBundle: boolean;
-    requiresApplication: boolean;
-    requiresMilestone: boolean;
-  };
-}
+export interface WikiPage { id?: string; _id?: string; slug?: string; title: string; content: string; parentId?: string; spaceId: string; bundleId?: string; applicationId?: string; milestoneId?: string; documentTypeId?: string; createdAt?: string; updatedAt?: string; author?: string; lastModifiedBy?: string; version?: number; status?: 'Draft' | 'Published' | 'Archived'; themeKey?: string; }
+export interface WikiVersion extends WikiPage { versionedAt: string; pageId: string; }
+export interface WikiSpace { _id?: string; id?: string; key: string; name: string; description?: string; icon?: string; color?: string; visibility: 'internal' | 'vendors' | 'specific'; createdAt?: string; defaultThemeKey?: string; }
+export interface WikiTheme { _id?: string; key: string; name: string; description?: string; css: string; isActive: boolean; isDefault: boolean; createdAt?: string; updatedAt?: string; }
+export interface TaxonomyCategory { _id?: string; id?: string; key: string; name: string; description?: string; icon?: string; isActive: boolean; sortOrder: number; }
+export interface TaxonomyDocumentType { _id?: string; id?: string; key: string; name: string; categoryId: string; description?: string; icon?: string; isActive: boolean; sortOrder: number; audience?: string[]; lifecyclePhases?: string[]; defaultTemplate?: string; requiredMetadata?: { requiresBundle: boolean; requiresApplication: boolean; requiresMilestone: boolean; }; }
