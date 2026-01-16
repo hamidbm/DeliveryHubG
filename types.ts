@@ -144,7 +144,6 @@ export interface WorkItem {
   activity?: WorkItemActivity[];
   attachments?: WorkItemAttachment[];
   checklists?: ChecklistItem[]; 
-  releaseId?: string; // New: Link to release
 }
 
 export interface InfrastructureNode {
@@ -159,7 +158,33 @@ export interface InfrastructureNode {
   appsCount: number;
 }
 
-/* Added missing Bundle, TaxonomyCategory, and TaxonomyDocumentType interfaces */
+export interface AppTelemetry {
+  timestamp: string;
+  cpu: number;
+  memory: number;
+  latency: number;
+  errorRate: number;
+}
+
+export interface Application {
+  _id?: string;
+  id?: string; 
+  aid: string; 
+  name: string;
+  bundleId: string;
+  bundleKey?: string;
+  description?: string;
+  tags?: string[];
+  status: {
+    phase?: string;
+    health: 'Healthy' | 'Risk' | 'Critical';
+    lastStatusUpdateAt?: string;
+    telemetry?: AppTelemetry[]; 
+  };
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
 
 export interface Bundle {
   _id?: string;
@@ -172,82 +197,6 @@ export interface Bundle {
   sortOrder?: number;
   createdAt?: string;
   updatedAt?: string;
-}
-
-export interface TaxonomyCategory {
-  _id?: string;
-  id?: string;
-  key: string;
-  name: string;
-  description?: string;
-  icon?: string;
-  isActive: boolean;
-  sortOrder: number;
-}
-
-export interface TaxonomyDocumentType {
-  _id?: string;
-  id?: string;
-  key: string;
-  name: string;
-  categoryId: string;
-  description?: string;
-  icon?: string;
-  isActive: boolean;
-  sortOrder: number;
-  audience?: string[];
-  lifecyclePhases?: string[];
-  defaultTemplate?: string;
-  requiredMetadata?: {
-    requiresBundle: boolean;
-    requiresApplication: boolean;
-    requiresMilestone: boolean;
-  };
-}
-
-export interface AppTelemetry {
-  timestamp: string;
-  cpu: number;
-  memory: number;
-  latency: number;
-  errorRate: number;
-  throughput: number;
-}
-
-export interface Application {
-  _id?: string;
-  id?: string; 
-  aid: string; 
-  name: string;
-  bundleId: string;
-  bundleKey?: string;
-  description?: string;
-  tags?: string[];
-  lifecycle?: {
-    plannedStartDate?: string;
-    plannedEndDate?: string;
-    goLiveDate?: string;
-    hypercareStartDate?: string;
-    hypercareEndDate?: string;
-  };
-  status: {
-    phase?: string;
-    health: 'Healthy' | 'Risk' | 'Critical';
-    lastStatusUpdateAt?: string;
-    telemetry?: AppTelemetry[]; // New: Real-time APM data
-  };
-  infra?: {
-    clusterId?: string;
-    environment: 'PROD' | 'UAT' | 'DEV';
-    instances: number;
-  };
-  isActive: boolean;
-  createdAt?: string;
-  updatedAt?: string;
-  owners?: {
-    name: string;
-    role: string;
-  }[];
 }
 
 export interface Milestone {
@@ -316,4 +265,35 @@ export interface WikiTheme {
   isDefault: boolean;
   createdAt?: string;
   updatedAt?: string;
+}
+
+export interface TaxonomyCategory {
+  _id?: string;
+  id?: string;
+  key: string;
+  name: string;
+  description?: string;
+  icon?: string;
+  isActive: boolean;
+  sortOrder: number;
+}
+
+export interface TaxonomyDocumentType {
+  _id?: string;
+  id?: string;
+  key: string;
+  name: string;
+  categoryId: string;
+  description?: string;
+  icon?: string;
+  isActive: boolean;
+  sortOrder: number;
+  audience?: string[];
+  lifecyclePhases?: string[];
+  defaultTemplate?: string;
+  requiredMetadata?: {
+    requiresBundle: boolean;
+    requiresApplication: boolean;
+    requiresMilestone: boolean;
+  };
 }

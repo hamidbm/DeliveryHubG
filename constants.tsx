@@ -1,23 +1,17 @@
 
 import React from 'react';
-import { Bundle, Application, WorkItem, Milestone, MilestoneStatus, WikiPage, WorkItemType, WorkItemStatus } from './types';
+import { Bundle, Application, WorkItem, Milestone, WikiPage } from './types';
 
-// Hard-coded lists removed to enforce dynamic fetching from MongoDB
 export const BUNDLES: Bundle[] = [];
-
 export const VENDORS = [
   { id: 'v1', name: 'Infosys' },
   { id: 'v2', name: 'Wipro' },
   { id: 'v3', name: 'Cognizant' },
   { id: 'v4', name: 'TCS' },
 ];
-
 export const APPLICATIONS: Application[] = [];
-
 export const WORK_ITEMS: WorkItem[] = [];
-
 export const MILESTONES: Milestone[] = [];
-
 export const WIKI_PAGES: WikiPage[] = [];
 
 export const NAV_ITEMS = [

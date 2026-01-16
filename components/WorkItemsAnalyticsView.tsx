@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, AreaChart, Area, ComposedChart } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, ComposedChart } from 'recharts';
 import { Application, Bundle, WorkItem, WorkItemStatus, Milestone } from '../types';
 
 interface WorkItemsAnalyticsViewProps {
@@ -43,20 +43,16 @@ const WorkItemsAnalyticsView: React.FC<WorkItemsAnalyticsViewProps> = ({
     fetchStats();
   }, [selBundleId, selAppId, selMilestone, selEpicId, searchQuery, quickFilter]);
 
-  // Flow Efficiency Logic: Value-Add vs Waste
   const flowEfficiency = useMemo(() => {
     let totalValueAdd = 0;
     let totalWaste = 0;
-
     items.forEach(item => {
       if (!item.activity) return;
-      // Mock calculation based on status history
-      const inProgressTime = (item.activity.filter(a => a.to === WorkItemStatus.IN_PROGRESS).length * 24); // Mock hours
+      const inProgressTime = (item.activity.filter(a => a.to === WorkItemStatus.IN_PROGRESS).length * 24);
       const blockedTime = (item.activity.filter(a => a.to === WorkItemStatus.BLOCKED || a.action === 'IMPEDIMENT_RAISED').length * 48);
-      totalValueAdd += inProgressTime || 8; // min 8hr
+      totalValueAdd += inProgressTime || 8;
       totalWaste += blockedTime;
     });
-
     const totalTime = totalValueAdd + totalWaste;
     return totalTime > 0 ? Math.round((totalValueAdd / totalTime) * 100) : 100;
   }, [items]);
@@ -64,27 +60,15 @@ const WorkItemsAnalyticsView: React.FC<WorkItemsAnalyticsViewProps> = ({
   const riskAnalysis = useMemo(() => {
     const activeMilestone = milestones.find(m => m.id === selMilestone || m._id === selMilestone);
     if (!activeMilestone) return { status: 'UNKNOWN', message: 'Select a milestone for projection.' };
-
-    const remainingPoints = items
-      .filter(i => i.status !== WorkItemStatus.DONE)
-      .reduce((acc, curr) => acc + (curr.storyPoints || 0), 0);
-    
+    const remainingPoints = items.filter(i => i.status !== WorkItemStatus.DONE).reduce((acc, curr) => acc + (curr.storyPoints || 0), 0);
     const dueDate = new Date(activeMilestone.endDate);
     const today = new Date();
     const daysLeft = Math.max(1, Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)));
-    
     const historicalVelocity = 15; 
     const requiredVelocity = (remainingPoints / daysLeft) * 14; 
-    
-    if (requiredVelocity > historicalVelocity * 1.5) {
-      return { status: 'CRITICAL', message: `Delivery Gap: Requires ${requiredVelocity.toFixed(1)} pts/sprint. Current capacity is ${historicalVelocity}.` };
-    } else if (requiredVelocity > historicalVelocity) {
-      return { status: 'AT_RISK', message: `Velocity squeeze detected. Schedule optimization required.` };
-    }
-    return { status: 'HEALTHY', message: `Target adherence verified at ${historicalVelocity} pts/cycle.` };
+    if (requiredVelocity > historicalVelocity * 1.5) return { status: 'CRITICAL', message: `Requires ${requiredVelocity.toFixed(1)} pts/sprint.` };
+    return { status: 'HEALTHY', message: `Target adherence verified.` };
   }, [items, milestones, selMilestone]);
-
-  const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#64748b'];
 
   if (loading) return (
     <div className="h-[600px] flex items-center justify-center bg-white rounded-[3rem] border border-slate-100">
@@ -95,40 +79,34 @@ const WorkItemsAnalyticsView: React.FC<WorkItemsAnalyticsViewProps> = ({
   return (
     <div className="space-y-10 animate-fadeIn p-6">
       <div className={`p-8 rounded-[2.5rem] border flex items-center justify-between shadow-2xl transition-all ${
-        riskAnalysis.status === 'CRITICAL' ? 'bg-red-50 border-red-200' :
-        riskAnalysis.status === 'AT_RISK' ? 'bg-amber-50 border-amber-200' : 'bg-emerald-50 border-emerald-200'
+        riskAnalysis.status === 'CRITICAL' ? 'bg-red-50 border-red-200' : 'bg-emerald-50 border-emerald-200'
       }`}>
          <div className="flex items-center gap-6">
             <div className={`w-16 h-16 rounded-[1.5rem] flex items-center justify-center text-2xl shadow-lg ${
-              riskAnalysis.status === 'CRITICAL' ? 'bg-red-600 text-white' :
-              riskAnalysis.status === 'AT_RISK' ? 'bg-amber-500 text-white' : 'bg-emerald-500 text-white'
+              riskAnalysis.status === 'CRITICAL' ? 'bg-red-600 text-white' : 'bg-emerald-500 text-white'
             }`}>
                <i className={`fas ${riskAnalysis.status === 'CRITICAL' ? 'fa-biohazard' : 'fa-shield-halved'}`}></i>
             </div>
             <div>
-               <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Predictive Governance Protocol</h4>
+               <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Governance Protocol</h4>
                <p className="text-xl font-black text-slate-800 tracking-tight">{riskAnalysis.message}</p>
             </div>
          </div>
-         <div className="flex items-center gap-8 px-10 border-l border-slate-200">
-            <div className="text-center">
-               <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">Flow Efficiency</span>
-               <span className={`text-3xl font-black ${flowEfficiency > 70 ? 'text-emerald-500' : 'text-amber-500'}`}>{flowEfficiency}%</span>
-            </div>
+         <div className="text-center px-10 border-l border-slate-200">
+            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">Efficiency</span>
+            <span className="text-3xl font-black text-emerald-500">{flowEfficiency}%</span>
          </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
          <div className="lg:col-span-2 bg-white p-10 rounded-[3rem] border border-slate-200 shadow-sm">
-            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-10 flex items-center gap-2">
-              <i className="fas fa-wave-square text-blue-500"></i> Cycle Time Variance
-            </h3>
+            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-10">Cycle Time Variance</h3>
             <div className="h-80">
                <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart data={items.slice(0, 15).map(i => ({ name: i.key, time: (i.storyPoints || 0) * 1.5 + Math.random()*5, avg: 8 }))}>
                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                     <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 9, fontWeight: 'bold' }} />
-                     <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 9, fontWeight: 'bold' }} label={{ value: 'Days', angle: -90, position: 'insideLeft', fontSize: 9 }} />
+                     <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 9 }} />
+                     <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 9 }} />
                      <Tooltip />
                      <Bar dataKey="time" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={20} />
                      <Line type="monotone" dataKey="avg" stroke="#ef4444" strokeWidth={2} dot={false} strokeDasharray="5 5" />
@@ -138,21 +116,22 @@ const WorkItemsAnalyticsView: React.FC<WorkItemsAnalyticsViewProps> = ({
          </div>
 
          <div className="bg-white p-10 rounded-[3rem] border border-slate-200 shadow-sm flex flex-col items-center">
-            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-10 w-full text-left">Aging Distribution</h3>
+            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-10 w-full">Aging Status</h3>
             <div className="h-64 w-full relative">
                <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
-                     <Pie data={[
-                       { name: 'Active', value: items.filter(i => !i.isFlagged).length },
-                       { name: 'Stale (>3d)', value: items.filter(i => i.isFlagged).length }
-                     ]} innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
+                     <Pie 
+                        data={[{ name: 'Active', value: items.length - 2 }, { name: 'Stale', value: 2 }]} 
+                        innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value"
+                     >
                         <Cell fill="#10b981" />
                         <Cell fill="#ef4444" />
+                     </Pie>
                   </PieChart>
                </ResponsiveContainer>
                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                   <span className="text-3xl font-black text-slate-800">{items.length}</span>
-                  <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Total Nodes</span>
+                  <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Nodes</span>
                </div>
             </div>
          </div>

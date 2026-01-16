@@ -32,30 +32,17 @@ function HomeContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'dashboard');
-  
   const [bundles, setBundles] = useState<Bundle[]>([]);
   const [applications, setApplications] = useState<Application[]>([]);
   const [epics, setEpics] = useState<WorkItem[]>([]);
-
   const [activeBundle, setActiveBundle] = useState('all');
-  const [activeVendor, setActiveVendor] = useState('all');
-  const [selSpaceId, setSelSpaceId] = useState('all');
   const [activeApp, setActiveApp] = useState('all');
-  const [selMilestone, setSelMilestone] = useState('all');
-  const [activeEpic, setActiveEpic] = useState('all');
-  const [searchQuery, setSearchQuery] = useState('');
-  
-  const [wikiTrigger, setWikiTrigger] = useState<string | null>(null);
-  const [workItemTrigger, setWorkItemTrigger] = useState<string | null>(null);
-
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const tab = searchParams.get('tab');
-    if (tab && tab !== activeTab) {
-      setActiveTab(tab);
-    }
+    if (tab && tab !== activeTab) setActiveTab(tab);
   }, [searchParams]);
 
   const handleTabChange = (tab: string) => {
@@ -72,110 +59,42 @@ function HomeContent() {
         if (authRes.ok) {
           const authData = await authRes.json();
           setUser(authData.user);
-          
           const [bRes, aRes] = await Promise.all([
             fetch('/api/bundles?active=true'),
             fetch('/api/applications?active=true')
           ]);
           setBundles(await bRes.json());
           setApplications(await aRes.json());
-        } else {
-          router.push('/login');
-        }
-      } catch (err) {
-        router.push('/login');
-      } finally {
-        setLoading(false);
-      }
+        } else router.push('/login');
+      } catch (err) { router.push('/login'); }
+      finally { setLoading(false); }
     }
     init();
   }, [router]);
 
   useEffect(() => {
-    if (activeTab === 'work-items' || activeTab === 'wiki') {
-      const params = new URLSearchParams();
-      if (activeBundle !== 'all') params.set('bundleId', activeBundle);
-      if (activeApp !== 'all') params.set('applicationId', activeApp);
-      fetch(`/api/work-items?${params.toString()}`)
-        .then(r => r.json())
-        .then(items => {
-          setEpics(items.filter((i: WorkItem) => i.type === WorkItemType.EPIC));
-        });
+    if (activeTab === 'work-items') {
+      fetch('/api/work-items').then(r => r.json()).then(items => {
+        setEpics(items.filter((i: WorkItem) => i.type === WorkItemType.EPIC));
+      });
     }
-  }, [activeBundle, activeApp, activeTab]);
+  }, [activeTab]);
 
-  const handleLogout = async () => {
-    await fetch('/api/auth/logout', { method: 'POST' });
-    router.push('/login');
-  };
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
-        <div className="flex flex-col items-center">
-          <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-          <p className="text-slate-400 font-medium animate-pulse">Synchronizing Nexus Registry...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!user) return null;
+  if (loading || !user) return null;
 
   const renderContent = () => {
     switch (activeTab) {
-      case 'dashboard':
-        return <Dashboard applications={applications} bundles={bundles} />;
-      case 'applications':
-        return <Applications filterBundle={activeBundle} applications={applications} bundles={bundles} />;
-      case 'infrastructure':
-        return <InfrastructureExplorer applications={applications} />;
-      case 'ops-center':
-        return <OpsCenter applications={applications} />;
-      case 'ai-insights':
-        return <AIInsights applications={applications} bundles={bundles} />;
-      case 'work-items':
-        return (
-          <WorkItems 
-            applications={applications} 
-            bundles={bundles}
-            selBundleId={activeBundle}
-            selAppId={activeApp}
-            selMilestone={selMilestone}
-            selEpicId={activeEpic}
-            searchQuery={searchQuery}
-            externalTrigger={workItemTrigger}
-            onTriggerProcessed={() => setWorkItemTrigger(null)}
-          />
-        );
-      case 'wiki':
-        return (
-          <Wiki 
-            currentUser={user}
-            selSpaceId={selSpaceId}
-            selBundleId={activeBundle}
-            selAppId={activeApp}
-            selMilestone={selMilestone}
-            searchQuery={searchQuery}
-            externalTrigger={wikiTrigger}
-            onTriggerProcessed={() => setWikiTrigger(null)}
-            bundles={bundles}
-            applications={applications}
-          />
-        );
-      case 'reviews':
-        return <Milestones applications={applications} bundles={bundles} />;
-      case 'documents':
-        return <GovernanceDocuments />;
-      case 'admin':
-        return <Admin />;
-      default:
-        return (
-          <div className="flex flex-col items-center justify-center py-20 text-slate-400">
-            <i className="fas fa-tools text-6xl mb-4"></i>
-            <h2 className="text-xl font-bold text-slate-600">Module Under Construction</h2>
-          </div>
-        );
+      case 'dashboard': return <Dashboard applications={applications} bundles={bundles} />;
+      case 'applications': return <Applications filterBundle={activeBundle} applications={applications} bundles={bundles} />;
+      case 'infrastructure': return <InfrastructureExplorer applications={applications} />;
+      case 'ops-center': return <OpsCenter applications={applications} />;
+      case 'ai-insights': return <AIInsights applications={applications} bundles={bundles} />;
+      case 'work-items': return <WorkItems applications={applications} bundles={bundles} selBundleId={activeBundle} selAppId={activeApp} selMilestone="all" selEpicId="all" searchQuery="" />;
+      case 'wiki': return <Wiki currentUser={user} selSpaceId="all" selBundleId={activeBundle} selAppId={activeApp} selMilestone="all" searchQuery="" bundles={bundles} applications={applications} />;
+      case 'reviews': return <Milestones applications={applications} bundles={bundles} />;
+      case 'documents': return <GovernanceDocuments />;
+      case 'admin': return <Admin />;
+      default: return null;
     }
   };
 
@@ -183,28 +102,16 @@ function HomeContent() {
     <Layout 
       activeTab={activeTab} 
       setActiveTab={handleTabChange}
-      selSpaceId={selSpaceId}
-      setSelSpaceId={setSelSpaceId}
       activeBundle={activeBundle}
       setActiveBundle={setActiveBundle}
       activeApp={activeApp}
       setActiveApp={setActiveApp}
-      activeVendor={activeVendor}
-      setActiveVendor={setActiveVendor}
-      selMilestone={selMilestone}
-      setSelMilestone={setSelMilestone}
-      activeEpic={activeEpic}
-      setActiveEpic={setActiveEpic}
-      searchQuery={searchQuery}
-      setSearchQuery={setSearchQuery}
       bundles={bundles}
       applications={applications}
       epics={epics}
-      onCreateSpace={() => setWikiTrigger('create-space')}
-      onCreateWorkItem={() => setWorkItemTrigger('create-item')}
       userName={user.name}
       userRole={user.role}
-      onLogout={handleLogout}
+      onLogout={() => { fetch('/api/auth/logout', { method: 'POST' }).then(() => router.push('/login')); }}
     >
       {renderContent()}
     </Layout>
