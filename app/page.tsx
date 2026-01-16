@@ -10,8 +10,8 @@ import AIInsights from '../components/AIInsights';
 import WorkItems from '../components/WorkItems';
 import Wiki from './../components/Wiki';
 import Milestones from '../components/Milestones';
-import GovernanceDocuments from '../components/GovernanceDocuments';
 import Admin from '../components/Admin';
+import ArchitectureHub from '../components/ArchitectureHub';
 import { Bundle, Application, WorkItem, WorkItemType } from '../types';
 
 export default function Home() {
@@ -98,7 +98,6 @@ function HomeContent() {
       const params = new URLSearchParams();
       if (activeBundle !== 'all') params.set('bundleId', activeBundle);
       if (activeApp !== 'all') params.set('applicationId', activeApp);
-      // Epic filter doesn't apply to the filter list itself usually, but parentId=all might be useful
       fetch(`/api/work-items?${params.toString()}`)
         .then(r => r.json())
         .then(items => {
@@ -131,6 +130,8 @@ function HomeContent() {
         return <Dashboard applications={applications} bundles={bundles} />;
       case 'applications':
         return <Applications filterBundle={activeBundle} applications={applications} bundles={bundles} />;
+      case 'architecture':
+        return <ArchitectureHub applications={applications} bundles={bundles} />;
       case 'ai-insights':
         return <AIInsights applications={applications} bundles={bundles} />;
       case 'work-items':
@@ -163,9 +164,7 @@ function HomeContent() {
           />
         );
       case 'reviews':
-        return <Milestones applications={applications} />;
-      case 'documents':
-        return <GovernanceDocuments />;
+        return <Milestones applications={applications} bundles={bundles} />;
       case 'admin':
         return <Admin />;
       default:

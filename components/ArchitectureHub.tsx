@@ -6,21 +6,24 @@ import PortfolioStrategy from './PortfolioStrategy';
 import InfrastructureExplorer from './InfrastructureExplorer';
 import OpsCenter from './OpsCenter';
 import GovernanceDocuments from './GovernanceDocuments';
-import { Application } from '../types';
+import ArchitectureDiagrams from './ArchitectureDiagrams';
+import { Application, Bundle } from '../types';
 
 interface ArchitectureHubProps {
   applications: Application[];
+  bundles: Bundle[];
 }
 
-type SubTab = 'capabilities' | 'integrations' | 'lifecycle' | 'infrastructure' | 'observability' | 'governance';
+type SubTab = 'capabilities' | 'integrations' | 'lifecycle' | 'diagrams' | 'infrastructure' | 'observability' | 'governance';
 
-const ArchitectureHub: React.FC<ArchitectureHubProps> = ({ applications }) => {
+const ArchitectureHub: React.FC<ArchitectureHubProps> = ({ applications, bundles }) => {
   const [activeSubTab, setActiveSubTab] = useState<SubTab>('capabilities');
 
   const tabs = [
     { id: 'capabilities', label: 'Capabilities', icon: 'fa-layer-group' },
     { id: 'integrations', label: 'Integrations', icon: 'fa-network-wired' },
     { id: 'lifecycle', label: 'TIME Matrix', icon: 'fa-compass' },
+    { id: 'diagrams', label: 'Diagrams', icon: 'fa-project-diagram' },
     { id: 'infrastructure', label: 'Infrastructure', icon: 'fa-server' },
     { id: 'observability', label: 'Ops Center', icon: 'fa-microscope' },
     { id: 'governance', label: 'Governance', icon: 'fa-file-shield' },
@@ -31,6 +34,7 @@ const ArchitectureHub: React.FC<ArchitectureHubProps> = ({ applications }) => {
       case 'capabilities': return <CapabilityMap applications={applications} />;
       case 'integrations': return <IntegrationMatrix applications={applications} />;
       case 'lifecycle': return <PortfolioStrategy applications={applications} />;
+      case 'diagrams': return <ArchitectureDiagrams applications={applications} bundles={bundles} />;
       case 'infrastructure': return <InfrastructureExplorer applications={applications} />;
       case 'observability': return <OpsCenter applications={applications} />;
       case 'governance': return <GovernanceDocuments />;

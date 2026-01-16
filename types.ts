@@ -73,6 +73,27 @@ export interface AppInterface {
   status: 'ACTIVE' | 'DEPRECATED' | 'PLANNED';
 }
 
+export enum DiagramFormat {
+  MERMAID = 'MERMAID',
+  DRAWIO = 'DRAWIO',
+  IMAGE = 'IMAGE',
+  PDF = 'PDF',
+  MINDMAP = 'MINDMAP'
+}
+
+export interface ArchitectureDiagram {
+  _id?: string;
+  title: string;
+  format: DiagramFormat;
+  content: string; // Mermaid code or base64/URL
+  bundleId?: string;
+  applicationId?: string;
+  tags?: string[];
+  createdBy: string;
+  updatedAt: string;
+  status: 'DRAFT' | 'VERIFIED' | 'OBSOLETE';
+}
+
 export interface InfrastructureNode {
   _id?: string;
   name: string;
