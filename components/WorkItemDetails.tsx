@@ -30,6 +30,7 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
 
   const [activeCollaborators, setActiveCollaborators] = useState<string[]>(['Alex Architect', 'Sarah PM']);
   const [aiPlan, setAiPlan] = useState<string | null>(initialItem.aiWorkPlan || null);
+  const [rebalanceSuggestion, setRebalanceSuggestion] = useState<string | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   
   const [standupDigest, setStandupDigest] = useState<string | null>(null);
@@ -63,6 +64,7 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
     loadFullDetails();
     setClosureError(null);
     setStandupDigest(null);
+    setRebalanceSuggestion(null);
   }, [initialItem]);
 
   useEffect(() => {
@@ -152,6 +154,19 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
       });
       const data = await res.json();
       setAiPlan(data.plan);
+    } finally { setAiLoading(false); }
+  };
+
+  const handleLoadRebalance = async () => {
+    setAiLoading(true);
+    try {
+      const res = await fetch('/api/ai/suggest-reassignment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: item._id || item.id })
+      });
+      const data = await res.json();
+      setRebalanceSuggestion(data.suggestion);
     } finally { setAiLoading(false); }
   };
 
@@ -324,7 +339,7 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
 
         {activeTab === 'ai' && (
           <div className="p-10 space-y-8 animate-fadeIn">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm space-y-6">
                   <div className="flex items-center gap-4">
                      <div className="w-12 h-12 bg-purple-50 text-purple-600 rounded-2xl flex items-center justify-center text-xl shadow-inner"><i className="fas fa-wand-magic-sparkles"></i></div>
@@ -346,10 +361,21 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
                     {isSummarizing ? <i className="fas fa-circle-notch fa-spin"></i> : 'Generate Standup Digest'}
                   </button>
                </div>
+
+               <div className={`p-8 rounded-[2.5rem] border shadow-sm space-y-6 transition-all ${item.storyPoints && item.storyPoints > 8 ? 'bg-amber-50 border-amber-100' : 'bg-white border-slate-100 opacity-60'}`}>
+                  <div className="flex items-center gap-4">
+                     <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-xl shadow-inner ${item.storyPoints && item.storyPoints > 8 ? 'bg-amber-500 text-white' : 'bg-slate-50 text-slate-400'}`}><i className="fas fa-scale-balanced"></i></div>
+                     <h4 className="font-black text-slate-800 uppercase tracking-tight">Adaptive Balancing</h4>
+                  </div>
+                  <p className="text-sm text-slate-500 font-medium leading-relaxed">Identify under-utilized peers for artifact hand-off based on context overlap.</p>
+                  <button onClick={handleLoadRebalance} disabled={aiLoading || !item.storyPoints} className={`w-full py-4 text-[10px] font-black rounded-2xl uppercase tracking-widest transition-all ${item.storyPoints && item.storyPoints > 8 ? 'bg-slate-900 text-white hover:bg-amber-600 shadow-xl' : 'bg-slate-100 text-slate-400'}`}>
+                    {aiLoading ? <i className="fas fa-sync fa-spin"></i> : 'Run Balance Protocol'}
+                  </button>
+               </div>
             </div>
 
-            {(standupDigest || aiPlan) && (
-              <div className="bg-white p-12 rounded-[3rem] border border-slate-100 shadow-sm prose prose-slate max-w-none animate-fadeIn" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(marked.parse(standupDigest || aiPlan!) as string) }} />
+            {(standupDigest || aiPlan || rebalanceSuggestion) && (
+              <div className="bg-white p-12 rounded-[3rem] border border-slate-100 shadow-sm prose prose-slate max-w-none animate-fadeIn" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(marked.parse(standupDigest || aiPlan || rebalanceSuggestion!) as string) }} />
             )}
           </div>
         )}
@@ -503,6 +529,24 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
         )}
       </div>
 
+      {isLoggingWork && (
+        <div className="fixed inset-0 bg-slate-950/40 backdrop-blur-md z-[200] flex items-center justify-center p-6">
+           <div className="bg-white rounded-[3rem] w-full max-w-md p-12 shadow-2xl animate-fadeIn border border-slate-100">
+              <h3 className="text-3xl font-black text-slate-900 tracking-tighter italic mb-8 text-center">Physical Effort Log</h3>
+              <div className="space-y-8">
+                 <div className="space-y-3 px-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Hours Expended (Cycle 0.5)</label>
+                    <input type="number" step="0.5" value={logHours} onChange={(e) => setLogHours(parseFloat(e.target.value))} className="w-full bg-slate-50 border-2 border-slate-100 rounded-[1.5rem] px-6 py-5 text-xl font-black outline-none focus:border-blue-500 transition-all text-center" />
+                 </div>
+                 <div className="flex gap-4">
+                    <button onClick={() => setIsLoggingWork(false)} className="flex-1 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Cancel</button>
+                    <button onClick={() => { handleUpdateItem({ timeLogged: (item.timeLogged || 0) + logHours }); setIsLoggingWork(false); setLogHours(0); }} className="flex-[2] py-5 bg-slate-900 text-white text-[11px] font-black rounded-2xl hover:bg-blue-600 uppercase tracking-widest transition-all shadow-2xl active:scale-95">Commit Log</button>
+                 </div>
+              </div>
+           </div>
+        </div>
+      )}
+
       {isLinking && (
         <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-md z-[300] flex items-center justify-center p-6">
            <div className="bg-white rounded-[3rem] w-full max-w-lg p-12 shadow-2xl animate-fadeIn border border-slate-100">
@@ -548,24 +592,6 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
                 {viewingAttachment.type.includes('image') ? <img src={viewingAttachment.url} className="w-full h-full object-contain" /> : <iframe src={viewingAttachment.url} className="w-full h-full border-none" title="Artifact Viewer" />}
              </div>
           </main>
-        </div>
-      )}
-
-      {isLoggingWork && (
-        <div className="fixed inset-0 bg-slate-950/40 backdrop-blur-md z-[200] flex items-center justify-center p-6">
-           <div className="bg-white rounded-[3rem] w-full max-w-md p-12 shadow-2xl animate-fadeIn border border-slate-100">
-              <h3 className="text-3xl font-black text-slate-900 tracking-tighter italic mb-8 text-center">Physical Effort Log</h3>
-              <div className="space-y-8">
-                 <div className="space-y-3 px-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Hours Expended (Cycle 0.5)</label>
-                    <input type="number" step="0.5" value={logHours} onChange={(e) => setLogHours(parseFloat(e.target.value))} className="w-full bg-slate-50 border-2 border-slate-100 rounded-[1.5rem] px-6 py-5 text-xl font-black outline-none focus:border-blue-500 transition-all text-center" />
-                 </div>
-                 <div className="flex gap-4">
-                    <button onClick={() => setIsLoggingWork(false)} className="flex-1 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Cancel</button>
-                    <button onClick={() => { handleUpdateItem({ timeLogged: (item.timeLogged || 0) + logHours }); setIsLoggingWork(false); setLogHours(0); }} className="flex-[2] py-5 bg-slate-900 text-white text-[11px] font-black rounded-2xl hover:bg-blue-600 uppercase tracking-widest transition-all shadow-2xl active:scale-95">Commit Log</button>
-                 </div>
-              </div>
-           </div>
         </div>
       )}
     </div>

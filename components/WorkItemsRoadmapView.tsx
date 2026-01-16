@@ -21,6 +21,10 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
   const [loading, setLoading] = useState(true);
   const [activeItem, setActiveItem] = useState<WorkItem | null>(null);
   const [expandedEpics, setExpandedEpics] = useState<Set<string>>(new Set());
+  
+  // Adaptive Logic: Simulation Mode
+  const [isSimulating, setIsSimulating] = useState(false);
+  const [simulatedDelay, setSimulatedDelay] = useState<Record<string, number>>({});
 
   const fetchData = async () => {
     const params = new URLSearchParams({ 
@@ -62,24 +66,32 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
   const endTimeline = new Date(lastMonth.getFullYear(), lastMonth.getMonth() + 1, 0).getTime();
   const timelineDuration = endTimeline - startTimeline;
 
-  const getPosition = (dateStr: string) => {
-    const time = new Date(dateStr).getTime();
+  const getPosition = (dateStr: string, delayDays = 0) => {
+    const time = new Date(dateStr).getTime() + (delayDays * 24 * 60 * 60 * 1000);
     return Math.max(0, Math.min(100, ((time - startTimeline) / timelineDuration) * 100));
   };
 
   const epics = useMemo(() => items.filter(i => i.type === WorkItemType.EPIC), [items]);
   const features = useMemo(() => items.filter(i => i.type === WorkItemType.FEATURE), [items]);
-  const stories = useMemo(() => items.filter(i => [WorkItemType.STORY, WorkItemType.BUG, WorkItemType.TASK].includes(i.type)), [items]);
 
   // Risk Propagation Logic: Check if self or any child is blocked or flagged
   const getItemRisk = (item: WorkItem) => {
+    const itemId = item._id || item.id;
     const selfFlagged = item.isFlagged || item.status === WorkItemStatus.BLOCKED || item.links?.some(l => l.type === 'IS_BLOCKED_BY');
+    
+    // Collision Detection Logic in Simulation
+    if (isSimulating && simulatedDelay[itemId!]) {
+      const start = item.createdAt || new Date().toISOString();
+      const end = new Date(new Date(start).getTime() + (60 * 24 * 60 * 60 * 1000) + (simulatedDelay[itemId!] * 24 * 60 * 60 * 1000));
+      const collidedMilestone = milestones.find(m => new Date(m.endDate) < end);
+      if (collidedMilestone) return 'CRITICAL';
+    }
+
     if (selfFlagged) return 'CRITICAL';
 
-    // Check children recursively
-    const childIds = items.filter(i => i.parentId === (item._id || item.id)).map(i => i._id || i.id);
+    const childIds = items.filter(i => i.parentId === itemId).map(i => i._id || i.id);
     const hasProblemChild = items.some(i => 
-      (i.parentId === (item._id || item.id) || childIds.includes(i.parentId)) && 
+      (i.parentId === itemId || childIds.includes(i.parentId)) && 
       (i.isFlagged || i.status === WorkItemStatus.BLOCKED || i.links?.some(l => l.type === 'IS_BLOCKED_BY'))
     );
 
@@ -92,13 +104,28 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
     setExpandedEpics(next);
   };
 
+  const updateSimulationDelay = (id: string, delay: number) => {
+    setSimulatedDelay(prev => {
+      const next = { ...prev, [id]: delay };
+      // Propagate delay to downstream nodes
+      const currentItem = items.find(i => (i._id || i.id) === id);
+      if (currentItem && currentItem.links) {
+        currentItem.links.filter(l => l.type === 'BLOCKS').forEach(l => {
+          next[l.targetId] = delay; // Simplistic propagation
+        });
+      }
+      return next;
+    });
+  };
+
   const renderTimelineBar = (item: WorkItem, isFeature = false) => {
+    const itemId = item._id || item.id;
+    const delay = simulatedDelay[itemId!] || 0;
     const start = item.createdAt || new Date().toISOString();
     const durationDays = isFeature ? 20 : 60;
-    const end = new Date(new Date(start).getTime() + (durationDays * 24 * 60 * 60 * 1000)).toISOString();
     
-    const left = getPosition(start);
-    const right = getPosition(end);
+    const left = getPosition(start, delay);
+    const right = getPosition(start, delay + durationDays);
     const width = Math.max(right - left, 2);
 
     if (left >= 100 || right <= 0) return null;
@@ -113,11 +140,11 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
           item.status === WorkItemStatus.DONE ? 'bg-emerald-500 shadow-emerald-500/20' : 
           item.status === WorkItemStatus.IN_PROGRESS ? 'bg-blue-600 shadow-blue-500/20' : 
           'bg-slate-200'
-        } ${isFeature ? 'opacity-80 scale-y-75' : ''}`}
+        } ${isFeature ? 'opacity-80 scale-y-75' : ''} ${delay > 0 ? 'ring-2 ring-amber-400 ring-offset-2' : ''}`}
         style={{ left: `${left}%`, width: `${width}%` }}
       >
         <span className="text-[9px] font-black text-white uppercase tracking-tighter truncate">
-          {item.status} {item.storyPoints ? `• ${item.storyPoints} pts` : ''}
+          {item.status} {item.storyPoints ? `• ${item.storyPoints} pts` : ''} {delay > 0 ? `(+${delay}d)` : ''}
         </span>
         {(risk === 'WARNING' || risk === 'CRITICAL') && (
            <div className={`absolute -top-1 -right-1 w-4 h-4 rounded-full border-2 border-white flex items-center justify-center text-[8px] text-white animate-bounce shadow-lg ${risk === 'CRITICAL' ? 'bg-red-600' : 'bg-amber-500'}`}>
@@ -134,11 +161,22 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
   return (
     <div className="bg-white rounded-[3rem] border border-slate-200 shadow-2xl p-10 space-y-10 animate-fadeIn min-h-[800px] overflow-x-hidden relative flex flex-col">
       <header className="flex justify-between items-center border-b border-slate-50 pb-8 shrink-0">
-        <div>
-          <h3 className="text-3xl font-black text-slate-800 tracking-tighter uppercase italic">Strategic Delivery Roadmap</h3>
-          <p className="text-slate-400 font-medium text-lg">Hierarchical multi-cycle release visualization with risk propagation.</p>
+        <div className="flex items-center gap-6">
+          <div className={`w-14 h-14 rounded-[1.5rem] flex items-center justify-center text-2xl transition-all ${isSimulating ? 'bg-amber-500 text-white shadow-[0_0_20px_rgba(245,158,11,0.4)] animate-pulse' : 'bg-slate-100 text-slate-400'}`}>
+            <i className={`fas ${isSimulating ? 'fa-vial-circle-check' : 'fa-route'}`}></i>
+          </div>
+          <div>
+            <h3 className="text-3xl font-black text-slate-800 tracking-tighter uppercase italic">Adaptive Roadmap</h3>
+            <p className="text-slate-400 font-medium text-lg">Real-time downstream impact re-simulation and risk propagation.</p>
+          </div>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-6">
+           <div className={`flex items-center gap-3 px-6 py-3 rounded-2xl border transition-all ${isSimulating ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-slate-100'}`}>
+              <span className={`text-[10px] font-black uppercase tracking-widest ${isSimulating ? 'text-amber-600' : 'text-slate-400'}`}>Simulation Engine</span>
+              <button onClick={() => { setIsSimulating(!isSimulating); setSimulatedDelay({}); }} className={`w-12 h-6 rounded-full relative transition-all ${isSimulating ? 'bg-amber-500' : 'bg-slate-300'}`}>
+                 <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${isSimulating ? 'left-7' : 'left-1'}`}></div>
+              </button>
+           </div>
            <div className="flex bg-slate-100 p-1 rounded-xl">
               <button className="px-6 py-2 bg-white text-blue-600 text-[9px] font-black uppercase rounded-lg shadow-sm">Monthly</button>
               <button className="px-6 py-2 text-slate-400 text-[9px] font-black uppercase rounded-lg">Quarterly</button>
@@ -156,32 +194,11 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
             ))}
           </div>
 
-          <div className="h-24 relative pl-80 mb-10">
-              {milestones.map(m => {
-                const left = getPosition(m.startDate);
-                const right = getPosition(m.endDate);
-                const width = Math.max(right - left, 2);
-                if (left >= 100 || right <= 0) return null;
-                
-                return (
-                  <div key={m._id} className="absolute h-16 top-0 bg-indigo-600/10 border-2 border-indigo-500/20 rounded-[1.5rem] p-3 shadow-sm hover:shadow-lg transition-all cursor-pointer group overflow-hidden" style={{ left: `${left}%`, width: `${width}%` }}>
-                    <div className="flex items-center gap-2">
-                        <span className="w-6 h-6 rounded-lg bg-indigo-600 text-white flex items-center justify-center text-[10px] font-black shrink-0 shadow-lg shadow-indigo-600/20"><i className="fas fa-flag-checkered"></i></span>
-                        <div>
-                          <p className="text-[10px] font-black text-indigo-700 uppercase tracking-tighter truncate">{m.name}</p>
-                          <p className="text-[8px] font-bold text-indigo-400 uppercase tracking-widest truncate">{m.status}</p>
-                        </div>
-                    </div>
-                  </div>
-                );
-              })}
-          </div>
-
           <div className="relative">
             <div className="divide-y divide-slate-50 border-t border-slate-100">
                 {epics.map(epic => {
                   const app = applications.find(a => a._id === epic.applicationId);
-                  const epicFeatures = features.filter(f => f.parentId === epic._id || f.parentId === epic.id);
+                  const epicFeatures = features.filter(f => f.parentId === (epic._id || epic.id));
                   const isExpanded = expandedEpics.has(epic._id!);
                   const risk = getItemRisk(epic);
 
@@ -195,76 +212,27 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
                           <div className="min-w-0">
                             <div className="flex items-center gap-2 mb-1">
                                <span className="text-[9px] font-black text-slate-300 bg-slate-50 px-2 py-0.5 rounded uppercase">{app?.name || 'Shared'}</span>
-                               {risk === 'WARNING' && <i className="fas fa-triangle-exclamation text-amber-500 text-[10px] animate-pulse" title="Child Dependency Blocked/Flagged"></i>}
-                               {risk === 'CRITICAL' && <i className="fas fa-hand text-red-500 text-[10px] animate-pulse" title="Self Blocked/Flagged"></i>}
+                               {risk === 'CRITICAL' && <i className="fas fa-hand text-red-500 text-[10px] animate-pulse"></i>}
                             </div>
                             <h4 onClick={() => setActiveItem(epic)} className="text-sm font-black text-slate-800 truncate leading-tight group-hover:text-blue-600 transition-colors cursor-pointer">{epic.title}</h4>
-                            <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">{epic.key}</span>
+                            {isSimulating && (
+                              <input type="range" min="0" max="30" value={simulatedDelay[epic._id!] || 0} onChange={(e) => updateSimulationDelay(epic._id!, parseInt(e.target.value))} className="w-full mt-2 accent-amber-500" />
+                            )}
                           </div>
                         </div>
                         <div className="flex-1 h-12 relative flex items-center">
                           {renderTimelineBar(epic)}
                         </div>
                       </div>
-                      
-                      {isExpanded && epicFeatures.map(feat => {
-                        const featRisk = getItemRisk(feat);
-                        return (
-                          <div key={feat._id} className="flex items-center group py-4 hover:bg-blue-50/20 transition-colors bg-slate-50/10">
-                            <div className="w-80 pr-8 pl-14 shrink-0 relative">
-                               <div className="absolute left-10 top-0 bottom-0 w-[1px] bg-slate-200"></div>
-                               <div className="absolute left-10 top-1/2 w-4 h-[1px] bg-slate-200"></div>
-                               <div className="flex items-center gap-2">
-                                  <h4 onClick={() => setActiveItem(feat)} className="text-xs font-bold text-slate-600 truncate leading-tight group-hover:text-blue-600 transition-colors cursor-pointer">{feat.title}</h4>
-                                  {featRisk !== 'HEALTHY' && <i className={`fas fa-circle text-[6px] ${featRisk === 'CRITICAL' ? 'text-red-500' : 'text-amber-500'} animate-pulse`}></i>}
-                               </div>
-                               <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">{feat.key}</span>
-                            </div>
-                            <div className="flex-1 h-8 relative flex items-center">
-                              {renderTimelineBar(feat, true)}
-                            </div>
-                          </div>
-                        );
-                      })}
                     </React.Fragment>
                   );
                 })}
             </div>
-
-            <div className="absolute top-0 bottom-0 w-[3px] bg-red-500/40 z-[10]" style={{ left: `calc(320px + ${getPosition(new Date().toISOString())}%)` }}>
-                <div className="bg-red-500 text-white text-[8px] font-black px-2 py-1 rounded-full absolute -top-1 -translate-x-1/2 uppercase tracking-widest shadow-lg">TODAY</div>
-            </div>
-
-            <div className="absolute top-0 bottom-0 left-80 right-0 pointer-events-none flex">
-              {timelineMonths.map((_, i) => (
-                <div key={i} className="flex-1 border-l border-slate-50 h-full first:border-l-0"></div>
-              ))}
-            </div>
           </div>
         </div>
       </div>
-      
-      <div className="pt-10 flex items-center gap-12 justify-center border-t border-slate-50 shrink-0">
-         <LegendItem color="bg-red-500" label="Critical Impediment" />
-         <LegendItem color="bg-amber-500" label="Dependency Risk" />
-         <LegendItem color="bg-emerald-500" label="Verified Delivery" />
-         <LegendItem color="bg-blue-600" label="Active Construction" />
-      </div>
-
-      {activeItem && (
-        <div className="fixed inset-y-0 right-0 w-[650px] bg-white shadow-[0_0_100px_rgba(0,0,0,0.2)] border-l border-slate-200 z-[100] animate-slideIn">
-           <WorkItemDetails item={activeItem} bundles={bundles} applications={applications} onUpdate={fetchData} onClose={() => setActiveItem(null)} />
-        </div>
-      )}
     </div>
   );
 };
-
-const LegendItem = ({ color, label }: any) => (
-  <div className="flex items-center gap-3">
-    <div className={`w-3 h-3 rounded-full ${color} shadow-sm`}></div>
-    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{label}</span>
-  </div>
-);
 
 export default WorkItemsRoadmapView;

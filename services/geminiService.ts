@@ -103,3 +103,38 @@ export const generateStandupDigest = async (item: any) => {
     return "Standup Intelligence offline.";
   }
 };
+
+/**
+ * AI Adaptive Resourcing
+ * Suggests reassignments for overloaded personnel.
+ */
+export const suggestReassignment = async (item: any, teamCapacity: any[]) => {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const prompt = `
+    TASK: Find the optimal peer engineer to take over an artifact from an overloaded resource.
+    
+    ARTIFACT: ${item.key} - ${item.title}
+    CURRENT ASSIGNEE: ${item.assignedTo} (OVERLOADED)
+    CONTEXT: ${item.description || 'General engineering task'}
+    
+    AVAILABLE TEAM NODES:
+    ${JSON.stringify(teamCapacity)}
+    
+    ANALYSIS REQUIREMENTS:
+    1. Identify the top 2 candidates based on lowest current load and matching skills (inferred from names/roles).
+    2. Provide a "Suitability Index" (0-100) for each.
+    3. Give a 1-sentence justification for the hand-off.
+    
+    FORMAT: Professional Markdown with a clear recommendation.
+  `;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: prompt
+    });
+    return response.text || "Re-allocation analysis failed.";
+  } catch (error) {
+    return "Resource Intelligence offline.";
+  }
+};
