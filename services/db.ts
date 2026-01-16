@@ -1,6 +1,7 @@
+
 import clientPromise from '../lib/mongodb';
 import { ObjectId } from 'mongodb';
-import { WikiPage, WikiSpace, WikiTheme, Bundle, Application, TaxonomyCategory, TaxonomyDocumentType, WorkItem, WorkItemType, WorkItemStatus, WorkItemActivity, Sprint, Milestone, Notification } from '../types';
+import { WikiPage, WikiSpace, WikiTheme, Bundle, Application, TaxonomyCategory, TaxonomyDocumentType, WorkItem, WorkItemType, WorkItemStatus, WorkItemActivity, Sprint, Milestone, Notification, ArchitectureDiagram } from '../types';
 
 export const getDb = async () => {
   const client = await clientPromise;
@@ -584,4 +585,37 @@ export const fetchWorkItemTree = async (filters: any) => {
   };
 
   return buildTree();
+};
+
+export const fetchArchitectureDiagrams = async (filters: any = {}) => {
+  const db = await getDb();
+  const query: any = {};
+  if (filters.bundleId && filters.bundleId !== 'all') query.bundleId = filters.bundleId;
+  if (filters.applicationId && filters.applicationId !== 'all') query.applicationId = filters.applicationId;
+  return await db.collection('architecture_diagrams').find(query).sort({ updatedAt: -1 }).toArray();
+};
+
+export const saveArchitectureDiagram = async (diagram: Partial<ArchitectureDiagram>, user: any) => {
+  const db = await getDb();
+  const { _id, ...data } = diagram;
+  const now = new Date().toISOString();
+  const userName = user?.name || 'System';
+
+  if (_id) {
+    return await db.collection('architecture_diagrams').updateOne(
+      { _id: new ObjectId(_id) },
+      { $set: { ...data, updatedAt: now } }
+    );
+  } else {
+    return await db.collection('architecture_diagrams').insertOne({
+      ...data,
+      createdBy: userName,
+      updatedAt: now
+    });
+  }
+};
+
+export const deleteArchitectureDiagram = async (id: string) => {
+  const db = await getDb();
+  return await db.collection('architecture_diagrams').deleteOne({ _id: new ObjectId(id) });
 };
