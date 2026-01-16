@@ -1,5 +1,8 @@
 
-import React, { useState, useEffect } from 'react';
+'use client';
+
+import React, { useState, useEffect, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Layout from './components/Layout';
 import Dashboard from './components/Dashboard';
 import Applications from './components/Applications';
@@ -9,29 +12,58 @@ import Wiki from './components/Wiki';
 import Milestones from './components/Milestones';
 import GovernanceDocuments from './components/GovernanceDocuments';
 import Admin from './components/Admin';
-import { Bundle, Application } from './types';
+import InfrastructureExplorer from './components/InfrastructureExplorer';
+import OpsCenter from './components/OpsCenter';
+import { Bundle, Application, WorkItem, WorkItemType } from './types';
 
-const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState('dashboard');
+export default function Home() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+        <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    }>
+      <HomeContent />
+    </Suspense>
+  );
+}
+
+function HomeContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'dashboard');
   
-  // Dynamic Data Lists
   const [bundles, setBundles] = useState<Bundle[]>([]);
   const [applications, setApplications] = useState<Application[]>([]);
+  const [epics, setEpics] = useState<WorkItem[]>([]);
 
-  // Global / Contextual Filters
   const [activeBundle, setActiveBundle] = useState('all');
   const [activeVendor, setActiveVendor] = useState('all');
   const [selSpaceId, setSelSpaceId] = useState('all');
   const [activeApp, setActiveApp] = useState('all');
   const [selMilestone, setSelMilestone] = useState('all');
+  const [activeEpic, setActiveEpic] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   
-  // Trigger for child components
   const [wikiTrigger, setWikiTrigger] = useState<string | null>(null);
   const [workItemTrigger, setWorkItemTrigger] = useState<string | null>(null);
 
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (tab && tab !== activeTab) {
+      setActiveTab(tab);
+    }
+  }, [searchParams]);
+
+  const handleTabChange = (tab: string) => {
+    setActiveTab(tab);
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('tab', tab);
+    router.push(`?${params.toString()}`);
+  };
 
   useEffect(() => {
     async function init() {
@@ -47,20 +79,48 @@ const App: React.FC = () => {
           ]);
           setBundles(await bRes.json());
           setApplications(await aRes.json());
+        } else {
+          router.push('/login');
         }
       } catch (err) {
-        console.error("Nexus Registry Sync Failed", err);
+        router.push('/login');
       } finally {
         setLoading(false);
       }
     }
     init();
-  }, []);
+  }, [router]);
+
+  useEffect(() => {
+    if (activeTab === 'work-items' || activeTab === 'wiki') {
+      const params = new URLSearchParams();
+      if (activeBundle !== 'all') params.set('bundleId', activeBundle);
+      if (activeApp !== 'all') params.set('applicationId', activeApp);
+      fetch(`/api/work-items?${params.toString()}`)
+        .then(r => r.json())
+        .then(items => {
+          setEpics(items.filter((i: WorkItem) => i.type === WorkItemType.EPIC));
+        });
+    }
+  }, [activeBundle, activeApp, activeTab]);
 
   const handleLogout = async () => {
     await fetch('/api/auth/logout', { method: 'POST' });
-    window.location.href = '/login';
+    router.push('/login');
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+        <div className="flex flex-col items-center">
+          <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+          <p className="text-slate-400 font-medium animate-pulse">Synchronizing Nexus Registry...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) return null;
 
   const renderContent = () => {
     switch (activeTab) {
@@ -68,6 +128,10 @@ const App: React.FC = () => {
         return <Dashboard applications={applications} bundles={bundles} />;
       case 'applications':
         return <Applications filterBundle={activeBundle} applications={applications} bundles={bundles} />;
+      case 'infrastructure':
+        return <InfrastructureExplorer applications={applications} />;
+      case 'ops-center':
+        return <OpsCenter applications={applications} />;
       case 'ai-insights':
         return <AIInsights applications={applications} bundles={bundles} />;
       case 'work-items':
@@ -78,7 +142,10 @@ const App: React.FC = () => {
             selBundleId={activeBundle}
             selAppId={activeApp}
             selMilestone={selMilestone}
+            selEpicId={activeEpic}
             searchQuery={searchQuery}
+            externalTrigger={workItemTrigger}
+            onTriggerProcessed={() => setWorkItemTrigger(null)}
           />
         );
       case 'wiki':
@@ -97,7 +164,7 @@ const App: React.FC = () => {
           />
         );
       case 'reviews':
-        return <Milestones applications={applications} />;
+        return <Milestones applications={applications} bundles={bundles} />;
       case 'documents':
         return <GovernanceDocuments />;
       case 'admin':
@@ -106,28 +173,16 @@ const App: React.FC = () => {
         return (
           <div className="flex flex-col items-center justify-center py-20 text-slate-400">
             <i className="fas fa-tools text-6xl mb-4"></i>
-            <h2 className="text-xl font-bold">Under Construction</h2>
-            <p>NexusDelivery engineers are building this view.</p>
+            <h2 className="text-xl font-bold text-slate-600">Module Under Construction</h2>
           </div>
         );
     }
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-          <p className="text-slate-400 font-bold text-[10px] uppercase tracking-[0.2em] animate-pulse">Synchronizing Registry...</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <Layout 
       activeTab={activeTab} 
-      setActiveTab={setActiveTab}
+      setActiveTab={handleTabChange}
       selSpaceId={selSpaceId}
       setSelSpaceId={setSelSpaceId}
       activeBundle={activeBundle}
@@ -138,19 +193,20 @@ const App: React.FC = () => {
       setActiveVendor={setActiveVendor}
       selMilestone={selMilestone}
       setSelMilestone={setSelMilestone}
+      activeEpic={activeEpic}
+      setActiveEpic={setActiveEpic}
       searchQuery={searchQuery}
       setSearchQuery={setSearchQuery}
       bundles={bundles}
       applications={applications}
+      epics={epics}
       onCreateSpace={() => setWikiTrigger('create-space')}
       onCreateWorkItem={() => setWorkItemTrigger('create-item')}
-      userName={user?.name}
-      userRole={user?.role}
+      userName={user.name}
+      userRole={user.role}
       onLogout={handleLogout}
     >
       {renderContent()}
     </Layout>
   );
-};
-
-export default App;
+}

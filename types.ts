@@ -50,7 +50,7 @@ export enum WorkItemStatus {
 
 export interface Notification {
   _id?: string;
-  recipient: string; // user name or email
+  recipient: string; 
   sender: string;
   type: 'MENTION' | 'IMPEDIMENT' | 'ASSIGNMENT' | 'SYSTEM';
   message: string;
@@ -144,6 +144,34 @@ export interface WorkItem {
   activity?: WorkItemActivity[];
   attachments?: WorkItemAttachment[];
   checklists?: ChecklistItem[]; 
+  releaseId?: string; // New: Link to release
+}
+
+export interface InfrastructureNode {
+  _id?: string;
+  name: string;
+  type: 'K8S_CLUSTER' | 'VM_SCALE_SET' | 'SERVERLESS_FUNCTION' | 'DATABASE_INST';
+  provider: 'AZURE' | 'AWS' | 'GCP' | 'ON_PREM';
+  region: string;
+  status: 'HEALTHY' | 'WARNING' | 'CRITICAL';
+  cpuUsage: number;
+  memUsage: number;
+  appsCount: number;
+}
+
+/* Added missing Bundle, TaxonomyCategory, and TaxonomyDocumentType interfaces */
+
+export interface Bundle {
+  _id?: string;
+  id?: string;
+  key: string;
+  name: string;
+  description?: string;
+  isActive: boolean;
+  wipLimits?: Record<string, number>;
+  sortOrder?: number;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface TaxonomyCategory {
@@ -167,8 +195,8 @@ export interface TaxonomyDocumentType {
   icon?: string;
   isActive: boolean;
   sortOrder: number;
-  audience?: ('engineering' | 'security' | 'operations' | 'leadership' | 'program_management' | 'product' | 'finance' | 'audit')[];
-  lifecyclePhases?: ('strategy' | 'plan' | 'design' | 'build' | 'test' | 'release' | 'operate' | 'improve' | 'retire')[];
+  audience?: string[];
+  lifecyclePhases?: string[];
   defaultTemplate?: string;
   requiredMetadata?: {
     requiresBundle: boolean;
@@ -177,17 +205,13 @@ export interface TaxonomyDocumentType {
   };
 }
 
-export interface Bundle {
-  _id?: string;
-  id?: string; 
-  key: string;
-  name: string;
-  description?: string;
-  isActive: boolean;
-  sortOrder?: number;
-  wipLimits?: Record<string, number>; 
-  createdAt?: string;
-  updatedAt?: string;
+export interface AppTelemetry {
+  timestamp: string;
+  cpu: number;
+  memory: number;
+  latency: number;
+  errorRate: number;
+  throughput: number;
 }
 
 export interface Application {
@@ -210,6 +234,12 @@ export interface Application {
     phase?: string;
     health: 'Healthy' | 'Risk' | 'Critical';
     lastStatusUpdateAt?: string;
+    telemetry?: AppTelemetry[]; // New: Real-time APM data
+  };
+  infra?: {
+    clusterId?: string;
+    environment: 'PROD' | 'UAT' | 'DEV';
+    instances: number;
   };
   isActive: boolean;
   createdAt?: string;

@@ -3,7 +3,6 @@ import { GoogleGenAI, Type } from "@google/genai";
 
 /**
  * AI Portfolio Analyst
- * Powered by Gemini 3 Pro for deep reasoning.
  */
 export const getPortfolioSummary = async (portfolioData: any) => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -39,8 +38,41 @@ export const getPortfolioSummary = async (portfolioData: any) => {
 };
 
 /**
+ * AI SRE Assistant
+ * Analyzes telemetry and infrastructure for anomaly detection.
+ */
+export const analyzeOperationsIntelligence = async (telemetryData: any, infraData: any) => {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const prompt = `
+    TASK: As a Senior Site Reliability AI, analyze the following real-time telemetry and infrastructure state.
+    
+    TELEMETRY:
+    ${JSON.stringify(telemetryData)}
+    
+    INFRASTRUCTURE:
+    ${JSON.stringify(infraData)}
+    
+    REQUIREMENTS:
+    1. IDENTIFY ANOMALIES: Look for CPU/Memory spikes or latency patterns that deviate from normal.
+    2. OUTAGE PREDICTION: Is there a likelihood of a service degradation in the next 4 hours?
+    3. OPTIMIZATION: Suggest instance scaling or resource redistribution.
+    
+    FORMAT: Professional SRE Markdown with "Observability Alert" headers where risks are found.
+  `;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: prompt
+    });
+    return response.text || "Ops intelligence currently unavailable.";
+  } catch (error) {
+    return "Operations Intelligence offline.";
+  }
+};
+
+/**
  * AI Task Co-Pilot
- * Refines individual work items with implementation plans and criteria.
  */
 export const generateWorkPlan = async (workItem: any) => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -73,7 +105,6 @@ export const generateWorkPlan = async (workItem: any) => {
 
 /**
  * AI Standup Synthesizer
- * Converts raw activity logs into executive status updates.
  */
 export const generateStandupDigest = async (item: any) => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -106,7 +137,6 @@ export const generateStandupDigest = async (item: any) => {
 
 /**
  * AI Adaptive Resourcing
- * Suggests reassignments for overloaded personnel.
  */
 export const suggestReassignment = async (item: any, teamCapacity: any[]) => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
