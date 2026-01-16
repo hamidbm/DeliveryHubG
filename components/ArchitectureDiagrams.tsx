@@ -14,23 +14,76 @@ const MermaidRenderer: React.FC<{ content: string; id: string }> = ({ content, i
   const render = useCallback(async () => {
     if (!containerRef.current || !content) return;
     try {
-      containerRef.current.innerHTML = ''; // Clear previous
-      const { svg } = await mermaid.render(`mermaid-${id}`, content);
+      containerRef.current.innerHTML = ''; 
+      const { svg } = await mermaid.render(`mermaid-${id.replace(/[^a-zA-Z0-9]/g, '-')}`, content);
       containerRef.current.innerHTML = svg;
+      
+      // Auto-scale SVG to fit
+      const svgEl = containerRef.current.querySelector('svg');
+      if (svgEl) {
+        svgEl.style.width = '100%';
+        svgEl.style.height = 'auto';
+        svgEl.style.maxWidth = '100%';
+      }
     } catch (err) {
       containerRef.current.innerHTML = `<div class="p-10 text-red-500 bg-red-50 rounded-2xl border border-red-100 flex flex-col items-center">
         <i class="fas fa-triangle-exclamation text-2xl mb-2"></i>
-        <p class="text-xs font-black uppercase">Syntax Error in Script</p>
+        <p class="text-[10px] font-black uppercase">Syntax Error in Mermaid Script</p>
       </div>`;
     }
   }, [content, id]);
 
   useEffect(() => {
-    mermaid.initialize({ startOnLoad: false, theme: 'neutral' });
+    mermaid.initialize({ 
+      startOnLoad: false, 
+      theme: 'neutral',
+      securityLevel: 'loose',
+      fontFamily: 'Inter'
+    });
     render();
   }, [render]);
 
-  return <div ref={containerRef} className="flex justify-center items-center w-full min-h-[300px]" />;
+  return <div ref={containerRef} className="flex justify-center items-center w-full h-full min-h-[400px]" />;
+};
+
+const DrawioEditor: React.FC<{ 
+  xml: string; 
+  onSave: (xml: string) => void;
+}> = ({ xml, onSave }) => {
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  useEffect(() => {
+    const handleMessage = (evt: MessageEvent) => {
+      if (evt.origin !== 'https://embed.diagrams.net') return;
+      
+      try {
+        const data = JSON.parse(evt.data);
+        if (data.event === 'init') {
+          // Send the current XML to the editor
+          iframeRef.current?.contentWindow?.postMessage(JSON.stringify({
+            action: 'load',
+            xml: xml,
+            autosave: 1
+          }), '*');
+        } else if (data.event === 'save' || data.event === 'autosave' || data.event === 'export') {
+          if (data.xml) onSave(data.xml);
+        }
+      } catch (e) {
+        // Silent fail for non-json messages
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [xml, onSave]);
+
+  return (
+    <iframe
+      ref={iframeRef}
+      className="w-full h-full border-none rounded-2xl shadow-inner bg-white"
+      src="https://embed.diagrams.net/?embed=1&ui=atlas&spin=1&proto=json&configure=1"
+    />
+  );
 };
 
 const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ applications, bundles }) => {
@@ -57,7 +110,7 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
 
   const openDesigner = (diag?: ArchitectureDiagram) => {
     setEditingDiagram(diag || {
-      title: 'New Architecture Diagram',
+      title: 'New Architecture Blueprint',
       format: DiagramFormat.MERMAID,
       content: 'graph TD\n  Start --> Process\n  Process --> End',
       status: 'DRAFT'
@@ -92,7 +145,7 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
         });
         if (res.ok) fetchDiagrams();
       } catch (err) {
-        alert("Upload failed");
+        alert("System encountered an error during blueprint ingestion.");
       }
     };
 
@@ -105,7 +158,7 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
 
   const handleDelete = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!confirm("Permanently delete this blueprint?")) return;
+    if (!confirm("Permanently purge this visual artifact from the registry?")) return;
     await fetch(`/api/architecture/diagrams/${id}`, { method: 'DELETE' });
     fetchDiagrams();
   };
@@ -117,7 +170,7 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
           <header className="flex justify-between items-end">
             <div>
               <h2 className="text-4xl font-black text-slate-900 tracking-tighter uppercase italic">Architecture Canvas</h2>
-              <p className="text-slate-400 font-medium text-lg">Visual blueprints, system sequence flows, and mind maps.</p>
+              <p className="text-slate-400 font-medium text-lg">Visualizing system relationships, sequence flows, and mind maps.</p>
             </div>
             <div className="flex gap-3">
                <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" accept=".drawio,.xml,image/*" />
@@ -131,7 +184,7 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
                 onClick={() => openDesigner()}
                 className="px-8 py-3 bg-slate-900 text-white text-[10px] font-black rounded-2xl shadow-xl hover:bg-blue-600 transition-all uppercase tracking-widest flex items-center gap-2"
                >
-                 <i className="fas fa-magic"></i> Launch Designer
+                 <i className="fas fa-magic"></i> Provision Canvas
                </button>
             </div>
           </header>
@@ -141,20 +194,21 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
              diagrams.length === 0 ? (
                <div className="col-span-full py-32 text-center bg-slate-50/50 border-2 border-dashed border-slate-100 rounded-[3rem]">
                   <i className="fas fa-pencil-ruler text-5xl mb-6 text-slate-200"></i>
-                  <p className="text-sm font-black text-slate-400 uppercase tracking-widest">No visual artifacts established</p>
+                  <p className="text-sm font-black text-slate-400 uppercase tracking-widest">Registry visual plane is currently empty</p>
                </div>
              ) : diagrams.map(diag => (
-              <div key={diag._id} className="bg-white border border-slate-200 rounded-[2.5rem] p-8 hover:shadow-2xl transition-all group cursor-pointer relative" onClick={() => openDesigner(diag)}>
+              <div key={diag._id} className="bg-white border border-slate-200 rounded-[2.5rem] p-8 hover:shadow-2xl transition-all group cursor-pointer relative flex flex-col h-full" onClick={() => openDesigner(diag)}>
                  <button 
                    onClick={(e) => handleDelete(diag._id!, e)}
-                   className="absolute top-6 right-6 w-8 h-8 rounded-lg bg-slate-50 text-slate-300 hover:text-red-500 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all z-20"
+                   className="absolute top-6 right-6 w-8 h-8 rounded-lg bg-slate-50 text-slate-300 hover:text-red-500 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all z-20 shadow-sm border border-slate-100"
                  >
                    <i className="fas fa-trash text-[10px]"></i>
                  </button>
 
                  <div className="flex justify-between items-start mb-6">
                     <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-lg ${
-                      diag.format === DiagramFormat.MERMAID ? 'bg-indigo-500' : 'bg-emerald-500'
+                      diag.format === DiagramFormat.MERMAID ? 'bg-indigo-500 shadow-indigo-200' : 
+                      diag.format === DiagramFormat.DRAWIO ? 'bg-orange-500 shadow-orange-200' : 'bg-emerald-500 shadow-emerald-200'
                     }`}>
                        <i className={`fas ${diag.format === DiagramFormat.MERMAID ? 'fa-code' : diag.format === DiagramFormat.DRAWIO ? 'fa-vector-square' : 'fa-image'}`}></i>
                     </div>
@@ -168,17 +222,20 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
                  <div className="flex items-center gap-3 mb-6">
                     <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">{diag.format}</span>
                     <div className="w-1 h-1 rounded-full bg-slate-200"></div>
-                    <span className="text-[10px] font-bold text-slate-400">Updated {new Date(diag.updatedAt).toLocaleDateString()}</span>
+                    <span className="text-[10px] font-bold text-slate-400">Synced {new Date(diag.updatedAt).toLocaleDateString()}</span>
                  </div>
-                 <div className="h-32 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-center overflow-hidden">
+                 <div className="flex-1 h-40 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-center overflow-hidden p-4">
                     {diag.format === DiagramFormat.MERMAID ? (
-                      <div className="scale-[0.4] origin-center opacity-40 pointer-events-none">
+                      <div className="scale-[0.4] origin-center opacity-40 group-hover:opacity-100 transition-opacity pointer-events-none w-full flex justify-center">
                          <MermaidRenderer content={diag.content} id={diag._id!} />
                       </div>
                     ) : diag.format === DiagramFormat.IMAGE ? (
                       <img src={diag.content} className="h-full w-full object-contain opacity-50 grayscale group-hover:grayscale-0 group-hover:opacity-100 transition-all" />
                     ) : (
-                      <i className="fas fa-file-code text-slate-200 text-3xl opacity-50"></i>
+                      <div className="flex flex-col items-center gap-2 opacity-30 group-hover:opacity-60 transition-all">
+                        <i className="fas fa-file-code text-4xl text-slate-300"></i>
+                        <span className="text-[8px] font-black uppercase">XML Vector Blueprint</span>
+                      </div>
                     )}
                  </div>
               </div>
@@ -209,11 +266,12 @@ const ArchitectureDesigner: React.FC<{
   const [title, setTitle] = useState(diagram.title || '');
   const [format, setFormat] = useState<DiagramFormat>(diagram.format || DiagramFormat.MERMAID);
   const [saving, setSaving] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [activeBundleId, setActiveBundleId] = useState(diagram.bundleId || '');
   const [activeAppId, setActiveAppId] = useState(diagram.applicationId || '');
 
   const handleCommit = async () => {
-    if (!title.trim()) return alert("Title required");
+    if (!title.trim()) return alert("Artifact title is mandatory.");
     setSaving(true);
     try {
       const res = await fetch('/api/architecture/diagrams', {
@@ -235,14 +293,18 @@ const ArchitectureDesigner: React.FC<{
     }
   };
 
+  const handleDrawioUpdate = useCallback((newXml: string) => {
+    setCode(newXml);
+  }, []);
+
   return (
-    <div className="fixed inset-0 z-[200] bg-white flex flex-col animate-fadeIn">
-      <header className="px-10 py-5 bg-white border-b border-slate-200 flex items-center justify-between shadow-sm shrink-0">
+    <div className="fixed inset-0 z-[200] bg-white flex flex-col animate-fadeIn overflow-hidden">
+      <header className="px-10 py-5 bg-white border-b border-slate-200 flex items-center justify-between shadow-sm shrink-0 z-[210]">
         <div className="flex items-center gap-6">
           <button onClick={onClose} className="w-10 h-10 rounded-full bg-slate-50 hover:bg-slate-100 flex items-center justify-center text-slate-400 border border-slate-100 transition-all"><i className="fas fa-times"></i></button>
           <div className="flex flex-col">
-            <span className="text-[9px] font-black text-blue-600 uppercase tracking-widest mb-1">Architecture Designer</span>
-            <input value={title} onChange={(e) => setTitle(e.target.value)} className="text-2xl font-black text-slate-800 border-none p-0 focus:ring-0 outline-none bg-transparent w-[400px]" placeholder="Untitled Flow" />
+            <span className="text-[9px] font-black text-blue-600 uppercase tracking-widest mb-1 italic">Blueprint Registry Node</span>
+            <input value={title} onChange={(e) => setTitle(e.target.value)} className="text-2xl font-black text-slate-800 border-none p-0 focus:ring-0 outline-none bg-transparent w-[400px]" placeholder="Untitled Blueprint" />
           </div>
         </div>
         <div className="flex items-center gap-4">
@@ -251,7 +313,7 @@ const ArchitectureDesigner: React.FC<{
               <button 
                 key={fmt}
                 onClick={() => setFormat(fmt)}
-                className={`px-4 py-2 text-[9px] font-black uppercase rounded-lg transition-all ${format === fmt ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}
+                className={`px-4 py-2 text-[9px] font-black uppercase rounded-lg transition-all ${format === fmt ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
               >
                 {fmt}
               </button>
@@ -260,70 +322,83 @@ const ArchitectureDesigner: React.FC<{
           <button 
             onClick={handleCommit}
             disabled={saving}
-            className="px-10 py-3.5 bg-slate-900 text-white rounded-2xl shadow-xl font-black text-[10px] uppercase tracking-widest flex items-center gap-3 active:scale-95 transition-all"
+            className="px-10 py-3.5 bg-slate-900 text-white rounded-2xl shadow-xl font-black text-[10px] uppercase tracking-widest flex items-center gap-3 active:scale-95 transition-all disabled:opacity-50"
           >
             {saving ? <i className="fas fa-circle-notch fa-spin"></i> : <i className="fas fa-save"></i>} 
-            {saving ? 'Processing...' : 'Commit to Registry'}
+            {saving ? 'Syncing...' : 'Commit to Registry'}
           </button>
         </div>
       </header>
 
-      <div className="flex-1 flex overflow-hidden bg-slate-50">
-        {/* Editor Pane */}
-        <div className="w-1/3 flex flex-col bg-slate-900 shadow-2xl relative z-10">
-           <div className="px-6 py-3 border-b border-white/5 flex items-center justify-between bg-black/20">
-              <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest">Source Editor</span>
+      <div className="flex-1 flex overflow-hidden bg-slate-50 relative">
+        {/* Editor Pane (Collapsible) */}
+        <div 
+          className={`flex flex-col bg-slate-900 shadow-2xl relative z-[205] transition-all duration-500 ease-in-out ${isSidebarCollapsed ? 'w-0 opacity-0 pointer-events-none translate-x-[-100%]' : 'w-1/3'}`}
+        >
+           <div className="px-6 py-3 border-b border-white/5 flex items-center justify-between bg-black/20 shrink-0">
+              <span className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">Source Registry</span>
               <div className="flex gap-2">
-                 <div className="w-2 h-2 rounded-full bg-red-500/50"></div>
-                 <div className="w-2 h-2 rounded-full bg-amber-500/50"></div>
-                 <div className="w-2 h-2 rounded-full bg-emerald-500/50"></div>
+                 <div className="w-2 h-2 rounded-full bg-red-500/30"></div>
+                 <div className="w-2 h-2 rounded-full bg-amber-500/30"></div>
+                 <div className="w-2 h-2 rounded-full bg-emerald-500/30"></div>
               </div>
            </div>
            <textarea 
             value={code}
             onChange={(e) => setCode(e.target.value)}
-            disabled={format === DiagramFormat.IMAGE}
-            className="flex-1 w-full bg-transparent text-emerald-400 font-mono text-sm p-8 outline-none resize-none custom-scrollbar"
-            placeholder={format === DiagramFormat.MERMAID ? "Enter Mermaid.js logic here..." : "XML / Content data..."}
+            className="flex-1 w-full bg-transparent text-emerald-400 font-mono text-sm p-8 outline-none resize-none custom-scrollbar selection:bg-emerald-500/20"
+            placeholder={format === DiagramFormat.MERMAID ? "Enter Mermaid syntax..." : "Visual source XML..."}
            />
-           <div className="p-6 bg-black/20 border-t border-white/5">
-              <h5 className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-2">Editor Quick-Links</h5>
+           <div className="p-6 bg-black/20 border-t border-white/5 shrink-0">
+              <h5 className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-3">Snippet Registry</h5>
               <div className="flex flex-wrap gap-2">
-                 <button onClick={() => setCode('graph TD\n  A[Client] --> B[API Gateway]\n  B --> C{Auth}\n  C -->|Pass| D[Service]\n  C -->|Fail| E[Reject]')} className="px-3 py-1 bg-white/5 rounded-lg text-[8px] text-slate-400 hover:text-white transition-colors">Flowchart Template</button>
-                 <button onClick={() => setCode('sequenceDiagram\n  Alice->>John: Hello John, how are you?\n  John-->>Alice: Great!')} className="px-3 py-1 bg-white/5 rounded-lg text-[8px] text-slate-400 hover:text-white transition-colors">Sequence Template</button>
-                 <button onClick={() => setCode('mindmap\n  root((Artifacts))\n    Requirement\n    Design\n    Testing')} className="px-3 py-1 bg-white/5 rounded-lg text-[8px] text-slate-400 hover:text-white transition-colors">Mindmap Template</button>
+                 <button onClick={() => setCode('graph TD\n  A[Client] --> B[API Gateway]\n  B --> C{Security}\n  C -->|Valid| D[Service]\n  C -->|Invalid| E[Audit]')} className="px-3 py-1 bg-white/5 rounded-lg text-[8px] text-slate-400 hover:text-white transition-colors">Flowchart</button>
+                 <button onClick={() => setCode('sequenceDiagram\n  User->>API: Request\n  API->>DB: Query\n  DB-->>API: Data\n  API-->>User: Response')} className="px-3 py-1 bg-white/5 rounded-lg text-[8px] text-slate-400 hover:text-white transition-colors">Sequence</button>
+                 <button onClick={() => setCode('mindmap\n  root((Nexus))\n    Architecture\n    Execution\n    Intelligence')} className="px-3 py-1 bg-white/5 rounded-lg text-[8px] text-slate-400 hover:text-white transition-colors">Mindmap</button>
               </div>
            </div>
         </div>
 
-        {/* Preview Pane */}
-        <div className="flex-1 overflow-hidden flex flex-col">
-           <div className="px-10 py-6 border-b border-slate-200 bg-white/50 backdrop-blur flex items-center justify-between">
+        {/* Sidebar Toggle Handle */}
+        <button 
+          onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+          className={`absolute top-1/2 -translate-y-1/2 w-6 h-20 bg-slate-800 text-white rounded-r-xl flex items-center justify-center hover:bg-blue-600 transition-all z-[206] shadow-xl ${isSidebarCollapsed ? 'left-0' : 'left-1/3'}`}
+        >
+          <i className={`fas fa-chevron-${isSidebarCollapsed ? 'right' : 'left'} text-[10px]`}></i>
+        </button>
+
+        {/* Canvas Pane */}
+        <div className={`flex-1 overflow-hidden flex flex-col transition-all duration-500 ${isSidebarCollapsed ? 'pl-6' : ''}`}>
+           <div className="px-10 py-6 border-b border-slate-200 bg-white/50 backdrop-blur flex items-center justify-between shrink-0">
               <div className="flex items-center gap-4">
-                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Live Canvas</span>
-                 <div className="px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-[8px] font-black uppercase">Live Synchronization</div>
+                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nexus Workspace</span>
+                 <div className="px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-[8px] font-black uppercase animate-pulse border border-blue-100">Live Synthesis</div>
               </div>
               <div className="flex gap-2">
                  <button className="w-9 h-9 rounded-xl bg-white border border-slate-200 text-slate-400 hover:text-blue-600 shadow-sm flex items-center justify-center transition-all"><i className="fas fa-magnifying-glass-plus"></i></button>
                  <button className="w-9 h-9 rounded-xl bg-white border border-slate-200 text-slate-400 hover:text-blue-600 shadow-sm flex items-center justify-center transition-all"><i className="fas fa-expand"></i></button>
-                 <button className="w-9 h-9 rounded-xl bg-white border border-slate-200 text-slate-400 hover:text-blue-600 shadow-sm flex items-center justify-center transition-all"><i className="fas fa-download"></i></button>
               </div>
            </div>
            
-           <div className="flex-1 overflow-auto p-20 flex items-center justify-center custom-scrollbar">
-              <div className="bg-white rounded-[3rem] p-16 shadow-[0_50px_100px_rgba(0,0,0,0.05)] border border-slate-100 min-w-[600px] min-h-[400px] flex flex-col items-center justify-center relative overflow-hidden transition-all duration-700">
-                 <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'radial-gradient(#000 1px, transparent 0)', backgroundSize: '30px 30px' }}></div>
+           <div className="flex-1 overflow-hidden p-8 lg:p-12 relative flex">
+              <div className="bg-white rounded-[3rem] w-full h-full shadow-[0_50px_100px_rgba(0,0,0,0.05)] border border-slate-100 relative overflow-hidden flex flex-col items-center justify-center group/canvas">
+                 <div className="absolute inset-0 opacity-[0.02] pointer-events-none" style={{ backgroundImage: 'radial-gradient(#000 1px, transparent 0)', backgroundSize: '32px 32px' }}></div>
                  
-                 <div className="relative z-10 w-full">
+                 <div className="relative z-10 w-full h-full overflow-auto custom-scrollbar p-10 flex flex-col items-center justify-center">
                    {format === DiagramFormat.MERMAID || format === DiagramFormat.MINDMAP ? (
-                     <MermaidRenderer content={code} id="preview" />
+                     <div className="w-full h-full min-h-[500px]">
+                        <MermaidRenderer content={code} id="canvas-node" />
+                     </div>
+                   ) : format === DiagramFormat.DRAWIO ? (
+                     <DrawioEditor xml={code} onSave={handleDrawioUpdate} />
                    ) : format === DiagramFormat.IMAGE ? (
-                     <img src={code} className="max-w-full h-auto shadow-2xl rounded-2xl" />
+                     <div className="max-w-full max-h-full flex items-center justify-center overflow-auto shadow-2xl rounded-[2rem] border border-slate-100 p-4">
+                        <img src={code} className="max-w-none h-auto transition-transform duration-500" />
+                     </div>
                    ) : (
-                     <div className="text-center">
-                        <pre className="text-slate-400 font-bold mb-10 text-lg opacity-40">XML Core Visualization Active</pre>
-                        <i className="fas fa-vector-square text-6xl text-slate-100 mb-4"></i>
-                        <p className="mt-10 text-[10px] font-black text-slate-300 uppercase tracking-[0.4em]">Rendering logic for {format}...</p>
+                     <div className="text-center opacity-40 flex flex-col items-center gap-6">
+                        <i className="fas fa-vector-square text-6xl text-slate-200"></i>
+                        <p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.5em]">Rendering artifact payload...</p>
                      </div>
                    )}
                  </div>
@@ -331,35 +406,40 @@ const ArchitectureDesigner: React.FC<{
            </div>
         </div>
 
-        {/* Sidebar Metadata */}
-        <aside className="w-80 border-l border-slate-200 bg-white p-8 space-y-10 overflow-y-auto custom-scrollbar">
-           <div>
-              <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6 flex items-center gap-2"><i className="fas fa-link"></i> Mapping Context</h4>
+        {/* Sidebar Metadata (Right) */}
+        <aside className="w-80 border-l border-slate-200 bg-white p-8 space-y-10 overflow-y-auto custom-scrollbar shrink-0 z-[204]">
+           <section>
+              <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-8 flex items-center gap-2"><i className="fas fa-link"></i> Hierarchy Context</h4>
               <div className="space-y-6">
                  <div className="space-y-2">
                     <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Business Cluster</label>
-                    <select value={activeBundleId} onChange={(e) => setActiveBundleId(e.target.value)} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3 text-xs font-bold text-slate-700">
-                       <option value="">Cross-Bundle</option>
+                    <select value={activeBundleId} onChange={(e) => setActiveBundleId(e.target.value)} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-xs font-bold text-slate-700 outline-none hover:border-blue-200 focus:border-blue-500 transition-all">
+                       <option value="">Cross-Bundle Plane</option>
                        {bundles.map(b => <option key={b._id} value={b._id}>{b.name}</option>)}
                     </select>
                  </div>
                  <div className="space-y-2">
-                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Asset Context</label>
-                    <select value={activeAppId} onChange={(e) => setActiveAppId(e.target.value)} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3 text-xs font-bold text-slate-700">
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Asset Mapping</label>
+                    <select value={activeAppId} onChange={(e) => setActiveAppId(e.target.value)} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-xs font-bold text-slate-700 outline-none hover:border-blue-200 focus:border-blue-500 transition-all">
                        <option value="">Full Cluster Scope</option>
                        {applications.filter(a => !activeBundleId || a.bundleId === activeBundleId).map(a => <option key={a._id} value={a._id}>{a.name}</option>)}
                     </select>
                  </div>
               </div>
-           </div>
+           </section>
 
-           <div className="pt-10 border-t border-slate-50">
-              <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6 flex items-center gap-2"><i className="fas fa-robot"></i> AI Reviewer</h4>
-              <div className="bg-blue-50 border border-blue-100 rounded-[1.5rem] p-6 space-y-4">
-                 <p className="text-[10px] text-blue-700 font-medium leading-relaxed italic">"Diagram synthesis analysis active. Press refresh to evaluate blueprint for interface consistency."</p>
-                 <button className="w-full py-2 bg-blue-600 text-white text-[9px] font-black uppercase rounded-lg shadow-lg active:scale-95 transition-all">Evaluate Layout</button>
+           <section className="pt-10 border-t border-slate-50">
+              <div className="flex items-center justify-between mb-8">
+                 <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><i className="fas fa-robot"></i> AI Reviewer</h4>
+                 <div className="w-2 h-2 rounded-full bg-blue-500 animate-ping"></div>
               </div>
-           </div>
+              <div className="bg-blue-50 border border-blue-100 rounded-[2rem] p-8 space-y-6 shadow-sm">
+                 <p className="text-[11px] text-blue-700 font-medium leading-relaxed italic border-l-2 border-blue-200 pl-4">
+                   "Nexus Intelligence is evaluating the node-link consistency. Ensure all interface protocols are explicitly labeled for downstream telemetry correlation."
+                 </p>
+                 <button className="w-full py-3 bg-blue-600 text-white text-[9px] font-black uppercase rounded-xl shadow-lg shadow-blue-500/20 active:scale-95 transition-all">Generate Summary</button>
+              </div>
+           </section>
         </aside>
       </div>
       
@@ -367,6 +447,7 @@ const ArchitectureDesigner: React.FC<{
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #cbd5e1; }
       `}</style>
     </div>
   );
