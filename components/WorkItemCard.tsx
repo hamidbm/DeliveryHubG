@@ -1,8 +1,9 @@
 
-import React from 'react';
+// Fix: Added useMemo to the React import to resolve "Cannot find name 'useMemo'" error.
+import React, { useMemo } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { WorkItem, WorkItemType } from '../types';
+import { WorkItem, WorkItemType, WorkItemStatus } from '../types';
 
 interface WorkItemCardProps {
   item: WorkItem;
@@ -47,6 +48,14 @@ const WorkItemCard: React.FC<WorkItemCardProps> = ({ item, onClick, isOverlay })
   };
 
   const isBlocked = item.links?.some(l => l.type === 'IS_BLOCKED_BY');
+  
+  // Logic: Staleness Detection (> 3 days without update)
+  const isStale = useMemo(() => {
+    if (item.status === WorkItemStatus.DONE) return false;
+    const lastUpdate = new Date(item.updatedAt || item.createdAt || 0).getTime();
+    const threeDaysAgo = new Date().getTime() - (3 * 24 * 60 * 60 * 1000);
+    return lastUpdate < threeDaysAgo;
+  }, [item.updatedAt, item.createdAt, item.status]);
 
   return (
     <div 
@@ -56,8 +65,8 @@ const WorkItemCard: React.FC<WorkItemCardProps> = ({ item, onClick, isOverlay })
       {...listeners}
       onClick={onClick}
       className={`bg-white p-5 rounded-2xl border transition-all cursor-grab active:cursor-grabbing group ${
-        isOverlay ? 'shadow-2xl ring-2 ring-blue-500 rotate-2' : 'shadow-sm border-slate-100 hover:shadow-xl hover:shadow-slate-200/50'
-      } ${item.isFlagged ? 'border-l-4 border-l-red-500 ring-1 ring-red-100' : isBlocked ? 'border-l-4 border-l-amber-500' : ''}`}
+        isOverlay ? 'shadow-2xl ring-2 ring-blue-500 rotate-2' : 'shadow-sm border-slate-100 hover:shadow-xl hover:shadow-200/50'
+      } ${item.isFlagged ? 'border-l-4 border-l-red-500 ring-1 ring-red-100' : isBlocked ? 'border-l-4 border-l-amber-500' : ''} ${isStale ? 'grayscale-[0.4] opacity-90' : ''}`}
     >
       <div className="flex justify-between items-start mb-3">
         <div className="flex items-center gap-2">
@@ -65,14 +74,14 @@ const WorkItemCard: React.FC<WorkItemCardProps> = ({ item, onClick, isOverlay })
            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{item.key}</span>
         </div>
         <div className="flex items-center gap-2">
+           {isStale && (
+             <div className="w-5 h-5 bg-slate-900 text-white rounded-full flex items-center justify-center animate-pulse" title="Node is Stale (>3d no activity)">
+               <i className="fas fa-clock-rotate-left text-[8px]"></i>
+             </div>
+           )}
            {item.isFlagged && (
              <span className="animate-pulse flex items-center justify-center w-5 h-5 bg-red-100 text-red-600 rounded-full" title="Artifact has active Impediment">
                <i className="fas fa-flag text-[8px]"></i>
-             </span>
-           )}
-           {isBlocked && !item.isFlagged && (
-             <span className="flex items-center justify-center w-5 h-5 bg-amber-100 text-amber-600 rounded-full" title="Artifact is Blocked by Dependency">
-               <i className="fas fa-hand text-[8px]"></i>
              </span>
            )}
            <span className={`text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-tighter ${getPriorityColor(item.priority)}`}>
@@ -98,15 +107,11 @@ const WorkItemCard: React.FC<WorkItemCardProps> = ({ item, onClick, isOverlay })
                {item.timeLogged}h
              </span>
            ) : null}
-           {item.links && item.links.length > 0 && (
-             <i className="fas fa-link text-slate-200 text-[10px]"></i>
-           )}
         </div>
         <div className="flex items-center gap-2">
            <img 
              src={`https://ui-avatars.com/api/?name=${encodeURIComponent(item.assignedTo || 'Unassigned')}&background=random&size=32`} 
              className="w-6 h-6 rounded-full border border-white shadow-sm" 
-             title={item.assignedTo || 'Unassigned'}
            />
         </div>
       </div>
