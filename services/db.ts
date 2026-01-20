@@ -4,8 +4,13 @@ import { ObjectId } from 'mongodb';
 import { WikiPage, WikiSpace, WikiTheme, Bundle, Application, TaxonomyCategory, TaxonomyDocumentType, WorkItem, WorkItemType, WorkItemStatus, WorkItemActivity, Sprint, Milestone, Notification, ArchitectureDiagram } from '../types';
 
 export const getDb = async () => {
-  const client = await clientPromise;
-  return client.db('deliveryhub');
+  try {
+    const client = await clientPromise;
+    return client.db('deliveryhub');
+  } catch (e) {
+    console.error("CRITICAL: Database connection failed.", e);
+    throw new Error("DB_OFFLINE");
+  }
 };
 
 const safeIdMatch = (id: string) => {
@@ -19,8 +24,10 @@ const safeIdMatch = (id: string) => {
 };
 
 export const fetchNotifications = async (userEmail: string) => {
-  const db = await getDb();
-  return await db.collection('notifications').find({ recipient: userEmail }).sort({ createdAt: -1 }).toArray();
+  try {
+    const db = await getDb();
+    return await db.collection('notifications').find({ recipient: userEmail }).sort({ createdAt: -1 }).toArray();
+  } catch { return []; }
 };
 
 export const saveNotification = async (notification: Partial<Notification>) => {
@@ -51,8 +58,10 @@ export const seedDatabase = async (applications: any[], workItems: any[], wikiPa
 };
 
 export const fetchWikiPages = async () => {
-  const db = await getDb();
-  return await db.collection('wikipages').find({}).toArray();
+  try {
+    const db = await getDb();
+    return await db.collection('wikipages').find({}).toArray();
+  } catch { return []; }
 };
 
 export const saveWikiPage = async (page: Partial<WikiPage>) => {
@@ -85,8 +94,10 @@ export const saveWikiPage = async (page: Partial<WikiPage>) => {
 };
 
 export const fetchWikiHistory = async (pageId: string) => {
-  const db = await getDb();
-  return await db.collection('wiki_versions').find({ pageId: new ObjectId(pageId) }).sort({ versionedAt: -1 }).toArray();
+  try {
+    const db = await getDb();
+    return await db.collection('wiki_versions').find({ pageId: new ObjectId(pageId) }).sort({ versionedAt: -1 }).toArray();
+  } catch { return []; }
 };
 
 export const revertWikiPage = async (pageId: string, versionId: string) => {
@@ -98,8 +109,10 @@ export const revertWikiPage = async (pageId: string, versionId: string) => {
 };
 
 export const fetchWikiSpaces = async () => {
-  const db = await getDb();
-  return await db.collection('spaces').find({}).toArray();
+  try {
+    const db = await getDb();
+    return await db.collection('spaces').find({}).toArray();
+  } catch { return []; }
 };
 
 export const saveWikiSpace = async (space: Partial<WikiSpace>) => {
@@ -113,9 +126,11 @@ export const saveWikiSpace = async (space: Partial<WikiSpace>) => {
 };
 
 export const fetchWikiComments = async (pageId: string) => {
-  const db = await getDb();
-  const page = await db.collection('wikipages').findOne({ _id: new ObjectId(pageId) });
-  return page?.comments || [];
+  try {
+    const db = await getDb();
+    const page = await db.collection('wikipages').findOne({ _id: new ObjectId(pageId) });
+    return page?.comments || [];
+  } catch { return []; }
 };
 
 export const saveWikiComment = async (commentData: any) => {
@@ -128,9 +143,11 @@ export const saveWikiComment = async (commentData: any) => {
 };
 
 export const fetchBundles = async (activeOnly: boolean = false) => {
-  const db = await getDb();
-  const query = activeOnly ? { isActive: true } : {};
-  return await db.collection('bundles').find(query).sort({ sortOrder: 1 }).toArray();
+  try {
+    const db = await getDb();
+    const query = activeOnly ? { isActive: true } : {};
+    return await db.collection('bundles').find(query).sort({ sortOrder: 1 }).toArray();
+  } catch { return []; }
 };
 
 export const saveBundle = async (bundle: Partial<Bundle>, user?: any) => {
@@ -145,9 +162,11 @@ export const saveBundle = async (bundle: Partial<Bundle>, user?: any) => {
 };
 
 export const fetchWikiThemes = async (activeOnly: boolean = false) => {
-  const db = await getDb();
-  const query = activeOnly ? { isActive: true } : {};
-  return await db.collection('themes').find(query).toArray();
+  try {
+    const db = await getDb();
+    const query = activeOnly ? { isActive: true } : {};
+    return await db.collection('themes').find(query).toArray();
+  } catch { return []; }
 };
 
 export const saveWikiTheme = async (theme: Partial<WikiTheme>) => {
@@ -166,14 +185,16 @@ export const deleteWikiTheme = async (id: string) => {
 };
 
 export const fetchApplications = async (bundleId?: string, activeOnly: boolean = false) => {
-  const db = await getDb();
-  const query: any = {};
-  if (bundleId && bundleId !== 'all') {
-    const bundleMatch = safeIdMatch(bundleId);
-    if (bundleMatch) query.bundleId = bundleMatch;
-  }
-  if (activeOnly) query.isActive = true;
-  return await db.collection('applications').find(query).toArray();
+  try {
+    const db = await getDb();
+    const query: any = {};
+    if (bundleId && bundleId !== 'all') {
+      const bundleMatch = safeIdMatch(bundleId);
+      if (bundleMatch) query.bundleId = bundleMatch;
+    }
+    if (activeOnly) query.isActive = true;
+    return await db.collection('applications').find(query).toArray();
+  } catch { return []; }
 };
 
 export const saveApplication = async (app: Partial<Application>, user?: any) => {
@@ -188,9 +209,11 @@ export const saveApplication = async (app: Partial<Application>, user?: any) => 
 };
 
 export const fetchTaxonomyCategories = async (activeOnly: boolean = false) => {
-  const db = await getDb();
-  const query = activeOnly ? { isActive: true } : {};
-  return await db.collection('taxonomy_categories').find(query).sort({ sortOrder: 1 }).toArray();
+  try {
+    const db = await getDb();
+    const query = activeOnly ? { isActive: true } : {};
+    return await db.collection('taxonomy_categories').find(query).sort({ sortOrder: 1 }).toArray();
+  } catch { return []; }
 };
 
 export const saveTaxonomyCategory = async (cat: Partial<TaxonomyCategory>) => {
@@ -204,14 +227,16 @@ export const saveTaxonomyCategory = async (cat: Partial<TaxonomyCategory>) => {
 };
 
 export const fetchTaxonomyDocumentTypes = async (activeOnly: boolean = false, categoryId?: string) => {
-  const db = await getDb();
-  const query: any = {};
-  if (activeOnly) query.isActive = true;
-  if (categoryId) {
-    const catMatch = safeIdMatch(categoryId);
-    if (catMatch) query.categoryId = catMatch;
-  }
-  return await db.collection('taxonomy_document_types').find(query).sort({ sortOrder: 1 }).toArray();
+  try {
+    const db = await getDb();
+    const query: any = {};
+    if (activeOnly) query.isActive = true;
+    if (categoryId) {
+      const catMatch = safeIdMatch(categoryId);
+      if (catMatch) query.categoryId = catMatch;
+    }
+    return await db.collection('taxonomy_document_types').find(query).sort({ sortOrder: 1 }).toArray();
+  } catch { return []; }
 };
 
 export const saveTaxonomyDocumentType = async (type: Partial<TaxonomyDocumentType>) => {
@@ -225,73 +250,75 @@ export const saveTaxonomyDocumentType = async (type: Partial<TaxonomyDocumentTyp
 };
 
 export const fetchWorkItems = async (filters: any) => {
-  const db = await getDb();
-  const query: any = {};
-  let sort: any = { rank: 1, createdAt: -1 };
-  
-  if (filters.bundleId && filters.bundleId !== 'all') {
-    const match = safeIdMatch(filters.bundleId);
-    if (match) query.bundleId = match;
-  }
-  
-  if (filters.applicationId && filters.applicationId !== 'all') {
-    const match = safeIdMatch(filters.applicationId);
-    if (match) query.applicationId = match;
-  }
-  
-  if (filters.milestoneId && filters.milestoneId !== 'all') {
-    const msRegex = new RegExp(`^${filters.milestoneId}$`, 'i');
-    query.$or = [{ milestoneIds: msRegex }, { milestoneId: msRegex }];
-  }
-
-  const pId = filters.parentId || filters.epicId;
-  if (pId && pId !== 'all') {
-    const match = safeIdMatch(pId);
-    if (match) query.parentId = match;
-  }
-
-  if (filters.assignedTo && filters.assignedTo !== 'all') {
-    query.assignedTo = filters.assignedTo;
-  }
-
-  if (filters.status && filters.status !== 'all') {
-    query.status = filters.status;
-  }
-
-  if (filters.quickFilter) {
-    switch (filters.quickFilter) {
-      case 'my':
-        if (filters.currentUser) query.assignedTo = filters.currentUser;
-        break;
-      case 'updated':
-        const recent = new Date();
-        recent.setDate(recent.getDate() - 7);
-        query.updatedAt = { $gte: recent.toISOString() };
-        sort = { updatedAt: -1 };
-        break;
-      case 'blocked':
-        query.$or = [
-          { status: WorkItemStatus.BLOCKED },
-          { isFlagged: true }
-        ];
-        break;
+  try {
+    const db = await getDb();
+    const query: any = {};
+    let sort: any = { rank: 1, createdAt: -1 };
+    
+    if (filters.bundleId && filters.bundleId !== 'all') {
+      const match = safeIdMatch(filters.bundleId);
+      if (match) query.bundleId = match;
     }
-  }
-  
-  if (filters.q) {
-    query.$or = [
-      ...(query.$or || []),
-      { title: { $regex: filters.q, $options: 'i' } },
-      { key: { $regex: filters.q, $options: 'i' } }
-    ];
-  }
-  
-  return await db.collection('workitems').find(query).sort(sort).toArray();
+    
+    if (filters.applicationId && filters.applicationId !== 'all') {
+      const match = safeIdMatch(filters.applicationId);
+      if (match) query.applicationId = match;
+    }
+    
+    if (filters.milestoneId && filters.milestoneId !== 'all') {
+      const msRegex = new RegExp(`^${filters.milestoneId}$`, 'i');
+      query.$or = [{ milestoneIds: msRegex }, { milestoneId: msRegex }];
+    }
+
+    const pId = filters.parentId || filters.epicId;
+    if (pId && pId !== 'all') {
+      const match = safeIdMatch(pId);
+      if (match) query.parentId = match;
+    }
+
+    if (filters.assignedTo && filters.assignedTo !== 'all') {
+      query.assignedTo = filters.assignedTo;
+    }
+
+    if (filters.status && filters.status !== 'all') {
+      query.status = filters.status;
+    }
+
+    if (filters.quickFilter) {
+      switch (filters.quickFilter) {
+        case 'my':
+          if (filters.currentUser) query.assignedTo = filters.currentUser;
+          break;
+        case 'updated':
+          const recent = new Date();
+          recent.setDate(recent.getDate() - 7);
+          query.updatedAt = { $gte: recent.toISOString() };
+          sort = { updatedAt: -1 };
+          break;
+        case 'blocked':
+          query.$or = [
+            { status: WorkItemStatus.BLOCKED },
+            { isFlagged: true }
+          ];
+          break;
+      }
+    }
+    
+    if (filters.q) {
+      query.$or = [
+        ...(query.$or || []),
+        { title: { $regex: filters.q, $options: 'i' } },
+        { key: { $regex: filters.q, $options: 'i' } }
+      ];
+    }
+    
+    return await db.collection('workitems').find(query).sort(sort).toArray();
+  } catch { return []; }
 };
 
 export const fetchWorkItemById = async (id: string) => {
-  const db = await getDb();
   try {
+    const db = await getDb();
     if (ObjectId.isValid(id)) {
       return await db.collection('workitems').findOne({ 
         $or: [{ _id: new ObjectId(id) }, { id: id }, { key: id }] 
@@ -300,9 +327,7 @@ export const fetchWorkItemById = async (id: string) => {
     return await db.collection('workitems').findOne({ 
       $or: [{ id: id }, { key: id }] 
     });
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 };
 
 export const saveWorkItem = async (item: Partial<WorkItem>, user?: any) => {
@@ -336,9 +361,7 @@ export const saveWorkItem = async (item: Partial<WorkItem>, user?: any) => {
           createdAt: now
         });
 
-        // Smart Logic: System Notifications
         if (field === 'isFlagged' && newVal === true) {
-          // Notify stakeholders if an artifact is flagged
           db.collection('notifications').insertOne({
             recipient: existing.assignedTo || 'Unassigned',
             sender: userName,
@@ -421,25 +444,25 @@ export const updateWorkItemStatus = async (id: string, toStatus: string, newRank
   );
 };
 
-// Fix: Implemented missing fetchMilestones function
 export const fetchMilestones = async (filters: any) => {
-  const db = await getDb();
-  const query: any = {};
-  if (filters.bundleId && filters.bundleId !== 'all') {
-    const match = safeIdMatch(filters.bundleId);
-    if (match) query.bundleId = match;
-  }
-  if (filters.applicationId && filters.applicationId !== 'all') {
-    const match = safeIdMatch(filters.applicationId);
-    if (match) query.applicationId = match;
-  }
-  if (filters.status && filters.status !== 'all') {
-    query.status = filters.status;
-  }
-  return await db.collection('milestones').find(query).sort({ dueDate: 1 }).toArray();
+  try {
+    const db = await getDb();
+    const query: any = {};
+    if (filters.bundleId && filters.bundleId !== 'all') {
+      const match = safeIdMatch(filters.bundleId);
+      if (match) query.bundleId = match;
+    }
+    if (filters.applicationId && filters.applicationId !== 'all') {
+      const match = safeIdMatch(filters.applicationId);
+      if (match) query.applicationId = match;
+    }
+    if (filters.status && filters.status !== 'all') {
+      query.status = filters.status;
+    }
+    return await db.collection('milestones').find(query).sort({ dueDate: 1 }).toArray();
+  } catch { return []; }
 };
 
-// Fix: Implemented missing saveMilestone function
 export const saveMilestone = async (milestone: Partial<Milestone>) => {
   const db = await getDb();
   const { _id, ...data } = milestone;
@@ -451,24 +474,23 @@ export const saveMilestone = async (milestone: Partial<Milestone>) => {
   }
 };
 
-// Fix: Implemented missing deleteMilestone function
 export const deleteMilestone = async (id: string) => {
   const db = await getDb();
   return await db.collection('milestones').deleteOne({ _id: new ObjectId(id) });
 };
 
-// Fix: Implemented missing searchUsers function
 export const searchUsers = async (query: string) => {
-  const db = await getDb();
-  return await db.collection('users').find({
-    $or: [
-      { name: { $regex: query, $options: 'i' } },
-      { email: { $regex: query, $options: 'i' } }
-    ]
-  }).limit(10).project({ password: 0 }).toArray();
+  try {
+    const db = await getDb();
+    return await db.collection('users').find({
+      $or: [
+        { name: { $regex: query, $options: 'i' } },
+        { email: { $regex: query, $options: 'i' } }
+      ]
+    }).limit(10).project({ password: 0 }).toArray();
+  } catch { return []; }
 };
 
-// Fix: Implemented missing fetchWorkItemsBoard function
 export const fetchWorkItemsBoard = async (filters: any) => {
   const items = await fetchWorkItems(filters);
   const statuses = [
@@ -488,25 +510,25 @@ export const fetchWorkItemsBoard = async (filters: any) => {
   return { columns };
 };
 
-// Fix: Implemented missing fetchSprints function
 export const fetchSprints = async (filters: any) => {
-  const db = await getDb();
-  const query: any = {};
-  if (filters.bundleId && filters.bundleId !== 'all') {
-    const match = safeIdMatch(filters.bundleId);
-    if (match) query.bundleId = match;
-  }
-  if (filters.applicationId && filters.applicationId !== 'all') {
-    const match = safeIdMatch(filters.applicationId);
-    if (match) query.applicationId = match;
-  }
-  if (filters.status) {
-    query.status = filters.status;
-  }
-  return await db.collection('sprints').find(query).sort({ startDate: 1 }).toArray();
+  try {
+    const db = await getDb();
+    const query: any = {};
+    if (filters.bundleId && filters.bundleId !== 'all') {
+      const match = safeIdMatch(filters.bundleId);
+      if (match) query.bundleId = match;
+    }
+    if (filters.applicationId && filters.applicationId !== 'all') {
+      const match = safeIdMatch(filters.applicationId);
+      if (match) query.applicationId = match;
+    }
+    if (filters.status) {
+      query.status = filters.status;
+    }
+    return await db.collection('sprints').find(query).sort({ startDate: 1 }).toArray();
+  } catch { return []; }
 };
 
-// Fix: Implemented missing saveSprint function
 export const saveSprint = async (sprint: Partial<Sprint>) => {
   const db = await getDb();
   const { _id, ...data } = sprint;
@@ -588,11 +610,13 @@ export const fetchWorkItemTree = async (filters: any) => {
 };
 
 export const fetchArchitectureDiagrams = async (filters: any = {}) => {
-  const db = await getDb();
-  const query: any = {};
-  if (filters.bundleId && filters.bundleId !== 'all') query.bundleId = filters.bundleId;
-  if (filters.applicationId && filters.applicationId !== 'all') query.applicationId = filters.applicationId;
-  return await db.collection('architecture_diagrams').find(query).sort({ updatedAt: -1 }).toArray();
+  try {
+    const db = await getDb();
+    const query: any = {};
+    if (filters.bundleId && filters.bundleId !== 'all') query.bundleId = filters.bundleId;
+    if (filters.applicationId && filters.applicationId !== 'all') query.applicationId = filters.applicationId;
+    return await db.collection('architecture_diagrams').find(query).sort({ updatedAt: -1 }).toArray();
+  } catch { return []; }
 };
 
 export const saveArchitectureDiagram = async (diagram: Partial<ArchitectureDiagram>, user: any) => {

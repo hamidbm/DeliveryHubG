@@ -54,23 +54,28 @@ const Wiki: React.FC<WikiProps> = ({
           fetch('/api/taxonomy/document-types?active=true')
         ]);
         
-        const rawSpaces: WikiSpace[] = await spRes.json();
-        const pagesData: WikiPage[] = await pgRes.json();
+        const rawSpaces = await spRes.json();
+        const pagesData = await pgRes.json();
+        const themesData = await thRes.json();
+        const categoriesData = await catRes.json();
+        const typesData = await typRes.json();
+        
+        const validSpaces = Array.isArray(rawSpaces) ? rawSpaces : [];
+        const validPages = Array.isArray(pagesData) ? pagesData : [];
         
         const spaceMap = new Map<string, WikiSpace>();
-        rawSpaces.forEach(s => {
+        validSpaces.forEach(s => {
           const id = String(s._id || s.id);
           if (!spaceMap.has(id)) spaceMap.set(id, s);
         });
         const uniqueSpaces = Array.from(spaceMap.values());
         
         setSpaces(uniqueSpaces);
-        setPages(pagesData);
-        setThemes(await thRes.json());
-        setCategories(await catRes.json());
-        setDocTypes(await typRes.json());
+        setPages(validPages);
+        setThemes(Array.isArray(themesData) ? themesData : []);
+        setCategories(Array.isArray(categoriesData) ? categoriesData : []);
+        setDocTypes(Array.isArray(typesData) ? typesData : []);
 
-        // Initial expansion for root spaces if no page is selected
         const urlPageId = searchParams.get('pageId');
         if (!urlPageId) {
           const rootIds = uniqueSpaces.map(s => `folder-space-${String(s._id || s.id)}`);
@@ -83,10 +88,10 @@ const Wiki: React.FC<WikiProps> = ({
       }
     };
     fetchData();
-  }, []); // Empty dependency array ensures this only runs once.
+  }, []);
 
   const resolvePage = useCallback((target: string, pageList: WikiPage[]): WikiPage | null => {
-    if (!target) return null;
+    if (!target || !Array.isArray(pageList)) return null;
     return pageList.find(p => 
       String(p._id) === target || 
       String(p.id) === target || 
@@ -96,7 +101,7 @@ const Wiki: React.FC<WikiProps> = ({
 
   // 2. Sync Active Page with URL and Expand Parents
   useEffect(() => {
-    if (loading || pages.length === 0) return;
+    if (loading || !Array.isArray(pages) || pages.length === 0) return;
 
     const urlPageId = searchParams.get('pageId');
     if (urlPageId) {
@@ -104,7 +109,6 @@ const Wiki: React.FC<WikiProps> = ({
       if (page) {
         setActivePage(page);
         
-        // Auto-expand path to the selected page
         const sId = page.spaceId ? String(page.spaceId) : 'unassigned';
         const bId = page.bundleId ? String(page.bundleId) : 'general';
         const aId = page.applicationId ? String(page.applicationId) : 'no_app';
@@ -112,7 +116,6 @@ const Wiki: React.FC<WikiProps> = ({
 
         setExpandedNodes(prev => {
           const next = new Set(prev);
-          // Add all potential parent IDs based on current hierarchy
           next.add(`folder-space-${sId}`);
           next.add(`folder-bundle-${sId}-${bId}`);
           next.add(`folder-app-${sId}-${bId}-${aId}`);
@@ -147,15 +150,16 @@ const Wiki: React.FC<WikiProps> = ({
   const refreshPages = async (activeId?: string) => {
     const pgRes = await fetch('/api/wiki');
     const newPages = await pgRes.json();
-    setPages(newPages);
+    const validPages = Array.isArray(newPages) ? newPages : [];
+    setPages(validPages);
     if (activeId) {
-      const updated = resolvePage(activeId, newPages);
+      const updated = resolvePage(activeId, validPages);
       if (updated) setActivePage(updated);
     }
   };
 
   const treeData = useMemo(() => {
-    if (!pages || !spaces) return [];
+    if (!Array.isArray(pages) || !Array.isArray(spaces)) return [];
     
     let filtered = pages;
     if (selSpaceId !== 'all') {
@@ -288,7 +292,7 @@ const Wiki: React.FC<WikiProps> = ({
   if (loading) return (
     <div className="flex flex-col items-center justify-center h-[500px] bg-white rounded-[3rem] border border-slate-100">
       <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-      <p className="text-slate-400 font-bold text-[10px] uppercase tracking-widest animate-pulse">Synchronizing Registry...</p>
+      <p className="text-slate-400 font-bold text-[10px] uppercase tracking-widest animate-pulse">Initializing Wiki...</p>
     </div>
   );
 
@@ -305,7 +309,7 @@ const Wiki: React.FC<WikiProps> = ({
           <nav className="flex-1 overflow-y-auto p-4 custom-scrollbar">
             {treeData.length === 0 ? (
                <div className="p-10 text-center">
-                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-relaxed">No matching artifacts in current scope.</p>
+                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-relaxed">No artifacts in current scope.</p>
                </div>
             ) : treeData.map((node: any) => renderTreeNode(node))}
           </nav>
@@ -391,4 +395,3 @@ const Wiki: React.FC<WikiProps> = ({
 };
 
 export default Wiki;
-    

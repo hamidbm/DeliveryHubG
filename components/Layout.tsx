@@ -44,13 +44,19 @@ const Layout: React.FC<LayoutProps> = ({
   const notifRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    fetch('/api/wiki/spaces').then(r => r.json()).then(setSpaces).catch(() => []);
+    fetch('/api/wiki/spaces')
+      .then(r => r.json())
+      .then(data => setSpaces(Array.isArray(data) ? data : []))
+      .catch(() => setSpaces([]));
     
     const fetchNotifs = () => {
-      fetch('/api/notifications').then(r => r.json()).then(setNotifications).catch(() => []);
+      fetch('/api/notifications')
+        .then(r => r.json())
+        .then(data => setNotifications(Array.isArray(data) ? data : []))
+        .catch(() => setNotifications([]));
     };
     fetchNotifs();
-    const interval = setInterval(fetchNotifs, 30000); // Check every 30s
+    const interval = setInterval(fetchNotifs, 30000); 
     return () => clearInterval(interval);
   }, []);
 
@@ -59,7 +65,7 @@ const Layout: React.FC<LayoutProps> = ({
       if (notifRef.current && !notifRef.current.contains(e.target as Node)) setIsNotifOpen(false);
     };
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    return () => document.addEventListener('mousedown', handleClickOutside);
   }, []);
 
   const unreadCount = notifications.filter(n => !n.read).length;
@@ -101,7 +107,6 @@ const Layout: React.FC<LayoutProps> = ({
         </div>
 
         <div className="ml-auto flex items-center space-x-6 shrink-0">
-          {/* Notification Hub */}
           <div className="relative" ref={notifRef}>
              <button 
                onClick={() => setIsNotifOpen(!isNotifOpen)}

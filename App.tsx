@@ -61,8 +61,12 @@ function HomeContent() {
             fetch('/api/bundles?active=true'),
             fetch('/api/applications?active=true')
           ]);
-          setBundles(await bRes.json());
-          setApplications(await aRes.json());
+          
+          const bData = await bRes.json();
+          const aData = await aRes.json();
+          
+          setBundles(Array.isArray(bData) ? bData : []);
+          setApplications(Array.isArray(aData) ? aData : []);
         } else router.push('/login');
       } catch (err) { router.push('/login'); }
       finally { setLoading(false); }
@@ -72,9 +76,13 @@ function HomeContent() {
 
   useEffect(() => {
     if (activeTab === 'work-items') {
-      fetch('/api/work-items').then(r => r.json()).then(items => {
-        setEpics(items.filter((i: WorkItem) => i.type === WorkItemType.EPIC));
-      });
+      fetch('/api/work-items')
+        .then(r => r.json())
+        .then(items => {
+          if (Array.isArray(items)) {
+            setEpics(items.filter((i: WorkItem) => i.type === WorkItemType.EPIC));
+          }
+        });
     }
   }, [activeTab]);
 
@@ -84,7 +92,7 @@ function HomeContent() {
     switch (activeTab) {
       case 'dashboard': return <Dashboard applications={applications} bundles={bundles} />;
       case 'applications': return <Applications filterBundle={activeBundle} applications={applications} bundles={bundles} />;
-      case 'architecture': return <ArchitectureHub applications={applications} />;
+      case 'architecture': return <ArchitectureHub applications={applications} bundles={bundles} />;
       case 'ai-insights': return <AIInsights applications={applications} bundles={bundles} />;
       case 'work-items': return <WorkItems applications={applications} bundles={bundles} selBundleId={activeBundle} selAppId={activeApp} selMilestone="all" selEpicId="all" searchQuery="" />;
       case 'wiki': return <Wiki currentUser={user} selSpaceId="all" selBundleId={activeBundle} selAppId={activeApp} selMilestone="all" searchQuery="" bundles={bundles} applications={applications} />;
