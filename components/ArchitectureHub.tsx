@@ -12,11 +12,13 @@ import { Application, Bundle } from '../types';
 interface ArchitectureHubProps {
   applications: Application[];
   bundles: Bundle[];
+  activeBundleId?: string;
+  activeAppId?: string;
 }
 
 type SubTab = 'capabilities' | 'integrations' | 'lifecycle' | 'diagrams' | 'infrastructure' | 'observability' | 'governance';
 
-const ArchitectureHub: React.FC<ArchitectureHubProps> = ({ applications, bundles }) => {
+const ArchitectureHub: React.FC<ArchitectureHubProps> = ({ applications, bundles, activeBundleId = 'all', activeAppId = 'all' }) => {
   const [activeSubTab, setActiveSubTab] = useState<SubTab>('capabilities');
 
   const tabs = [
@@ -34,7 +36,7 @@ const ArchitectureHub: React.FC<ArchitectureHubProps> = ({ applications, bundles
       case 'capabilities': return <CapabilityMap applications={applications} />;
       case 'integrations': return <IntegrationMatrix applications={applications} />;
       case 'lifecycle': return <PortfolioStrategy applications={applications} />;
-      case 'diagrams': return <ArchitectureDiagrams applications={applications} bundles={bundles} />;
+      case 'diagrams': return <ArchitectureDiagrams applications={applications} bundles={bundles} activeBundleId={activeBundleId} activeAppId={activeAppId} />;
       case 'infrastructure': return <InfrastructureExplorer applications={applications} />;
       case 'observability': return <OpsCenter applications={applications} />;
       case 'governance': return <GovernanceDocuments />;
@@ -58,7 +60,7 @@ const ArchitectureHub: React.FC<ArchitectureHubProps> = ({ applications, bundles
                 key={tab.id}
                 onClick={() => setActiveSubTab(tab.id as SubTab)}
                 className={`px-5 py-2 text-[10px] font-black uppercase rounded-lg transition-all flex items-center gap-2 ${
-                  activeSubTab === tab.id ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400 hover:text-slate-600'
+                  activeSubTab === tab.id ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400 hover:text-white hover:bg-blue-500'
                 }`}
               >
                 <i className={`fas ${tab.icon}`}></i>

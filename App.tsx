@@ -92,7 +92,7 @@ function HomeContent() {
     switch (activeTab) {
       case 'dashboard': return <Dashboard applications={applications} bundles={bundles} />;
       case 'applications': return <Applications filterBundle={activeBundle} applications={applications} bundles={bundles} />;
-      case 'architecture': return <ArchitectureHub applications={applications} bundles={bundles} />;
+      case 'architecture': return <ArchitectureHub applications={applications} bundles={bundles} activeBundleId={activeBundle} activeAppId={activeApp} />;
       case 'ai-insights': return <AIInsights applications={applications} bundles={bundles} />;
       case 'work-items': return <WorkItems applications={applications} bundles={bundles} selBundleId={activeBundle} selAppId={activeApp} selMilestone="all" selEpicId="all" searchQuery="" />;
       case 'wiki': return <Wiki currentUser={user} selSpaceId="all" selBundleId={activeBundle} selAppId={activeApp} selMilestone="all" searchQuery="" bundles={bundles} applications={applications} />;

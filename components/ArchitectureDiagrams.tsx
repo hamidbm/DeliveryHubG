@@ -6,6 +6,8 @@ import mermaid from 'mermaid';
 interface ArchitectureDiagramsProps {
   applications: Application[];
   bundles: Bundle[];
+  activeBundleId?: string;
+  activeAppId?: string;
 }
 
 const MermaidRenderer: React.FC<{ content: string; id: string }> = ({ content, id }) => {
@@ -49,7 +51,7 @@ const MermaidRenderer: React.FC<{ content: string; id: string }> = ({ content, i
 const DrawioEditor: React.FC<{ 
   xml: string; 
   onSave: (xml: string) => void;
-  requestExportTrigger?: number; // Increment this to force an export
+  requestExportTrigger?: number; 
 }> = ({ xml, onSave, requestExportTrigger }) => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const xmlRef = useRef(xml);
@@ -60,7 +62,6 @@ const DrawioEditor: React.FC<{
     onSaveRef.current = onSave;
   }, [xml, onSave]);
 
-  // Trigger export when the parent requests it (on Commit button click)
   useEffect(() => {
     if (requestExportTrigger && requestExportTrigger > 0) {
       iframeRef.current?.contentWindow?.postMessage(JSON.stringify({
@@ -86,7 +87,6 @@ const DrawioEditor: React.FC<{
             autosave: 1
           }), '*');
         } else if (data.event === 'save' || data.event === 'autosave' || data.event === 'export') {
-          // If we receive XML from Draw.io, update the parent state
           if (data.xml) {
             onSaveRef.current(data.xml);
           }
@@ -118,17 +118,22 @@ const DrawioEditor: React.FC<{
   );
 };
 
-const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ applications, bundles }) => {
+const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ applications, bundles, activeBundleId, activeAppId }) => {
   const [diagrams, setDiagrams] = useState<ArchitectureDiagram[]>([]);
   const [isDesignerOpen, setIsDesignerOpen] = useState(false);
   const [editingDiagram, setEditingDiagram] = useState<Partial<ArchitectureDiagram> | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const fetchDiagrams = async () => {
+  const fetchDiagrams = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/architecture/diagrams');
+      const params = new URLSearchParams();
+      if (activeBundleId && activeBundleId !== 'all') params.set('bundleId', activeBundleId);
+      if (activeAppId && activeAppId !== 'all') params.set('applicationId', activeAppId);
+      
+      const res = await fetch(`/api/architecture/diagrams?${params.toString()}`);
       const data = await res.json();
       setDiagrams(Array.isArray(data) ? data : []);
     } catch (e) {
@@ -136,18 +141,20 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
     } finally {
       setLoading(false);
     }
-  };
+  }, [activeBundleId, activeAppId]);
 
   useEffect(() => {
     fetchDiagrams();
-  }, []);
+  }, [fetchDiagrams]);
 
   const openDesigner = (diag?: ArchitectureDiagram) => {
     setEditingDiagram(diag || {
       title: 'New Architecture Blueprint',
       format: DiagramFormat.MERMAID,
       content: 'graph TD\n  Start --> Process\n  Process --> End',
-      status: 'DRAFT'
+      status: 'DRAFT',
+      bundleId: activeBundleId !== 'all' ? activeBundleId : undefined,
+      applicationId: activeAppId !== 'all' ? activeAppId : undefined
     });
     setIsDesignerOpen(true);
   };
@@ -156,10 +163,14 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
     const file = e.target.files?.[0];
     if (!file) return;
 
+    setIsUploading(true);
     const reader = new FileReader();
     reader.onload = async (event) => {
       const result = event.target?.result;
-      if (typeof result !== 'string') return;
+      if (typeof result !== 'string') {
+        setIsUploading(false);
+        return;
+      }
 
       const isDrawio = file.name.endsWith('.drawio') || file.name.endsWith('.xml');
       const format = isDrawio ? DiagramFormat.DRAWIO : DiagramFormat.IMAGE;
@@ -168,7 +179,9 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
         title: file.name.replace(/\.[^/.]+$/, ""),
         format,
         content: result,
-        status: 'DRAFT'
+        status: 'DRAFT',
+        bundleId: activeBundleId !== 'all' ? activeBundleId : undefined,
+        applicationId: activeAppId !== 'all' ? activeAppId : undefined
       };
 
       try {
@@ -177,10 +190,25 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(newDiagram)
         });
-        if (res.ok) fetchDiagrams();
+        
+        if (res.ok) {
+          alert("Blueprint successfully ingested into Nexus Registry.");
+          await fetchDiagrams();
+          if (fileInputRef.current) fileInputRef.current.value = '';
+        } else {
+          const err = await res.json();
+          alert(`Ingest Failed: ${err.error || 'Unknown Error'}`);
+        }
       } catch (err) {
-        alert("Upload error.");
+        alert("Ingest Error: Failed to communicate with Nexus Gateway.");
+      } finally {
+        setIsUploading(false);
       }
+    };
+
+    reader.onerror = () => {
+      alert("Error reading file from disk.");
+      setIsUploading(false);
     };
 
     if (file.type.includes('image')) {
@@ -193,8 +221,8 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
   const handleDelete = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!confirm("Permanently purge this visual artifact?")) return;
-    await fetch(`/api/architecture/diagrams/${id}`, { method: 'DELETE' });
-    fetchDiagrams();
+    const res = await fetch(`/api/architecture/diagrams/${id}`, { method: 'DELETE' });
+    if (res.ok) fetchDiagrams();
   };
 
   return (
@@ -210,9 +238,11 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
                <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" accept=".drawio,.xml,image/*" />
                <button 
                  onClick={() => fileInputRef.current?.click()}
-                 className="px-6 py-3 bg-white border border-slate-200 text-slate-600 text-[10px] font-black rounded-2xl uppercase tracking-widest hover:bg-slate-50 transition-all flex items-center gap-2"
+                 disabled={isUploading}
+                 className="px-6 py-3 bg-white border border-slate-200 text-slate-600 text-[10px] font-black rounded-2xl uppercase tracking-widest hover:bg-slate-50 transition-all flex items-center gap-2 shadow-sm disabled:opacity-50"
                >
-                 <i className="fas fa-cloud-arrow-up"></i> Ingest Blueprint
+                 {isUploading ? <i className="fas fa-circle-notch fa-spin"></i> : <i className="fas fa-cloud-arrow-up"></i>}
+                 {isUploading ? 'Ingesting...' : 'Ingest Blueprint'}
                </button>
                <button 
                 onClick={() => openDesigner()}
@@ -224,7 +254,7 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
           </header>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {loading ? [...Array(3)].map((_, i) => <div key={i} className="h-80 bg-slate-100 rounded-[2.5rem] animate-pulse"></div>) : 
+            {loading && diagrams.length === 0 ? [...Array(3)].map((_, i) => <div key={i} className="h-80 bg-slate-100 rounded-[2.5rem] animate-pulse"></div>) : 
              diagrams.length === 0 ? (
                <div className="col-span-full py-32 text-center bg-slate-50/50 border-2 border-dashed border-slate-100 rounded-[3rem]">
                   <i className="fas fa-pencil-ruler text-5xl mb-6 text-slate-200"></i>
@@ -252,7 +282,7 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
                       {diag.status}
                     </span>
                  </div>
-                 <h4 className="text-lg font-black text-slate-800 mb-2 group-hover:text-blue-600 transition-colors truncate pr-10">{diag.title}</h4>
+                 <h4 className="text-lg font-black text-slate-800 mb-2 group-hover:text-blue-600 transition-colors pr-10 overflow-hidden text-ellipsis whitespace-nowrap">{diag.title}</h4>
                  <div className="flex items-center gap-3 mb-6">
                     <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">{diag.format}</span>
                     <div className="w-1 h-1 rounded-full bg-slate-200"></div>
@@ -304,11 +334,9 @@ const ArchitectureDesigner: React.FC<{
   const [activeBundleId, setActiveBundleId] = useState(diagram.bundleId || '');
   const [activeAppId, setActiveAppId] = useState(diagram.applicationId || '');
   
-  // Handshake state for Draw.io
   const [exportTrigger, setExportTrigger] = useState(0);
   const [isCommitPending, setIsCommitPending] = useState(false);
 
-  // Core persistence logic
   const persistToRegistry = useCallback(async (finalCode: string) => {
     if (!title.trim()) return alert("Artifact title is mandatory.");
     setSaving(true);
@@ -342,18 +370,15 @@ const ArchitectureDesigner: React.FC<{
     if (!title.trim()) return alert("Title required.");
     
     if (format === DiagramFormat.DRAWIO) {
-      // Trigger Draw.io export first, then persist in the handleDrawioUpdate callback
       setIsCommitPending(true);
       setExportTrigger(prev => prev + 1);
     } else {
-      // Mermaid/Image: Persist immediately with current code state
       persistToRegistry(code);
     }
   };
 
   const handleDrawioUpdate = useCallback((newXml: string) => {
     setCode(newXml);
-    // If we were waiting for this XML to finish a commit, do it now
     if (isCommitPending) {
       persistToRegistry(newXml);
     }
@@ -393,7 +418,6 @@ const ArchitectureDesigner: React.FC<{
       </header>
 
       <div className="flex-1 flex overflow-hidden bg-slate-50 relative">
-        {/* Source Panel (Collapsible) */}
         <div 
           className={`flex flex-col bg-slate-900 shadow-2xl relative z-[205] transition-all duration-500 ease-in-out origin-left ${isSidebarCollapsed ? 'w-0 opacity-0 pointer-events-none' : 'w-1/3'}`}
         >
@@ -415,7 +439,6 @@ const ArchitectureDesigner: React.FC<{
            </div>
         </div>
 
-        {/* Sliding Grip Handle */}
         <button 
           onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
           className={`absolute top-1/2 -translate-y-1/2 w-6 h-24 bg-slate-800 text-white rounded-r-xl flex flex-col items-center justify-center hover:bg-blue-600 transition-all z-[206] shadow-2xl border-y border-r border-white/10 ${isSidebarCollapsed ? 'left-0' : 'left-[33.333%]'}`}
@@ -429,7 +452,6 @@ const ArchitectureDesigner: React.FC<{
           <i className={`fas fa-chevron-${isSidebarCollapsed ? 'right' : 'left'} text-[10px]`}></i>
         </button>
 
-        {/* Live Canvas Pane */}
         <div className={`flex-1 overflow-hidden flex flex-col transition-all duration-500 ${isSidebarCollapsed ? 'pl-6' : ''}`}>
            <div className="px-10 py-4 border-b border-slate-200 bg-white/50 backdrop-blur flex items-center justify-between shrink-0">
               <div className="flex items-center gap-4">
@@ -466,7 +488,6 @@ const ArchitectureDesigner: React.FC<{
            </div>
         </div>
 
-        {/* Mapping & Metadata Sidebar */}
         <aside className="w-80 border-l border-slate-200 bg-white p-8 space-y-10 overflow-y-auto custom-scrollbar shrink-0 z-[204]">
            <section>
               <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-8 flex items-center gap-2"><i className="fas fa-link"></i> Hierarchy Context</h4>
