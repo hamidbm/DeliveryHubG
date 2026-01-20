@@ -49,16 +49,26 @@ const MermaidRenderer: React.FC<{ content: string; id: string }> = ({ content, i
 const DrawioEditor: React.FC<{ 
   xml: string; 
   onSave: (xml: string) => void;
-}> = ({ xml, onSave }) => {
+  requestExportTrigger?: number; // Increment this to force an export
+}> = ({ xml, onSave, requestExportTrigger }) => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const xmlRef = useRef(xml);
   const onSaveRef = useRef(onSave);
 
-  // Keep refs in sync to avoid effect re-triggers
   useEffect(() => {
     xmlRef.current = xml;
     onSaveRef.current = onSave;
   }, [xml, onSave]);
+
+  // Trigger export when the parent requests it (on Commit button click)
+  useEffect(() => {
+    if (requestExportTrigger && requestExportTrigger > 0) {
+      iframeRef.current?.contentWindow?.postMessage(JSON.stringify({
+        action: 'export',
+        format: 'xml'
+      }), '*');
+    }
+  }, [requestExportTrigger]);
 
   useEffect(() => {
     const handleMessage = (evt: MessageEvent) => {
@@ -70,25 +80,18 @@ const DrawioEditor: React.FC<{
         if (!iframe || !iframe.contentWindow) return;
 
         if (data.event === 'init') {
-          // Handshake: Load initial XML
           iframe.contentWindow.postMessage(JSON.stringify({
             action: 'load',
             xml: xmlRef.current || '',
             autosave: 1
           }), '*');
-        } else if (data.event === 'configure') {
-          // Send configuration if requested
-          iframe.contentWindow.postMessage(JSON.stringify({
-            action: 'configure',
-            config: { 
-              defaultFonts: ["Inter", "Helvetica", "Arial"],
-              ui: 'atlas'
-            }
-          }), '*');
         } else if (data.event === 'save' || data.event === 'autosave' || data.event === 'export') {
-          if (data.xml) onSaveRef.current(data.xml);
+          // If we receive XML from Draw.io, update the parent state
+          if (data.xml) {
+            onSaveRef.current(data.xml);
+          }
           
-          if (data.event === 'save') {
+          if (data.event === 'save' || data.event === 'export') {
              iframe.contentWindow.postMessage(JSON.stringify({
                action: 'status',
                message: 'Registry Synchronized',
@@ -96,9 +99,7 @@ const DrawioEditor: React.FC<{
              }), '*');
           }
         }
-      } catch (e) {
-        // Silently catch non-JSON data from other sources
-      }
+      } catch (e) {}
     };
 
     window.addEventListener('message', handleMessage);
@@ -178,7 +179,7 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
         });
         if (res.ok) fetchDiagrams();
       } catch (err) {
-        alert("Upload error. Check system logs.");
+        alert("Upload error.");
       }
     };
 
@@ -302,8 +303,13 @@ const ArchitectureDesigner: React.FC<{
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [activeBundleId, setActiveBundleId] = useState(diagram.bundleId || '');
   const [activeAppId, setActiveAppId] = useState(diagram.applicationId || '');
+  
+  // Handshake state for Draw.io
+  const [exportTrigger, setExportTrigger] = useState(0);
+  const [isCommitPending, setIsCommitPending] = useState(false);
 
-  const handleCommit = async () => {
+  // Core persistence logic
+  const persistToRegistry = useCallback(async (finalCode: string) => {
     if (!title.trim()) return alert("Artifact title is mandatory.");
     setSaving(true);
     try {
@@ -313,22 +319,45 @@ const ArchitectureDesigner: React.FC<{
         body: JSON.stringify({
           ...diagram,
           title,
-          content: code,
+          content: finalCode,
           format,
-          bundleId: activeBundleId,
-          applicationId: activeAppId,
+          bundleId: activeBundleId || undefined,
+          applicationId: activeAppId || undefined,
           status: 'VERIFIED'
         })
       });
-      if (res.ok) onSuccess();
+      if (res.ok) {
+        onSuccess();
+      } else {
+        const err = await res.json();
+        alert(`Registry Sync Failed: ${err.error}`);
+      }
     } finally {
       setSaving(false);
+      setIsCommitPending(false);
+    }
+  }, [title, diagram, format, activeBundleId, activeAppId, onSuccess]);
+
+  const handleCommitRequest = () => {
+    if (!title.trim()) return alert("Title required.");
+    
+    if (format === DiagramFormat.DRAWIO) {
+      // Trigger Draw.io export first, then persist in the handleDrawioUpdate callback
+      setIsCommitPending(true);
+      setExportTrigger(prev => prev + 1);
+    } else {
+      // Mermaid/Image: Persist immediately with current code state
+      persistToRegistry(code);
     }
   };
 
   const handleDrawioUpdate = useCallback((newXml: string) => {
     setCode(newXml);
-  }, []);
+    // If we were waiting for this XML to finish a commit, do it now
+    if (isCommitPending) {
+      persistToRegistry(newXml);
+    }
+  }, [isCommitPending, persistToRegistry]);
 
   return (
     <div className="fixed inset-0 z-[200] bg-white flex flex-col animate-fadeIn overflow-hidden">
@@ -353,12 +382,12 @@ const ArchitectureDesigner: React.FC<{
             ))}
           </div>
           <button 
-            onClick={handleCommit}
-            disabled={saving}
+            onClick={handleCommitRequest}
+            disabled={saving || isCommitPending}
             className="px-10 py-3.5 bg-slate-900 text-white rounded-2xl shadow-xl font-black text-[10px] uppercase tracking-widest flex items-center gap-3 active:scale-95 transition-all disabled:opacity-50"
           >
-            {saving ? <i className="fas fa-circle-notch fa-spin"></i> : <i className="fas fa-save"></i>} 
-            {saving ? 'Syncing...' : 'Commit to Registry'}
+            {saving || isCommitPending ? <i className="fas fa-circle-notch fa-spin"></i> : <i className="fas fa-save"></i>} 
+            {saving || isCommitPending ? 'Syncing...' : 'Commit to Registry'}
           </button>
         </div>
       </header>
@@ -421,7 +450,7 @@ const ArchitectureDesigner: React.FC<{
                         <MermaidRenderer content={code} id={diagram._id || 'temp'} />
                      </div>
                    ) : format === DiagramFormat.DRAWIO ? (
-                     <DrawioEditor xml={code} onSave={handleDrawioUpdate} />
+                     <DrawioEditor xml={code} onSave={handleDrawioUpdate} requestExportTrigger={exportTrigger} />
                    ) : format === DiagramFormat.IMAGE ? (
                      <div className="max-w-full max-h-full flex items-center justify-center overflow-auto shadow-2xl rounded-[2rem] border border-slate-100 p-4">
                         <img src={code} className="max-w-none h-auto transition-transform duration-500" alt="Blueprint Preview" />
