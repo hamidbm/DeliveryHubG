@@ -15,7 +15,6 @@ const MermaidRenderer: React.FC<{ content: string; id: string }> = ({ content, i
     if (!containerRef.current || !content) return;
     try {
       containerRef.current.innerHTML = ''; 
-      // Ensure ID is globally unique and safe for Mermaid DOM selection
       const safeId = `mermaid-${id.replace(/[^a-zA-Z0-9]/g, '-')}-${Math.floor(Math.random() * 10000)}`;
       const { svg } = await mermaid.render(safeId, content);
       containerRef.current.innerHTML = svg;
@@ -52,6 +51,14 @@ const DrawioEditor: React.FC<{
   onSave: (xml: string) => void;
 }> = ({ xml, onSave }) => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const xmlRef = useRef(xml);
+  const onSaveRef = useRef(onSave);
+
+  // Keep refs in sync to avoid effect re-triggers
+  useEffect(() => {
+    xmlRef.current = xml;
+    onSaveRef.current = onSave;
+  }, [xml, onSave]);
 
   useEffect(() => {
     const handleMessage = (evt: MessageEvent) => {
@@ -59,41 +66,54 @@ const DrawioEditor: React.FC<{
       
       try {
         const data = typeof evt.data === 'string' ? JSON.parse(evt.data) : evt.data;
-        
-        // Protocol handshake: https://www.drawio.com/doc/faq/embed-mode
+        const iframe = iframeRef.current;
+        if (!iframe || !iframe.contentWindow) return;
+
         if (data.event === 'init') {
-          iframeRef.current?.contentWindow?.postMessage(JSON.stringify({
+          // Handshake: Load initial XML
+          iframe.contentWindow.postMessage(JSON.stringify({
             action: 'load',
-            xml: xml || '',
+            xml: xmlRef.current || '',
             autosave: 1
           }), '*');
+        } else if (data.event === 'configure') {
+          // Send configuration if requested
+          iframe.contentWindow.postMessage(JSON.stringify({
+            action: 'configure',
+            config: { 
+              defaultFonts: ["Inter", "Helvetica", "Arial"],
+              ui: 'atlas'
+            }
+          }), '*');
         } else if (data.event === 'save' || data.event === 'autosave' || data.event === 'export') {
-          if (data.xml) onSave(data.xml);
+          if (data.xml) onSaveRef.current(data.xml);
+          
           if (data.event === 'save') {
-             // Visual feedback that save happened
-             iframeRef.current?.contentWindow?.postMessage(JSON.stringify({
+             iframe.contentWindow.postMessage(JSON.stringify({
                action: 'status',
-               message: 'Nexus Registry Updated',
+               message: 'Registry Synchronized',
                modified: false
              }), '*');
           }
         }
       } catch (e) {
-        // Suppress parsing errors for non-JSON postMessages
+        // Silently catch non-JSON data from other sources
       }
     };
 
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [xml, onSave]);
+  }, []);
 
   return (
-    <iframe
-      ref={iframeRef}
-      className="w-full h-full border-none rounded-2xl shadow-2xl bg-white"
-      src="https://embed.diagrams.net/?embed=1&ui=atlas&spin=1&proto=json&configure=1"
-      title="Draw.io Editor"
-    />
+    <div className="w-full h-full relative">
+      <iframe
+        ref={iframeRef}
+        className="absolute inset-0 w-full h-full border-none bg-white"
+        src="https://embed.diagrams.net/?embed=1&ui=atlas&spin=1&proto=json&configure=1"
+        title="Draw.io Editor"
+      />
+    </div>
   );
 };
 
@@ -389,11 +409,13 @@ const ArchitectureDesigner: React.FC<{
               </div>
            </div>
            
-           <div className="flex-1 overflow-hidden p-6 lg:p-10 relative flex">
-              <div className="bg-white rounded-[3rem] w-full h-full shadow-[0_50px_100px_rgba(0,0,0,0.05)] border border-slate-100 relative overflow-hidden flex flex-col items-center justify-center group/canvas">
-                 <div className="absolute inset-0 opacity-[0.02] pointer-events-none" style={{ backgroundImage: 'radial-gradient(#000 1px, transparent 0)', backgroundSize: '32px 32px' }}></div>
+           <div className={`flex-1 overflow-hidden relative flex flex-col ${format === DiagramFormat.DRAWIO ? 'p-0' : 'p-6 lg:p-10'}`}>
+              <div className={`bg-white w-full h-full relative overflow-hidden flex flex-col ${format === DiagramFormat.DRAWIO ? '' : 'rounded-[3rem] shadow-[0_50px_100px_rgba(0,0,0,0.05)] border border-slate-100 items-center justify-center'}`}>
+                 {format !== DiagramFormat.DRAWIO && (
+                   <div className="absolute inset-0 opacity-[0.02] pointer-events-none" style={{ backgroundImage: 'radial-gradient(#000 1px, transparent 0)', backgroundSize: '32px 32px' }}></div>
+                 )}
                  
-                 <div className="relative z-10 w-full h-full overflow-auto custom-scrollbar p-6 flex flex-col items-center justify-center">
+                 <div className={`relative z-10 w-full h-full overflow-hidden ${format === DiagramFormat.DRAWIO ? '' : 'overflow-auto custom-scrollbar p-6 flex flex-col items-center justify-center'}`}>
                    {format === DiagramFormat.MERMAID || format === DiagramFormat.MINDMAP ? (
                      <div className="w-full h-full min-h-[500px]">
                         <MermaidRenderer content={code} id={diagram._id || 'temp'} />
