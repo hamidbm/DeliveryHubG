@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { ArchitectureDiagram, DiagramFormat, Application, Bundle } from '../types';
+import { ArchitectureDiagram, DiagramFormat, Application, Bundle, Milestone } from '../types';
 import mermaid from 'mermaid';
 
 interface ArchitectureDiagramsProps {
@@ -51,8 +51,9 @@ const MermaidRenderer: React.FC<{ content: string; id: string }> = ({ content, i
 const DrawioEditor: React.FC<{ 
   xml: string; 
   onSave: (xml: string) => void;
-  requestExportTrigger?: number; 
-}> = ({ xml, onSave, requestExportTrigger }) => {
+  requestExportTrigger?: number;
+  readOnly?: boolean;
+}> = ({ xml, onSave, requestExportTrigger, readOnly = false }) => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const xmlRef = useRef(xml);
   const onSaveRef = useRef(onSave);
@@ -63,7 +64,6 @@ const DrawioEditor: React.FC<{
     onSaveRef.current = onSave;
   }, [xml, onSave]);
 
-  // Handle explicit export requests from parent
   useEffect(() => {
     if (requestExportTrigger && requestExportTrigger > 0 && isReady) {
       iframeRef.current?.contentWindow?.postMessage(JSON.stringify({
@@ -82,7 +82,18 @@ const DrawioEditor: React.FC<{
         const iframe = iframeRef.current;
         if (!iframe || !iframe.contentWindow) return;
 
-        if (data.event === 'init') {
+        // Draw.io Handshake Protocol
+        if (data.event === 'configure') {
+          // 1. Send Configuration
+          iframe.contentWindow.postMessage(JSON.stringify({
+            action: 'configure',
+            config: { 
+              defaultFonts: ["Inter", "Helvetica", "Arial"],
+              ui: 'atlas'
+            }
+          }), '*');
+        } else if (data.event === 'init') {
+          // 2. Load XML once initialized
           setIsReady(true);
           iframe.contentWindow.postMessage(JSON.stringify({
             action: 'load',
@@ -96,7 +107,7 @@ const DrawioEditor: React.FC<{
           if (data.event === 'save' || data.event === 'export') {
              iframe.contentWindow.postMessage(JSON.stringify({
                action: 'status',
-               message: 'Registry Synchronized',
+               message: 'Nexus Registry Synchronized',
                modified: false
              }), '*');
           }
@@ -108,12 +119,15 @@ const DrawioEditor: React.FC<{
     return () => window.removeEventListener('message', handleMessage);
   }, []);
 
+  const baseUrl = "https://embed.diagrams.net/?embed=1&ui=atlas&spin=1&proto=json&configure=1";
+  const url = readOnly ? `${baseUrl}&lightbox=1` : baseUrl;
+
   return (
     <div className="absolute inset-0 w-full h-full bg-white">
       <iframe
         ref={iframeRef}
         className="w-full h-full border-none"
-        src="https://embed.diagrams.net/?embed=1&ui=atlas&spin=1&proto=json&configure=1"
+        src={url}
         title="Draw.io Editor"
       />
     </div>
@@ -125,9 +139,9 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
   const [isDesignerOpen, setIsDesignerOpen] = useState(false);
   const [isIngestModalOpen, setIsIngestModalOpen] = useState(false);
   const [editingDiagram, setEditingDiagram] = useState<Partial<ArchitectureDiagram> | null>(null);
+  const [isEditMode, setIsEditMode] = useState(false);
   const [loading, setLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
-  const [stagedContent, setStagedContent] = useState<{ content: string, format: DiagramFormat } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchDiagrams = useCallback(async () => {
@@ -151,7 +165,7 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
     fetchDiagrams();
   }, [fetchDiagrams]);
 
-  const openDesigner = (diag?: ArchitectureDiagram) => {
+  const openDesigner = (diag?: ArchitectureDiagram, edit: boolean = false) => {
     setEditingDiagram(diag || {
       title: 'New Architecture Blueprint',
       format: DiagramFormat.MERMAID,
@@ -160,6 +174,7 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
       bundleId: activeBundleId !== 'all' ? activeBundleId : undefined,
       applicationId: activeAppId !== 'all' ? activeAppId : undefined
     });
+    setIsEditMode(edit);
     setIsDesignerOpen(true);
   };
 
@@ -175,7 +190,6 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
       const isDrawio = file.name.endsWith('.drawio') || file.name.endsWith('.xml');
       const format = isDrawio ? DiagramFormat.DRAWIO : DiagramFormat.IMAGE;
       
-      setStagedContent({ content: result, format });
       setEditingDiagram({
         title: file.name.replace(/\.[^/.]+$/, ""),
         format,
@@ -208,7 +222,6 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
       if (res.ok) {
         setIsIngestModalOpen(false);
         setEditingDiagram(null);
-        setStagedContent(null);
         await fetchDiagrams();
         if (fileInputRef.current) fileInputRef.current.value = '';
       } else {
@@ -216,7 +229,7 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
         alert(`Ingest Failed: ${err.error || 'Unknown Error'}`);
       }
     } catch (err) {
-      alert("Ingest Error: Failed to communicate with Nexus Gateway.");
+      alert("Ingest Error: Connection lost.");
     } finally {
       setIsUploading(false);
     }
@@ -247,7 +260,7 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
                  <i className="fas fa-cloud-arrow-up"></i> Ingest Blueprint
                </button>
                <button 
-                onClick={() => openDesigner()}
+                onClick={() => openDesigner(undefined, true)}
                 className="px-8 py-3 bg-slate-900 text-white text-[10px] font-black rounded-2xl shadow-xl hover:bg-blue-600 transition-all uppercase tracking-widest flex items-center gap-2"
                >
                  <i className="fas fa-magic"></i> New Canvas
@@ -263,13 +276,23 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
                   <p className="text-sm font-black text-slate-400 uppercase tracking-widest">No visual artifacts in current scope</p>
                </div>
              ) : diagrams.map(diag => (
-              <div key={diag._id} className="bg-white border border-slate-200 rounded-[2.5rem] p-8 hover:shadow-2xl transition-all group cursor-pointer relative flex flex-col h-full" onClick={() => openDesigner(diag)}>
-                 <button 
-                   onClick={(e) => handleDelete(diag._id!, e)}
-                   className="absolute top-6 right-6 w-8 h-8 rounded-lg bg-slate-50 text-slate-300 hover:text-red-500 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all z-20 shadow-sm border border-slate-100"
-                 >
-                   <i className="fas fa-trash text-[10px]"></i>
-                 </button>
+              <div key={diag._id} className="bg-white border border-slate-200 rounded-[2.5rem] p-8 hover:shadow-2xl transition-all group cursor-pointer relative flex flex-col h-full" onClick={() => openDesigner(diag, false)}>
+                 <div className="absolute top-6 right-6 flex gap-2 opacity-0 group-hover:opacity-100 transition-all z-20">
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); openDesigner(diag, true); }}
+                      className="w-8 h-8 rounded-lg bg-white text-slate-400 hover:text-blue-600 flex items-center justify-center shadow-sm border border-slate-100"
+                      title="Edit Blueprint"
+                    >
+                      <i className="fas fa-pen text-[10px]"></i>
+                    </button>
+                    <button 
+                      onClick={(e) => handleDelete(diag._id!, e)}
+                      className="w-8 h-8 rounded-lg bg-white text-slate-400 hover:text-red-500 flex items-center justify-center shadow-sm border border-slate-100"
+                      title="Delete Blueprint"
+                    >
+                      <i className="fas fa-trash text-[10px]"></i>
+                    </button>
+                 </div>
 
                  <div className="flex justify-between items-start mb-6">
                     <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-lg ${
@@ -284,7 +307,7 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
                       {diag.status}
                     </span>
                  </div>
-                 <h4 className="text-lg font-black text-slate-800 mb-2 group-hover:text-blue-600 transition-colors pr-10 overflow-hidden text-ellipsis whitespace-nowrap">{diag.title}</h4>
+                 <h4 className="text-lg font-black text-slate-800 mb-2 group-hover:text-blue-600 transition-colors pr-12 overflow-hidden text-ellipsis whitespace-nowrap">{diag.title}</h4>
                  <div className="flex items-center gap-3 mb-6">
                     <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">{diag.format}</span>
                     <div className="w-1 h-1 rounded-full bg-slate-200"></div>
@@ -315,6 +338,7 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
           onSuccess={() => { setIsDesignerOpen(false); fetchDiagrams(); }}
           bundles={bundles}
           applications={applications}
+          isEditMode={isEditMode}
         />
       )}
 
@@ -385,7 +409,7 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
                  </div>
 
                  <div className="flex gap-4 pt-10 border-t border-slate-50">
-                    <button onClick={() => { setIsIngestModalOpen(false); setStagedContent(null); }} className="flex-1 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-900 transition-colors">Discard</button>
+                    <button onClick={() => { setIsIngestModalOpen(false); setEditingDiagram(null); }} className="flex-1 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-900 transition-colors">Discard</button>
                     <button 
                       onClick={commitIngest} 
                       disabled={isUploading}
@@ -409,12 +433,14 @@ const ArchitectureDesigner: React.FC<{
   onSuccess: () => void;
   bundles: Bundle[];
   applications: Application[];
-}> = ({ diagram, onClose, onSuccess, bundles, applications }) => {
+  isEditMode: boolean;
+}> = ({ diagram, onClose, onSuccess, bundles, applications, isEditMode }) => {
   const [code, setCode] = useState(diagram.content || '');
   const [title, setTitle] = useState(diagram.title || '');
   const [format, setFormat] = useState<DiagramFormat>(diagram.format || DiagramFormat.MERMAID);
+  const [readOnly, setReadOnly] = useState(!isEditMode);
   const [saving, setSaving] = useState(false);
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(!isEditMode);
   const [activeBundleId, setActiveBundleId] = useState(diagram.bundleId || '');
   const [activeAppId, setActiveAppId] = useState(diagram.applicationId || '');
   const [activeMilestone, setActiveMilestone] = useState(diagram.milestoneId || '');
@@ -477,29 +503,47 @@ const ArchitectureDesigner: React.FC<{
           <button onClick={onClose} className="w-10 h-10 rounded-full bg-slate-50 hover:bg-slate-100 flex items-center justify-center text-slate-400 border border-slate-100 transition-all"><i className="fas fa-times"></i></button>
           <div className="flex flex-col">
             <span className="text-[9px] font-black text-blue-600 uppercase tracking-widest mb-1 italic">Blueprint Registry Node</span>
-            <input value={title} onChange={(e) => setTitle(e.target.value)} className="text-2xl font-black text-slate-800 border-none p-0 focus:ring-0 outline-none bg-transparent w-[400px]" placeholder="Untitled Blueprint" />
+            <input 
+              value={title} 
+              readOnly={readOnly}
+              onChange={(e) => setTitle(e.target.value)} 
+              className={`text-2xl font-black text-slate-800 border-none p-0 focus:ring-0 outline-none bg-transparent w-[400px] ${readOnly ? 'cursor-default' : ''}`} 
+              placeholder="Untitled Blueprint" 
+            />
           </div>
         </div>
         <div className="flex items-center gap-4">
-          <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 mr-4 shadow-inner">
-            {[DiagramFormat.MERMAID, DiagramFormat.DRAWIO, DiagramFormat.MINDMAP].map(fmt => (
-              <button 
-                key={fmt}
-                onClick={() => setFormat(fmt)}
-                className={`px-4 py-2 text-[9px] font-black uppercase rounded-lg transition-all ${format === fmt ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
-              >
-                {fmt}
-              </button>
-            ))}
-          </div>
-          <button 
-            onClick={handleCommitRequest}
-            disabled={saving || isCommitPending}
-            className="px-10 py-3.5 bg-slate-900 text-white rounded-2xl shadow-xl font-black text-[10px] uppercase tracking-widest flex items-center gap-3 active:scale-95 transition-all disabled:opacity-50"
-          >
-            {saving || isCommitPending ? <i className="fas fa-circle-notch fa-spin"></i> : <i className="fas fa-save"></i>} 
-            {saving || isCommitPending ? 'Syncing...' : 'Commit to Registry'}
-          </button>
+          {!readOnly && (
+            <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 mr-4 shadow-inner">
+              {[DiagramFormat.MERMAID, DiagramFormat.DRAWIO, DiagramFormat.MINDMAP].map(fmt => (
+                <button 
+                  key={fmt}
+                  onClick={() => setFormat(fmt)}
+                  className={`px-4 py-2 text-[9px] font-black uppercase rounded-lg transition-all ${format === fmt ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                >
+                  {fmt}
+                </button>
+              ))}
+            </div>
+          )}
+          
+          {readOnly ? (
+            <button 
+              onClick={() => { setReadOnly(false); setIsSidebarCollapsed(false); }}
+              className="px-10 py-3.5 bg-blue-600 text-white rounded-2xl shadow-xl font-black text-[10px] uppercase tracking-widest flex items-center gap-3 active:scale-95 transition-all"
+            >
+              <i className="fas fa-pen"></i> Enter Edit Mode
+            </button>
+          ) : (
+            <button 
+              onClick={handleCommitRequest}
+              disabled={saving || isCommitPending}
+              className="px-10 py-3.5 bg-slate-900 text-white rounded-2xl shadow-xl font-black text-[10px] uppercase tracking-widest flex items-center gap-3 active:scale-95 transition-all disabled:opacity-50"
+            >
+              {saving || isCommitPending ? <i className="fas fa-circle-notch fa-spin"></i> : <i className="fas fa-save"></i>} 
+              {saving || isCommitPending ? 'Syncing...' : 'Commit to Registry'}
+            </button>
+          )}
         </div>
       </header>
 
@@ -518,8 +562,9 @@ const ArchitectureDesigner: React.FC<{
            <div className="flex-1 overflow-hidden relative">
              <textarea 
               value={code}
+              readOnly={readOnly}
               onChange={(e) => setCode(e.target.value)}
-              className="w-full h-full bg-transparent text-emerald-400 font-mono text-sm p-8 outline-none resize-none custom-scrollbar selection:bg-emerald-500/20"
+              className={`w-full h-full bg-transparent text-emerald-400 font-mono text-sm p-8 outline-none resize-none custom-scrollbar selection:bg-emerald-500/20 ${readOnly ? 'opacity-80' : ''}`}
               placeholder={format === DiagramFormat.MERMAID ? "Enter Mermaid syntax..." : "Visual source XML..."}
              />
            </div>
@@ -542,7 +587,9 @@ const ArchitectureDesigner: React.FC<{
            <div className="px-10 py-4 border-b border-slate-200 bg-white/50 backdrop-blur flex items-center justify-between shrink-0">
               <div className="flex items-center gap-4">
                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nexus Workspace</span>
-                 <div className="px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-[8px] font-black uppercase animate-pulse border border-blue-100">Live Synthesis</div>
+                 {!readOnly && (
+                   <div className="px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-[8px] font-black uppercase animate-pulse border border-blue-100">Live Synthesis</div>
+                 )}
               </div>
            </div>
            
@@ -558,7 +605,7 @@ const ArchitectureDesigner: React.FC<{
                         <MermaidRenderer content={code} id={diagram._id || 'temp'} />
                      </div>
                    ) : format === DiagramFormat.DRAWIO ? (
-                     <DrawioEditor xml={code} onSave={handleDrawioUpdate} requestExportTrigger={exportTrigger} />
+                     <DrawioEditor xml={code} onSave={handleDrawioUpdate} requestExportTrigger={exportTrigger} readOnly={readOnly} />
                    ) : format === DiagramFormat.IMAGE ? (
                      <div className="max-w-full max-h-full flex items-center justify-center overflow-auto shadow-2xl rounded-[2rem] border border-slate-100 p-4">
                         <img src={code} className="max-w-none h-auto transition-transform duration-500" alt="Blueprint Preview" />
@@ -566,7 +613,7 @@ const ArchitectureDesigner: React.FC<{
                    ) : (
                      <div className="text-center opacity-40 flex flex-col items-center gap-6">
                         <i className="fas fa-vector-square text-6xl text-slate-200"></i>
-                        <p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.5em]">Syncing artifact payload...</p>
+                        <p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.5em]">Artifact processing...</p>
                      </div>
                    )}
                  </div>
@@ -580,21 +627,21 @@ const ArchitectureDesigner: React.FC<{
               <div className="space-y-6">
                  <div className="space-y-2">
                     <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Business Cluster</label>
-                    <select value={activeBundleId} onChange={(e) => setActiveBundleId(e.target.value)} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-xs font-bold text-slate-700 outline-none hover:border-blue-200 transition-all">
+                    <select disabled={readOnly} value={activeBundleId} onChange={(e) => setActiveBundleId(e.target.value)} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-xs font-bold text-slate-700 outline-none hover:border-blue-200 transition-all disabled:opacity-50">
                        <option value="">Cross-Bundle Plane</option>
                        {bundles.map(b => <option key={b._id} value={b._id}>{b.name}</option>)}
                     </select>
                  </div>
                  <div className="space-y-2">
                     <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Asset Mapping</label>
-                    <select value={activeAppId} onChange={(e) => setActiveAppId(e.target.value)} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-xs font-bold text-slate-700 outline-none hover:border-blue-200 transition-all">
+                    <select disabled={readOnly} value={activeAppId} onChange={(e) => setActiveAppId(e.target.value)} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-xs font-bold text-slate-700 outline-none hover:border-blue-200 transition-all disabled:opacity-50">
                        <option value="">Full Cluster Scope</option>
                        {applications.filter(a => !activeBundleId || a.bundleId === activeBundleId).map(a => <option key={a._id} value={a._id}>{a.name}</option>)}
                     </select>
                  </div>
                  <div className="space-y-2">
                     <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Milestone Anchor</label>
-                    <select value={activeMilestone} onChange={(e) => setActiveMilestone(e.target.value)} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-xs font-bold text-slate-700 outline-none hover:border-blue-200 transition-all">
+                    <select disabled={readOnly} value={activeMilestone} onChange={(e) => setActiveMilestone(e.target.value)} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-xs font-bold text-slate-700 outline-none hover:border-blue-200 transition-all disabled:opacity-50">
                        <option value="">Continuous Lifecycle</option>
                        {[...Array(10)].map((_, i) => <option key={i} value={`M${i+1}`}>M{i+1} Release</option>)}
                     </select>
@@ -605,7 +652,7 @@ const ArchitectureDesigner: React.FC<{
               <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 mb-6"><i className="fas fa-robot"></i> Review Protocol</h4>
               <div className="bg-blue-50 border border-blue-100 rounded-[2rem] p-6 space-y-4">
                  <p className="text-[11px] text-blue-700 font-medium leading-relaxed italic">
-                   "Nexus Intelligence is observing the visual contract. Ensure all node relationships align with the Registry hierarchy."
+                   {readOnly ? '"Reviewing visual blueprint registry entry."' : '"Registry sync active. Ensure node hierarchy consistency."'}
                  </p>
               </div>
            </section>
