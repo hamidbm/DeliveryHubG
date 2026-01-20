@@ -11,7 +11,7 @@ interface ArchitectureDiagramsProps {
   activeAppId?: string;
 }
 
-// Global defaults for stability
+// Global defaults for stability and registry consistency
 const DEFAULT_MINDMAP_TOPIC = "Nexus Central Concept";
 const DEFAULT_MINDMAP_DATA = {
   nodeData: {
@@ -37,9 +37,12 @@ function safeJsonParse<T>(value: unknown, fallback: T): T {
 
   try {
     // Basic structural check for JSON before parsing
-    if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return fallback;
+    if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) {
+      return fallback;
+    }
     return JSON.parse(trimmed) as T;
   } catch (err) {
+    console.warn("Nexus Registry: Visual source payload parsing issue. Reverting to safe default.");
     return fallback;
   }
 }
@@ -48,7 +51,8 @@ const MermaidRenderer: React.FC<{ content: string; id: string }> = ({ content, i
   const containerRef = useRef<HTMLDivElement>(null);
 
   const render = useCallback(async () => {
-    if (!containerRef.current || !content || content.trim().startsWith('{')) return;
+    // Prevent Mermaid from attempting to render JSON/XML payloads
+    if (!containerRef.current || !content || content.trim().startsWith('{') || content.trim().startsWith('<')) return;
     try {
       containerRef.current.innerHTML = ''; 
       const safeId = `mermaid-${id.replace(/[^a-zA-Z0-9]/g, '-')}-${Math.floor(Math.random() * 10000)}`;
@@ -177,7 +181,7 @@ const MindMapEditor: React.FC<{
   useEffect(() => {
     if (!containerRef.current || initialized.current) return;
 
-    // Use guarded parser for robustness
+    // Use guarded parser to ensure Mind Elixir always receives an object
     const mindData = safeJsonParse(data, DEFAULT_MINDMAP_DATA);
 
     try {
@@ -204,17 +208,16 @@ const MindMapEditor: React.FC<{
         });
       }
     } catch (err) {
-      console.error("MindElixir Init Failure:", err);
+      console.error("Nexus Hub: MindElixir initialization failed.", err);
     }
 
     return () => {
-      // MindElixir doesn't have a formal destroy() in 3.x that is widely used, 
-      // but we ensure initialized is reset if component is truly destroyed.
       initialized.current = false;
+      // MindElixir doesn't strictly require explicit teardown if the element is removed from DOM.
     };
   }, []);
 
-  // Sync state if it changes externally
+  // Synchronize state if data changes externally (e.g., Undo/Redo or Registry sync)
   useEffect(() => {
     if (meRef.current && data) {
       try {
@@ -231,7 +234,7 @@ const MindMapEditor: React.FC<{
     <div className="w-full h-full relative mind-map-container overflow-hidden">
       <div ref={containerRef} className="w-full h-full bg-slate-50" />
       {readOnly && (
-        <div className="absolute inset-0 z-10 bg-transparent pointer-events-none" />
+        <div className="absolute inset-0 z-10 bg-transparent pointer-events-none cursor-default" />
       )}
       {!readOnly && (
         <div className="absolute bottom-6 right-6 flex flex-col gap-2 z-20">
@@ -284,7 +287,7 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
       setEditingDiagram({
         title: 'New Architecture Blueprint',
         format: DiagramFormat.MERMAID,
-        content: '', // Start empty to let designer handle defaults
+        content: '', // Designer logic will apply defaults based on format
         status: 'DRAFT',
         bundleId: activeBundleId !== 'all' ? activeBundleId : undefined,
         applicationId: activeAppId !== 'all' ? activeAppId : undefined
@@ -562,8 +565,17 @@ const ArchitectureDesigner: React.FC<{
   isEditMode: boolean;
 }> = ({ diagram, onClose, onSuccess, bundles, applications, isEditMode }) => {
   const [format, setFormat] = useState<DiagramFormat>(diagram.format || DiagramFormat.MERMAID);
+  
+  // Guarded initialization logic to ensure starting code matches format expectation
   const [code, setCode] = useState(() => {
-    if (diagram.content) return diagram.content;
+    if (diagram.content) {
+       // If format is Mind Map, ensure we are starting with valid JSON
+       if (diagram.format === DiagramFormat.MINDMAP && !diagram.content.trim().startsWith('{')) {
+          return JSON.stringify(DEFAULT_MINDMAP_DATA);
+       }
+       return diagram.content;
+    }
+    
     // Default logic for NEW items
     if (format === DiagramFormat.MINDMAP) return JSON.stringify(DEFAULT_MINDMAP_DATA);
     if (format === DiagramFormat.DRAWIO) return DEFAULT_DRAWIO_XML;
@@ -647,10 +659,15 @@ const ArchitectureDesigner: React.FC<{
                      code.trim() === DEFAULT_DRAWIO_XML || 
                      code.trim() === JSON.stringify(DEFAULT_MINDMAP_DATA);
 
-    // Update both format and code simultaneously to avoid parse crashes in sub-components
+    // If swapping from a text-based format to an object-based format and non-default content exists, warn user.
+    if (!isDefault && (newFmt === DiagramFormat.MINDMAP || newFmt === DiagramFormat.DRAWIO)) {
+       if (!confirm("Switching visual engine will reset current canvas content to default template. Proceed?")) return;
+    }
+
     setFormat(newFmt);
     
-    if (isDefault) {
+    // Auto-seed template if content was default or if we are forced to reset
+    if (isDefault || newFmt === DiagramFormat.MINDMAP || newFmt === DiagramFormat.DRAWIO) {
       if (newFmt === DiagramFormat.MINDMAP) setCode(JSON.stringify(DEFAULT_MINDMAP_DATA));
       else if (newFmt === DiagramFormat.DRAWIO) setCode(DEFAULT_DRAWIO_XML);
       else setCode(DEFAULT_MERMAID_CODE);
@@ -702,7 +719,7 @@ const ArchitectureDesigner: React.FC<{
                   onClick={handleExportJson}
                   className="px-6 py-3.5 bg-white border border-slate-200 text-slate-600 rounded-2xl shadow-sm font-black text-[10px] uppercase tracking-widest flex items-center gap-3 hover:bg-slate-50 transition-all"
                 >
-                  <i className="fas fa-file-export"></i> JSON
+                  <i className="fas fa-file-export"></i> Export JSON
                 </button>
               )}
               <button 
@@ -736,7 +753,7 @@ const ArchitectureDesigner: React.FC<{
               readOnly={readOnly}
               onChange={(e) => setCode(e.target.value)}
               className={`w-full h-full bg-transparent text-emerald-400 font-mono text-sm p-8 outline-none resize-none custom-scrollbar selection:bg-emerald-500/20 ${readOnly ? 'opacity-80' : ''}`}
-              placeholder={format === DiagramFormat.MERMAID ? "Enter Mermaid syntax..." : "Visual source payload..."}
+              placeholder={format === DiagramFormat.MERMAID ? "Enter Mermaid syntax..." : "Visual source payload (JSON/XML)..."}
              />
            </div>
         </div>
