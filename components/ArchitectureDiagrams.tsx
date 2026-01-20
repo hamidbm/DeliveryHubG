@@ -22,6 +22,9 @@ const DEFAULT_MINDMAP_DATA = {
   }
 };
 
+const DEFAULT_MERMAID_CODE = 'graph TD\n  Start --> Process\n  Process --> End';
+const DEFAULT_DRAWIO_XML = '<mxfile><diagram id="page-1" name="Page-1"><mxGraphModel dx="1000" dy="1000" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0"><root><mxCell id="0"/><mxCell id="1" parent="0"/></root></mxGraphModel></diagram></mxfile>';
+
 /**
  * Guarded JSON parser to prevent application crashes on malformed/missing artifact content.
  */
@@ -33,9 +36,10 @@ function safeJsonParse<T>(value: unknown, fallback: T): T {
   if (!trimmed || trimmed === 'undefined' || trimmed === 'null') return fallback;
 
   try {
+    // Basic structural check for JSON before parsing
+    if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return fallback;
     return JSON.parse(trimmed) as T;
   } catch (err) {
-    console.error("Nexus Registry: Failed to parse visual source payload. Falling back to default node.", err);
     return fallback;
   }
 }
@@ -44,7 +48,7 @@ const MermaidRenderer: React.FC<{ content: string; id: string }> = ({ content, i
   const containerRef = useRef<HTMLDivElement>(null);
 
   const render = useCallback(async () => {
-    if (!containerRef.current || !content) return;
+    if (!containerRef.current || !content || content.trim().startsWith('{')) return;
     try {
       containerRef.current.innerHTML = ''; 
       const safeId = `mermaid-${id.replace(/[^a-zA-Z0-9]/g, '-')}-${Math.floor(Math.random() * 10000)}`;
@@ -176,31 +180,37 @@ const MindMapEditor: React.FC<{
     // Use guarded parser for robustness
     const mindData = safeJsonParse(data, DEFAULT_MINDMAP_DATA);
 
-    const me = new MindElixir({
-      el: containerRef.current,
-      direction: MindElixir.SIDE,
-      data: mindData,
-      draggable: !readOnly,
-      contextMenu: !readOnly,
-      toolBar: true,
-      nodeMenu: !readOnly,
-      keypress: !readOnly,
-      mainButton: !readOnly,
-    });
-
-    me.init();
-    meRef.current = me;
-    initialized.current = true;
-
-    if (!readOnly) {
-      me.bus.addListener('operation', () => {
-        const fullData = me.getData();
-        onUpdate(JSON.stringify(fullData));
+    try {
+      const me = new MindElixir({
+        el: containerRef.current,
+        direction: MindElixir.SIDE,
+        data: mindData,
+        draggable: !readOnly,
+        contextMenu: !readOnly,
+        toolBar: true,
+        nodeMenu: !readOnly,
+        keypress: !readOnly,
+        mainButton: !readOnly,
       });
+
+      me.init();
+      meRef.current = me;
+      initialized.current = true;
+
+      if (!readOnly) {
+        me.bus.addListener('operation', () => {
+          const fullData = me.getData();
+          onUpdate(JSON.stringify(fullData));
+        });
+      }
+    } catch (err) {
+      console.error("MindElixir Init Failure:", err);
     }
 
     return () => {
-      // Cleanup happens via DOM removal in MindElixir
+      // MindElixir doesn't have a formal destroy() in 3.x that is widely used, 
+      // but we ensure initialized is reset if component is truly destroyed.
+      initialized.current = false;
     };
   }, []);
 
@@ -274,7 +284,7 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
       setEditingDiagram({
         title: 'New Architecture Blueprint',
         format: DiagramFormat.MERMAID,
-        content: 'graph TD\n  Start --> Process\n  Process --> End',
+        content: '', // Start empty to let designer handle defaults
         status: 'DRAFT',
         bundleId: activeBundleId !== 'all' ? activeBundleId : undefined,
         applicationId: activeAppId !== 'all' ? activeAppId : undefined
@@ -551,15 +561,16 @@ const ArchitectureDesigner: React.FC<{
   applications: Application[];
   isEditMode: boolean;
 }> = ({ diagram, onClose, onSuccess, bundles, applications, isEditMode }) => {
-  const [code, setCode] = useState(() => {
-    if (diagram.format === DiagramFormat.MINDMAP) {
-      // Ensure Mind Map diagrams always have valid JSON content
-      return diagram.content || JSON.stringify(DEFAULT_MINDMAP_DATA);
-    }
-    return diagram.content || '';
-  });
-  const [title, setTitle] = useState(diagram.title || '');
   const [format, setFormat] = useState<DiagramFormat>(diagram.format || DiagramFormat.MERMAID);
+  const [code, setCode] = useState(() => {
+    if (diagram.content) return diagram.content;
+    // Default logic for NEW items
+    if (format === DiagramFormat.MINDMAP) return JSON.stringify(DEFAULT_MINDMAP_DATA);
+    if (format === DiagramFormat.DRAWIO) return DEFAULT_DRAWIO_XML;
+    return DEFAULT_MERMAID_CODE;
+  });
+  
+  const [title, setTitle] = useState(diagram.title || '');
   const [readOnly, setReadOnly] = useState(!isEditMode);
   const [saving, setSaving] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(!isEditMode);
@@ -627,6 +638,25 @@ const ArchitectureDesigner: React.FC<{
     link.click();
   };
 
+  const switchFormat = (newFmt: DiagramFormat) => {
+    if (newFmt === format) return;
+
+    // Detection: Is the user currently using a default template or is the code empty?
+    const isDefault = code.trim() === '' || 
+                     code.trim() === DEFAULT_MERMAID_CODE || 
+                     code.trim() === DEFAULT_DRAWIO_XML || 
+                     code.trim() === JSON.stringify(DEFAULT_MINDMAP_DATA);
+
+    // Update both format and code simultaneously to avoid parse crashes in sub-components
+    setFormat(newFmt);
+    
+    if (isDefault) {
+      if (newFmt === DiagramFormat.MINDMAP) setCode(JSON.stringify(DEFAULT_MINDMAP_DATA));
+      else if (newFmt === DiagramFormat.DRAWIO) setCode(DEFAULT_DRAWIO_XML);
+      else setCode(DEFAULT_MERMAID_CODE);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-[200] bg-white flex flex-col animate-fadeIn overflow-hidden">
       <header className="px-10 py-5 bg-white border-b border-slate-200 flex items-center justify-between shadow-sm shrink-0 z-[210]">
@@ -649,13 +679,7 @@ const ArchitectureDesigner: React.FC<{
               {[DiagramFormat.MERMAID, DiagramFormat.DRAWIO, DiagramFormat.MINDMAP].map(fmt => (
                 <button 
                   key={fmt}
-                  onClick={() => {
-                    setFormat(fmt);
-                    // Initialize with default data if switching to MINDMAP and current content is incompatible
-                    if (fmt === DiagramFormat.MINDMAP && !code.trim().startsWith('{')) {
-                       setCode(JSON.stringify(DEFAULT_MINDMAP_DATA));
-                    }
-                  }}
+                  onClick={() => switchFormat(fmt)}
                   className={`px-4 py-2 text-[9px] font-black uppercase rounded-lg transition-all ${format === fmt ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
                 >
                   {fmt}
