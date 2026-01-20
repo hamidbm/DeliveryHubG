@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ArchitectureDiagram, DiagramFormat, Application, Bundle, Milestone } from '../types';
 import mermaid from 'mermaid';
+import MindElixir from 'mind-elixir';
 
 interface ArchitectureDiagramsProps {
   applications: Application[];
@@ -82,9 +83,7 @@ const DrawioEditor: React.FC<{
         const iframe = iframeRef.current;
         if (!iframe || !iframe.contentWindow) return;
 
-        // Draw.io Handshake Protocol
         if (data.event === 'configure') {
-          // 1. Send Configuration
           iframe.contentWindow.postMessage(JSON.stringify({
             action: 'configure',
             config: { 
@@ -93,7 +92,6 @@ const DrawioEditor: React.FC<{
             }
           }), '*');
         } else if (data.event === 'init') {
-          // 2. Load XML once initialized
           setIsReady(true);
           iframe.contentWindow.postMessage(JSON.stringify({
             action: 'load',
@@ -134,6 +132,86 @@ const DrawioEditor: React.FC<{
   );
 };
 
+const MindMapEditor: React.FC<{
+  data: string;
+  onUpdate: (data: string) => void;
+  readOnly?: boolean;
+}> = ({ data, onUpdate, readOnly = false }) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const meRef = useRef<any>(null);
+  const initialized = useRef(false);
+
+  useEffect(() => {
+    if (!containerRef.current || initialized.current) return;
+
+    let mindData;
+    try {
+      mindData = data ? JSON.parse(data) : MindElixir.new('Nexus Central Concept');
+    } catch (e) {
+      mindData = MindElixir.new('Recovery Node');
+    }
+
+    const me = new MindElixir({
+      el: containerRef.current,
+      direction: MindElixir.SIDE,
+      data: mindData,
+      draggable: !readOnly,
+      contextMenu: !readOnly,
+      toolBar: true,
+      nodeMenu: !readOnly,
+      keypress: !readOnly,
+      mainButton: !readOnly,
+    });
+
+    me.init();
+    meRef.current = me;
+    initialized.current = true;
+
+    if (!readOnly) {
+      me.bus.addListener('operation', (operation: any) => {
+        const fullData = me.getData();
+        onUpdate(JSON.stringify(fullData));
+      });
+    }
+
+    return () => {
+      // Cleanup if needed
+    };
+  }, []);
+
+  // Update data if it changes externally (e.g. Ingest)
+  useEffect(() => {
+    if (meRef.current && data) {
+      try {
+        const parsed = JSON.parse(data);
+        if (JSON.stringify(meRef.current.getData()) !== data) {
+          meRef.current.refresh(parsed);
+        }
+      } catch (e) {}
+    }
+  }, [data]);
+
+  return (
+    <div className="w-full h-full relative mind-map-container overflow-hidden">
+      <div ref={containerRef} className="w-full h-full bg-slate-50" />
+      {readOnly && (
+        <div className="absolute inset-0 z-10 bg-transparent pointer-events-none" />
+      )}
+      {!readOnly && (
+        <div className="absolute bottom-6 right-6 flex flex-col gap-2 z-20">
+          <button 
+            onClick={() => meRef.current?.toCenter()}
+            className="w-10 h-10 rounded-full bg-white shadow-xl flex items-center justify-center text-slate-400 hover:text-blue-600 transition-all border border-slate-100"
+            title="Recenter"
+          >
+            <i className="fas fa-crosshairs"></i>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ applications, bundles, activeBundleId, activeAppId }) => {
   const [diagrams, setDiagrams] = useState<ArchitectureDiagram[]>([]);
   const [isDesignerOpen, setIsDesignerOpen] = useState(false);
@@ -166,14 +244,18 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
   }, [fetchDiagrams]);
 
   const openDesigner = (diag?: ArchitectureDiagram, edit: boolean = false) => {
-    setEditingDiagram(diag || {
-      title: 'New Architecture Blueprint',
-      format: DiagramFormat.MERMAID,
-      content: 'graph TD\n  Start --> Process\n  Process --> End',
-      status: 'DRAFT',
-      bundleId: activeBundleId !== 'all' ? activeBundleId : undefined,
-      applicationId: activeAppId !== 'all' ? activeAppId : undefined
-    });
+    if (!diag) {
+      setEditingDiagram({
+        title: 'New Architecture Blueprint',
+        format: DiagramFormat.MERMAID,
+        content: 'graph TD\n  Start --> Process\n  Process --> End',
+        status: 'DRAFT',
+        bundleId: activeBundleId !== 'all' ? activeBundleId : undefined,
+        applicationId: activeAppId !== 'all' ? activeAppId : undefined
+      });
+    } else {
+      setEditingDiagram(diag);
+    }
     setIsEditMode(edit);
     setIsDesignerOpen(true);
   };
@@ -187,8 +269,9 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
       const result = event.target?.result;
       if (typeof result !== 'string') return;
 
-      const isDrawio = file.name.endsWith('.drawio') || file.name.endsWith('.xml');
-      const format = isDrawio ? DiagramFormat.DRAWIO : DiagramFormat.IMAGE;
+      let format = DiagramFormat.IMAGE;
+      if (file.name.endsWith('.drawio') || file.name.endsWith('.xml')) format = DiagramFormat.DRAWIO;
+      if (file.name.endsWith('.json')) format = DiagramFormat.MINDMAP;
       
       setEditingDiagram({
         title: file.name.replace(/\.[^/.]+$/, ""),
@@ -252,7 +335,7 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
               <p className="text-slate-400 font-medium text-lg">Visualizing system relationships, sequence flows, and infrastructure topologies.</p>
             </div>
             <div className="flex gap-3">
-               <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" accept=".drawio,.xml,image/*" />
+               <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" accept=".drawio,.xml,.json,image/*" />
                <button 
                  onClick={() => fileInputRef.current?.click()}
                  className="px-6 py-3 bg-white border border-slate-200 text-slate-600 text-[10px] font-black rounded-2xl uppercase tracking-widest hover:bg-slate-50 transition-all flex items-center gap-2 shadow-sm"
@@ -297,9 +380,11 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
                  <div className="flex justify-between items-start mb-6">
                     <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-lg ${
                       diag.format === DiagramFormat.MERMAID ? 'bg-indigo-500 shadow-indigo-200' : 
-                      diag.format === DiagramFormat.DRAWIO ? 'bg-orange-500 shadow-orange-200' : 'bg-emerald-500 shadow-emerald-200'
+                      diag.format === DiagramFormat.DRAWIO ? 'bg-orange-500 shadow-orange-200' : 
+                      diag.format === DiagramFormat.MINDMAP ? 'bg-emerald-500 shadow-emerald-200' :
+                      'bg-slate-500 shadow-slate-200'
                     }`}>
-                       <i className={`fas ${diag.format === DiagramFormat.MERMAID ? 'fa-code' : diag.format === DiagramFormat.DRAWIO ? 'fa-vector-square' : 'fa-image'}`}></i>
+                       <i className={`fas ${diag.format === DiagramFormat.MERMAID ? 'fa-code' : diag.format === DiagramFormat.DRAWIO ? 'fa-vector-square' : diag.format === DiagramFormat.MINDMAP ? 'fa-diagram-project' : 'fa-image'}`}></i>
                     </div>
                     <span className={`px-3 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest border ${
                       diag.status === 'VERIFIED' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-blue-50 text-blue-600 border-blue-100'
@@ -320,6 +405,11 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
                       </div>
                     ) : diag.format === DiagramFormat.IMAGE ? (
                       <img src={diag.content} className="h-full w-full object-contain opacity-50 grayscale group-hover:grayscale-0 group-hover:opacity-100 transition-all" alt={diag.title} />
+                    ) : diag.format === DiagramFormat.MINDMAP ? (
+                      <div className="flex flex-col items-center gap-2 opacity-30 group-hover:opacity-60 transition-all text-center">
+                        <i className="fas fa-brain text-4xl text-slate-300"></i>
+                        <span className="text-[8px] font-black uppercase tracking-widest">Interactive Logic Node</span>
+                      </div>
                     ) : (
                       <div className="flex flex-col items-center gap-2 opacity-30 group-hover:opacity-60 transition-all">
                         <i className="fas fa-file-code text-4xl text-slate-300"></i>
@@ -435,7 +525,12 @@ const ArchitectureDesigner: React.FC<{
   applications: Application[];
   isEditMode: boolean;
 }> = ({ diagram, onClose, onSuccess, bundles, applications, isEditMode }) => {
-  const [code, setCode] = useState(diagram.content || '');
+  const [code, setCode] = useState(() => {
+    if (diagram.format === DiagramFormat.MINDMAP && !diagram.content) {
+      return JSON.stringify(MindElixir.new('Nexus Central Concept'));
+    }
+    return diagram.content || '';
+  });
   const [title, setTitle] = useState(diagram.title || '');
   const [format, setFormat] = useState<DiagramFormat>(diagram.format || DiagramFormat.MERMAID);
   const [readOnly, setReadOnly] = useState(!isEditMode);
@@ -496,6 +591,15 @@ const ArchitectureDesigner: React.FC<{
     }
   }, [isCommitPending, persistToRegistry]);
 
+  const handleExportJson = () => {
+    const blob = new Blob([code], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${title.replace(/\s+/g, '-').toLowerCase()}-mindmap.json`;
+    link.click();
+  };
+
   return (
     <div className="fixed inset-0 z-[200] bg-white flex flex-col animate-fadeIn overflow-hidden">
       <header className="px-10 py-5 bg-white border-b border-slate-200 flex items-center justify-between shadow-sm shrink-0 z-[210]">
@@ -518,7 +622,12 @@ const ArchitectureDesigner: React.FC<{
               {[DiagramFormat.MERMAID, DiagramFormat.DRAWIO, DiagramFormat.MINDMAP].map(fmt => (
                 <button 
                   key={fmt}
-                  onClick={() => setFormat(fmt)}
+                  onClick={() => {
+                    setFormat(fmt);
+                    if (fmt === DiagramFormat.MINDMAP && !code.startsWith('{')) {
+                       setCode(JSON.stringify(MindElixir.new('Nexus Central Concept')));
+                    }
+                  }}
                   className={`px-4 py-2 text-[9px] font-black uppercase rounded-lg transition-all ${format === fmt ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
                 >
                   {fmt}
@@ -535,14 +644,24 @@ const ArchitectureDesigner: React.FC<{
               <i className="fas fa-pen"></i> Enter Edit Mode
             </button>
           ) : (
-            <button 
-              onClick={handleCommitRequest}
-              disabled={saving || isCommitPending}
-              className="px-10 py-3.5 bg-slate-900 text-white rounded-2xl shadow-xl font-black text-[10px] uppercase tracking-widest flex items-center gap-3 active:scale-95 transition-all disabled:opacity-50"
-            >
-              {saving || isCommitPending ? <i className="fas fa-circle-notch fa-spin"></i> : <i className="fas fa-save"></i>} 
-              {saving || isCommitPending ? 'Syncing...' : 'Commit to Registry'}
-            </button>
+            <div className="flex gap-2">
+              {format === DiagramFormat.MINDMAP && (
+                <button 
+                  onClick={handleExportJson}
+                  className="px-6 py-3.5 bg-white border border-slate-200 text-slate-600 rounded-2xl shadow-sm font-black text-[10px] uppercase tracking-widest flex items-center gap-3 hover:bg-slate-50 transition-all"
+                >
+                  <i className="fas fa-file-export"></i> JSON
+                </button>
+              )}
+              <button 
+                onClick={handleCommitRequest}
+                disabled={saving || isCommitPending}
+                className="px-10 py-3.5 bg-slate-900 text-white rounded-2xl shadow-xl font-black text-[10px] uppercase tracking-widest flex items-center gap-3 active:scale-95 transition-all disabled:opacity-50"
+              >
+                {saving || isCommitPending ? <i className="fas fa-circle-notch fa-spin"></i> : <i className="fas fa-save"></i>} 
+                {saving || isCommitPending ? 'Syncing...' : 'Commit to Registry'}
+              </button>
+            </div>
           )}
         </div>
       </header>
@@ -565,7 +684,7 @@ const ArchitectureDesigner: React.FC<{
               readOnly={readOnly}
               onChange={(e) => setCode(e.target.value)}
               className={`w-full h-full bg-transparent text-emerald-400 font-mono text-sm p-8 outline-none resize-none custom-scrollbar selection:bg-emerald-500/20 ${readOnly ? 'opacity-80' : ''}`}
-              placeholder={format === DiagramFormat.MERMAID ? "Enter Mermaid syntax..." : "Visual source XML..."}
+              placeholder={format === DiagramFormat.MERMAID ? "Enter Mermaid syntax..." : "Visual source payload..."}
              />
            </div>
         </div>
@@ -593,19 +712,21 @@ const ArchitectureDesigner: React.FC<{
               </div>
            </div>
            
-           <div className={`flex-1 overflow-hidden relative flex flex-col ${format === DiagramFormat.DRAWIO ? 'p-0' : 'p-6 lg:p-10'}`}>
-              <div className={`bg-white w-full h-full relative overflow-hidden flex flex-col ${format === DiagramFormat.DRAWIO ? '' : 'rounded-[3rem] shadow-[0_50px_100px_rgba(0,0,0,0.05)] border border-slate-100 items-center justify-center'}`}>
-                 {format !== DiagramFormat.DRAWIO && (
+           <div className={`flex-1 overflow-hidden relative flex flex-col ${format === DiagramFormat.DRAWIO || format === DiagramFormat.MINDMAP ? 'p-0' : 'p-6 lg:p-10'}`}>
+              <div className={`bg-white w-full h-full relative overflow-hidden flex flex-col ${format === DiagramFormat.DRAWIO || format === DiagramFormat.MINDMAP ? '' : 'rounded-[3rem] shadow-[0_50px_100px_rgba(0,0,0,0.05)] border border-slate-100 items-center justify-center'}`}>
+                 {format !== DiagramFormat.DRAWIO && format !== DiagramFormat.MINDMAP && (
                    <div className="absolute inset-0 opacity-[0.02] pointer-events-none" style={{ backgroundImage: 'radial-gradient(#000 1px, transparent 0)', backgroundSize: '32px 32px' }}></div>
                  )}
                  
-                 <div className={`relative z-10 w-full h-full overflow-hidden ${format === DiagramFormat.DRAWIO ? '' : 'overflow-auto custom-scrollbar p-6 flex flex-col items-center justify-center'}`}>
-                   {format === DiagramFormat.MERMAID || format === DiagramFormat.MINDMAP ? (
+                 <div className={`relative z-10 w-full h-full overflow-hidden ${format === DiagramFormat.DRAWIO || format === DiagramFormat.MINDMAP ? '' : 'overflow-auto custom-scrollbar p-6 flex flex-col items-center justify-center'}`}>
+                   {format === DiagramFormat.MERMAID ? (
                      <div className="w-full h-full min-h-[500px]">
                         <MermaidRenderer content={code} id={diagram._id || 'temp'} />
                      </div>
                    ) : format === DiagramFormat.DRAWIO ? (
                      <DrawioEditor xml={code} onSave={handleDrawioUpdate} requestExportTrigger={exportTrigger} readOnly={readOnly} />
+                   ) : format === DiagramFormat.MINDMAP ? (
+                     <MindMapEditor data={code} onUpdate={setCode} readOnly={readOnly} />
                    ) : format === DiagramFormat.IMAGE ? (
                      <div className="max-w-full max-h-full flex items-center justify-center overflow-auto shadow-2xl rounded-[2rem] border border-slate-100 p-4">
                         <img src={code} className="max-w-none h-auto transition-transform duration-500" alt="Blueprint Preview" />

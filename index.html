@@ -8,6 +8,7 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/mind-elixir/dist/MindElixir.css">
   <style>
     body {
       font-family: 'Inter', sans-serif;
@@ -128,6 +129,11 @@
       font-size: 0.95rem;
       color: #334155;
     }
+
+    /* MindMap Styles override */
+    .mind-map-container .map-canvas {
+      background-color: #f8fafc !important;
+    }
   </style>
 <script type="importmap">
 {
@@ -148,7 +154,8 @@
     "@dnd-kit/core": "https://esm.sh/@dnd-kit/core@^6.1.0",
     "@dnd-kit/sortable": "https://esm.sh/@dnd-kit/sortable@^8.0.0",
     "@dnd-kit/utilities": "https://esm.sh/@dnd-kit/utilities@^3.2.2",
-    "mermaid": "https://esm.sh/mermaid@^10.9.0"
+    "mermaid": "https://esm.sh/mermaid@^10.9.0",
+    "mind-elixir": "https://esm.sh/mind-elixir@^3.13.0"
   }
 }
 </script>
