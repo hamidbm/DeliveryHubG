@@ -11,6 +11,35 @@ interface ArchitectureDiagramsProps {
   activeAppId?: string;
 }
 
+// Global defaults for stability
+const DEFAULT_MINDMAP_TOPIC = "Nexus Central Concept";
+const DEFAULT_MINDMAP_DATA = {
+  nodeData: {
+    id: "root",
+    topic: DEFAULT_MINDMAP_TOPIC,
+    root: true,
+    children: []
+  }
+};
+
+/**
+ * Guarded JSON parser to prevent application crashes on malformed/missing artifact content.
+ */
+function safeJsonParse<T>(value: unknown, fallback: T): T {
+  if (value === null || value === undefined) return fallback;
+  if (typeof value !== 'string') return fallback;
+
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === 'undefined' || trimmed === 'null') return fallback;
+
+  try {
+    return JSON.parse(trimmed) as T;
+  } catch (err) {
+    console.error("Nexus Registry: Failed to parse visual source payload. Falling back to default node.", err);
+    return fallback;
+  }
+}
+
 const MermaidRenderer: React.FC<{ content: string; id: string }> = ({ content, id }) => {
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -144,12 +173,8 @@ const MindMapEditor: React.FC<{
   useEffect(() => {
     if (!containerRef.current || initialized.current) return;
 
-    let mindData;
-    try {
-      mindData = data ? JSON.parse(data) : MindElixir.new('Nexus Central Concept');
-    } catch (e) {
-      mindData = MindElixir.new('Recovery Node');
-    }
+    // Use guarded parser for robustness
+    const mindData = safeJsonParse(data, DEFAULT_MINDMAP_DATA);
 
     const me = new MindElixir({
       el: containerRef.current,
@@ -168,23 +193,24 @@ const MindMapEditor: React.FC<{
     initialized.current = true;
 
     if (!readOnly) {
-      me.bus.addListener('operation', (operation: any) => {
+      me.bus.addListener('operation', () => {
         const fullData = me.getData();
         onUpdate(JSON.stringify(fullData));
       });
     }
 
     return () => {
-      // Cleanup if needed
+      // Cleanup happens via DOM removal in MindElixir
     };
   }, []);
 
-  // Update data if it changes externally (e.g. Ingest)
+  // Sync state if it changes externally
   useEffect(() => {
     if (meRef.current && data) {
       try {
-        const parsed = JSON.parse(data);
-        if (JSON.stringify(meRef.current.getData()) !== data) {
+        const currentDataStr = JSON.stringify(meRef.current.getData());
+        if (currentDataStr !== data) {
+          const parsed = safeJsonParse(data, DEFAULT_MINDMAP_DATA);
           meRef.current.refresh(parsed);
         }
       } catch (e) {}
@@ -526,8 +552,9 @@ const ArchitectureDesigner: React.FC<{
   isEditMode: boolean;
 }> = ({ diagram, onClose, onSuccess, bundles, applications, isEditMode }) => {
   const [code, setCode] = useState(() => {
-    if (diagram.format === DiagramFormat.MINDMAP && !diagram.content) {
-      return JSON.stringify(MindElixir.new('Nexus Central Concept'));
+    if (diagram.format === DiagramFormat.MINDMAP) {
+      // Ensure Mind Map diagrams always have valid JSON content
+      return diagram.content || JSON.stringify(DEFAULT_MINDMAP_DATA);
     }
     return diagram.content || '';
   });
@@ -624,8 +651,9 @@ const ArchitectureDesigner: React.FC<{
                   key={fmt}
                   onClick={() => {
                     setFormat(fmt);
-                    if (fmt === DiagramFormat.MINDMAP && !code.startsWith('{')) {
-                       setCode(JSON.stringify(MindElixir.new('Nexus Central Concept')));
+                    // Initialize with default data if switching to MINDMAP and current content is incompatible
+                    if (fmt === DiagramFormat.MINDMAP && !code.trim().startsWith('{')) {
+                       setCode(JSON.stringify(DEFAULT_MINDMAP_DATA));
                     }
                   }}
                   className={`px-4 py-2 text-[9px] font-black uppercase rounded-lg transition-all ${format === fmt ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
