@@ -56,20 +56,22 @@ const DrawioEditor: React.FC<{
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const xmlRef = useRef(xml);
   const onSaveRef = useRef(onSave);
+  const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
     xmlRef.current = xml;
     onSaveRef.current = onSave;
   }, [xml, onSave]);
 
+  // Handle explicit export requests from parent
   useEffect(() => {
-    if (requestExportTrigger && requestExportTrigger > 0) {
+    if (requestExportTrigger && requestExportTrigger > 0 && isReady) {
       iframeRef.current?.contentWindow?.postMessage(JSON.stringify({
         action: 'export',
         format: 'xml'
       }), '*');
     }
-  }, [requestExportTrigger]);
+  }, [requestExportTrigger, isReady]);
 
   useEffect(() => {
     const handleMessage = (evt: MessageEvent) => {
@@ -81,6 +83,7 @@ const DrawioEditor: React.FC<{
         if (!iframe || !iframe.contentWindow) return;
 
         if (data.event === 'init') {
+          setIsReady(true);
           iframe.contentWindow.postMessage(JSON.stringify({
             action: 'load',
             xml: xmlRef.current || '',
@@ -90,7 +93,6 @@ const DrawioEditor: React.FC<{
           if (data.xml) {
             onSaveRef.current(data.xml);
           }
-          
           if (data.event === 'save' || data.event === 'export') {
              iframe.contentWindow.postMessage(JSON.stringify({
                action: 'status',
@@ -107,10 +109,10 @@ const DrawioEditor: React.FC<{
   }, []);
 
   return (
-    <div className="w-full h-full relative">
+    <div className="absolute inset-0 w-full h-full bg-white">
       <iframe
         ref={iframeRef}
-        className="absolute inset-0 w-full h-full border-none bg-white"
+        className="w-full h-full border-none"
         src="https://embed.diagrams.net/?embed=1&ui=atlas&spin=1&proto=json&configure=1"
         title="Draw.io Editor"
       />
@@ -121,9 +123,11 @@ const DrawioEditor: React.FC<{
 const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ applications, bundles, activeBundleId, activeAppId }) => {
   const [diagrams, setDiagrams] = useState<ArchitectureDiagram[]>([]);
   const [isDesignerOpen, setIsDesignerOpen] = useState(false);
+  const [isIngestModalOpen, setIsIngestModalOpen] = useState(false);
   const [editingDiagram, setEditingDiagram] = useState<Partial<ArchitectureDiagram> | null>(null);
   const [loading, setLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
+  const [stagedContent, setStagedContent] = useState<{ content: string, format: DiagramFormat } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchDiagrams = useCallback(async () => {
@@ -159,62 +163,62 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
     setIsDesignerOpen(true);
   };
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    setIsUploading(true);
     const reader = new FileReader();
-    reader.onload = async (event) => {
+    reader.onload = (event) => {
       const result = event.target?.result;
-      if (typeof result !== 'string') {
-        setIsUploading(false);
-        return;
-      }
+      if (typeof result !== 'string') return;
 
       const isDrawio = file.name.endsWith('.drawio') || file.name.endsWith('.xml');
       const format = isDrawio ? DiagramFormat.DRAWIO : DiagramFormat.IMAGE;
       
-      const newDiagram: Partial<ArchitectureDiagram> = {
+      setStagedContent({ content: result, format });
+      setEditingDiagram({
         title: file.name.replace(/\.[^/.]+$/, ""),
         format,
         content: result,
-        status: 'DRAFT',
         bundleId: activeBundleId !== 'all' ? activeBundleId : undefined,
-        applicationId: activeAppId !== 'all' ? activeAppId : undefined
-      };
-
-      try {
-        const res = await fetch('/api/architecture/diagrams', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(newDiagram)
-        });
-        
-        if (res.ok) {
-          alert("Blueprint successfully ingested into Nexus Registry.");
-          await fetchDiagrams();
-          if (fileInputRef.current) fileInputRef.current.value = '';
-        } else {
-          const err = await res.json();
-          alert(`Ingest Failed: ${err.error || 'Unknown Error'}`);
-        }
-      } catch (err) {
-        alert("Ingest Error: Failed to communicate with Nexus Gateway.");
-      } finally {
-        setIsUploading(false);
-      }
-    };
-
-    reader.onerror = () => {
-      alert("Error reading file from disk.");
-      setIsUploading(false);
+        applicationId: activeAppId !== 'all' ? activeAppId : undefined,
+        status: 'DRAFT',
+        tags: []
+      });
+      setIsIngestModalOpen(true);
     };
 
     if (file.type.includes('image')) {
       reader.readAsDataURL(file);
     } else {
       reader.readAsText(file);
+    }
+  };
+
+  const commitIngest = async () => {
+    if (!editingDiagram?.title?.trim()) return alert("Title is mandatory.");
+    setIsUploading(true);
+    try {
+      const res = await fetch('/api/architecture/diagrams', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editingDiagram)
+      });
+      
+      if (res.ok) {
+        setIsIngestModalOpen(false);
+        setEditingDiagram(null);
+        setStagedContent(null);
+        await fetchDiagrams();
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      } else {
+        const err = await res.json();
+        alert(`Ingest Failed: ${err.error || 'Unknown Error'}`);
+      }
+    } catch (err) {
+      alert("Ingest Error: Failed to communicate with Nexus Gateway.");
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -238,11 +242,9 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
                <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" accept=".drawio,.xml,image/*" />
                <button 
                  onClick={() => fileInputRef.current?.click()}
-                 disabled={isUploading}
-                 className="px-6 py-3 bg-white border border-slate-200 text-slate-600 text-[10px] font-black rounded-2xl uppercase tracking-widest hover:bg-slate-50 transition-all flex items-center gap-2 shadow-sm disabled:opacity-50"
+                 className="px-6 py-3 bg-white border border-slate-200 text-slate-600 text-[10px] font-black rounded-2xl uppercase tracking-widest hover:bg-slate-50 transition-all flex items-center gap-2 shadow-sm"
                >
-                 {isUploading ? <i className="fas fa-circle-notch fa-spin"></i> : <i className="fas fa-cloud-arrow-up"></i>}
-                 {isUploading ? 'Ingesting...' : 'Ingest Blueprint'}
+                 <i className="fas fa-cloud-arrow-up"></i> Ingest Blueprint
                </button>
                <button 
                 onClick={() => openDesigner()}
@@ -315,6 +317,88 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
           applications={applications}
         />
       )}
+
+      {/* Ingest Staging Modal */}
+      {isIngestModalOpen && editingDiagram && (
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-md z-[300] flex items-center justify-center p-6">
+           <div className="bg-white rounded-[3rem] w-full max-w-xl p-12 shadow-2xl animate-fadeIn border border-slate-100 overflow-y-auto max-h-[90vh] custom-scrollbar">
+              <header className="mb-10">
+                 <h3 className="text-3xl font-black text-slate-900 tracking-tight">Stage Visual Artifact</h3>
+                 <p className="text-slate-400 text-sm font-medium mt-1">Map registry metadata to the imported blueprint.</p>
+              </header>
+
+              <div className="space-y-6">
+                 <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Blueprint Title</label>
+                    <input 
+                      value={editingDiagram.title} 
+                      onChange={(e) => setEditingDiagram({...editingDiagram, title: e.target.value})}
+                      className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-slate-700 font-bold outline-none focus:border-blue-500 transition-all"
+                    />
+                 </div>
+
+                 <div className="grid grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Bundle Association</label>
+                       <select 
+                         value={editingDiagram.bundleId || ''} 
+                         onChange={(e) => setEditingDiagram({...editingDiagram, bundleId: e.target.value || undefined, applicationId: undefined})}
+                         className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-slate-700 font-bold outline-none"
+                       >
+                          <option value="">Full Cluster Scope</option>
+                          {bundles.map(b => <option key={b._id} value={b._id}>{b.name}</option>)}
+                       </select>
+                    </div>
+                    <div className="space-y-2">
+                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Asset Mapping</label>
+                       <select 
+                         value={editingDiagram.applicationId || ''} 
+                         onChange={(e) => setEditingDiagram({...editingDiagram, applicationId: e.target.value || undefined})}
+                         className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-slate-700 font-bold outline-none"
+                       >
+                          <option value="">General Purpose</option>
+                          {applications.filter(a => !editingDiagram.bundleId || a.bundleId === editingDiagram.bundleId).map(a => <option key={a._id} value={a._id}>{a.name}</option>)}
+                       </select>
+                    </div>
+                 </div>
+
+                 <div className="grid grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Milestone Anchor</label>
+                       <select 
+                         value={editingDiagram.milestoneId || ''} 
+                         onChange={(e) => setEditingDiagram({...editingDiagram, milestoneId: e.target.value || undefined})}
+                         className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-slate-700 font-bold outline-none"
+                       >
+                          <option value="">Continuous Lifecycle</option>
+                          {[...Array(10)].map((_, i) => <option key={i} value={`M${i+1}`}>M{i+1} Release</option>)}
+                       </select>
+                    </div>
+                    <div className="space-y-2">
+                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Tags (Comma Separated)</label>
+                       <input 
+                        placeholder="L3, Security, API" 
+                        onChange={(e) => setEditingDiagram({...editingDiagram, tags: e.target.value.split(',').map(t => t.trim())})}
+                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-slate-700 font-bold outline-none" 
+                       />
+                    </div>
+                 </div>
+
+                 <div className="flex gap-4 pt-10 border-t border-slate-50">
+                    <button onClick={() => { setIsIngestModalOpen(false); setStagedContent(null); }} className="flex-1 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-900 transition-colors">Discard</button>
+                    <button 
+                      onClick={commitIngest} 
+                      disabled={isUploading}
+                      className="flex-[2] py-4 bg-slate-900 text-white text-[10px] font-black rounded-2xl shadow-2xl hover:bg-blue-600 transition-all uppercase tracking-widest"
+                    >
+                      {isUploading ? <i className="fas fa-circle-notch fa-spin mr-2"></i> : null}
+                      Commit to Registry
+                    </button>
+                 </div>
+              </div>
+           </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -333,6 +417,7 @@ const ArchitectureDesigner: React.FC<{
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [activeBundleId, setActiveBundleId] = useState(diagram.bundleId || '');
   const [activeAppId, setActiveAppId] = useState(diagram.applicationId || '');
+  const [activeMilestone, setActiveMilestone] = useState(diagram.milestoneId || '');
   
   const [exportTrigger, setExportTrigger] = useState(0);
   const [isCommitPending, setIsCommitPending] = useState(false);
@@ -351,6 +436,7 @@ const ArchitectureDesigner: React.FC<{
           format,
           bundleId: activeBundleId || undefined,
           applicationId: activeAppId || undefined,
+          milestoneId: activeMilestone || undefined,
           status: 'VERIFIED'
         })
       });
@@ -364,7 +450,7 @@ const ArchitectureDesigner: React.FC<{
       setSaving(false);
       setIsCommitPending(false);
     }
-  }, [title, diagram, format, activeBundleId, activeAppId, onSuccess]);
+  }, [title, diagram, format, activeBundleId, activeAppId, activeMilestone, onSuccess]);
 
   const handleCommitRequest = () => {
     if (!title.trim()) return alert("Title required.");
@@ -504,6 +590,13 @@ const ArchitectureDesigner: React.FC<{
                     <select value={activeAppId} onChange={(e) => setActiveAppId(e.target.value)} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-xs font-bold text-slate-700 outline-none hover:border-blue-200 transition-all">
                        <option value="">Full Cluster Scope</option>
                        {applications.filter(a => !activeBundleId || a.bundleId === activeBundleId).map(a => <option key={a._id} value={a._id}>{a.name}</option>)}
+                    </select>
+                 </div>
+                 <div className="space-y-2">
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Milestone Anchor</label>
+                    <select value={activeMilestone} onChange={(e) => setActiveMilestone(e.target.value)} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-xs font-bold text-slate-700 outline-none hover:border-blue-200 transition-all">
+                       <option value="">Continuous Lifecycle</option>
+                       {[...Array(10)].map((_, i) => <option key={i} value={`M${i+1}`}>M{i+1} Release</option>)}
                     </select>
                  </div>
               </div>

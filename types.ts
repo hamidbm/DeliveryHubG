@@ -88,6 +88,7 @@ export interface ArchitectureDiagram {
   content: string; // Mermaid code or base64/URL
   bundleId?: string;
   applicationId?: string;
+  milestoneId?: string;
   tags?: string[];
   createdBy: string;
   updatedAt: string;
@@ -218,5 +219,6 @@ export interface WikiPage { id?: string; _id?: string; slug?: string; title: str
 export interface WikiVersion extends WikiPage { versionedAt: string; pageId: string; }
 export interface WikiSpace { _id?: string; id?: string; key: string; name: string; description?: string; icon?: string; color?: string; visibility: 'internal' | 'vendors' | 'specific'; createdAt?: string; defaultThemeKey?: string; }
 export interface WikiTheme { _id?: string; key: string; name: string; description?: string; css: string; isActive: boolean; isDefault: boolean; createdAt?: string; updatedAt?: string; }
+export interface WikiComment { author: string; body: string; createdAt: string; }
 export interface TaxonomyCategory { _id?: string; id?: string; key: string; name: string; description?: string; icon?: string; isActive: boolean; sortOrder: number; }
 export interface TaxonomyDocumentType { _id?: string; id?: string; key: string; name: string; categoryId: string; description?: string; icon?: string; isActive: boolean; sortOrder: number; audience?: string[]; lifecyclePhases?: string[]; defaultTemplate?: string; requiredMetadata?: { requiresBundle: boolean; requiresApplication: boolean; requiresMilestone: boolean; }; }
