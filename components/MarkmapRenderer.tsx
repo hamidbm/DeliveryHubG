@@ -11,30 +11,53 @@ interface MarkmapRendererProps {
 }
 
 const MarkmapRenderer: React.FC<MarkmapRendererProps> = ({ content, theme = 'light' }) => {
+  const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const markmapRef = useRef<Markmap | null>(null);
   const transformerRef = useRef<Transformer>(new Transformer());
 
+  // 1. Initialize Markmap instance
   useEffect(() => {
     if (!svgRef.current) return;
 
-    // Initialize Markmap instance if it doesn't exist
     if (!markmapRef.current) {
       markmapRef.current = Markmap.create(svgRef.current, {
         autoFit: true,
         duration: 500,
-        paddingX: 16,
+        paddingX: 32,
       });
     }
+  }, []);
 
-    // Transform and update
+  // 2. Handle Data Updates
+  useEffect(() => {
+    if (!markmapRef.current) return;
+
     const { root } = transformerRef.current.transform(content || '# Start Typing...');
     markmapRef.current.setData(root);
-    markmapRef.current.fit();
-
+    
+    // Ensure fit runs after data is set and rendered
+    requestAnimationFrame(() => {
+      markmapRef.current?.fit();
+    });
   }, [content]);
 
-  // Handle manual fit view via exposing method or just internal logic
+  // 3. Handle Container Resizing (Sidebar toggle, window resize)
+  useEffect(() => {
+    if (!containerRef.current || !markmapRef.current) return;
+
+    const resizeObserver = new ResizeObserver(() => {
+      // Small delay to allow the layout to settle before refitting
+      requestAnimationFrame(() => {
+        markmapRef.current?.fit();
+      });
+    });
+
+    resizeObserver.observe(containerRef.current);
+    return () => resizeObserver.disconnect();
+  }, []);
+
+  // 4. Handle manual fit view events
   useEffect(() => {
     const handleFit = () => {
       markmapRef.current?.fit();
@@ -44,11 +67,15 @@ const MarkmapRenderer: React.FC<MarkmapRendererProps> = ({ content, theme = 'lig
   }, []);
 
   return (
-    <div className={`w-full h-full markmap-container theme-${theme} relative`}>
-      <svg ref={svgRef} className="markmap" />
-      <div className="absolute bottom-4 left-4 flex gap-2 pointer-events-none">
+    <div ref={containerRef} className={`w-full h-full markmap-container theme-${theme} relative overflow-hidden bg-white`}>
+      <svg 
+        ref={svgRef} 
+        className="markmap" 
+        style={{ width: '100%', height: '100%', display: 'block' }}
+      />
+      <div className="absolute bottom-4 left-4 flex gap-2 pointer-events-none z-10">
         <div className="px-3 py-1 bg-white/50 backdrop-blur-sm rounded-full text-[8px] font-black text-slate-400 uppercase tracking-widest border border-slate-100">
-           D3 Engine Active
+           D3 Radial Engine v1.0
         </div>
       </div>
     </div>

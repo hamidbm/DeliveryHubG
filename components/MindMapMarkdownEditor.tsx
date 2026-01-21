@@ -18,7 +18,6 @@ const MindMapMarkdownEditor: React.FC<MindMapMarkdownEditorProps> = ({ initialCo
   const [content, setContent] = useState(initialContent || DEFAULT_MARKMAP_MD);
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [isSidebarOpen, setIsSidebarOpen] = useState(!readOnly);
-  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const handleContentChange = (val: string) => {
@@ -123,7 +122,7 @@ const MindMapMarkdownEditor: React.FC<MindMapMarkdownEditorProps> = ({ initialCo
            )}
         </div>
 
-        <div className="flex-1">
+        <div className="flex-1 h-full min-h-0">
           <MarkmapRenderer content={content} theme={theme} />
         </div>
       </div>
