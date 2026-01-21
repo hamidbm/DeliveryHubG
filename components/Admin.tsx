@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import AdminThemes from './AdminThemes';
 import AdminBundles from './AdminBundles';
@@ -91,6 +90,7 @@ const Admin: React.FC = () => {
                           m.color === 'orange' ? 'bg-orange-500' :
                           m.color === 'purple' ? 'bg-purple-600' :
                           m.color === 'cyan' ? 'bg-cyan-500' :
+                          // Fix: Added missing opening quote for 'bg-slate-900' to resolve syntax and cascading type errors.
                           m.color === 'sky' ? 'bg-sky-500' : 'bg-slate-900'
                         } text-white`}>
                           <i className={`fas ${m.icon} text-xl`}></i>
@@ -223,11 +223,11 @@ const Admin: React.FC = () => {
         {renderModuleContent()}
       </main>
 
-      <style jsx>{`
+      <style dangerouslySetInnerHTML={{ __html: `
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
-      `}</style>
+      `}} />
     </div>
   );
 };

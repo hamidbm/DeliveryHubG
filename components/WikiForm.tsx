@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { WikiPage, WikiTheme, Bundle, Application, TaxonomyCategory, TaxonomyDocumentType } from '../types';
 import WikiPageDisplay from './WikiPageDisplay';
@@ -226,11 +225,12 @@ const WikiForm: React.FC<WikiFormProps> = ({
           )}
         </aside>
       </div>
-      <style jsx>{`
+      {/* Fix: Replaced style jsx with standard style tag and dangerouslySetInnerHTML for compatibility */}
+      <style dangerouslySetInnerHTML={{ __html: `
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
-      `}</style>
+      `}} />
     </div>
   );
 };

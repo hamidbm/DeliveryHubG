@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ArchitectureDiagram, DiagramFormat, Application, Bundle, Milestone } from '../types';
 import mermaid from 'mermaid';
@@ -36,13 +35,11 @@ function safeJsonParse<T>(value: unknown, fallback: T): T {
   if (!trimmed || trimmed === 'undefined' || trimmed === 'null') return fallback;
 
   try {
-    // Basic structural check for JSON before parsing
     if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) {
       return fallback;
     }
     return JSON.parse(trimmed) as T;
   } catch (err) {
-    console.warn("Nexus Registry: Visual source payload parsing issue. Reverting to safe default.");
     return fallback;
   }
 }
@@ -51,7 +48,6 @@ const MermaidRenderer: React.FC<{ content: string; id: string }> = ({ content, i
   const containerRef = useRef<HTMLDivElement>(null);
 
   const render = useCallback(async () => {
-    // Prevent Mermaid from attempting to render JSON/XML payloads
     if (!containerRef.current || !content || content.trim().startsWith('{') || content.trim().startsWith('<')) return;
     try {
       containerRef.current.innerHTML = ''; 
@@ -176,48 +172,58 @@ const MindMapEditor: React.FC<{
 }> = ({ data, onUpdate, readOnly = false }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const meRef = useRef<any>(null);
-  const initialized = useRef(false);
 
   useEffect(() => {
-    if (!containerRef.current || initialized.current) return;
+    if (!containerRef.current) return;
 
-    // Use guarded parser to ensure Mind Elixir always receives an object
     const mindData = safeJsonParse(data, DEFAULT_MINDMAP_DATA);
 
     try {
+      // Mind Elixir 3 initialization with all interactive modules enabled
       const me = new MindElixir({
         el: containerRef.current,
         direction: MindElixir.SIDE,
-        data: mindData,
+        // Fix: Removed 'data: mindData' from constructor options as it is not a recognized property.
+        // Data is instead passed to me.init(mindData) below.
         draggable: !readOnly,
         contextMenu: !readOnly,
         toolBar: true,
         nodeMenu: !readOnly,
         keypress: !readOnly,
         mainButton: !readOnly,
+        theme: {
+          name: 'Nexus Light',
+          palette: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'],
+          cssVar: {
+            '--main-color': '#3b82f6',
+            '--main-bgcolor': '#ffffff',
+            '--color': '#1e293b',
+            '--bgcolor': '#f8fafc',
+          } as any,
+        },
       });
 
-      me.init();
+      me.init(mindData);
       meRef.current = me;
-      initialized.current = true;
+      
+      // Force initial center to ensure root node visibility
+      setTimeout(() => me.toCenter(), 200);
 
       if (!readOnly) {
         me.bus.addListener('operation', () => {
-          const fullData = me.getData();
-          onUpdate(JSON.stringify(fullData));
+          const updatedData = me.getData();
+          onUpdate(JSON.stringify(updatedData));
         });
       }
     } catch (err) {
-      console.error("Nexus Hub: MindElixir initialization failed.", err);
+      console.error("MindMap Initialization Error:", err);
     }
 
     return () => {
-      initialized.current = false;
-      // MindElixir doesn't strictly require explicit teardown if the element is removed from DOM.
+      meRef.current = null;
     };
   }, []);
 
-  // Synchronize state if data changes externally (e.g., Undo/Redo or Registry sync)
   useEffect(() => {
     if (meRef.current && data) {
       try {
@@ -231,20 +237,24 @@ const MindMapEditor: React.FC<{
   }, [data]);
 
   return (
-    <div className="w-full h-full relative mind-map-container overflow-hidden">
-      <div ref={containerRef} className="w-full h-full bg-slate-50" />
+    <div className="absolute inset-0 bg-white overflow-hidden mind-map-container" style={{ zIndex: 1 }}>
+      <div ref={containerRef} className="w-full h-full" style={{ height: '100%', minHeight: '600px' }} />
       {readOnly && (
-        <div className="absolute inset-0 z-10 bg-transparent pointer-events-none cursor-default" />
+        <div className="absolute inset-0 z-[60] bg-transparent cursor-default pointer-events-none" />
       )}
       {!readOnly && (
-        <div className="absolute bottom-6 right-6 flex flex-col gap-2 z-20">
+        <div className="absolute bottom-8 right-8 flex flex-col gap-3 z-[70]">
           <button 
             onClick={() => meRef.current?.toCenter()}
-            className="w-10 h-10 rounded-full bg-white shadow-xl flex items-center justify-center text-slate-400 hover:text-blue-600 transition-all border border-slate-100"
-            title="Recenter"
+            className="w-12 h-12 rounded-2xl bg-white shadow-2xl flex items-center justify-center text-slate-500 hover:text-blue-600 transition-all border border-slate-100 active:scale-90"
+            title="Focus Root Node"
           >
-            <i className="fas fa-crosshairs"></i>
+            <i className="fas fa-crosshairs text-lg"></i>
           </button>
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-100 p-2 flex flex-col gap-1">
+             <button onClick={() => meRef.current?.zoomIn()} className="w-8 h-8 rounded-lg hover:bg-slate-50 text-slate-400 hover:text-blue-500 transition-colors"><i className="fas fa-plus"></i></button>
+             <button onClick={() => meRef.current?.zoomOut()} className="w-8 h-8 rounded-lg hover:bg-slate-50 text-slate-400 hover:text-blue-500 transition-colors"><i className="fas fa-minus"></i></button>
+          </div>
         </div>
       )}
     </div>
@@ -287,7 +297,7 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
       setEditingDiagram({
         title: 'New Architecture Blueprint',
         format: DiagramFormat.MERMAID,
-        content: '', // Designer logic will apply defaults based on format
+        content: '', 
         status: 'DRAFT',
         bundleId: activeBundleId !== 'all' ? activeBundleId : undefined,
         applicationId: activeAppId !== 'all' ? activeAppId : undefined
@@ -552,6 +562,13 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
            </div>
         </div>
       )}
+      
+      {/* Replaced style jsx with standard style tag and dangerouslySetInnerHTML for compatibility */}
+      <style dangerouslySetInnerHTML={{ __html: `
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+      `}} />
     </div>
   );
 };
@@ -566,17 +583,14 @@ const ArchitectureDesigner: React.FC<{
 }> = ({ diagram, onClose, onSuccess, bundles, applications, isEditMode }) => {
   const [format, setFormat] = useState<DiagramFormat>(diagram.format || DiagramFormat.MERMAID);
   
-  // Guarded initialization logic to ensure starting code matches format expectation
   const [code, setCode] = useState(() => {
     if (diagram.content) {
-       // If format is Mind Map, ensure we are starting with valid JSON
        if (diagram.format === DiagramFormat.MINDMAP && !diagram.content.trim().startsWith('{')) {
           return JSON.stringify(DEFAULT_MINDMAP_DATA);
        }
        return diagram.content;
     }
     
-    // Default logic for NEW items
     if (format === DiagramFormat.MINDMAP) return JSON.stringify(DEFAULT_MINDMAP_DATA);
     if (format === DiagramFormat.DRAWIO) return DEFAULT_DRAWIO_XML;
     return DEFAULT_MERMAID_CODE;
@@ -653,20 +667,17 @@ const ArchitectureDesigner: React.FC<{
   const switchFormat = (newFmt: DiagramFormat) => {
     if (newFmt === format) return;
 
-    // Detection: Is the user currently using a default template or is the code empty?
     const isDefault = code.trim() === '' || 
                      code.trim() === DEFAULT_MERMAID_CODE || 
                      code.trim() === DEFAULT_DRAWIO_XML || 
                      code.trim() === JSON.stringify(DEFAULT_MINDMAP_DATA);
 
-    // If swapping from a text-based format to an object-based format and non-default content exists, warn user.
     if (!isDefault && (newFmt === DiagramFormat.MINDMAP || newFmt === DiagramFormat.DRAWIO)) {
        if (!confirm("Switching visual engine will reset current canvas content to default template. Proceed?")) return;
     }
 
     setFormat(newFmt);
     
-    // Auto-seed template if content was default or if we are forced to reset
     if (isDefault || newFmt === DiagramFormat.MINDMAP || newFmt === DiagramFormat.DRAWIO) {
       if (newFmt === DiagramFormat.MINDMAP) setCode(JSON.stringify(DEFAULT_MINDMAP_DATA));
       else if (newFmt === DiagramFormat.DRAWIO) setCode(DEFAULT_DRAWIO_XML);
@@ -849,11 +860,12 @@ const ArchitectureDesigner: React.FC<{
         </aside>
       </div>
       
-      <style jsx>{`
+      {/* Replaced style jsx with standard style tag and dangerouslySetInnerHTML for compatibility */}
+      <style dangerouslySetInnerHTML={{ __html: `
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
-      `}</style>
+      `}} />
     </div>
   );
 };

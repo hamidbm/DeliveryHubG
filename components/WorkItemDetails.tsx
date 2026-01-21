@@ -101,9 +101,8 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
     const files = e.target.files;
     if (!files || files.length === 0) return;
     setUploading(true);
-    // Simulate upload delay and storage
-    // Fix: Explicitly type 'f' as 'any' to resolve "Property does not exist on type 'unknown'" errors during Array.from(files).map
-    const newAttachments: WorkItemAttachment[] = Array.from(files).map((f: any) => ({
+    
+    const newAttachments = Array.from(files).map((f) => ({
       name: f.name,
       size: f.size,
       type: f.type,
@@ -111,14 +110,13 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
       uploadedBy: 'Current User',
       createdAt: new Date().toISOString()
     }));
-    await handleUpdateItem({ attachments: [...(item.attachments || []), ...newAttachments] });
+    await handleUpdateItem({ attachments: [...(item.attachments || []), ...newAttachments] as any });
     setUploading(false);
   };
 
   const handleAddLink = async () => {
     const targetKey = window.prompt("Enter Target Artifact Key (e.g. CORE-123):");
     if (!targetKey) return;
-    // Real logic would search by key first
     const link: WorkItemLink = {
       type: 'RELATES_TO',
       targetId: 'lookup-pending',
@@ -230,7 +228,7 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
               <div className="space-y-2">
                 <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Narrative Description</label>
                 <textarea 
-                  value={item.description} 
+                  value={item.description || ''} 
                   onChange={(e) => handleUpdateItem({ description: e.target.value })} 
                   className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 text-sm font-medium h-40 outline-none focus:ring-2 focus:ring-blue-500/10" 
                   placeholder="Elaborate on the requirements and technical constraints..."
@@ -479,7 +477,7 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
         )}
       </div>
 
-      <style jsx>{`
+      <style dangerouslySetInnerHTML={{ __html: `
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
@@ -489,7 +487,7 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
           75% { transform: translateX(4px); }
         }
         .animate-shake { animation: shake 0.2s ease-in-out 0s 2; }
-      `}</style>
+      `}} />
     </div>
   );
 };

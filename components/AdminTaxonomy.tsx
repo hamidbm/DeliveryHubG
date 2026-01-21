@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { TaxonomyCategory, TaxonomyDocumentType } from '../types';
 
@@ -240,7 +239,7 @@ const AdminTaxonomy: React.FC = () => {
                                  <h4 className="text-xl font-black text-slate-800 group-hover:text-blue-600 transition-colors">{type.name}</h4>
                                  <code className="text-[10px] font-black text-slate-400 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-100">{type.key}</code>
                               </div>
-                              <div className="flex flex-wrap gap-2">
+                              <div className="flex wrap gap-2">
                                  {type.audience?.map(aud => <span key={aud} className="px-2 py-0.5 bg-indigo-50 text-indigo-600 text-[9px] font-black uppercase rounded-md border border-indigo-100">{aud}</span>)}
                                  {type.lifecyclePhases?.map(ph => <span key={ph} className="px-2 py-0.5 bg-emerald-50 text-emerald-600 text-[9px] font-black uppercase rounded-md border border-emerald-100">{ph}</span>)}
                               </div>
@@ -427,11 +426,12 @@ const AdminTaxonomy: React.FC = () => {
         </div>
       )}
 
-      <style jsx>{`
+      {/* Fix: Replaced style jsx with standard style tag and dangerouslySetInnerHTML for compatibility */}
+      <style dangerouslySetInnerHTML={{ __html: `
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
-      `}</style>
+      `}} />
     </div>
   );
 };

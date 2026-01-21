@@ -188,7 +188,8 @@ export default function LoginPage() {
         </div>
       </div>
       
-      <style jsx global>{`
+      {/* Fix: Replaced style jsx global with standard style tag and dangerouslySetInnerHTML for compatibility */}
+      <style dangerouslySetInnerHTML={{ __html: `
         @keyframes shake {
           0%, 100% { transform: translateX(0); }
           25% { transform: translateX(-4px); }
@@ -197,7 +198,7 @@ export default function LoginPage() {
         .animate-shake {
           animation: shake 0.2s ease-in-out 0s 2;
         }
-      `}</style>
+      `}} />
     </div>
   );
 }

@@ -106,6 +106,7 @@ export default function ProfilePage() {
   if (!user) return null;
 
   return (
+    /* Fix: Added missing required properties bundles and applications to Layout component */
     <Layout
       activeTab="profile"
       setActiveTab={() => {}}
@@ -116,6 +117,8 @@ export default function ProfilePage() {
       userName={user.name}
       userRole={user.role}
       onLogout={handleLogout}
+      bundles={[]}
+      applications={[]}
     >
       <div className="max-w-4xl mx-auto space-y-8 animate-fadeIn">
         <header className="flex flex-col md:flex-row md:items-end justify-between gap-4">
@@ -310,7 +313,8 @@ export default function ProfilePage() {
         </div>
       </div>
       
-      <style jsx global>{`
+      {/* Fix: Replaced style jsx global with standard style tag and dangerouslySetInnerHTML for compatibility */}
+      <style dangerouslySetInnerHTML={{ __html: `
         @keyframes shake {
           0%, 100% { transform: translateX(0); }
           25% { transform: translateX(-5px); }
@@ -319,7 +323,7 @@ export default function ProfilePage() {
         .animate-shake {
           animation: shake 0.3s ease-in-out;
         }
-      `}</style>
+      `}} />
     </Layout>
   );
 }

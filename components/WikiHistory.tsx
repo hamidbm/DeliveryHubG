@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { WikiVersion, WikiPage, Bundle, Application } from '../types';
 import WikiPageDisplay from './WikiPageDisplay';
@@ -249,12 +248,13 @@ const WikiHistory: React.FC<WikiHistoryProps> = ({ page, onClose, onRevert, bund
         </main>
       </div>
 
-      <style jsx>{`
+      {/* Fix: Replaced style jsx with standard style tag and dangerouslySetInnerHTML for compatibility */}
+      <style dangerouslySetInnerHTML={{ __html: `
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #cbd5e1; }
-      `}</style>
+      `}} />
     </div>
   );
 };
