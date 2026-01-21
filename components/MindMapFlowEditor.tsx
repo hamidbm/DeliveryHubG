@@ -10,7 +10,8 @@ import ReactFlow, {
   useNodesState, 
   useEdgesState,
   useReactFlow,
-  Panel
+  Panel,
+  ReactFlowInstance
 } from 'reactflow';
 import { safeMindMapParse, DEFAULT_MINDMAP_JSON } from '../lib/mindmapDsl';
 import { computeMindMapLayout } from '../lib/mindmapLayout';
@@ -40,8 +41,8 @@ const MindMapFlowEditor: React.FC<MindMapFlowEditorProps> = ({ initialContent, o
   const [isSidebarOpen, setIsSidebarOpen] = useState(!readOnly);
   const { fitView } = useReactFlow();
   
-  // Fix: Used ReturnType<typeof setTimeout> instead of NodeJS.Timeout to resolve namespace error in browser environment.
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reactFlowInstanceRef = useRef<ReactFlowInstance | null>(null);
 
   const performLayoutUpdate = useCallback((text: string) => {
     const { data, error: parseError } = safeMindMapParse(text);
@@ -81,7 +82,15 @@ const MindMapFlowEditor: React.FC<MindMapFlowEditorProps> = ({ initialContent, o
     
     debounceTimerRef.current = setTimeout(() => {
       performLayoutUpdate(val);
-    }, 400); // 400ms debounce
+    }, 400); 
+  };
+
+  const handleInit = (instance: ReactFlowInstance) => {
+    reactFlowInstanceRef.current = instance;
+    // Initial fit view once the instance is ready
+    setTimeout(() => {
+      instance.fitView(fitViewOptions);
+    }, 100);
   };
 
   const handleFormat = () => {
@@ -92,7 +101,7 @@ const MindMapFlowEditor: React.FC<MindMapFlowEditorProps> = ({ initialContent, o
   };
 
   return (
-    <div className="flex-1 flex overflow-hidden h-full bg-slate-50 relative">
+    <div className="flex-1 flex overflow-hidden h-full w-full bg-slate-50 relative">
       {!readOnly && (
         <div className={`transition-all duration-500 ease-in-out border-r border-slate-200 bg-slate-900 flex flex-col shrink-0 z-50 ${isSidebarOpen ? 'w-[450px]' : 'w-0 opacity-0'}`}>
           <header className="px-8 py-6 border-b border-white/10 flex items-center justify-between bg-black/20">
@@ -135,13 +144,13 @@ const MindMapFlowEditor: React.FC<MindMapFlowEditorProps> = ({ initialContent, o
         </div>
       )}
 
-      <div className="flex-1 relative bg-white">
+      <div className="flex-1 relative bg-white h-full w-full overflow-hidden">
         {!readOnly && (
           <button 
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
             className="absolute left-0 top-1/2 -translate-y-1/2 z-[60] w-8 h-24 bg-slate-900 text-white rounded-r-2xl flex items-center justify-center hover:bg-blue-600 transition-all shadow-2xl"
           >
-            <i className={`fas fa-chevron-${isSidebarOpen ? 'left' : 'right'} text-xs`}></i>
+            <i className={`fas ${isSidebarOpen ? 'fa-chevron-left' : 'fa-chevron-right'} text-xs`}></i>
           </button>
         )}
 
@@ -151,11 +160,14 @@ const MindMapFlowEditor: React.FC<MindMapFlowEditorProps> = ({ initialContent, o
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           nodeTypes={nodeTypes}
+          onInit={handleInit}
           minZoom={0.05}
           maxZoom={2.0}
           nodesDraggable={!readOnly}
           panOnDrag={true}
-          selectionOnDrag={true}
+          selectionOnDrag={false} // Disable box selection to allow standard mouse panning
+          fitView
+          fitViewOptions={fitViewOptions}
           className="mindmap-flow-engine"
         >
           <Background color="#f8fafc" gap={40} size={1} />
