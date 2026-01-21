@@ -1,5 +1,5 @@
 
-import { z } from 'z';
+import { z } from 'zod';
 
 export const MindMapNodeSchema: z.ZodType<any> = z.lazy(() =>
   z.object({
@@ -21,7 +21,6 @@ export const MindMapNodeSchema: z.ZodType<any> = z.lazy(() =>
 );
 
 export const MindMapDslSchema = z.object({
-  // Fix: Provided full default object to .default() to satisfy Zod type inference requirements for nested objects with defaults.
   meta: z.object({
     title: z.string().optional(),
     layout: z.enum(['RADIAL', 'TREE']).default('RADIAL'),
@@ -101,7 +100,6 @@ export function safeMindMapParse(content: string): { data: MindMapDsl | null; er
     const raw = JSON.parse(content);
     const parsed = MindMapDslSchema.safeParse(raw);
     if (!parsed.success) {
-      // Fix: Used .issues instead of .errors to correctly access the ZodError details.
       return { data: null, error: parsed.error.issues.map(e => `${e.path.join('.')}: ${e.message}`).join(', ') };
     }
     return { data: parsed.data, error: null };

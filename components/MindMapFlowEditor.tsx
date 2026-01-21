@@ -13,7 +13,7 @@ import ReactFlow, {
   FitViewOptions,
   Panel
 } from 'reactflow';
-import 'reactflow/dist/style.css';
+// import 'reactflow/dist/style.css'; // Removed: Moved to index.html link tag
 import { safeMindMapParse, DEFAULT_MINDMAP_JSON, MindMapDsl } from '../lib/mindmapDsl';
 import { computeMindMapLayout } from '../lib/mindmapLayout';
 import { exportMindMapAsSvg, exportMindMapAsPng } from '../lib/mindmapExport';
@@ -173,7 +173,6 @@ const MindMapFlowEditor: React.FC<MindMapFlowEditorProps> = ({ initialContent, o
         </ReactFlow>
       </div>
 
-      {/* Fix: Replaced style jsx with standard style tag and dangerouslySetInnerHTML for compatibility */}
       <style dangerouslySetInnerHTML={{ __html: `
         .react-flow__edge-path {
           stroke-dasharray: 0;

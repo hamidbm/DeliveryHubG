@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import Link from 'next/link';
+import { useRouter } from '../App';
 import { NAV_ITEMS } from '../constants';
 import { WikiSpace, Application, Bundle, WorkItem, Notification } from '../types';
 
@@ -38,6 +38,7 @@ const Layout: React.FC<LayoutProps> = ({
   setSearchQuery, bundles = [], applications = [], epics = [], onCreateSpace, onCreateWorkItem, userName = 'Alex Architect',
   userRole = 'Enterprise Architect', onLogout
 }) => {
+  const router = useRouter();
   const [spaces, setSpaces] = useState<WikiSpace[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
@@ -65,7 +66,7 @@ const Layout: React.FC<LayoutProps> = ({
       if (notifRef.current && !notifRef.current.contains(e.target as Node)) setIsNotifOpen(false);
     };
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   const unreadCount = notifications.filter(n => !n.read).length;
@@ -82,12 +83,15 @@ const Layout: React.FC<LayoutProps> = ({
   return (
     <div className="min-h-screen flex flex-col">
       <nav className="bg-slate-900 text-white h-16 fixed top-0 w-full z-50 flex items-center px-6 shadow-xl">
-        <Link href="/" className="flex items-center space-x-3 mr-12 shrink-0 cursor-pointer">
+        <a 
+          onClick={(e) => { e.preventDefault(); setActiveTab('dashboard'); router.push('/'); }} 
+          className="flex items-center space-x-3 mr-12 shrink-0 cursor-pointer"
+        >
           <div className="w-8 h-8 bg-blue-500 rounded flex items-center justify-center">
             <i className="fas fa-bolt text-white"></i>
           </div>
           <span className="font-bold text-xl tracking-tight">NexusDelivery</span>
-        </Link>
+        </a>
 
         <div className="flex space-x-1 h-full overflow-x-auto no-scrollbar">
           {NAV_ITEMS.map((item) => (
@@ -171,10 +175,13 @@ const Layout: React.FC<LayoutProps> = ({
                <div className="px-4 py-2 border-b border-slate-50 mb-1">
                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Account</p>
                </div>
-               <Link href="/profile" className="w-full text-left px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 flex items-center space-x-2 transition cursor-pointer">
+               <a 
+                 onClick={(e) => { e.preventDefault(); setActiveTab('profile'); router.push('/profile'); }}
+                 className="w-full text-left px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 flex items-center space-x-2 transition cursor-pointer"
+               >
                  <i className="fas fa-user-circle"></i>
                  <span>Profile Settings</span>
-               </Link>
+               </a>
                <button onClick={onLogout} className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center space-x-2 transition font-medium">
                  <i className="fas fa-sign-out-alt"></i>
                  <span>Sign Out</span>

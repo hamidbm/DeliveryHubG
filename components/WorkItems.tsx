@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, Suspense } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
+import { useSearchParams, useRouter } from '../App';
 import { WorkItem, WorkItemType, WorkItemStatus, Bundle, Application } from '../types';
 import WorkItemsTreeView from './WorkItemsTreeView';
 import WorkItemsBoardView from './WorkItemsBoardView';
@@ -204,7 +204,6 @@ const WorkItems: React.FC<WorkItemsProps> = (props) => {
   );
 };
 
-// Fix: Changed FilterToggle to use React.FC to properly support key prop and ensure type safety during list mapping.
 const FilterToggle: React.FC<{ label: string; active: boolean; onClick: () => void }> = ({ label, active, onClick }) => (
   <button 
     onClick={onClick}

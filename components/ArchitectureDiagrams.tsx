@@ -1,19 +1,10 @@
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import dynamic from 'next/dynamic';
+import React, { useState, useEffect, useRef, useCallback, Suspense, lazy } from 'react';
 import { ArchitectureDiagram, DiagramFormat, Application, Bundle, Milestone } from '../types';
 import mermaid from 'mermaid';
 
-// Dynamically import the heavy MindMap Flow editor
-const MindMapFlowEditor = dynamic(() => import('./MindMapFlowEditor'), { 
-  ssr: false,
-  loading: () => (
-    <div className="flex-1 flex flex-col items-center justify-center bg-slate-50 gap-4">
-      <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Loading Flow Engine...</p>
-    </div>
-  )
-});
+// Use React.lazy instead of next/dynamic for standard browser module compatibility
+const MindMapFlowEditor = lazy(() => import('./MindMapFlowEditor'));
 
 interface ArchitectureDiagramsProps {
   applications: Application[];
@@ -391,11 +382,18 @@ const ArchitectureDesigner: React.FC<{
 
       <div className="flex-1 flex overflow-hidden bg-slate-50 relative">
         {format === DiagramFormat.MINDMAP_FLOW ? (
-          <MindMapFlowEditor 
-            initialContent={code} 
-            onSave={handleSave} 
-            readOnly={readOnly}
-          />
+          <Suspense fallback={
+            <div className="flex-1 flex flex-col items-center justify-center bg-white gap-4">
+              <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Activating Canvas...</p>
+            </div>
+          }>
+            <MindMapFlowEditor 
+              initialContent={code} 
+              onSave={handleSave} 
+              readOnly={readOnly}
+            />
+          </Suspense>
         ) : format === DiagramFormat.MERMAID ? (
           <div className="flex-1 flex overflow-hidden">
              <div className="w-1/3 bg-slate-900 flex flex-col border-r border-white/5">
