@@ -1,7 +1,19 @@
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import dynamic from 'next/dynamic';
 import { ArchitectureDiagram, DiagramFormat, Application, Bundle, Milestone } from '../types';
 import mermaid from 'mermaid';
-import MindElixir from 'mind-elixir';
+
+// Dynamically import the heavy MindMap Flow editor
+const MindMapFlowEditor = dynamic(() => import('./MindMapFlowEditor'), { 
+  ssr: false,
+  loading: () => (
+    <div className="flex-1 flex flex-col items-center justify-center bg-slate-50 gap-4">
+      <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Loading Flow Engine...</p>
+    </div>
+  )
+});
 
 interface ArchitectureDiagramsProps {
   applications: Application[];
@@ -10,39 +22,8 @@ interface ArchitectureDiagramsProps {
   activeAppId?: string;
 }
 
-// Global defaults for stability and registry consistency
-const DEFAULT_MINDMAP_TOPIC = "Nexus Central Concept";
-const DEFAULT_MINDMAP_DATA = {
-  nodeData: {
-    id: "root",
-    topic: DEFAULT_MINDMAP_TOPIC,
-    root: true,
-    children: []
-  }
-};
-
 const DEFAULT_MERMAID_CODE = 'graph TD\n  Start --> Process\n  Process --> End';
 const DEFAULT_DRAWIO_XML = '<mxfile><diagram id="page-1" name="Page-1"><mxGraphModel dx="1000" dy="1000" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0"><root><mxCell id="0"/><mxCell id="1" parent="0"/></root></mxGraphModel></diagram></mxfile>';
-
-/**
- * Guarded JSON parser to prevent application crashes on malformed/missing artifact content.
- */
-function safeJsonParse<T>(value: unknown, fallback: T): T {
-  if (value === null || value === undefined) return fallback;
-  if (typeof value !== 'string') return fallback;
-
-  const trimmed = value.trim();
-  if (!trimmed || trimmed === 'undefined' || trimmed === 'null') return fallback;
-
-  try {
-    if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) {
-      return fallback;
-    }
-    return JSON.parse(trimmed) as T;
-  } catch (err) {
-    return fallback;
-  }
-}
 
 const MermaidRenderer: React.FC<{ content: string; id: string }> = ({ content, id }) => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -165,111 +146,12 @@ const DrawioEditor: React.FC<{
   );
 };
 
-const MindMapEditor: React.FC<{
-  data: string;
-  onUpdate: (data: string) => void;
-  readOnly?: boolean;
-}> = ({ data, onUpdate, readOnly = false }) => {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const meRef = useRef<any>(null);
-
-  useEffect(() => {
-    if (!containerRef.current) return;
-
-    const mindData = safeJsonParse(data, DEFAULT_MINDMAP_DATA);
-
-    try {
-      // Mind Elixir 3 initialization with all interactive modules enabled
-      const me = new MindElixir({
-        el: containerRef.current,
-        direction: MindElixir.SIDE,
-        // Fix: Removed 'data: mindData' from constructor options as it is not a recognized property.
-        // Data is instead passed to me.init(mindData) below.
-        draggable: !readOnly,
-        contextMenu: !readOnly,
-        toolBar: true,
-        nodeMenu: !readOnly,
-        keypress: !readOnly,
-        mainButton: !readOnly,
-        theme: {
-          name: 'Nexus Light',
-          palette: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'],
-          cssVar: {
-            '--main-color': '#3b82f6',
-            '--main-bgcolor': '#ffffff',
-            '--color': '#1e293b',
-            '--bgcolor': '#f8fafc',
-          } as any,
-        },
-      });
-
-      me.init(mindData);
-      meRef.current = me;
-      
-      // Force initial center to ensure root node visibility
-      setTimeout(() => me.toCenter(), 200);
-
-      if (!readOnly) {
-        me.bus.addListener('operation', () => {
-          const updatedData = me.getData();
-          onUpdate(JSON.stringify(updatedData));
-        });
-      }
-    } catch (err) {
-      console.error("MindMap Initialization Error:", err);
-    }
-
-    return () => {
-      meRef.current = null;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (meRef.current && data) {
-      try {
-        const currentDataStr = JSON.stringify(meRef.current.getData());
-        if (currentDataStr !== data) {
-          const parsed = safeJsonParse(data, DEFAULT_MINDMAP_DATA);
-          meRef.current.refresh(parsed);
-        }
-      } catch (e) {}
-    }
-  }, [data]);
-
-  return (
-    <div className="absolute inset-0 bg-white overflow-hidden mind-map-container" style={{ zIndex: 1 }}>
-      <div ref={containerRef} className="w-full h-full" style={{ height: '100%', minHeight: '600px' }} />
-      {readOnly && (
-        <div className="absolute inset-0 z-[60] bg-transparent cursor-default pointer-events-none" />
-      )}
-      {!readOnly && (
-        <div className="absolute bottom-8 right-8 flex flex-col gap-3 z-[70]">
-          <button 
-            onClick={() => meRef.current?.toCenter()}
-            className="w-12 h-12 rounded-2xl bg-white shadow-2xl flex items-center justify-center text-slate-500 hover:text-blue-600 transition-all border border-slate-100 active:scale-90"
-            title="Focus Root Node"
-          >
-            <i className="fas fa-crosshairs text-lg"></i>
-          </button>
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-100 p-2 flex flex-col gap-1">
-             <button onClick={() => meRef.current?.zoomIn()} className="w-8 h-8 rounded-lg hover:bg-slate-50 text-slate-400 hover:text-blue-500 transition-colors"><i className="fas fa-plus"></i></button>
-             <button onClick={() => meRef.current?.zoomOut()} className="w-8 h-8 rounded-lg hover:bg-slate-50 text-slate-400 hover:text-blue-500 transition-colors"><i className="fas fa-minus"></i></button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
-
 const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ applications, bundles, activeBundleId, activeAppId }) => {
   const [diagrams, setDiagrams] = useState<ArchitectureDiagram[]>([]);
   const [isDesignerOpen, setIsDesignerOpen] = useState(false);
-  const [isIngestModalOpen, setIsIngestModalOpen] = useState(false);
   const [editingDiagram, setEditingDiagram] = useState<Partial<ArchitectureDiagram> | null>(null);
   const [isEditMode, setIsEditMode] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [isUploading, setIsUploading] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchDiagrams = useCallback(async () => {
     setLoading(true);
@@ -296,7 +178,7 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
     if (!diag) {
       setEditingDiagram({
         title: 'New Architecture Blueprint',
-        format: DiagramFormat.MERMAID,
+        format: DiagramFormat.MINDMAP_FLOW,
         content: '', 
         status: 'DRAFT',
         bundleId: activeBundleId !== 'all' ? activeBundleId : undefined,
@@ -307,64 +189,6 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
     }
     setIsEditMode(edit);
     setIsDesignerOpen(true);
-  };
-
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const result = event.target?.result;
-      if (typeof result !== 'string') return;
-
-      let format = DiagramFormat.IMAGE;
-      if (file.name.endsWith('.drawio') || file.name.endsWith('.xml')) format = DiagramFormat.DRAWIO;
-      if (file.name.endsWith('.json')) format = DiagramFormat.MINDMAP;
-      
-      setEditingDiagram({
-        title: file.name.replace(/\.[^/.]+$/, ""),
-        format,
-        content: result,
-        bundleId: activeBundleId !== 'all' ? activeBundleId : undefined,
-        applicationId: activeAppId !== 'all' ? activeAppId : undefined,
-        status: 'DRAFT',
-        tags: []
-      });
-      setIsIngestModalOpen(true);
-    };
-
-    if (file.type.includes('image')) {
-      reader.readAsDataURL(file);
-    } else {
-      reader.readAsText(file);
-    }
-  };
-
-  const commitIngest = async () => {
-    if (!editingDiagram?.title?.trim()) return alert("Title is mandatory.");
-    setIsUploading(true);
-    try {
-      const res = await fetch('/api/architecture/diagrams', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(editingDiagram)
-      });
-      
-      if (res.ok) {
-        setIsIngestModalOpen(false);
-        setEditingDiagram(null);
-        await fetchDiagrams();
-        if (fileInputRef.current) fileInputRef.current.value = '';
-      } else {
-        const err = await res.json();
-        alert(`Ingest Failed: ${err.error || 'Unknown Error'}`);
-      }
-    } catch (err) {
-      alert("Ingest Error: Connection lost.");
-    } finally {
-      setIsUploading(false);
-    }
   };
 
   const handleDelete = async (id: string, e: React.MouseEvent) => {
@@ -381,16 +205,9 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
           <header className="flex justify-between items-end">
             <div>
               <h2 className="text-4xl font-black text-slate-900 tracking-tighter uppercase italic">Architecture Canvas</h2>
-              <p className="text-slate-400 font-medium text-lg">Visualizing system relationships, sequence flows, and infrastructure topologies.</p>
+              <p className="text-slate-400 font-medium text-lg">Visualizing system relationships, sequence flows, and mind maps.</p>
             </div>
             <div className="flex gap-3">
-               <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" accept=".drawio,.xml,.json,image/*" />
-               <button 
-                 onClick={() => fileInputRef.current?.click()}
-                 className="px-6 py-3 bg-white border border-slate-200 text-slate-600 text-[10px] font-black rounded-2xl uppercase tracking-widest hover:bg-slate-50 transition-all flex items-center gap-2 shadow-sm"
-               >
-                 <i className="fas fa-cloud-arrow-up"></i> Ingest Blueprint
-               </button>
                <button 
                 onClick={() => openDesigner(undefined, true)}
                 className="px-8 py-3 bg-slate-900 text-white text-[10px] font-black rounded-2xl shadow-xl hover:bg-blue-600 transition-all uppercase tracking-widest flex items-center gap-2"
@@ -413,14 +230,12 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
                     <button 
                       onClick={(e) => { e.stopPropagation(); openDesigner(diag, true); }}
                       className="w-8 h-8 rounded-lg bg-white text-slate-400 hover:text-blue-600 flex items-center justify-center shadow-sm border border-slate-100"
-                      title="Edit Blueprint"
                     >
                       <i className="fas fa-pen text-[10px]"></i>
                     </button>
                     <button 
                       onClick={(e) => handleDelete(diag._id!, e)}
                       className="w-8 h-8 rounded-lg bg-white text-slate-400 hover:text-red-500 flex items-center justify-center shadow-sm border border-slate-100"
-                      title="Delete Blueprint"
                     >
                       <i className="fas fa-trash text-[10px]"></i>
                     </button>
@@ -430,16 +245,11 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
                     <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-lg ${
                       diag.format === DiagramFormat.MERMAID ? 'bg-indigo-500 shadow-indigo-200' : 
                       diag.format === DiagramFormat.DRAWIO ? 'bg-orange-500 shadow-orange-200' : 
-                      diag.format === DiagramFormat.MINDMAP ? 'bg-emerald-500 shadow-emerald-200' :
+                      diag.format === DiagramFormat.MINDMAP_FLOW ? 'bg-emerald-500 shadow-emerald-200' :
                       'bg-slate-500 shadow-slate-200'
                     }`}>
-                       <i className={`fas ${diag.format === DiagramFormat.MERMAID ? 'fa-code' : diag.format === DiagramFormat.DRAWIO ? 'fa-vector-square' : diag.format === DiagramFormat.MINDMAP ? 'fa-diagram-project' : 'fa-image'}`}></i>
+                       <i className={`fas ${diag.format === DiagramFormat.MERMAID ? 'fa-code' : diag.format === DiagramFormat.DRAWIO ? 'fa-vector-square' : diag.format === DiagramFormat.MINDMAP_FLOW ? 'fa-diagram-project' : 'fa-image'}`}></i>
                     </div>
-                    <span className={`px-3 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest border ${
-                      diag.status === 'VERIFIED' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-blue-50 text-blue-600 border-blue-100'
-                    }`}>
-                      {diag.status}
-                    </span>
                  </div>
                  <h4 className="text-lg font-black text-slate-800 mb-2 group-hover:text-blue-600 transition-colors pr-12 overflow-hidden text-ellipsis whitespace-nowrap">{diag.title}</h4>
                  <div className="flex items-center gap-3 mb-6">
@@ -452,17 +262,15 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
                       <div className="scale-[0.4] origin-center opacity-40 group-hover:opacity-100 transition-opacity pointer-events-none w-full flex justify-center">
                          <MermaidRenderer content={diag.content} id={diag._id!} />
                       </div>
-                    ) : diag.format === DiagramFormat.IMAGE ? (
-                      <img src={diag.content} className="h-full w-full object-contain opacity-50 grayscale group-hover:grayscale-0 group-hover:opacity-100 transition-all" alt={diag.title} />
-                    ) : diag.format === DiagramFormat.MINDMAP ? (
+                    ) : diag.format === DiagramFormat.MINDMAP_FLOW ? (
                       <div className="flex flex-col items-center gap-2 opacity-30 group-hover:opacity-60 transition-all text-center">
                         <i className="fas fa-brain text-4xl text-slate-300"></i>
-                        <span className="text-[8px] font-black uppercase tracking-widest">Interactive Logic Node</span>
+                        <span className="text-[8px] font-black uppercase tracking-widest">MindMap Flow Node</span>
                       </div>
                     ) : (
                       <div className="flex flex-col items-center gap-2 opacity-30 group-hover:opacity-60 transition-all">
                         <i className="fas fa-file-code text-4xl text-slate-300"></i>
-                        <span className="text-[8px] font-black uppercase">XML Vector Node</span>
+                        <span className="text-[8px] font-black uppercase">Visual Artifact</span>
                       </div>
                     )}
                  </div>
@@ -480,95 +288,6 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
           isEditMode={isEditMode}
         />
       )}
-
-      {/* Ingest Staging Modal */}
-      {isIngestModalOpen && editingDiagram && (
-        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-md z-[300] flex items-center justify-center p-6">
-           <div className="bg-white rounded-[3rem] w-full max-w-xl p-12 shadow-2xl animate-fadeIn border border-slate-100 overflow-y-auto max-h-[90vh] custom-scrollbar">
-              <header className="mb-10">
-                 <h3 className="text-3xl font-black text-slate-900 tracking-tight">Stage Visual Artifact</h3>
-                 <p className="text-slate-400 text-sm font-medium mt-1">Map registry metadata to the imported blueprint.</p>
-              </header>
-
-              <div className="space-y-6">
-                 <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Blueprint Title</label>
-                    <input 
-                      value={editingDiagram.title} 
-                      onChange={(e) => setEditingDiagram({...editingDiagram, title: e.target.value})}
-                      className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-slate-700 font-bold outline-none focus:border-blue-500 transition-all"
-                    />
-                 </div>
-
-                 <div className="grid grid-cols-2 gap-6">
-                    <div className="space-y-2">
-                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Bundle Association</label>
-                       <select 
-                         value={editingDiagram.bundleId || ''} 
-                         onChange={(e) => setEditingDiagram({...editingDiagram, bundleId: e.target.value || undefined, applicationId: undefined})}
-                         className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-slate-700 font-bold outline-none"
-                       >
-                          <option value="">Full Cluster Scope</option>
-                          {bundles.map(b => <option key={b._id} value={b._id}>{b.name}</option>)}
-                       </select>
-                    </div>
-                    <div className="space-y-2">
-                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Asset Mapping</label>
-                       <select 
-                         value={editingDiagram.applicationId || ''} 
-                         onChange={(e) => setEditingDiagram({...editingDiagram, applicationId: e.target.value || undefined})}
-                         className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-slate-700 font-bold outline-none"
-                       >
-                          <option value="">General Purpose</option>
-                          {applications.filter(a => !editingDiagram.bundleId || a.bundleId === editingDiagram.bundleId).map(a => <option key={a._id} value={a._id}>{a.name}</option>)}
-                       </select>
-                    </div>
-                 </div>
-
-                 <div className="grid grid-cols-2 gap-6">
-                    <div className="space-y-2">
-                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Milestone Anchor</label>
-                       <select 
-                         value={editingDiagram.milestoneId || ''} 
-                         onChange={(e) => setEditingDiagram({...editingDiagram, milestoneId: e.target.value || undefined})}
-                         className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-slate-700 font-bold outline-none"
-                       >
-                          <option value="">Continuous Lifecycle</option>
-                          {[...Array(10)].map((_, i) => <option key={i} value={`M${i+1}`}>M{i+1} Release</option>)}
-                       </select>
-                    </div>
-                    <div className="space-y-2">
-                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Tags (Comma Separated)</label>
-                       <input 
-                        placeholder="L3, Security, API" 
-                        onChange={(e) => setEditingDiagram({...editingDiagram, tags: e.target.value.split(',').map(t => t.trim())})}
-                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-slate-700 font-bold outline-none" 
-                       />
-                    </div>
-                 </div>
-
-                 <div className="flex gap-4 pt-10 border-t border-slate-50">
-                    <button onClick={() => { setIsIngestModalOpen(false); setEditingDiagram(null); }} className="flex-1 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-900 transition-colors">Discard</button>
-                    <button 
-                      onClick={commitIngest} 
-                      disabled={isUploading}
-                      className="flex-[2] py-4 bg-slate-900 text-white text-[10px] font-black rounded-2xl shadow-2xl hover:bg-blue-600 transition-all uppercase tracking-widest"
-                    >
-                      {isUploading ? <i className="fas fa-circle-notch fa-spin mr-2"></i> : null}
-                      Commit to Registry
-                    </button>
-                 </div>
-              </div>
-           </div>
-        </div>
-      )}
-      
-      {/* Replaced style jsx with standard style tag and dangerouslySetInnerHTML for compatibility */}
-      <style dangerouslySetInnerHTML={{ __html: `
-        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
-      `}} />
     </div>
   );
 };
@@ -582,30 +301,14 @@ const ArchitectureDesigner: React.FC<{
   isEditMode: boolean;
 }> = ({ diagram, onClose, onSuccess, bundles, applications, isEditMode }) => {
   const [format, setFormat] = useState<DiagramFormat>(diagram.format || DiagramFormat.MERMAID);
-  
-  const [code, setCode] = useState(() => {
-    if (diagram.content) {
-       if (diagram.format === DiagramFormat.MINDMAP && !diagram.content.trim().startsWith('{')) {
-          return JSON.stringify(DEFAULT_MINDMAP_DATA);
-       }
-       return diagram.content;
-    }
-    
-    if (format === DiagramFormat.MINDMAP) return JSON.stringify(DEFAULT_MINDMAP_DATA);
-    if (format === DiagramFormat.DRAWIO) return DEFAULT_DRAWIO_XML;
-    return DEFAULT_MERMAID_CODE;
-  });
-  
+  const [code, setCode] = useState(diagram.content || '');
   const [title, setTitle] = useState(diagram.title || '');
   const [readOnly, setReadOnly] = useState(!isEditMode);
   const [saving, setSaving] = useState(false);
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(!isEditMode);
   const [activeBundleId, setActiveBundleId] = useState(diagram.bundleId || '');
   const [activeAppId, setActiveAppId] = useState(diagram.applicationId || '');
-  const [activeMilestone, setActiveMilestone] = useState(diagram.milestoneId || '');
   
   const [exportTrigger, setExportTrigger] = useState(0);
-  const [isCommitPending, setIsCommitPending] = useState(false);
 
   const persistToRegistry = useCallback(async (finalCode: string) => {
     if (!title.trim()) return alert("Artifact title is mandatory.");
@@ -621,68 +324,18 @@ const ArchitectureDesigner: React.FC<{
           format,
           bundleId: activeBundleId || undefined,
           applicationId: activeAppId || undefined,
-          milestoneId: activeMilestone || undefined,
           status: 'VERIFIED'
         })
       });
-      if (res.ok) {
-        onSuccess();
-      } else {
-        const err = await res.json();
-        alert(`Registry Sync Failed: ${err.error}`);
-      }
+      if (res.ok) onSuccess();
     } finally {
       setSaving(false);
-      setIsCommitPending(false);
     }
-  }, [title, diagram, format, activeBundleId, activeAppId, activeMilestone, onSuccess]);
+  }, [title, diagram, format, activeBundleId, activeAppId, onSuccess]);
 
-  const handleCommitRequest = () => {
-    if (!title.trim()) return alert("Title required.");
-    
-    if (format === DiagramFormat.DRAWIO) {
-      setIsCommitPending(true);
-      setExportTrigger(prev => prev + 1);
-    } else {
-      persistToRegistry(code);
-    }
-  };
-
-  const handleDrawioUpdate = useCallback((newXml: string) => {
-    setCode(newXml);
-    if (isCommitPending) {
-      persistToRegistry(newXml);
-    }
-  }, [isCommitPending, persistToRegistry]);
-
-  const handleExportJson = () => {
-    const blob = new Blob([code], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${title.replace(/\s+/g, '-').toLowerCase()}-mindmap.json`;
-    link.click();
-  };
-
-  const switchFormat = (newFmt: DiagramFormat) => {
-    if (newFmt === format) return;
-
-    const isDefault = code.trim() === '' || 
-                     code.trim() === DEFAULT_MERMAID_CODE || 
-                     code.trim() === DEFAULT_DRAWIO_XML || 
-                     code.trim() === JSON.stringify(DEFAULT_MINDMAP_DATA);
-
-    if (!isDefault && (newFmt === DiagramFormat.MINDMAP || newFmt === DiagramFormat.DRAWIO)) {
-       if (!confirm("Switching visual engine will reset current canvas content to default template. Proceed?")) return;
-    }
-
-    setFormat(newFmt);
-    
-    if (isDefault || newFmt === DiagramFormat.MINDMAP || newFmt === DiagramFormat.DRAWIO) {
-      if (newFmt === DiagramFormat.MINDMAP) setCode(JSON.stringify(DEFAULT_MINDMAP_DATA));
-      else if (newFmt === DiagramFormat.DRAWIO) setCode(DEFAULT_DRAWIO_XML);
-      else setCode(DEFAULT_MERMAID_CODE);
-    }
+  const handleSave = (newCode: string) => {
+    setCode(newCode);
+    persistToRegistry(newCode);
   };
 
   return (
@@ -691,7 +344,7 @@ const ArchitectureDesigner: React.FC<{
         <div className="flex items-center gap-6">
           <button onClick={onClose} className="w-10 h-10 rounded-full bg-slate-50 hover:bg-slate-100 flex items-center justify-center text-slate-400 border border-slate-100 transition-all"><i className="fas fa-times"></i></button>
           <div className="flex flex-col">
-            <span className="text-[9px] font-black text-blue-600 uppercase tracking-widest mb-1 italic">Blueprint Registry Node</span>
+            <span className="text-[9px] font-black text-blue-600 uppercase tracking-widest mb-1 italic">Blueprint Node</span>
             <input 
               value={title} 
               readOnly={readOnly}
@@ -704,10 +357,10 @@ const ArchitectureDesigner: React.FC<{
         <div className="flex items-center gap-4">
           {!readOnly && (
             <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 mr-4 shadow-inner">
-              {[DiagramFormat.MERMAID, DiagramFormat.DRAWIO, DiagramFormat.MINDMAP].map(fmt => (
+              {[DiagramFormat.MERMAID, DiagramFormat.DRAWIO, DiagramFormat.MINDMAP_FLOW].map(fmt => (
                 <button 
                   key={fmt}
-                  onClick={() => switchFormat(fmt)}
+                  onClick={() => setFormat(fmt)}
                   className={`px-4 py-2 text-[9px] font-black uppercase rounded-lg transition-all ${format === fmt ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
                 >
                   {fmt}
@@ -718,149 +371,76 @@ const ArchitectureDesigner: React.FC<{
           
           {readOnly ? (
             <button 
-              onClick={() => { setReadOnly(false); setIsSidebarCollapsed(false); }}
+              onClick={() => setReadOnly(false)}
               className="px-10 py-3.5 bg-blue-600 text-white rounded-2xl shadow-xl font-black text-[10px] uppercase tracking-widest flex items-center gap-3 active:scale-95 transition-all"
             >
-              <i className="fas fa-pen"></i> Enter Edit Mode
+              <i className="fas fa-pen"></i> Edit
             </button>
           ) : (
-            <div className="flex gap-2">
-              {format === DiagramFormat.MINDMAP && (
-                <button 
-                  onClick={handleExportJson}
-                  className="px-6 py-3.5 bg-white border border-slate-200 text-slate-600 rounded-2xl shadow-sm font-black text-[10px] uppercase tracking-widest flex items-center gap-3 hover:bg-slate-50 transition-all"
-                >
-                  <i className="fas fa-file-export"></i> Export JSON
-                </button>
-              )}
-              <button 
-                onClick={handleCommitRequest}
-                disabled={saving || isCommitPending}
-                className="px-10 py-3.5 bg-slate-900 text-white rounded-2xl shadow-xl font-black text-[10px] uppercase tracking-widest flex items-center gap-3 active:scale-95 transition-all disabled:opacity-50"
-              >
-                {saving || isCommitPending ? <i className="fas fa-circle-notch fa-spin"></i> : <i className="fas fa-save"></i>} 
-                {saving || isCommitPending ? 'Syncing...' : 'Commit to Registry'}
-              </button>
-            </div>
+            <button 
+              onClick={() => { if (format !== DiagramFormat.MINDMAP_FLOW) handleSave(code); else setExportTrigger(p => p+1); }}
+              disabled={saving}
+              className="px-10 py-3.5 bg-slate-900 text-white rounded-2xl shadow-xl font-black text-[10px] uppercase tracking-widest flex items-center gap-3 active:scale-95 transition-all disabled:opacity-50"
+            >
+              {saving ? <i className="fas fa-circle-notch fa-spin"></i> : <i className="fas fa-save"></i>} 
+              {saving ? 'Syncing...' : 'Sync to Registry'}
+            </button>
           )}
         </div>
       </header>
 
       <div className="flex-1 flex overflow-hidden bg-slate-50 relative">
-        <div 
-          className={`flex flex-col bg-slate-900 shadow-2xl relative z-[205] transition-all duration-500 ease-in-out origin-left ${isSidebarCollapsed ? 'w-0 opacity-0 pointer-events-none' : 'w-1/3'}`}
-        >
-           <div className="px-6 py-3 border-b border-white/5 flex items-center justify-between bg-black/20 shrink-0">
-              <span className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">Source Registry</span>
-              <div className="flex gap-2">
-                 <div className="w-2 h-2 rounded-full bg-red-500/30"></div>
-                 <div className="w-2 h-2 rounded-full bg-amber-500/30"></div>
-                 <div className="w-2 h-2 rounded-full bg-emerald-500/30"></div>
-              </div>
-           </div>
-           <div className="flex-1 overflow-hidden relative">
-             <textarea 
-              value={code}
-              readOnly={readOnly}
-              onChange={(e) => setCode(e.target.value)}
-              className={`w-full h-full bg-transparent text-emerald-400 font-mono text-sm p-8 outline-none resize-none custom-scrollbar selection:bg-emerald-500/20 ${readOnly ? 'opacity-80' : ''}`}
-              placeholder={format === DiagramFormat.MERMAID ? "Enter Mermaid syntax..." : "Visual source payload (JSON/XML)..."}
-             />
-           </div>
-        </div>
-
-        <button 
-          onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-          className={`absolute top-1/2 -translate-y-1/2 w-6 h-24 bg-slate-800 text-white rounded-r-xl flex flex-col items-center justify-center hover:bg-blue-600 transition-all z-[206] shadow-2xl border-y border-r border-white/10 ${isSidebarCollapsed ? 'left-0' : 'left-[33.333%]'}`}
-          title={isSidebarCollapsed ? "Show Source" : "Maximize Workspace"}
-        >
-          <div className="flex flex-col gap-1 mb-2 opacity-30">
-            <div className="w-1 h-1 rounded-full bg-white"></div>
-            <div className="w-1 h-1 rounded-full bg-white"></div>
-            <div className="w-1 h-1 rounded-full bg-white"></div>
+        {format === DiagramFormat.MINDMAP_FLOW ? (
+          <MindMapFlowEditor 
+            initialContent={code} 
+            onSave={handleSave} 
+            readOnly={readOnly}
+          />
+        ) : format === DiagramFormat.MERMAID ? (
+          <div className="flex-1 flex overflow-hidden">
+             <div className="w-1/3 bg-slate-900 flex flex-col border-r border-white/5">
+                <textarea 
+                  value={code} 
+                  onChange={(e) => setCode(e.target.value)}
+                  readOnly={readOnly}
+                  className="flex-1 bg-transparent text-emerald-400 font-mono text-sm p-8 outline-none resize-none custom-scrollbar"
+                />
+             </div>
+             <div className="flex-1 bg-white flex items-center justify-center p-12 overflow-auto">
+                <MermaidRenderer content={code || DEFAULT_MERMAID_CODE} id={diagram._id || 'temp'} />
+             </div>
           </div>
-          <i className={`fas fa-chevron-${isSidebarCollapsed ? 'right' : 'left'} text-[10px]`}></i>
-        </button>
-
-        <div className={`flex-1 overflow-hidden flex flex-col transition-all duration-500 ${isSidebarCollapsed ? 'pl-6' : ''}`}>
-           <div className="px-10 py-4 border-b border-slate-200 bg-white/50 backdrop-blur flex items-center justify-between shrink-0">
-              <div className="flex items-center gap-4">
-                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nexus Workspace</span>
-                 {!readOnly && (
-                   <div className="px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-[8px] font-black uppercase animate-pulse border border-blue-100">Live Synthesis</div>
-                 )}
-              </div>
-           </div>
-           
-           <div className={`flex-1 overflow-hidden relative flex flex-col ${format === DiagramFormat.DRAWIO || format === DiagramFormat.MINDMAP ? 'p-0' : 'p-6 lg:p-10'}`}>
-              <div className={`bg-white w-full h-full relative overflow-hidden flex flex-col ${format === DiagramFormat.DRAWIO || format === DiagramFormat.MINDMAP ? '' : 'rounded-[3rem] shadow-[0_50px_100px_rgba(0,0,0,0.05)] border border-slate-100 items-center justify-center'}`}>
-                 {format !== DiagramFormat.DRAWIO && format !== DiagramFormat.MINDMAP && (
-                   <div className="absolute inset-0 opacity-[0.02] pointer-events-none" style={{ backgroundImage: 'radial-gradient(#000 1px, transparent 0)', backgroundSize: '32px 32px' }}></div>
-                 )}
-                 
-                 <div className={`relative z-10 w-full h-full overflow-hidden ${format === DiagramFormat.DRAWIO || format === DiagramFormat.MINDMAP ? '' : 'overflow-auto custom-scrollbar p-6 flex flex-col items-center justify-center'}`}>
-                   {format === DiagramFormat.MERMAID ? (
-                     <div className="w-full h-full min-h-[500px]">
-                        <MermaidRenderer content={code} id={diagram._id || 'temp'} />
-                     </div>
-                   ) : format === DiagramFormat.DRAWIO ? (
-                     <DrawioEditor xml={code} onSave={handleDrawioUpdate} requestExportTrigger={exportTrigger} readOnly={readOnly} />
-                   ) : format === DiagramFormat.MINDMAP ? (
-                     <MindMapEditor data={code} onUpdate={setCode} readOnly={readOnly} />
-                   ) : format === DiagramFormat.IMAGE ? (
-                     <div className="max-w-full max-h-full flex items-center justify-center overflow-auto shadow-2xl rounded-[2rem] border border-slate-100 p-4">
-                        <img src={code} className="max-w-none h-auto transition-transform duration-500" alt="Blueprint Preview" />
-                     </div>
-                   ) : (
-                     <div className="text-center opacity-40 flex flex-col items-center gap-6">
-                        <i className="fas fa-vector-square text-6xl text-slate-200"></i>
-                        <p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.5em]">Artifact processing...</p>
-                     </div>
-                   )}
-                 </div>
-              </div>
-           </div>
-        </div>
+        ) : (
+          <DrawioEditor 
+            xml={code || DEFAULT_DRAWIO_XML} 
+            onSave={(xml) => setCode(xml)} 
+            readOnly={readOnly} 
+          />
+        )}
 
         <aside className="w-80 border-l border-slate-200 bg-white p-8 space-y-10 overflow-y-auto custom-scrollbar shrink-0 z-[204]">
            <section>
-              <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-8 flex items-center gap-2"><i className="fas fa-link"></i> Hierarchy Context</h4>
+              <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-8 flex items-center gap-2"><i className="fas fa-link"></i> Context Mapping</h4>
               <div className="space-y-6">
                  <div className="space-y-2">
-                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Business Cluster</label>
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Business Bundle</label>
                     <select disabled={readOnly} value={activeBundleId} onChange={(e) => setActiveBundleId(e.target.value)} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-xs font-bold text-slate-700 outline-none hover:border-blue-200 transition-all disabled:opacity-50">
-                       <option value="">Cross-Bundle Plane</option>
+                       <option value="">Cross-Bundle</option>
                        {bundles.map(b => <option key={b._id} value={b._id}>{b.name}</option>)}
                     </select>
                  </div>
                  <div className="space-y-2">
-                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Asset Mapping</label>
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Application Mapping</label>
                     <select disabled={readOnly} value={activeAppId} onChange={(e) => setActiveAppId(e.target.value)} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-xs font-bold text-slate-700 outline-none hover:border-blue-200 transition-all disabled:opacity-50">
-                       <option value="">Full Cluster Scope</option>
+                       <option value="">Global Resource</option>
                        {applications.filter(a => !activeBundleId || a.bundleId === activeBundleId).map(a => <option key={a._id} value={a._id}>{a.name}</option>)}
                     </select>
                  </div>
-                 <div className="space-y-2">
-                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Milestone Anchor</label>
-                    <select disabled={readOnly} value={activeMilestone} onChange={(e) => setActiveMilestone(e.target.value)} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-xs font-bold text-slate-700 outline-none hover:border-blue-200 transition-all disabled:opacity-50">
-                       <option value="">Continuous Lifecycle</option>
-                       {[...Array(10)].map((_, i) => <option key={i} value={`M${i+1}`}>M{i+1} Release</option>)}
-                    </select>
-                 </div>
-              </div>
-           </section>
-           <section className="pt-10 border-t border-slate-50">
-              <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 mb-6"><i className="fas fa-robot"></i> Review Protocol</h4>
-              <div className="bg-blue-50 border border-blue-100 rounded-[2rem] p-6 space-y-4">
-                 <p className="text-[11px] text-blue-700 font-medium leading-relaxed italic">
-                   {readOnly ? '"Reviewing visual blueprint registry entry."' : '"Registry sync active. Ensure node hierarchy consistency."'}
-                 </p>
               </div>
            </section>
         </aside>
       </div>
-      
-      {/* Replaced style jsx with standard style tag and dangerouslySetInnerHTML for compatibility */}
+
       <style dangerouslySetInnerHTML={{ __html: `
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }

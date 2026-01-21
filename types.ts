@@ -78,14 +78,15 @@ export enum DiagramFormat {
   DRAWIO = 'DRAWIO',
   IMAGE = 'IMAGE',
   PDF = 'PDF',
-  MINDMAP = 'MINDMAP'
+  MINDMAP = 'MINDMAP',
+  MINDMAP_FLOW = 'MINDMAP_FLOW'
 }
 
 export interface ArchitectureDiagram {
   _id?: string;
   title: string;
   format: DiagramFormat;
-  content: string; // Mermaid code or base64/URL
+  content: string; // Mermaid code, DrawIO XML, or MINDMAP_FLOW JSON
   bundleId?: string;
   applicationId?: string;
   milestoneId?: string;
