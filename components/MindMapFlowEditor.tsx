@@ -23,7 +23,7 @@ const nodeTypes = {
 
 const fitViewOptions = {
   padding: 0.25,
-  duration: 600,
+  duration: 800,
 };
 
 interface MindMapFlowEditorProps {
@@ -40,22 +40,24 @@ const MindMapFlowEditor: React.FC<MindMapFlowEditorProps> = ({ initialContent, o
   const [isSidebarOpen, setIsSidebarOpen] = useState(!readOnly);
   const { fitView } = useReactFlow();
   
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  // Fix: Used ReturnType<typeof setTimeout> instead of NodeJS.Timeout to resolve namespace error in browser environment.
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const updateLayout = useCallback((text: string) => {
+  const performLayoutUpdate = useCallback((text: string) => {
     const { data, error: parseError } = safeMindMapParse(text);
+    
     if (parseError) {
       setError(parseError);
       return;
     }
+    
     setError(null);
     if (data) {
       const { nodes: newNodes, edges: newEdges } = computeMindMapLayout(data);
       setNodes(newNodes);
       setEdges(newEdges);
       
-      // CRITICAL: Schedule fitView after DOM and React Flow have processed node dimensions
-      // Use double RAF to ensure the layout engine and React Flow internal states have settled.
+      // CRITICAL: Fit view using double RAF to ensure DOM has settled with node dimensions
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           fitView(fitViewOptions);
@@ -67,15 +69,26 @@ const MindMapFlowEditor: React.FC<MindMapFlowEditorProps> = ({ initialContent, o
   useEffect(() => {
     const content = initialContent || DEFAULT_MINDMAP_JSON;
     setJsonText(content);
-    updateLayout(content);
-  }, [initialContent, updateLayout]);
+    performLayoutUpdate(content);
+  }, [initialContent, performLayoutUpdate]);
 
   const handleJsonChange = (val: string) => {
     setJsonText(val);
-    if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => {
-      updateLayout(val);
+    
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+    
+    debounceTimerRef.current = setTimeout(() => {
+      performLayoutUpdate(val);
     }, 400); // 400ms debounce
+  };
+
+  const handleFormat = () => {
+    try {
+      const obj = JSON.parse(jsonText);
+      setJsonText(JSON.stringify(obj, null, 2));
+    } catch (e) {}
   };
 
   return (
@@ -85,15 +98,10 @@ const MindMapFlowEditor: React.FC<MindMapFlowEditorProps> = ({ initialContent, o
           <header className="px-8 py-6 border-b border-white/10 flex items-center justify-between bg-black/20">
             <div className="flex flex-col">
               <span className="text-[10px] font-black text-blue-400 uppercase tracking-[0.2em]">Blueprint Logic</span>
-              <span className="text-[8px] font-bold text-slate-500 uppercase">Radial DSL Engine</span>
+              <span className="text-[8px] font-bold text-slate-500 uppercase tracking-widest">Radial Engine v2.0</span>
             </div>
             <div className="flex gap-3">
-              <button 
-                onClick={() => setJsonText(JSON.stringify(JSON.parse(jsonText), null, 2))} 
-                className="text-[10px] font-black text-slate-400 hover:text-white uppercase transition-colors"
-              >
-                Format
-              </button>
+              <button onClick={handleFormat} className="text-[10px] font-black text-slate-400 hover:text-white uppercase transition-colors">Format</button>
             </div>
           </header>
           
@@ -108,7 +116,7 @@ const MindMapFlowEditor: React.FC<MindMapFlowEditorProps> = ({ initialContent, o
           </div>
 
           {error && (
-            <div className="p-6 bg-red-950/40 border-t border-red-500/20 animate-slideUp">
+            <div className="p-6 bg-red-950/40 border-t border-red-500/20">
                <div className="flex gap-4 text-red-400">
                   <i className="fas fa-triangle-exclamation text-xl"></i>
                   <p className="text-xs font-bold leading-relaxed">{error}</p>
@@ -121,7 +129,7 @@ const MindMapFlowEditor: React.FC<MindMapFlowEditorProps> = ({ initialContent, o
               onClick={() => onSave(jsonText)}
               className="w-full py-4 bg-blue-600 text-white text-[11px] font-black rounded-2xl uppercase tracking-widest shadow-2xl hover:bg-blue-500 transition-all active:scale-95"
              >
-               Sync Visual Logic
+               Commit Visual Logic
              </button>
           </footer>
         </div>
@@ -145,18 +153,16 @@ const MindMapFlowEditor: React.FC<MindMapFlowEditorProps> = ({ initialContent, o
           nodeTypes={nodeTypes}
           minZoom={0.05}
           maxZoom={2.0}
-          defaultEdgeOptions={{ type: 'default' }}
-          fitView
-          fitViewOptions={fitViewOptions}
           nodesDraggable={!readOnly}
           panOnDrag={true}
+          selectionOnDrag={true}
           className="mindmap-flow-engine"
         >
           <Background color="#f8fafc" gap={40} size={1} />
           <Controls className="bg-white shadow-2xl rounded-2xl border-none p-1" />
           <MiniMap 
             nodeStrokeColor={(n) => (n.data?.style?.accent || '#3b82f6')}
-            nodeColor={(n) => (n.data?.style?.bg || '#ffffff')}
+            nodeColor={(n) => (n.data?.style?.bg?.includes('linear-gradient') ? (n.data?.style?.accent || '#3b82f6') : (n.data?.style?.bg || '#ffffff'))}
             maskColor="rgba(248, 250, 252, 0.7)"
             className="rounded-[2rem] border border-slate-100 shadow-2xl overflow-hidden"
           />
@@ -166,7 +172,7 @@ const MindMapFlowEditor: React.FC<MindMapFlowEditorProps> = ({ initialContent, o
                onClick={() => exportMindMapAsSvg('mindmap-canvas', 'blueprint-export')}
                className="bg-white border border-slate-100 px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 shadow-xl flex items-center gap-3 transition-all"
              >
-               <i className="fas fa-file-export text-blue-600"></i> SVG
+               <i className="fas fa-file-export text-blue-600"></i> Export SVG
              </button>
              <button 
                onClick={() => exportMindMapAsPng('mindmap-canvas', 'blueprint-export')}
@@ -179,7 +185,7 @@ const MindMapFlowEditor: React.FC<MindMapFlowEditorProps> = ({ initialContent, o
       </div>
 
       <style dangerouslySetInnerHTML={{ __html: `
-        .react-flow__edge-path { stroke-linecap: round; transition: stroke 0.3s; }
+        .react-flow__edge-path { stroke-linecap: round; transition: stroke 0.3s; stroke-dasharray: 0; }
         .custom-scrollbar::-webkit-scrollbar { width: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }

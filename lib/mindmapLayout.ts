@@ -7,22 +7,21 @@ export function computeMindMapLayout(dsl: MindMapDsl): { nodes: Node[]; edges: E
   const { root, meta } = dsl;
   const nodeWidth = meta.nodeWidth || 220;
   const nodeHeight = meta.nodeHeight || 68;
-  const radiusStep = meta.radiusStep || 260;
   
-  // 1. Create d3 hierarchy
+  // Dynamic radius based on node dimensions to ensure no collision
+  const minRadiusStep = Math.max(meta.radiusStep || 260, nodeWidth * 1.1);
+  
+  // 1. Build D3 Hierarchy
   const hierarchy = d3.hierarchy<MindMapNodeData>(root);
   const maxDepth = hierarchy.height;
   
-  // radius is based on depth
-  const totalRadius = radiusStep * (maxDepth + 0.5);
-
-  // 2. Compute tree layout in radial space
-  // x is the angle (0 to 2PI), y is the radius
+  // 2. Configure Tree Layout
+  // x is angle [0, 2PI], y is radial distance
   const treeLayout = d3.tree<MindMapNodeData>()
-    .size([2 * Math.PI, totalRadius])
+    .size([2 * Math.PI, minRadiusStep * (maxDepth + 0.5)])
     .separation((a, b) => {
-      // Provide more angular separation as we go deeper to prevent outer crowding
-      const baseSep = (a.parent === b.parent ? 1.2 : 2.0);
+      // Increase separation at deeper levels to avoid outer clumping
+      const baseSep = a.parent === b.parent ? 1.5 : 2.2;
       return baseSep / (a.depth || 1);
     });
     
@@ -33,7 +32,7 @@ export function computeMindMapLayout(dsl: MindMapDsl): { nodes: Node[]; edges: E
   
   rootNode.descendants().forEach((d) => {
     // d.x is angle, d.y is radius
-    // Rotate by -PI/2 so the first branch starts at the top (12 o'clock)
+    // We rotate by -PI/2 so the 0 angle starts at the top (12 o'clock)
     const angle = d.x - Math.PI / 2;
     const radius = d.y;
     
@@ -41,35 +40,36 @@ export function computeMindMapLayout(dsl: MindMapDsl): { nodes: Node[]; edges: E
     const cx = Math.cos(angle) * radius;
     const cy = Math.sin(angle) * radius;
     
-    // Convert center coordinate to React Flow top-left coordinate
+    // CRITICAL FIX: React Flow positions are TOP-LEFT.
+    // We must offset the center coordinates by half the node dimensions.
     const x = cx - nodeWidth / 2;
     const y = cy - nodeHeight / 2;
 
-    // 3. Intelligent Handle Routing based on node position relative to center
-    // We determine quadrant to make bezier curves look natural (flowing outward)
+    // 3. Intelligent Handle Orientation
+    // Determine which side of the node faces "outward" from the root
     let sourcePos = Position.Bottom;
     let targetPos = Position.Top;
 
     if (d.depth > 0) {
-      const normAngle = (d.x) % (2 * Math.PI);
+      // Normalize angle to [-PI, PI] for easy quadrant check
+      const normAngle = Math.atan2(Math.sin(angle), Math.cos(angle));
       
-      // Determine if node is primarily on Left, Right, Top, or Bottom of the root
-      if (normAngle < Math.PI / 4 || normAngle > 7 * Math.PI / 4) {
-        // Top Quadrant
-        targetPos = Position.Bottom;
-        sourcePos = Position.Top;
-      } else if (normAngle >= Math.PI / 4 && normAngle < 3 * Math.PI / 4) {
-        // Right Quadrant
-        targetPos = Position.Left;
+      if (normAngle >= -Math.PI / 4 && normAngle <= Math.PI / 4) {
+        // Right side
         sourcePos = Position.Right;
-      } else if (normAngle >= 3 * Math.PI / 4 && normAngle < 5 * Math.PI / 4) {
-        // Bottom Quadrant
-        targetPos = Position.Top;
+        targetPos = Position.Left;
+      } else if (normAngle > Math.PI / 4 && normAngle < 3 * Math.PI / 4) {
+        // Bottom side
         sourcePos = Position.Bottom;
+        targetPos = Position.Top;
+      } else if (normAngle < -Math.PI / 4 && normAngle > -3 * Math.PI / 4) {
+        // Top side
+        sourcePos = Position.Top;
+        targetPos = Position.Bottom;
       } else {
-        // Left Quadrant
-        targetPos = Position.Right;
+        // Left side
         sourcePos = Position.Left;
+        targetPos = Position.Right;
       }
     }
     
@@ -101,9 +101,8 @@ export function computeMindMapLayout(dsl: MindMapDsl): { nodes: Node[]; edges: E
         style: { 
           stroke: nodeAccent, 
           strokeWidth: 2.5, 
-          opacity: 0.7 
-        },
-        // Mind maps usually look cleaner without large arrowheads
+          opacity: 0.75
+        }
       });
     }
   });

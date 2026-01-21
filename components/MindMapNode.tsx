@@ -4,14 +4,14 @@ import { Handle, NodeProps } from 'reactflow';
 
 const MindMapNode = ({ data, sourcePosition, targetPosition }: NodeProps) => {
   const accentColor = data.style?.accent || '#3b82f6';
-  // Use 'background' instead of 'backgroundColor' to support linear-gradient strings
+  // Use 'background' to support linear-gradient strings
   const background = data.style?.bg || '#ffffff';
   const textColor = data.style?.text || '#1e293b';
   const isRoot = data.isRoot;
 
   return (
     <div 
-      className={`relative flex flex-col justify-center rounded-2xl transition-all duration-500 overflow-hidden ${isRoot ? 'ring-4 ring-offset-4 ring-slate-100' : ''}`}
+      className={`relative flex flex-col justify-center rounded-2xl transition-all duration-500 overflow-hidden ${isRoot ? 'ring-4 ring-offset-4 ring-blue-500/10' : ''}`}
       style={{
         background: background,
         color: textColor,
@@ -19,10 +19,10 @@ const MindMapNode = ({ data, sourcePosition, targetPosition }: NodeProps) => {
         height: data.height || 68,
         border: `1px solid ${data.style?.border || '#e2e8f0'}`,
         boxShadow: data.style?.shadow || '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
-        whiteSpace: 'pre-line' // Crucial for \n in labels
+        whiteSpace: 'pre-line' // Important for \n support in labels
       }}
     >
-      {/* Dynamic Accent Bar */}
+      {/* Visual Accent Sidebar */}
       <div 
         className="absolute left-0 top-0 bottom-0 w-1.5 z-10"
         style={{ backgroundColor: accentColor }}
@@ -35,7 +35,7 @@ const MindMapNode = ({ data, sourcePosition, targetPosition }: NodeProps) => {
               {data.icon}
             </span>
           )}
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <h4 
               className={`tracking-tight leading-tight ${data.style?.bold ? 'font-black' : 'font-bold'}`} 
               style={{ fontSize: data.style?.fontSize ? `${data.style.fontSize}px` : '13px' }}
@@ -61,7 +61,7 @@ const MindMapNode = ({ data, sourcePosition, targetPosition }: NodeProps) => {
         )}
       </div>
 
-      {/* React Flow Handles - Quadrant specific positions set by layout engine */}
+      {/* Logical Handles - Positions determined by radial layout engine */}
       <Handle type="target" position={targetPosition} className="opacity-0 w-0 h-0" />
       <Handle type="source" position={sourcePosition} className="opacity-0 w-0 h-0" />
     </div>

@@ -102,7 +102,8 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
     if (!files || files.length === 0) return;
     setUploading(true);
     
-    const newAttachments = Array.from(files).map((f) => ({
+    // Fix: Explicitly cast Array.from(files) as File[] to resolve 'unknown' property access errors.
+    const newAttachments = (Array.from(files) as File[]).map((f) => ({
       name: f.name,
       size: f.size,
       type: f.type,
