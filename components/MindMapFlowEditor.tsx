@@ -22,7 +22,7 @@ const nodeTypes = {
 };
 
 const fitViewOptions = {
-  padding: 0.2,
+  padding: 0.25,
   duration: 600,
 };
 
@@ -39,6 +39,8 @@ const MindMapFlowEditor: React.FC<MindMapFlowEditorProps> = ({ initialContent, o
   const [error, setError] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(!readOnly);
   const { fitView } = useReactFlow();
+  
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   const updateLayout = useCallback((text: string) => {
     const { data, error: parseError } = safeMindMapParse(text);
@@ -52,15 +54,16 @@ const MindMapFlowEditor: React.FC<MindMapFlowEditorProps> = ({ initialContent, o
       setNodes(newNodes);
       setEdges(newEdges);
       
-      // CRITICAL: Schedule fitView after React Flow has processed the new nodes
-      // We use requestAnimationFrame to ensure the nodes are in the DOM for bounds calculation
+      // CRITICAL: Schedule fitView after DOM and React Flow have processed node dimensions
+      // Use double RAF to ensure the layout engine and React Flow internal states have settled.
       requestAnimationFrame(() => {
-        fitView(fitViewOptions);
+        requestAnimationFrame(() => {
+          fitView(fitViewOptions);
+        });
       });
     }
   }, [setNodes, setEdges, fitView]);
 
-  // Handle initialization and content updates
   useEffect(() => {
     const content = initialContent || DEFAULT_MINDMAP_JSON;
     setJsonText(content);
@@ -69,7 +72,10 @@ const MindMapFlowEditor: React.FC<MindMapFlowEditorProps> = ({ initialContent, o
 
   const handleJsonChange = (val: string) => {
     setJsonText(val);
-    updateLayout(val);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => {
+      updateLayout(val);
+    }, 400); // 400ms debounce
   };
 
   return (
@@ -139,14 +145,14 @@ const MindMapFlowEditor: React.FC<MindMapFlowEditorProps> = ({ initialContent, o
           nodeTypes={nodeTypes}
           minZoom={0.05}
           maxZoom={2.0}
-          defaultEdgeOptions={{ type: 'default' }} // Use Bezier curves
+          defaultEdgeOptions={{ type: 'default' }}
           fitView
           fitViewOptions={fitViewOptions}
           nodesDraggable={!readOnly}
           panOnDrag={true}
           className="mindmap-flow-engine"
         >
-          <Background color="#f1f5f9" gap={40} size={1} />
+          <Background color="#f8fafc" gap={40} size={1} />
           <Controls className="bg-white shadow-2xl rounded-2xl border-none p-1" />
           <MiniMap 
             nodeStrokeColor={(n) => (n.data?.style?.accent || '#3b82f6')}
@@ -160,7 +166,7 @@ const MindMapFlowEditor: React.FC<MindMapFlowEditorProps> = ({ initialContent, o
                onClick={() => exportMindMapAsSvg('mindmap-canvas', 'blueprint-export')}
                className="bg-white border border-slate-100 px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 shadow-xl flex items-center gap-3 transition-all"
              >
-               <i className="fas fa-file-export text-blue-600"></i> Export SVG
+               <i className="fas fa-file-export text-blue-600"></i> SVG
              </button>
              <button 
                onClick={() => exportMindMapAsPng('mindmap-canvas', 'blueprint-export')}
@@ -173,7 +179,7 @@ const MindMapFlowEditor: React.FC<MindMapFlowEditorProps> = ({ initialContent, o
       </div>
 
       <style dangerouslySetInnerHTML={{ __html: `
-        .react-flow__edge-path { stroke-linecap: round; }
+        .react-flow__edge-path { stroke-linecap: round; transition: stroke 0.3s; }
         .custom-scrollbar::-webkit-scrollbar { width: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
