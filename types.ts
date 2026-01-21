@@ -79,7 +79,8 @@ export enum DiagramFormat {
   IMAGE = 'IMAGE',
   PDF = 'PDF',
   MINDMAP = 'MINDMAP',
-  MINDMAP_FLOW = 'MINDMAP_FLOW'
+  MINDMAP_FLOW = 'MINDMAP_FLOW',
+  MINDMAP_MD = 'MINDMAP_MD'
 }
 
 export interface ArchitectureDiagram {

@@ -27,6 +27,35 @@
     .prose ol, .prose ol[style] { list-style-type: decimal !important; padding-left: 2.5rem !important; margin-bottom: 1.5rem !important; display: block !important; }
     .prose li { margin-bottom: 0.75rem !important; display: list-item !important; color: #475569; }
     
+    /* Markmap Custom Theming */
+    .markmap {
+      width: 100%;
+      height: 100%;
+      font-family: 'Inter', sans-serif;
+    }
+    .markmap-node {
+      cursor: pointer;
+    }
+    .markmap-node circle {
+      stroke-width: 2px;
+    }
+    .markmap-node-text {
+      font-weight: 600;
+      font-size: 14px;
+      fill: #1e293b;
+    }
+    .markmap-link {
+      fill: none;
+      stroke: #cbd5e1;
+      stroke-width: 1.5px;
+    }
+    
+    /* Enterprise Markmap Themes */
+    .markmap-container.theme-light { background: #ffffff; }
+    .markmap-container.theme-dark { background: #0f172a; }
+    .markmap-container.theme-dark .markmap-node-text { fill: #f8fafc; }
+    .markmap-container.theme-dark .markmap-link { stroke: #334155; }
+
     /* Table Styling */
     .prose table { width: 100%; border-collapse: collapse; margin-bottom: 2rem; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; }
     .prose th, .prose td { border: 1px solid #e2e8f0; padding: 1rem; text-align: left; }
@@ -165,7 +194,10 @@
     "html-to-image": "https://esm.sh/html-to-image@1.11.11",
     "d3-hierarchy": "https://esm.sh/d3-hierarchy@3.1.2",
     "zod": "https://esm.sh/zod@3.22.4",
-    "lucide-react": "https://esm.sh/lucide-react@0.321.0?external=react,react-dom"
+    "lucide-react": "https://esm.sh/lucide-react@0.321.0?external=react,react-dom",
+    "markmap-lib": "https://esm.sh/markmap-lib@0.16.0",
+    "markmap-view": "https://esm.sh/markmap-view@0.16.0",
+    "d3": "https://esm.sh/d3@7.8.5"
   }
 }
 </script>

@@ -5,6 +5,7 @@ import mermaid from 'mermaid';
 
 // Use React.lazy instead of next/dynamic for standard browser module compatibility
 const MindMapFlowEditor = lazy(() => import('./MindMapFlowEditor'));
+const MindMapMarkdownEditor = lazy(() => import('./MindMapMarkdownEditor'));
 
 interface ArchitectureDiagramsProps {
   applications: Application[];
@@ -169,7 +170,7 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
     if (!diag) {
       setEditingDiagram({
         title: 'New Architecture Blueprint',
-        format: DiagramFormat.MINDMAP_FLOW,
+        format: DiagramFormat.MINDMAP_MD,
         content: '', 
         status: 'DRAFT',
         bundleId: activeBundleId !== 'all' ? activeBundleId : undefined,
@@ -237,9 +238,10 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
                       diag.format === DiagramFormat.MERMAID ? 'bg-indigo-500 shadow-indigo-200' : 
                       diag.format === DiagramFormat.DRAWIO ? 'bg-orange-500 shadow-orange-200' : 
                       diag.format === DiagramFormat.MINDMAP_FLOW ? 'bg-emerald-500 shadow-emerald-200' :
+                      diag.format === DiagramFormat.MINDMAP_MD ? 'bg-blue-500 shadow-blue-200' :
                       'bg-slate-500 shadow-slate-200'
                     }`}>
-                       <i className={`fas ${diag.format === DiagramFormat.MERMAID ? 'fa-code' : diag.format === DiagramFormat.DRAWIO ? 'fa-vector-square' : diag.format === DiagramFormat.MINDMAP_FLOW ? 'fa-diagram-project' : 'fa-image'}`}></i>
+                       <i className={`fas ${diag.format === DiagramFormat.MERMAID ? 'fa-code' : diag.format === DiagramFormat.DRAWIO ? 'fa-vector-square' : (diag.format === DiagramFormat.MINDMAP_FLOW || diag.format === DiagramFormat.MINDMAP_MD) ? 'fa-diagram-project' : 'fa-image'}`}></i>
                     </div>
                  </div>
                  <h4 className="text-lg font-black text-slate-800 mb-2 group-hover:text-blue-600 transition-colors pr-12 overflow-hidden text-ellipsis whitespace-nowrap">{diag.title}</h4>
@@ -249,14 +251,14 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
                     <span className="text-[10px] font-bold text-slate-400">Synced {new Date(diag.updatedAt).toLocaleDateString()}</span>
                  </div>
                  <div className="flex-1 h-40 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-center overflow-hidden p-4">
-                    {diag.format === DiagramFormat.MERMAID ? (
-                      <div className="scale-[0.4] origin-center opacity-40 group-hover:opacity-100 transition-opacity pointer-events-none w-full flex justify-center">
-                         <MermaidRenderer content={diag.content} id={diag._id!} />
-                      </div>
-                    ) : diag.format === DiagramFormat.MINDMAP_FLOW ? (
+                    {(diag.format === DiagramFormat.MINDMAP_FLOW || diag.format === DiagramFormat.MINDMAP_MD) ? (
                       <div className="flex flex-col items-center gap-2 opacity-30 group-hover:opacity-60 transition-all text-center">
                         <i className="fas fa-brain text-4xl text-slate-300"></i>
-                        <span className="text-[8px] font-black uppercase tracking-widest">MindMap Flow Node</span>
+                        <span className="text-[8px] font-black uppercase tracking-widest">MindMap Node</span>
+                      </div>
+                    ) : diag.format === DiagramFormat.MERMAID ? (
+                      <div className="scale-[0.4] origin-center opacity-40 group-hover:opacity-100 transition-opacity pointer-events-none w-full flex justify-center">
+                         <MermaidRenderer content={diag.content} id={diag._id!} />
                       </div>
                     ) : (
                       <div className="flex flex-col items-center gap-2 opacity-30 group-hover:opacity-60 transition-all">
@@ -348,13 +350,13 @@ const ArchitectureDesigner: React.FC<{
         <div className="flex items-center gap-4">
           {!readOnly && (
             <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 mr-4 shadow-inner">
-              {[DiagramFormat.MERMAID, DiagramFormat.DRAWIO, DiagramFormat.MINDMAP_FLOW].map(fmt => (
+              {[DiagramFormat.MERMAID, DiagramFormat.DRAWIO, DiagramFormat.MINDMAP_FLOW, DiagramFormat.MINDMAP_MD].map(fmt => (
                 <button 
                   key={fmt}
                   onClick={() => setFormat(fmt)}
                   className={`px-4 py-2 text-[9px] font-black uppercase rounded-lg transition-all ${format === fmt ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
                 >
-                  {fmt}
+                  {fmt === DiagramFormat.MINDMAP_MD ? 'Mind Map (MD)' : fmt === DiagramFormat.MINDMAP_FLOW ? 'Mind Map (Legacy)' : fmt}
                 </button>
               ))}
             </div>
@@ -381,7 +383,11 @@ const ArchitectureDesigner: React.FC<{
       </header>
 
       <div className="flex-1 flex overflow-hidden bg-slate-50 relative">
-        {format === DiagramFormat.MINDMAP_FLOW ? (
+        {format === DiagramFormat.MINDMAP_MD ? (
+          <Suspense fallback={<div className="flex-1 flex items-center justify-center bg-white"><i className="fas fa-circle-notch fa-spin text-blue-500 text-2xl"></i></div>}>
+            <MindMapMarkdownEditor initialContent={code} onSave={handleSave} readOnly={readOnly} />
+          </Suspense>
+        ) : format === DiagramFormat.MINDMAP_FLOW ? (
           <Suspense fallback={
             <div className="flex-1 flex flex-col items-center justify-center bg-white gap-4">
               <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
