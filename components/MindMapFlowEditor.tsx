@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import ReactFlow, { 
   ReactFlowProvider, 
   Background, 
@@ -9,12 +9,10 @@ import ReactFlow, {
   MiniMap, 
   useNodesState, 
   useEdgesState,
-  ConnectionLineType,
-  FitViewOptions,
+  useReactFlow,
   Panel
 } from 'reactflow';
-// import 'reactflow/dist/style.css'; // Removed: Moved to index.html link tag
-import { safeMindMapParse, DEFAULT_MINDMAP_JSON, MindMapDsl } from '../lib/mindmapDsl';
+import { safeMindMapParse, DEFAULT_MINDMAP_JSON } from '../lib/mindmapDsl';
 import { computeMindMapLayout } from '../lib/mindmapLayout';
 import { exportMindMapAsSvg, exportMindMapAsPng } from '../lib/mindmapExport';
 import MindMapNode from './MindMapNode';
@@ -23,8 +21,9 @@ const nodeTypes = {
   mindmapNode: MindMapNode,
 };
 
-const fitViewOptions: FitViewOptions = {
+const fitViewOptions = {
   padding: 0.2,
+  duration: 600,
 };
 
 interface MindMapFlowEditorProps {
@@ -39,11 +38,12 @@ const MindMapFlowEditor: React.FC<MindMapFlowEditorProps> = ({ initialContent, o
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [error, setError] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(!readOnly);
+  const { fitView } = useReactFlow();
 
   const updateLayout = useCallback((text: string) => {
-    const { data, error } = safeMindMapParse(text);
-    if (error) {
-      setError(error);
+    const { data, error: parseError } = safeMindMapParse(text);
+    if (parseError) {
+      setError(parseError);
       return;
     }
     setError(null);
@@ -51,13 +51,20 @@ const MindMapFlowEditor: React.FC<MindMapFlowEditorProps> = ({ initialContent, o
       const { nodes: newNodes, edges: newEdges } = computeMindMapLayout(data);
       setNodes(newNodes);
       setEdges(newEdges);
+      
+      // CRITICAL: Schedule fitView after React Flow has processed the new nodes
+      // We use requestAnimationFrame to ensure the nodes are in the DOM for bounds calculation
+      requestAnimationFrame(() => {
+        fitView(fitViewOptions);
+      });
     }
-  }, [setNodes, setEdges]);
+  }, [setNodes, setEdges, fitView]);
 
-  // Handle initial load and external updates
+  // Handle initialization and content updates
   useEffect(() => {
-    updateLayout(initialContent || DEFAULT_MINDMAP_JSON);
-    setJsonText(initialContent || DEFAULT_MINDMAP_JSON);
+    const content = initialContent || DEFAULT_MINDMAP_JSON;
+    setJsonText(content);
+    updateLayout(content);
   }, [initialContent, updateLayout]);
 
   const handleJsonChange = (val: string) => {
@@ -65,32 +72,22 @@ const MindMapFlowEditor: React.FC<MindMapFlowEditorProps> = ({ initialContent, o
     updateLayout(val);
   };
 
-  const handleFormat = () => {
-    try {
-      const obj = JSON.parse(jsonText);
-      const formatted = JSON.stringify(obj, null, 2);
-      setJsonText(formatted);
-    } catch (e) {}
-  };
-
-  const handleReset = () => {
-    if (confirm("Reset to sample blueprint? All local changes will be lost.")) {
-      setJsonText(DEFAULT_MINDMAP_JSON);
-      updateLayout(DEFAULT_MINDMAP_JSON);
-    }
-  };
-
-  const handleExportSvg = () => exportMindMapAsSvg('mindmap-canvas', 'nexus-mindmap');
-
   return (
-    <div className="flex-1 flex overflow-hidden h-full bg-white relative">
+    <div className="flex-1 flex overflow-hidden h-full bg-slate-50 relative">
       {!readOnly && (
-        <div className={`transition-all duration-300 ease-in-out border-r border-slate-200 bg-slate-900 flex flex-col shrink-0 ${isSidebarOpen ? 'w-1/3' : 'w-0 opacity-0'}`}>
-          <header className="px-6 py-4 border-b border-white/10 flex items-center justify-between bg-black/20">
-            <span className="text-[10px] font-black text-blue-400 uppercase tracking-[0.2em]">Source Registry (JSON)</span>
-            <div className="flex gap-2">
-              <button onClick={handleFormat} className="text-[9px] font-black text-slate-400 hover:text-white uppercase">Format</button>
-              <button onClick={handleReset} className="text-[9px] font-black text-red-400 hover:text-red-300 uppercase">Reset</button>
+        <div className={`transition-all duration-500 ease-in-out border-r border-slate-200 bg-slate-900 flex flex-col shrink-0 z-50 ${isSidebarOpen ? 'w-[450px]' : 'w-0 opacity-0'}`}>
+          <header className="px-8 py-6 border-b border-white/10 flex items-center justify-between bg-black/20">
+            <div className="flex flex-col">
+              <span className="text-[10px] font-black text-blue-400 uppercase tracking-[0.2em]">Blueprint Logic</span>
+              <span className="text-[8px] font-bold text-slate-500 uppercase">Radial DSL Engine</span>
+            </div>
+            <div className="flex gap-3">
+              <button 
+                onClick={() => setJsonText(JSON.stringify(JSON.parse(jsonText), null, 2))} 
+                className="text-[10px] font-black text-slate-400 hover:text-white uppercase transition-colors"
+              >
+                Format
+              </button>
             </div>
           </header>
           
@@ -98,74 +95,76 @@ const MindMapFlowEditor: React.FC<MindMapFlowEditorProps> = ({ initialContent, o
             <textarea
               value={jsonText}
               onChange={(e) => handleJsonChange(e.target.value)}
-              className="w-full h-full bg-transparent text-emerald-400 font-mono text-sm p-8 outline-none resize-none custom-scrollbar selection:bg-emerald-500/20"
+              className="w-full h-full bg-transparent text-emerald-400 font-mono text-sm p-10 outline-none resize-none custom-scrollbar selection:bg-emerald-500/20"
               spellCheck={false}
-              placeholder="Enter Mind Map JSON..."
+              placeholder="Paste JSON DSL here..."
             />
           </div>
 
           {error && (
-            <div className="p-6 bg-red-950/50 border-t border-red-500/30">
-               <div className="flex gap-3 text-red-400">
-                  <i className="fas fa-triangle-exclamation text-sm mt-0.5"></i>
+            <div className="p-6 bg-red-950/40 border-t border-red-500/20 animate-slideUp">
+               <div className="flex gap-4 text-red-400">
+                  <i className="fas fa-triangle-exclamation text-xl"></i>
                   <p className="text-xs font-bold leading-relaxed">{error}</p>
                </div>
             </div>
           )}
 
-          <footer className="p-6 border-t border-white/5 flex gap-3 bg-black/10">
+          <footer className="p-8 border-t border-white/5 bg-black/30">
              <button 
               onClick={() => onSave(jsonText)}
-              className="flex-1 py-3 bg-blue-600 text-white text-[10px] font-black rounded-xl uppercase tracking-widest shadow-xl hover:bg-blue-500 transition-all active:scale-95"
+              className="w-full py-4 bg-blue-600 text-white text-[11px] font-black rounded-2xl uppercase tracking-widest shadow-2xl hover:bg-blue-500 transition-all active:scale-95"
              >
-               Commit Changes
+               Sync Visual Logic
              </button>
           </footer>
         </div>
       )}
 
-      <div className="flex-1 relative bg-[#FDFDFD]">
-        <button 
-          onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-          className={`absolute left-0 top-1/2 -translate-y-1/2 z-[60] w-6 h-20 bg-slate-800 text-white rounded-r-xl flex items-center justify-center hover:bg-blue-600 transition-all ${readOnly ? 'hidden' : ''}`}
-        >
-          <i className={`fas fa-chevron-${isSidebarOpen ? 'left' : 'right'} text-[10px]`}></i>
-        </button>
+      <div className="flex-1 relative bg-white">
+        {!readOnly && (
+          <button 
+            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+            className="absolute left-0 top-1/2 -translate-y-1/2 z-[60] w-8 h-24 bg-slate-900 text-white rounded-r-2xl flex items-center justify-center hover:bg-blue-600 transition-all shadow-2xl"
+          >
+            <i className={`fas fa-chevron-${isSidebarOpen ? 'left' : 'right'} text-xs`}></i>
+          </button>
+        )}
 
         <ReactFlow
-          id="mindmap-canvas"
           nodes={nodes}
           edges={edges}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           nodeTypes={nodeTypes}
-          connectionLineType={ConnectionLineType.SmoothStep}
+          minZoom={0.05}
+          maxZoom={2.0}
+          defaultEdgeOptions={{ type: 'default' }} // Use Bezier curves
           fitView
           fitViewOptions={fitViewOptions}
-          panOnDrag={true}
-          selectionOnDrag={true}
-          zoomOnScroll={true}
           nodesDraggable={!readOnly}
-          className="mindmap-flow"
+          panOnDrag={true}
+          className="mindmap-flow-engine"
         >
-          <Background color="#cbd5e1" gap={32} />
-          <Controls className="bg-white shadow-xl rounded-xl border-slate-100" />
+          <Background color="#f1f5f9" gap={40} size={1} />
+          <Controls className="bg-white shadow-2xl rounded-2xl border-none p-1" />
           <MiniMap 
-            nodeColor={(n) => (n.data?.style?.accent || '#3b82f6')} 
-            maskColor="rgb(241, 245, 249, 0.6)"
-            className="rounded-2xl border border-slate-100 shadow-2xl"
+            nodeStrokeColor={(n) => (n.data?.style?.accent || '#3b82f6')}
+            nodeColor={(n) => (n.data?.style?.bg || '#ffffff')}
+            maskColor="rgba(248, 250, 252, 0.7)"
+            className="rounded-[2rem] border border-slate-100 shadow-2xl overflow-hidden"
           />
           
-          <Panel position="top-right" className="flex gap-2">
+          <Panel position="top-right" className="flex gap-3 m-6">
              <button 
-               onClick={handleExportSvg}
-               className="bg-white border border-slate-200 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 shadow-lg flex items-center gap-2"
+               onClick={() => exportMindMapAsSvg('mindmap-canvas', 'blueprint-export')}
+               className="bg-white border border-slate-100 px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 shadow-xl flex items-center gap-3 transition-all"
              >
                <i className="fas fa-file-export text-blue-600"></i> Export SVG
              </button>
              <button 
-               onClick={() => exportMindMapAsPng('mindmap-canvas', 'nexus-mindmap')}
-               className="bg-white border border-slate-200 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 shadow-lg flex items-center gap-2"
+               onClick={() => exportMindMapAsPng('mindmap-canvas', 'blueprint-export')}
+               className="bg-white border border-slate-100 px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 shadow-xl flex items-center gap-3 transition-all"
              >
                <i className="fas fa-image text-emerald-600"></i> PNG
              </button>
@@ -174,11 +173,8 @@ const MindMapFlowEditor: React.FC<MindMapFlowEditorProps> = ({ initialContent, o
       </div>
 
       <style dangerouslySetInnerHTML={{ __html: `
-        .react-flow__edge-path {
-          stroke-dasharray: 0;
-          stroke-linecap: round;
-        }
-        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .react-flow__edge-path { stroke-linecap: round; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
       `}} />

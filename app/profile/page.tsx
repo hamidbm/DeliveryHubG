@@ -1,7 +1,8 @@
+
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter } from '../../App';
 import Layout from '../../components/Layout';
 import { Role } from '../../types';
 
@@ -106,7 +107,6 @@ export default function ProfilePage() {
   if (!user) return null;
 
   return (
-    /* Fix: Added missing required properties bundles and applications to Layout component */
     <Layout
       activeTab="profile"
       setActiveTab={() => {}}
@@ -313,7 +313,6 @@ export default function ProfilePage() {
         </div>
       </div>
       
-      {/* Fix: Replaced style jsx global with standard style tag and dangerouslySetInnerHTML for compatibility */}
       <style dangerouslySetInnerHTML={{ __html: `
         @keyframes shake {
           0%, 100% { transform: translateX(0); }

@@ -1,8 +1,8 @@
+
 'use client';
 
 import React, { useState } from 'react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter } from '../../App';
 import { Role } from '../../types';
 
 export default function RegisterPage() {
@@ -142,9 +142,9 @@ export default function RegisterPage() {
           <div className="mt-8 pt-8 border-t border-slate-800/50 text-center">
             <p className="text-slate-500 text-sm">
               Already have credentials?{' '}
-              <Link href="/login" className="text-blue-500 font-bold hover:text-blue-400 transition">
+              <a onClick={() => router.push('/login')} className="text-blue-500 font-bold hover:text-blue-400 transition cursor-pointer">
                 Sign In
-              </Link>
+              </a>
             </p>
           </div>
         </div>

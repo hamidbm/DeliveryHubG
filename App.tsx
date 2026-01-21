@@ -20,18 +20,30 @@ const NavigationContext = createContext<{
   push: (url: string) => void;
   searchParams: URLSearchParams;
   currentPath: string;
+  pathname: string;
 }>({
   push: () => {},
   searchParams: new URLSearchParams(),
   currentPath: '/',
+  pathname: '/',
 });
 
 export function useRouter() {
-  return useContext(NavigationContext);
+  const ctx = useContext(NavigationContext);
+  return {
+    push: ctx.push,
+    back: () => window.history.back(),
+    forward: () => window.history.forward(),
+    refresh: () => window.location.reload(),
+  };
 }
 
 export function useSearchParams() {
   return useContext(NavigationContext).searchParams;
+}
+
+export function usePathname() {
+  return useContext(NavigationContext).pathname;
 }
 
 export default function Home() {
@@ -61,6 +73,7 @@ export default function Home() {
     },
     searchParams,
     currentPath,
+    pathname: currentPath,
   };
 
   return (
@@ -77,7 +90,7 @@ export default function Home() {
 }
 
 function RouterSwitcher() {
-  const { currentPath } = useRouter();
+  const { currentPath } = useContext(NavigationContext);
 
   if (currentPath === '/login') return <LoginPage />;
   if (currentPath === '/register') return <RegisterPage />;

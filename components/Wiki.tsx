@@ -1,5 +1,6 @@
+
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { useRouter, useSearchParams, usePathname } from 'next/navigation';
+import { useRouter, useSearchParams, usePathname } from '../App';
 import { WikiPage, WikiTheme, HierarchyMode, Application, WikiSpace, Bundle, TaxonomyCategory, TaxonomyDocumentType } from '../types';
 import WikiForm from './WikiForm';
 import CreateWikiPageForm from './CreateWikiPageForm';
@@ -136,7 +137,7 @@ const Wiki: React.FC<WikiProps> = ({
     setActivePage(page);
     const params = new URLSearchParams(searchParams.toString());
     params.set('pageId', (page.slug || page._id || page.id || '') as string);
-    router.push(`${pathname}?${params.toString()}`);
+    router.push(`?${params.toString()}`);
   };
 
   const handleCopyLink = () => {
