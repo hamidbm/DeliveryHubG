@@ -128,6 +128,7 @@ const InfrastructureExplorer: React.FC<{ applications: Application[], onUpdate?:
   const [isTopographyLoading, setIsTopographyLoading] = useState(false);
   const [topographyError, setTopographyError] = useState<string | null>(null);
   const [activeEngine, setActiveEngine] = useState<string | null>(null);
+  const [auditEngine, setAuditEngine] = useState<string | null>(null);
   const [isAuthError, setIsAuthError] = useState(false);
 
   const [activeTab, setActiveTab] = useState<'iac' | 'topography' | 'audit'>('iac');
@@ -155,7 +156,8 @@ const InfrastructureExplorer: React.FC<{ applications: Application[], onUpdate?:
     if (window.aistudio) {
       await window.aistudio.openSelectKey();
       setIsAuthError(false);
-      handleGenerateTopography();
+      if (activeTab === 'topography') handleGenerateTopography();
+      else if (activeTab === 'audit') runAiAudit();
     }
   };
 
@@ -170,7 +172,11 @@ const InfrastructureExplorer: React.FC<{ applications: Application[], onUpdate?:
         body: JSON.stringify({ code: tfCode, provider: selectedApp?.cloudMetadata?.provider || 'Azure' })
       });
       const data = await res.json();
+      if (data.error) throw new Error(data.error);
       setAiInsight(data.analysis);
+      setAuditEngine(data.engine);
+    } catch (err: any) {
+      setAiInsight(`### Audit Failed\n\n${err.message}`);
     } finally {
       setIsAiLoading(false);
     }
@@ -262,7 +268,7 @@ const InfrastructureExplorer: React.FC<{ applications: Application[], onUpdate?:
                   <div><h2 className="text-3xl font-black text-slate-900 tracking-tighter uppercase italic">{selectedApp.name} Workspace</h2></div>
                </div>
                <div className="flex gap-3">
-                  <button onClick={runAiAudit} disabled={isAiLoading} className="px-6 py-3 bg-slate-900 text-white text-[10px] font-black rounded-2xl shadow-xl hover:bg-blue-600 transition-all uppercase tracking-widest">{isAiLoading ? <i className="fas fa-circle-notch fa-spin"></i> : <i className="fas fa-brain"></i>} AI Audit</button>
+                  <button onClick={runAiAudit} disabled={isAiLoading} className="px-6 py-3 bg-slate-900 text-white text-[10px] font-black rounded-2xl shadow-xl hover:bg-blue-600 transition-all uppercase tracking-widest">{isAiLoading ? <i className="fas fa-circle-notch fa-spin"></i> : <i className="fas fa-shield-halved"></i>} Trigger Audit</button>
                   <button onClick={handleSaveTf} disabled={saving} className="px-6 py-3 bg-blue-50 text-blue-600 border border-blue-100 text-[10px] font-black rounded-2xl">Sync Script</button>
                </div>
             </header>
@@ -273,7 +279,7 @@ const InfrastructureExplorer: React.FC<{ applications: Application[], onUpdate?:
                ))}
             </div>
 
-            <div className="flex-1 overflow-y-auto bg-white">
+            <div className="flex-1 overflow-y-auto bg-white custom-scrollbar">
                {activeTab === 'iac' && <textarea value={tfCode} onChange={(e) => setTfCode(e.target.value)} spellCheck={false} className="w-full h-full p-10 bg-slate-950 text-emerald-400 font-mono text-sm outline-none resize-none custom-scrollbar" />}
                
                {activeTab === 'topography' && (
@@ -330,7 +336,43 @@ const InfrastructureExplorer: React.FC<{ applications: Application[], onUpdate?:
                     )}
                  </div>
                )}
-               {/* Audit Tab logic omitted for brevity, same as previous implementation */}
+
+               {activeTab === 'audit' && (
+                 <div className="p-10 min-h-full bg-white">
+                    {isAiLoading ? (
+                      <div className="flex flex-col items-center justify-center py-32 gap-6">
+                        <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] animate-pulse">Running Multi-Vector Security Scan...</p>
+                      </div>
+                    ) : aiInsight ? (
+                      <div className="animate-fadeIn space-y-10">
+                         <header className="flex justify-between items-center bg-slate-50 px-8 py-5 rounded-2xl border border-slate-100">
+                            <div className="flex items-center gap-4">
+                               <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                               <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Registry Audit Report Complete</span>
+                            </div>
+                            <div className="flex items-center gap-3">
+                               <span className="px-3 py-1 bg-blue-50 text-blue-600 rounded-lg text-[8px] font-black uppercase tracking-widest border border-blue-100 flex items-center gap-2">
+                                  <i className="fas fa-microchip"></i> {auditEngine}
+                               </span>
+                               <button onClick={runAiAudit} className="px-4 py-1.5 bg-slate-900 text-white text-[9px] font-black rounded-lg uppercase tracking-widest shadow-lg">Re-Scan</button>
+                            </div>
+                         </header>
+                         <div className="prose prose-slate max-w-none prose-h1:text-4xl prose-h2:text-2xl prose-p:text-slate-600" 
+                              dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(marked.parse(aiInsight) as string) }} />
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center py-32 text-center">
+                        <div className="w-24 h-24 bg-slate-50 rounded-[2.5rem] flex items-center justify-center mb-8 border border-slate-100 shadow-inner">
+                           <i className="fas fa-shield-halved text-slate-200 text-4xl"></i>
+                        </div>
+                        <h3 className="text-xl font-black text-slate-800 tracking-tight uppercase">Infrastructure Auditor</h3>
+                        <p className="text-slate-400 font-medium max-w-md mt-3 leading-relaxed">Execute an AI-powered security and cost audit on your IaC definition. Detect misconfigurations before deployment.</p>
+                        <button onClick={runAiAudit} className="mt-8 px-10 py-4 bg-blue-600 text-white text-[10px] font-black uppercase rounded-2xl shadow-xl hover:bg-blue-700 transition-all active:scale-95">Initiate Audit</button>
+                      </div>
+                    )}
+                 </div>
+               )}
             </div>
           </>
         ) : (
