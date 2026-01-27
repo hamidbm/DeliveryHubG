@@ -414,36 +414,55 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
              <button onClick={() => { setSelBundle('all'); setSelApp('all'); setSelMilestone('all'); setSelTag('all'); }} className="ml-auto text-[9px] font-black text-slate-400 uppercase tracking-widest hover:text-blue-600 transition-colors">Clear Filters</button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 pb-20">
-            {loading && diagrams.length === 0 ? [...Array(3)].map((_, i) => <div key={i} className="h-80 bg-slate-100 rounded-[2.5rem] animate-pulse"></div>) : 
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pb-20">
+            {loading && diagrams.length === 0 ? [...Array(3)].map((_, i) => <div key={i} className="h-48 bg-slate-100 rounded-[2rem] animate-pulse"></div>) : 
              filteredDiagrams.length === 0 ? (
                <div className="col-span-full py-32 text-center bg-slate-50/50 border-2 border-dashed border-slate-100 rounded-[3rem]">
                   <i className="fas fa-pencil-ruler text-5xl mb-6 text-slate-200"></i>
                   <p className="text-sm font-black text-slate-400 uppercase tracking-widest">No diagrams found matching filters</p>
                </div>
              ) : filteredDiagrams.map(diag => (
-              <div key={diag._id} className="bg-white border border-slate-200 rounded-[2.5rem] p-8 hover:shadow-2xl transition-all group cursor-pointer relative flex flex-col h-full" onClick={() => openDesigner(diag, false)}>
-                 <div className="absolute top-6 right-6 flex gap-2 opacity-0 group-hover:opacity-100 transition-all z-20">
+              <div key={diag._id} className="bg-white border border-slate-200 rounded-[2rem] p-6 hover:shadow-xl transition-all group cursor-pointer relative flex flex-col justify-between" onClick={() => openDesigner(diag, false)}>
+                 <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-all z-20">
                     <button onClick={(e) => { e.stopPropagation(); openDesigner(diag, true); }} className="w-8 h-8 rounded-lg bg-white text-slate-400 hover:text-blue-600 flex items-center justify-center shadow-sm border border-slate-100"><i className="fas fa-pen text-[10px]"></i></button>
                     <button onClick={(e) => handleDelete(diag._id!, e)} className="w-8 h-8 rounded-lg bg-white text-slate-400 hover:text-red-500 flex items-center justify-center shadow-sm border border-slate-100"><i className="fas fa-trash text-[10px]"></i></button>
                  </div>
-                 <div className="flex justify-between items-start mb-6">
-                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-lg ${
-                      diag.format === DiagramFormat.MERMAID ? 'bg-indigo-500 shadow-indigo-200' : 
-                      diag.format === DiagramFormat.DRAWIO ? 'bg-orange-500 shadow-orange-200' : 
-                      diag.format === DiagramFormat.MINDMAP_MD ? 'bg-blue-500 shadow-blue-200' : 'bg-slate-500 shadow-slate-200'
-                    }`}><i className={`fas ${diag.format === DiagramFormat.MERMAID ? 'fa-code' : diag.format === DiagramFormat.DRAWIO ? 'fa-vector-square' : 'fa-diagram-project'}`}></i></div>
-                 </div>
-                 <h4 className="text-lg font-black text-slate-800 mb-2 group-hover:text-blue-600 transition-colors pr-12 truncate">{diag.title}</h4>
-                 <div className="flex flex-wrap gap-2 mb-6">
-                    <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">{diag.format}</span>
-                    {diag.tags?.map(t => <span key={t} className="px-2 py-0.5 bg-blue-50 text-blue-500 text-[8px] font-black uppercase rounded-md border border-blue-100">{t}</span>)}
-                 </div>
-                 <div className="flex-1 h-40 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-center overflow-hidden p-4">
-                    <div className="flex flex-col items-center gap-2 opacity-30 group-hover:opacity-60 transition-all text-center">
-                        <i className={`fas ${diag.format === DiagramFormat.MERMAID ? 'fa-code' : 'fa-file-code'} text-4xl text-slate-300`}></i>
-                        <span className="text-[8px] font-black uppercase tracking-widest">Visual Logic Attached</span>
+                 
+                 <div>
+                    <div className="flex items-center gap-3 mb-4">
+                       <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-white shadow-md ${
+                         diag.format === DiagramFormat.MERMAID ? 'bg-indigo-500' : 
+                         diag.format === DiagramFormat.DRAWIO ? 'bg-orange-500' : 
+                         diag.format === DiagramFormat.MINDMAP_MD ? 'bg-blue-500' : 'bg-slate-500'
+                       }`}><i className={`fas ${diag.format === DiagramFormat.MERMAID ? 'fa-code' : diag.format === DiagramFormat.DRAWIO ? 'fa-vector-square' : 'fa-diagram-project'} text-sm`}></i></div>
+                       <div className="min-w-0">
+                          <h4 className="text-sm font-black text-slate-800 group-hover:text-blue-600 transition-colors truncate pr-8">{diag.title}</h4>
+                          <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest">{diag.format}</span>
+                       </div>
                     </div>
+
+                    <div className="space-y-2 mb-4">
+                       <div className="flex items-center gap-2">
+                          <i className="fas fa-boxes-stacked text-[9px] text-slate-300"></i>
+                          <span className="text-[10px] font-bold text-slate-500 truncate">
+                            {bundles.find(b => b._id === diag.bundleId)?.name || 'Unassigned Cluster'}
+                          </span>
+                       </div>
+                       <div className="flex items-center gap-2">
+                          <i className="fas fa-cube text-[9px] text-slate-300"></i>
+                          <span className="text-[10px] font-bold text-slate-500 truncate">
+                            {applications.find(a => a._id === diag.applicationId || a.id === diag.applicationId)?.name || 'No App Context'}
+                          </span>
+                       </div>
+                    </div>
+                 </div>
+
+                 <div className="flex flex-wrap gap-1.5 border-t border-slate-50 pt-4 mt-2">
+                    {diag.tags && diag.tags.length > 0 ? diag.tags.map(t => (
+                      <span key={t} className="px-2 py-0.5 bg-slate-50 text-slate-400 text-[8px] font-black uppercase rounded border border-slate-100">{t}</span>
+                    )) : (
+                      <span className="text-[8px] font-black text-slate-200 uppercase italic">No tags attached</span>
+                    )}
                  </div>
               </div>
             ))}
