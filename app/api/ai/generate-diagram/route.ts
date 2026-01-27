@@ -29,11 +29,16 @@ async function generateOpenAiDiagram(code: string, apiKey: string) {
     });
 
     const data = await response.json();
+    
+    if (data.error) {
+       throw new Error(data.error.message || "OpenAI API Error");
+    }
+
     const text = data.choices[0].message.content || "";
     return text.replace(/```mermaid/g, '').replace(/```/g, '').trim();
-  } catch (err) {
+  } catch (err: any) {
     console.error("OpenAI Error:", err);
-    throw new Error("OpenAI failed to generate diagram.");
+    throw new Error(err.message || "OpenAI failed to generate diagram.");
   }
 }
 
@@ -43,19 +48,26 @@ export async function POST(request: Request) {
     if (!code) return NextResponse.json({ error: 'Terraform code required' }, { status: 400 });
     
     const settings = await fetchSystemSettings();
-    const provider = settings?.ai?.defaultProvider || 'GEMINI';
+    const envKey = process.env.OPENAI_API_KEY;
     
-    if (provider === 'OPENAI') {
-      // Prioritize environment variable, fallback to settings key
-      const apiKey = process.env.OPENAI_API_KEY || settings.ai?.openaiKey;
+    // Auto-detect and prioritize OpenAI if env var is present, 
+    // or if DB explicitly says OpenAI.
+    const isOpenAiDefault = envKey || (settings?.ai?.defaultProvider === 'OPENAI');
+    
+    if (isOpenAiDefault) {
+      const apiKey = envKey || settings.ai?.openaiKey;
       if (!apiKey) {
-        return NextResponse.json({ error: 'OpenAI API Key missing in System Environment or Admin Settings' }, { status: 401 });
+        // Fallback to Gemini if OpenAI is intended but key is missing
+        const model = settings?.ai?.proModel || 'gemini-3-pro-preview';
+        const mermaid = await generateDiagramFromTerraform(code, model);
+        return NextResponse.json({ mermaid, engine: 'Gemini 3 Pro (OpenAI Key Missing)' });
       }
+      
       const mermaid = await generateOpenAiDiagram(code, apiKey);
       return NextResponse.json({ mermaid, engine: 'OpenAI GPT-4' });
     }
 
-    // Default to Gemini
+    // Default path for Gemini
     const model = settings?.ai?.proModel || 'gemini-3-pro-preview';
     const mermaid = await generateDiagramFromTerraform(code, model);
     return NextResponse.json({ mermaid, engine: 'Gemini 3 Pro' });

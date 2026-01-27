@@ -17,11 +17,13 @@ export const fetchSystemSettings = async () => {
   try {
     const db = await getDb();
     const settings = await db.collection('settings').findOne({ key: 'global_config' });
+    
+    // Default to OPENAI if no settings exist in DB
     return settings || {
       key: 'global_config',
       ai: {
-        defaultProvider: 'GEMINI',
-        defaultModel: 'gemini-3-pro-preview',
+        defaultProvider: 'OPENAI',
+        defaultModel: 'gpt-4o',
         flashModel: 'gemini-3-flash-preview',
         proModel: 'gemini-3-pro-preview',
         openaiKey: '',
