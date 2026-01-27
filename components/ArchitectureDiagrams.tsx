@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef, useCallback, Suspense, lazy } from 'react';
 import { ArchitectureDiagram, DiagramFormat, Application, Bundle, Milestone } from '../types';
 import mermaid from 'mermaid';
+import * as d3 from 'd3';
 
 // Use React.lazy instead of next/dynamic for standard browser module compatibility
 const MindMapFlowEditor = lazy(() => import('./MindMapFlowEditor'));
@@ -154,6 +155,19 @@ const DEFAULT_DRAWIO_XML = '<mxfile><diagram id="page-1" name="Page-1"><mxGraphM
 
 const MermaidRenderer: React.FC<{ content: string; id: string }> = ({ content, id }) => {
   const containerRef = useRef<HTMLDivElement>(null);
+  const zoomRef = useRef<any>(null);
+  const svgGroupRef = useRef<any>(null);
+
+  const handleZoom = useCallback((direction: 'in' | 'out' | 'reset') => {
+    if (!zoomRef.current || !containerRef.current) return;
+    const svg = d3.select(containerRef.current).select('svg');
+    
+    if (direction === 'reset') {
+      svg.transition().duration(750).call(zoomRef.current.transform, d3.zoomIdentity);
+    } else {
+      svg.transition().duration(300).call(zoomRef.current.scaleBy, direction === 'in' ? 1.3 : 0.7);
+    }
+  }, []);
 
   const render = useCallback(async () => {
     if (!containerRef.current || !content || content.trim().startsWith('{') || content.trim().startsWith('<')) return;
@@ -161,13 +175,35 @@ const MermaidRenderer: React.FC<{ content: string; id: string }> = ({ content, i
       containerRef.current.innerHTML = ''; 
       const safeId = `mermaid-${id.replace(/[^a-zA-Z0-9]/g, '-')}-${Math.floor(Math.random() * 10000)}`;
       const { svg } = await mermaid.render(safeId, content);
-      containerRef.current.innerHTML = svg;
       
-      const svgEl = containerRef.current.querySelector('svg');
-      if (svgEl) {
-        svgEl.style.width = '100%';
-        svgEl.style.height = 'auto';
-        svgEl.style.maxWidth = '100%';
+      // Inject SVG and wrap content for zooming
+      containerRef.current.innerHTML = svg;
+      const svgElement = containerRef.current.querySelector('svg');
+      
+      if (svgElement) {
+        svgElement.setAttribute('width', '100%');
+        svgElement.setAttribute('height', '100%');
+        svgElement.style.maxWidth = 'none';
+        svgElement.style.cursor = 'grab';
+
+        const svgSelection = d3.select(svgElement);
+        // Create a root group if it doesn't exist, though Mermaid usually has one
+        // We actually want to zoom the entire SVG content
+        const zoom = d3.zoom()
+          .scaleExtent([0.05, 5])
+          .on('zoom', (event) => {
+            svgSelection.selectAll('g').filter(function() {
+                // Only target top-level g elements to avoid double transforms if possible, 
+                // but usually Mermaid outputs one main container G.
+                return this.parentNode === svgElement;
+            }).attr('transform', event.transform);
+          });
+
+        zoomRef.current = zoom;
+        svgSelection.call(zoom as any);
+        
+        // Ensure it starts centered
+        svgSelection.call(zoom.transform as any, d3.zoomIdentity);
       }
     } catch (err) {
       containerRef.current.innerHTML = `<div class="p-10 text-red-500 bg-red-50 rounded-2xl border border-red-100 flex flex-col items-center">
@@ -187,7 +223,41 @@ const MermaidRenderer: React.FC<{ content: string; id: string }> = ({ content, i
     render();
   }, [render]);
 
-  return <div ref={containerRef} className="flex justify-center items-center w-full h-full min-h-[400px]" />;
+  return (
+    <div className="relative w-full h-full group/mermaid">
+      <div ref={containerRef} className="flex justify-center items-center w-full h-full min-h-[400px] overflow-hidden" />
+      
+      {/* Zoom Controls HUD */}
+      <div className="absolute bottom-6 left-6 flex flex-col gap-2 opacity-0 group-hover/mermaid:opacity-100 transition-opacity duration-300 z-50">
+        <div className="flex flex-col bg-white/80 backdrop-blur-md border border-slate-200 rounded-2xl shadow-2xl overflow-hidden">
+          <button 
+            onClick={() => handleZoom('in')}
+            className="p-3 text-slate-600 hover:bg-blue-50 hover:text-blue-600 border-b border-slate-100 transition-colors"
+            title="Zoom In"
+          >
+            <i className="fas fa-plus text-xs"></i>
+          </button>
+          <button 
+            onClick={() => handleZoom('out')}
+            className="p-3 text-slate-600 hover:bg-blue-50 hover:text-blue-600 transition-colors border-b border-slate-100"
+            title="Zoom Out"
+          >
+            <i className="fas fa-minus text-xs"></i>
+          </button>
+          <button 
+            onClick={() => handleZoom('reset')}
+            className="p-3 text-slate-600 hover:bg-blue-50 hover:text-blue-600 transition-colors"
+            title="Reset View"
+          >
+            <i className="fas fa-compress text-xs"></i>
+          </button>
+        </div>
+        <div className="px-3 py-1.5 bg-slate-900 text-white rounded-xl text-[8px] font-black uppercase tracking-widest text-center shadow-lg">
+           D3 Engine
+        </div>
+      </div>
+    </div>
+  );
 };
 
 const DrawioEditor: React.FC<{ 
@@ -445,7 +515,7 @@ const ArchitectureDesigner: React.FC<{
       if (format === DiagramFormat.MERMAID) setCode(DEFAULT_MERMAID_CODE);
       else if (format === DiagramFormat.DRAWIO) setCode(DEFAULT_DRAWIO_XML);
     }
-  }, [format]);
+  }, [format, code]);
 
   const persistToRegistry = useCallback(async (finalCode: string) => {
     if (!title.trim()) return alert("Artifact title is mandatory.");
@@ -550,7 +620,7 @@ const ArchitectureDesigner: React.FC<{
           ) : format === DiagramFormat.MERMAID ? (
             <div className="flex-1 flex overflow-hidden">
                {!readOnly && (
-                 <div className="w-1/3 bg-slate-900 flex flex-col border-r border-white/5 animate-slideRight">
+                 <div className="w-1/3 bg-slate-900 flex flex-col border-r border-white/5">
                     <textarea 
                       value={code} 
                       onChange={(e) => setCode(e.target.value)}
@@ -559,7 +629,7 @@ const ArchitectureDesigner: React.FC<{
                     />
                  </div>
                )}
-               <div className="flex-1 bg-white flex items-center justify-center p-12 overflow-auto">
+               <div className="flex-1 bg-white p-0 overflow-hidden relative">
                   <MermaidRenderer content={code || DEFAULT_MERMAID_CODE} id={diagram._id || 'temp'} />
                </div>
             </div>
