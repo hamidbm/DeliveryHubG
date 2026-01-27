@@ -79,7 +79,6 @@ export enum DiagramFormat {
   IMAGE = 'IMAGE',
   PDF = 'PDF',
   MINDMAP = 'MINDMAP',
-  MINDMAP_FLOW = 'MINDMAP_FLOW',
   MINDMAP_MD = 'MINDMAP_MD'
 }
 
@@ -87,7 +86,7 @@ export interface ArchitectureDiagram {
   _id?: string;
   title: string;
   format: DiagramFormat;
-  content: string; // Mermaid code, DrawIO XML, or MINDMAP_FLOW JSON
+  content: string; // Mermaid code, DrawIO XML, or MINDMAP DSL
   bundleId?: string;
   applicationId?: string;
   milestoneId?: string;
@@ -195,6 +194,7 @@ export interface WorkItem {
 export interface ChecklistItem { id: string; label: string; isCompleted: boolean; createdAt: string; }
 export interface WorkItemComment { _id?: string; author: string; body: string; createdAt: string; }
 export interface WorkItemLink { type: 'BLOCKS' | 'IS_BLOCKED_BY' | 'RELATES_TO' | 'DUPLICATES' | 'IS_DUPLICATED_BY'; targetId: string; targetKey?: string; targetTitle?: string; }
+export interface WorkItemActivity { _id?: string; user: string; action: string; field?: string; from?: any; to?: any; createdAt: string; }
 export interface WorkItemActivity { _id?: string; user: string; action: string; field?: string; from?: any; to?: any; createdAt: string; }
 export interface WorkItemAttachment { name: string; size: number; type: string; url: string; uploadedBy: string; createdAt: string; }
 export interface Notification { _id?: string; recipient: string; sender: string; type: 'MENTION' | 'IMPEDIMENT' | 'ASSIGNMENT' | 'SYSTEM'; message: string; link?: string; read: boolean; createdAt: string; }

@@ -5,7 +5,6 @@ import mermaid from 'mermaid';
 import * as d3 from 'd3';
 
 // Use React.lazy instead of next/dynamic for standard browser module compatibility
-const MindMapFlowEditor = lazy(() => import('./MindMapFlowEditor'));
 const MindMapMarkdownEditor = lazy(() => import('./MindMapMarkdownEditor'));
 
 interface ArchitectureDiagramsProps {
@@ -432,7 +431,6 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
                     <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-lg ${
                       diag.format === DiagramFormat.MERMAID ? 'bg-indigo-500 shadow-indigo-200' : 
                       diag.format === DiagramFormat.DRAWIO ? 'bg-orange-500 shadow-orange-200' : 
-                      diag.format === DiagramFormat.MINDMAP_FLOW ? 'bg-emerald-500 shadow-emerald-200' :
                       diag.format === DiagramFormat.MINDMAP_MD ? 'bg-blue-500 shadow-blue-200' : 'bg-slate-500 shadow-slate-200'
                     }`}><i className={`fas ${diag.format === DiagramFormat.MERMAID ? 'fa-code' : diag.format === DiagramFormat.DRAWIO ? 'fa-vector-square' : 'fa-diagram-project'}`}></i></div>
                  </div>
@@ -538,15 +536,15 @@ const ArchitectureDesigner: React.FC<{
         <div className="flex items-center gap-4">
           {!readOnly && (
             <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 mr-4 shadow-inner">
-              {[DiagramFormat.MERMAID, DiagramFormat.DRAWIO, DiagramFormat.MINDMAP_FLOW, DiagramFormat.MINDMAP_MD].map(fmt => (
-                <button key={fmt} onClick={() => setFormat(fmt)} className={`px-4 py-2 text-[9px] font-black uppercase rounded-lg transition-all ${format === fmt ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>{fmt === DiagramFormat.MINDMAP_MD ? 'Mind Map (MD)' : fmt === DiagramFormat.MINDMAP_FLOW ? 'Mind Map (Legacy)' : fmt}</button>
+              {[DiagramFormat.MERMAID, DiagramFormat.DRAWIO, DiagramFormat.MINDMAP_MD].map(fmt => (
+                <button key={fmt} onClick={() => setFormat(fmt)} className={`px-4 py-2 text-[9px] font-black uppercase rounded-lg transition-all ${format === fmt ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>{fmt === DiagramFormat.MINDMAP_MD ? 'Mind Map (MD)' : fmt}</button>
               ))}
             </div>
           )}
           {readOnly ? (
             <button onClick={() => setReadOnly(false)} className="px-10 py-3.5 bg-blue-600 text-white rounded-2xl shadow-xl font-black text-[10px] uppercase tracking-widest flex items-center gap-3 active:scale-95 transition-all"><i className="fas fa-pen"></i> Edit</button>
           ) : (
-            <button onClick={() => { if (format !== DiagramFormat.MINDMAP_FLOW) handleSave(code); else setExportTrigger(p => p+1); }} disabled={saving} className="px-10 py-3.5 bg-slate-900 text-white rounded-2xl shadow-xl font-black text-[10px] uppercase tracking-widest flex items-center gap-3 active:scale-95 transition-all disabled:opacity-50">
+            <button onClick={() => { handleSave(code); }} disabled={saving} className="px-10 py-3.5 bg-slate-900 text-white rounded-2xl shadow-xl font-black text-[10px] uppercase tracking-widest flex items-center gap-3 active:scale-95 transition-all disabled:opacity-50">
               {saving ? <i className="fas fa-circle-notch fa-spin"></i> : <i className="fas fa-save"></i>} {saving ? 'Syncing...' : 'Sync to Registry'}
             </button>
           )}
@@ -557,8 +555,6 @@ const ArchitectureDesigner: React.FC<{
         <div className="flex-1 relative overflow-hidden flex flex-col min-w-0">
           {format === DiagramFormat.MINDMAP_MD ? (
             <Suspense fallback={<div className="flex-1 flex items-center justify-center bg-white"><i className="fas fa-circle-notch fa-spin text-blue-500 text-2xl"></i></div>}><MindMapMarkdownEditor initialContent={code} onSave={handleSave} readOnly={readOnly} /></Suspense>
-          ) : format === DiagramFormat.MINDMAP_FLOW ? (
-            <Suspense fallback={<div className="flex-1 flex flex-col items-center justify-center bg-white gap-4"><div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div><p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Activating Canvas...</p></div>}><MindMapFlowEditor initialContent={code} onSave={handleSave} readOnly={readOnly} /></Suspense>
           ) : format === DiagramFormat.MERMAID ? (
             <div className="flex-1 flex overflow-hidden">
                {!readOnly && <div className="w-1/3 bg-slate-900 flex flex-col border-r border-white/5"><textarea value={code} onChange={(e) => setCode(e.target.value)} readOnly={readOnly} className="flex-1 bg-transparent text-emerald-400 font-mono text-sm p-8 outline-none resize-none custom-scrollbar" /></div>}
