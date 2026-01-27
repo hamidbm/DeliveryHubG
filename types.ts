@@ -48,7 +48,6 @@ export enum WorkItemStatus {
   BLOCKED = 'BLOCKED'
 }
 
-// LeanIX: Portfolio Management Categories
 export enum TimeModelStatus {
   TOLERATE = 'TOLERATE',
   INVEST = 'INVEST',
@@ -71,6 +70,9 @@ export interface AppInterface {
   type: 'REST' | 'SOAP' | 'KAFKA' | 'DB_LINK' | 'FILE';
   dataCriticality: 'LOW' | 'MEDIUM' | 'HIGH';
   status: 'ACTIVE' | 'DEPRECATED' | 'PLANNED';
+  contractUrl?: string;
+  dataEntities?: string[];
+  description?: string;
 }
 
 export enum DiagramFormat {
@@ -86,7 +88,7 @@ export interface ArchitectureDiagram {
   _id?: string;
   title: string;
   format: DiagramFormat;
-  content: string; // Mermaid code, DrawIO XML, or MINDMAP DSL
+  content: string; 
   bundleId?: string;
   applicationId?: string;
   milestoneId?: string;
