@@ -1,4 +1,3 @@
-
 import clientPromise from '../lib/mongodb';
 import { ObjectId } from 'mongodb';
 import { WikiPage, WikiSpace, WikiTheme, Bundle, Application, TaxonomyCategory, TaxonomyDocumentType, WorkItem, WorkItemType, WorkItemStatus, WorkItemActivity, Sprint, Milestone, Notification, ArchitectureDiagram, BusinessCapability, AppInterface } from '../types';
@@ -24,7 +23,11 @@ export const fetchSystemSettings = async () => {
         defaultProvider: 'GEMINI',
         defaultModel: 'gemini-3-pro-preview',
         flashModel: 'gemini-3-flash-preview',
-        proModel: 'gemini-3-pro-preview'
+        proModel: 'gemini-3-pro-preview',
+        openaiKey: '',
+        anthropicKey: '',
+        huggingfaceKey: '',
+        cohereKey: ''
       }
     };
   } catch { return null; }
@@ -35,7 +38,7 @@ export const saveSystemSettings = async (settings: any) => {
   return await db.collection('settings').updateOne(
     { key: 'global_config' },
     { $set: settings },
-    { upsate: true }
+    { upsert: true }
   );
 };
 

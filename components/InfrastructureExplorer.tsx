@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Application, Bundle } from '../types';
 import { marked } from 'marked';
@@ -83,6 +82,7 @@ const InfrastructureExplorer: React.FC<{ applications: Application[], onUpdate?:
   const [topographyContent, setTopographyContent] = useState<string | null>(null);
   const [isTopographyLoading, setIsTopographyLoading] = useState(false);
   const [topographyError, setTopographyError] = useState<string | null>(null);
+  const [activeEngine, setActiveEngine] = useState<string | null>(null);
   const [isAuthError, setIsAuthError] = useState(false);
 
   const [activeTab, setActiveTab] = useState<'iac' | 'topography' | 'audit'>('iac');
@@ -154,8 +154,11 @@ const InfrastructureExplorer: React.FC<{ applications: Application[], onUpdate?:
         throw new Error("Missing AI Credentials");
       }
 
+      if (data.error) throw new Error(data.error);
+
       if (data.mermaid) {
         setTopographyContent(data.mermaid);
+        setActiveEngine(data.engine);
       } else {
         throw new Error("Intelligence engine returned empty payload.");
       }
@@ -226,14 +229,14 @@ const InfrastructureExplorer: React.FC<{ applications: Application[], onUpdate?:
             </div>
 
             <div className="flex-1 overflow-y-auto bg-white">
-               {activeTab === 'iac' && <textarea value={tfCode} onChange={(e) => setTfCode(e.target.value)} spellCheck={false} className="w-full h-full p-10 bg-slate-950 text-emerald-400 font-mono text-sm outline-none resize-none" />}
+               {activeTab === 'iac' && <textarea value={tfCode} onChange={(e) => setTfCode(e.target.value)} spellCheck={false} className="w-full h-full p-10 bg-slate-950 text-emerald-400 font-mono text-sm outline-none resize-none custom-scrollbar" />}
                
                {activeTab === 'topography' && (
                  <div className="p-12 h-full flex flex-col overflow-hidden">
                     {isTopographyLoading ? (
                         <div className="flex-1 flex flex-col items-center justify-center gap-6">
                             <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] animate-pulse">Consulting Gemini 3 Pro...</p>
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] animate-pulse">Consulting AI Engine...</p>
                         </div>
                     ) : isAuthError ? (
                         <div className="flex-1 flex flex-col items-center justify-center text-center">
@@ -256,7 +259,13 @@ const InfrastructureExplorer: React.FC<{ applications: Application[], onUpdate?:
                     ) : topographyContent ? (
                         <div className="h-full flex flex-col">
                             <header className="mb-6 flex justify-between items-center">
-                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><i className="fas fa-circle text-emerald-500 text-[6px]"></i> Active Topology Snapshotted</span>
+                                <div className="flex items-center gap-3">
+                                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><i className="fas fa-circle text-emerald-500 text-[6px]"></i> Active Topology Snapshotted</span>
+                                  <div className="px-3 py-1 bg-blue-50 text-blue-600 rounded-lg text-[8px] font-black uppercase tracking-widest border border-blue-100 flex items-center gap-2">
+                                     <i className="fas fa-microchip"></i>
+                                     {activeEngine}
+                                  </div>
+                                </div>
                                 <div className="flex gap-2">
                                   <button onClick={handleGenerateTopography} className="px-4 py-2 bg-slate-100 text-slate-600 rounded-xl text-[9px] font-black uppercase">Re-Sync</button>
                                   <button onClick={() => setTopographyContent(null)} className="px-4 py-2 bg-white border border-slate-200 text-slate-400 rounded-xl text-[9px] font-black uppercase">Clear</button>
@@ -270,7 +279,7 @@ const InfrastructureExplorer: React.FC<{ applications: Application[], onUpdate?:
                         <div className="flex-1 flex flex-col items-center justify-center text-center">
                             <div className="w-24 h-24 bg-slate-50 rounded-[2.5rem] flex items-center justify-center mb-8 border border-slate-100 shadow-inner"><i className="fas fa-diagram-project text-slate-200 text-4xl"></i></div>
                             <h3 className="text-xl font-black text-slate-800 tracking-tight uppercase">Live Topography</h3>
-                            <p className="text-slate-400 font-medium max-w-sm mt-3 leading-relaxed">Consulting Gemini to reverse-engineer logical resource relationships from the Terraform state definition.</p>
+                            <p className="text-slate-400 font-medium max-w-sm mt-3 leading-relaxed">Reverse-engineer logical resource relationships from the Terraform state definition using the default System LLM.</p>
                             <button onClick={handleGenerateTopography} className="mt-8 px-10 py-4 bg-slate-900 text-white text-[10px] font-black uppercase rounded-2xl shadow-xl hover:bg-blue-600 transition-all active:scale-95">Generate Graph</button>
                         </div>
                     )}

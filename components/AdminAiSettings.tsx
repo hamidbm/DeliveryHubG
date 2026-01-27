@@ -1,17 +1,11 @@
-
 import React, { useState, useEffect } from 'react';
 
 const PROVIDERS = [
-  { id: 'GEMINI', name: 'Google Gemini', icon: 'fa-robot', active: true },
-  { id: 'OPENAI', name: 'OpenAI (GPT-4)', icon: 'fa-bolt', active: false, badge: 'ENV REQUIRED' },
-  { id: 'ANTHROPIC', name: 'Anthropic (Claude)', icon: 'fa-brain', active: false, badge: 'COMING SOON' },
-  { id: 'COHERE', name: 'Cohere', icon: 'fa-shapes', active: false, badge: 'COMING SOON' }
-];
-
-const GEMINI_MODELS = [
-  { id: 'gemini-3-pro-preview', name: 'Gemini 3 Pro', desc: 'Highest reasoning, best for code/infra.', type: 'Complex' },
-  { id: 'gemini-3-flash-preview', name: 'Gemini 3 Flash', desc: 'Fastest response, ideal for summaries.', type: 'Efficient' },
-  { id: 'gemini-2.5-pro-preview-09-2024', name: 'Gemini 2.5 Pro', desc: 'Previous stable release.', type: 'Legacy' }
+  { id: 'GEMINI', name: 'Google Gemini', icon: 'fa-robot', keyField: 'geminiKey', description: 'Native multi-modal architecture engine.' },
+  { id: 'OPENAI', name: 'OpenAI (GPT-4)', icon: 'fa-bolt', keyField: 'openaiKey', description: 'Advanced logic for HCL parsing and diagrams.' },
+  { id: 'ANTHROPIC', name: 'Anthropic (Claude)', icon: 'fa-brain', keyField: 'anthropicKey', description: 'Optimized for massive context architecture reviews.' },
+  { id: 'HUGGINGFACE', name: 'Hugging Face', icon: 'fa-face-smile', keyField: 'huggingfaceKey', description: 'Open-source inference for privacy-first tasks.' },
+  { id: 'COHERE', name: 'Cohere', icon: 'fa-shapes', keyField: 'cohereKey', description: 'Specialized enterprise classification & RAG.' }
 ];
 
 const AdminAiSettings: React.FC = () => {
@@ -67,7 +61,7 @@ const AdminAiSettings: React.FC = () => {
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-6 border-b border-slate-100 pb-10">
         <div>
           <h2 className="text-4xl font-black text-slate-900 tracking-tighter uppercase italic">Intelligence Governance</h2>
-          <p className="text-slate-500 font-medium text-lg">Configure LLM providers and reasoning models for the enterprise.</p>
+          <p className="text-slate-500 font-medium text-lg">Manage multi-LLM providers and system-wide reasoning defaults.</p>
         </div>
         {hasPlatformKey !== null && (
           <div className={`px-6 py-3 rounded-2xl border flex items-center gap-3 transition-all ${
@@ -75,110 +69,106 @@ const AdminAiSettings: React.FC = () => {
           }`}>
              <i className={`fas ${hasPlatformKey ? 'fa-circle-check' : 'fa-triangle-exclamation'}`}></i>
              <span className="text-[10px] font-black uppercase tracking-widest">
-               {hasPlatformKey ? 'Platform Key Connected' : 'Authorization Required'}
+               {hasPlatformKey ? 'Gemini Bridge Active' : 'Bridge Required'}
              </span>
              <button onClick={handleRefreshKey} className="ml-4 px-3 py-1 bg-white rounded-lg border border-current text-[9px] font-black hover:bg-slate-50 transition-colors uppercase">
-                {hasPlatformKey ? 'Switch Key' : 'Authorize Now'}
+                {hasPlatformKey ? 'Switch' : 'Authorize'}
              </button>
           </div>
         )}
       </header>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-        <section className="space-y-8">
-           <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-slate-900 text-white flex items-center justify-center shadow-lg"><i className="fas fa-server"></i></div>
-              <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Provider Registry</h4>
-           </div>
+      <section className="space-y-8">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-slate-900 text-white flex items-center justify-center shadow-lg"><i className="fas fa-server"></i></div>
+          <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Provider Registry & Credentials</h4>
+        </div>
 
-           <div className="grid grid-cols-1 gap-4">
-              {PROVIDERS.map(p => (
-                <div 
-                  key={p.id} 
-                  className={`p-6 rounded-[2rem] border-2 transition-all flex items-center justify-between group ${
-                    settings.ai.defaultProvider === p.id 
-                    ? 'bg-blue-50 border-blue-500 shadow-xl shadow-blue-500/5' 
-                    : 'bg-white border-slate-100'
-                  } ${!p.active ? 'opacity-50 grayscale cursor-not-allowed' : 'cursor-pointer hover:border-blue-200'}`}
-                  onClick={() => p.active && handleSave({ ...settings, ai: { ...settings.ai, defaultProvider: p.id } })}
-                >
-                   <div className="flex items-center gap-6">
-                      <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-2xl shadow-inner ${
-                        settings.ai.defaultProvider === p.id ? 'bg-blue-600 text-white' : 'bg-slate-50 text-slate-400'
-                      }`}>
-                         <i className={`fas ${p.icon}`}></i>
-                      </div>
-                      <div>
-                         <h5 className="text-lg font-black text-slate-800">{p.name}</h5>
-                         <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                           {p.id === 'GEMINI' ? 'Platform Bridge Active' : 'Environment Var Required'}
-                         </p>
-                      </div>
-                   </div>
-                   {p.badge ? (
-                     <span className="px-3 py-1 bg-slate-100 text-slate-500 text-[8px] font-black uppercase rounded-lg">{p.badge}</span>
-                   ) : settings.ai.defaultProvider === p.id && (
-                     <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-lg">
-                        <i className="fas fa-check text-xs"></i>
-                     </div>
-                   )}
+        <div className="grid grid-cols-1 gap-6">
+          {PROVIDERS.map(p => (
+            <div 
+              key={p.id} 
+              className={`p-8 rounded-[2.5rem] border-2 transition-all flex flex-col md:flex-row md:items-center gap-8 ${
+                settings.ai.defaultProvider === p.id 
+                ? 'bg-blue-50/50 border-blue-500 shadow-xl shadow-blue-500/5' 
+                : 'bg-white border-slate-100'
+              }`}
+            >
+              <div className="flex items-center gap-6 shrink-0 md:w-64">
+                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-2xl shadow-inner transition-colors ${
+                  settings.ai.defaultProvider === p.id ? 'bg-blue-600 text-white' : 'bg-slate-50 text-slate-400'
+                }`}>
+                  <i className={`fas ${p.icon}`}></i>
                 </div>
-              ))}
-           </div>
-        </section>
-
-        <section className="space-y-8">
-           <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-lg shadow-blue-500/20"><i className="fas fa-brain"></i></div>
-              <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Default Engine (Gemini)</h4>
-           </div>
-
-           <div className="bg-white border border-slate-200 rounded-[3rem] p-8 space-y-6">
-              <p className="text-sm text-slate-500 font-medium leading-relaxed">Select which Gemini series model serves as the primary system-of-truth for HCL parsing and diagram generation.</p>
-              
-              <div className="space-y-3">
-                 {GEMINI_MODELS.map(m => (
-                   <button 
-                    key={m.id}
-                    onClick={() => handleSave({ ...settings, ai: { ...settings.ai, defaultModel: m.id } })}
-                    className={`w-full text-left p-5 rounded-2xl border-2 transition-all flex items-center justify-between group ${
-                      settings.ai.defaultModel === m.id 
-                      ? 'bg-slate-900 border-slate-900 text-white shadow-2xl' 
-                      : 'bg-slate-50 border-transparent hover:border-slate-200'
-                    }`}
-                   >
-                      <div className="min-w-0">
-                         <div className="flex items-center gap-3 mb-1">
-                            <span className="text-sm font-black">{m.name}</span>
-                            <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase ${
-                              settings.ai.defaultModel === m.id ? 'bg-white/10 text-white' : 'bg-white text-slate-400 border border-slate-100'
-                            }`}>{m.type}</span>
-                         </div>
-                         <p className={`text-[10px] font-medium truncate ${settings.ai.defaultModel === m.id ? 'text-slate-400' : 'text-slate-500'}`}>{m.desc}</p>
-                      </div>
-                      {settings.ai.defaultModel === m.id && <i className="fas fa-check-circle text-blue-400"></i>}
-                   </button>
-                 ))}
+                <div>
+                  <h5 className="text-lg font-black text-slate-800">{p.name}</h5>
+                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mt-1">{p.id === 'GEMINI' ? 'Platform Bridge' : 'External Endpoint'}</p>
+                </div>
               </div>
-           </div>
 
-           <div className="p-8 bg-blue-900 rounded-[2.5rem] text-white relative overflow-hidden shadow-2xl shadow-blue-900/30">
-              <div className="absolute top-0 right-0 w-48 h-48 bg-white/5 rounded-full -mr-24 -mt-24"></div>
-              <div className="relative z-10">
-                 <h4 className="text-xl font-black tracking-tight mb-2 italic">Security Notice</h4>
-                 <p className="text-blue-200 text-xs font-medium leading-relaxed">
-                   Nexus does not store LLM keys. Authorization for Gemini is managed via the <strong>AI Studio Browser Extension</strong> or <strong>Environment Secrets</strong>. External keys (OpenAI/Anthropic) must be set as system environment variables.
-                 </p>
-                 <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" className="inline-flex items-center gap-2 mt-6 text-[10px] font-black uppercase tracking-widest hover:text-white transition-colors">
-                    Registry Billing Docs <i className="fas fa-arrow-right scale-75"></i>
-                 </a>
+              <div className="flex-1 space-y-2">
+                {p.id === 'GEMINI' ? (
+                  <div className="px-6 py-3 bg-slate-100/50 rounded-2xl border border-slate-200 text-xs font-bold text-slate-500 italic">
+                    Gemini Key is managed via the Platform Authorization bridge above.
+                  </div>
+                ) : (
+                  <div className="relative group">
+                    <input 
+                      type="password"
+                      placeholder={`${p.name} API Key (Optional if set in Env)`}
+                      value={settings.ai[p.keyField] || ''}
+                      onChange={(e) => setSettings({ ...settings, ai: { ...settings.ai, [p.keyField]: e.target.value } })}
+                      className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-3 text-xs font-bold text-slate-700 focus:border-blue-500 outline-none transition-all shadow-sm"
+                    />
+                    <div className="absolute right-4 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <i className="fas fa-key text-[10px] text-slate-300"></i>
+                    </div>
+                  </div>
+                )}
+                <p className="text-[10px] font-medium text-slate-400 pl-2">{p.description}</p>
               </div>
-           </div>
-        </section>
-      </div>
+
+              <div className="shrink-0 flex items-center gap-4">
+                <button 
+                  onClick={() => handleSave({ ...settings, ai: { ...settings.ai, defaultProvider: p.id } })}
+                  className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                    settings.ai.defaultProvider === p.id 
+                    ? 'bg-blue-600 text-white shadow-lg' 
+                    : 'bg-white border border-slate-200 text-slate-400 hover:text-slate-600'
+                  }`}
+                >
+                  {settings.ai.defaultProvider === p.id ? 'Active Default' : 'Mark Default'}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="bg-slate-900 rounded-[3rem] p-10 text-white relative overflow-hidden shadow-2xl">
+         <div className="absolute top-0 right-0 w-64 h-64 bg-blue-600/10 rounded-full -mr-32 -mt-32 blur-3xl"></div>
+         <div className="relative z-10 grid grid-cols-1 lg:grid-cols-2 gap-10 items-center">
+            <div>
+               <h4 className="text-2xl font-black tracking-tight mb-4 italic">Security Awareness</h4>
+               <p className="text-slate-400 text-sm font-medium leading-relaxed">
+                 For enterprise security, it is recommended to set <strong>OPENAI_API_KEY</strong> as a system environment variable. Keys provided in this registry are stored in the database and should only be used in internal, non-public environments.
+               </p>
+               <div className="flex gap-4 mt-8">
+                  <button onClick={() => handleSave(settings)} className="px-8 py-3 bg-white text-slate-900 text-[10px] font-black rounded-xl uppercase tracking-widest hover:bg-blue-50 transition-all shadow-xl active:scale-95">Commit Registry Keys</button>
+                  <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" className="px-8 py-3 bg-white/10 text-white text-[10px] font-black rounded-xl uppercase tracking-widest hover:bg-white/20 transition-all">Billing Docs</a>
+               </div>
+            </div>
+            <div className="hidden lg:block bg-black/40 border border-white/5 rounded-[2rem] p-8 font-mono text-[11px] text-blue-400 space-y-2">
+               <p># Security Best Practice:</p>
+               <p className="text-white">docker run -e OPENAI_API_KEY=$KEY nexus-portal</p>
+               <p className="text-slate-500 mt-4">// Active Default Provider:</p>
+               <p className="text-emerald-400">"{settings.ai.defaultProvider}"</p>
+            </div>
+         </div>
+      </section>
 
       {saving && (
-        <div className="fixed bottom-10 left-1/2 -translate-x-1/2 px-10 py-4 bg-slate-900 text-white rounded-full shadow-2xl animate-slideUp flex items-center gap-4 border border-white/10">
+        <div className="fixed bottom-10 left-1/2 -translate-x-1/2 px-10 py-4 bg-slate-900 text-white rounded-full shadow-2xl animate-slideUp flex items-center gap-4 border border-white/10 z-[300]">
            <i className="fas fa-circle-notch fa-spin"></i>
            <span className="text-[10px] font-black uppercase tracking-[0.2em]">Synchronizing Registry Preferences</span>
         </div>
