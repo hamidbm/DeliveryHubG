@@ -1,7 +1,7 @@
 
 import clientPromise from '../lib/mongodb';
 import { ObjectId } from 'mongodb';
-import { WikiPage, WikiSpace, WikiTheme, Bundle, Application, TaxonomyCategory, TaxonomyDocumentType, WorkItem, WorkItemType, WorkItemStatus, WorkItemActivity, Sprint, Milestone, Notification, ArchitectureDiagram, BusinessCapability } from '../types';
+import { WikiPage, WikiSpace, WikiTheme, Bundle, Application, TaxonomyCategory, TaxonomyDocumentType, WorkItem, WorkItemType, WorkItemStatus, WorkItemActivity, Sprint, Milestone, Notification, ArchitectureDiagram, BusinessCapability, AppInterface } from '../types';
 
 export const getDb = async () => {
   try {
@@ -664,4 +664,27 @@ export const saveCapability = async (capability: Partial<BusinessCapability>) =>
 export const deleteCapability = async (id: string) => {
   const db = await getDb();
   return await db.collection('capabilities').deleteOne({ _id: new ObjectId(id) });
+};
+
+export const fetchInterfaces = async (appId?: string) => {
+  try {
+    const db = await getDb();
+    const query = appId && appId !== 'all' ? { $or: [{ sourceAppId: appId }, { targetAppId: appId }] } : {};
+    return await db.collection('interfaces').find(query).toArray();
+  } catch { return []; }
+};
+
+export const saveInterface = async (data: Partial<AppInterface>) => {
+  const db = await getDb();
+  const { _id, ...rest } = data;
+  if (_id) {
+    return await db.collection('interfaces').updateOne({ _id: new ObjectId(_id) }, { $set: rest });
+  } else {
+    return await db.collection('interfaces').insertOne(rest);
+  }
+};
+
+export const deleteInterface = async (id: string) => {
+  const db = await getDb();
+  return await db.collection('interfaces').deleteOne({ _id: new ObjectId(id) });
 };
