@@ -1,20 +1,11 @@
 import { GoogleGenAI, Type } from "@google/genai";
-import { fetchSystemSettings } from './db';
 
-// Fix: Strictly use process.env.API_KEY directly during initialization to follow architectural guidelines.
+// Strictly use process.env.API_KEY directly during initialization.
+// This service should only be called from API routes (Server Context).
 const getAI = () => new GoogleGenAI({ apiKey: process.env.API_KEY as string });
 
-const getModelConfig = async (type: 'pro' | 'flash' = 'pro') => {
-  const settings = await fetchSystemSettings();
-  if (settings?.ai) {
-    return type === 'pro' ? settings.ai.proModel : settings.ai.flashModel;
-  }
-  return type === 'pro' ? 'gemini-3-pro-preview' : 'gemini-3-flash-preview';
-};
-
-export const getPortfolioSummary = async (portfolioData: any) => {
+export const getPortfolioSummary = async (portfolioData: any, model: string = 'gemini-3-pro-preview') => {
   const ai = getAI();
-  const model = await getModelConfig('pro');
   const prompt = `Perform an in-depth analysis on this software delivery portfolio: ${JSON.stringify(portfolioData)}`;
   try {
     const response = await ai.models.generateContent({
@@ -28,9 +19,8 @@ export const getPortfolioSummary = async (portfolioData: any) => {
   }
 };
 
-export const analyzeOperationsIntelligence = async (telemetryData: any, infraData: any) => {
+export const analyzeOperationsIntelligence = async (telemetryData: any, infraData: any, model: string = 'gemini-3-flash-preview') => {
   const ai = getAI();
-  const model = await getModelConfig('flash');
   const prompt = `As a Senior SRE AI, analyze this telemetry: ${JSON.stringify(telemetryData)} and infra: ${JSON.stringify(infraData)}. Detect anomalies and suggest scaling actions in Markdown.`;
   try {
     const response = await ai.models.generateContent({
@@ -41,9 +31,8 @@ export const analyzeOperationsIntelligence = async (telemetryData: any, infraDat
   } catch (error) { return "Operations Intelligence offline."; }
 };
 
-export const analyzeTerraform = async (code: string, provider: string) => {
+export const analyzeTerraform = async (code: string, provider: string, model: string = 'gemini-3-flash-preview') => {
   const ai = getAI();
-  const model = await getModelConfig('flash');
   const prompt = `Act as a Cloud Architect. Analyze this ${provider} Terraform script for: 1. Security Risks 2. Cost Optimization 3. Best Practices. Provide a structured review in Markdown. Terraform code: \n\n${code}`;
   try {
     const response = await ai.models.generateContent({
@@ -54,9 +43,8 @@ export const analyzeTerraform = async (code: string, provider: string) => {
   } catch (error) { return "AI Infra Analyzer offline."; }
 };
 
-export const generateDiagramFromTerraform = async (code: string) => {
+export const generateDiagramFromTerraform = async (code: string, model: string = 'gemini-3-pro-preview') => {
   const ai = getAI();
-  const model = await getModelConfig('pro');
   const prompt = `As a Cloud Architect, convert this Terraform HCL code into a high-quality Mermaid.js flowchart (LR). 
   Guidelines:
   1. Use subgraphs to group tiers (e.g., Edge, App Tier, Data Layer).
@@ -92,9 +80,8 @@ export const generateDiagramFromTerraform = async (code: string) => {
   }
 };
 
-export const generateWorkPlan = async (workItem: any) => {
+export const generateWorkPlan = async (workItem: any, model: string = 'gemini-3-flash-preview') => {
   const ai = getAI();
-  const model = await getModelConfig('flash');
   const prompt = `Analyze this work item and provide a structured implementation roadmap: ${JSON.stringify(workItem)}`;
   try {
     const response = await ai.models.generateContent({
@@ -105,9 +92,8 @@ export const generateWorkPlan = async (workItem: any) => {
   } catch (error) { return "AI offline."; }
 };
 
-export const suggestRationalization = async (app: any) => {
+export const suggestRationalization = async (app: any, model: string = 'gemini-3-flash-preview') => {
   const ai = getAI();
-  const model = await getModelConfig('flash');
   const prompt = `Act as an Enterprise Architect. Based on this application data: ${JSON.stringify(app)}, recommend one of the following TIME quadrants: INVEST, TOLERATE, MIGRATE, ELIMINATE. Provide a 2-sentence technical justification. Return JSON with 'recommendation' and 'justification' fields.`;
   try {
     const response = await ai.models.generateContent({
@@ -132,9 +118,8 @@ export const suggestRationalization = async (app: any) => {
   }
 };
 
-export const generateStandupDigest = async (item: any) => {
+export const generateStandupDigest = async (item: any, model: string = 'gemini-3-flash-preview') => {
   const ai = getAI();
-  const model = await getModelConfig('flash');
   const prompt = `Summarize progress for this item: ${JSON.stringify(item)}`;
   try {
     const response = await ai.models.generateContent({
@@ -145,9 +130,8 @@ export const generateStandupDigest = async (item: any) => {
   } catch (error) { return "Offline."; }
 };
 
-export const suggestReassignment = async (item: any, teamCapacity: any[]) => {
+export const suggestReassignment = async (item: any, teamCapacity: any[], model: string = 'gemini-3-flash-preview') => {
   const ai = getAI();
-  const model = await getModelConfig('flash');
   const prompt = `Suggest peer for task handover: ${JSON.stringify(item)} Team: ${JSON.stringify(teamCapacity)}`;
   try {
     const response = await ai.models.generateContent({

@@ -1,7 +1,4 @@
-
 import React, { useState, useEffect } from 'react';
-import { getPortfolioSummary } from '../services/geminiService';
-import { VENDORS, MILESTONES } from '../constants';
 import { Application, Bundle } from '../types';
 
 interface AIInsightsProps {
@@ -14,23 +11,26 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
   const [loading, setLoading] = useState(false);
 
   const generateAIReport = async () => {
-    if (!applications.length) return;
+    // Note: We trigger the AI even if applications state is empty because 
+    // the API now fetches fresh registry data server-side for consistency.
     setLoading(true);
-    const summary = await getPortfolioSummary({
-      applications,
-      bundles,
-      vendors: VENDORS,
-      milestones: MILESTONES
-    });
-    setInsight(summary);
-    setLoading(false);
+    try {
+      const res = await fetch('/api/ai/portfolio-summary', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      const data = await res.json();
+      setInsight(data.summary || "Analysis unavailable.");
+    } catch (err) {
+      setInsight("Security protocol prevented AI synthesis. Ensure API services are reachable.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
-    if (applications.length) {
-      generateAIReport();
-    }
-  }, [applications]);
+    generateAIReport();
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -44,7 +44,7 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
         </div>
         <button 
           onClick={generateAIReport}
-          disabled={loading || !applications.length}
+          disabled={loading}
           className="bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition disabled:opacity-50 flex items-center space-x-2"
         >
           <i className={`fas ${loading ? 'fa-spinner fa-spin' : 'fa-sync-alt'}`}></i>
@@ -68,7 +68,7 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
               </div>
             ) : (
               <div className="text-slate-700 whitespace-pre-wrap">
-                {insight || (applications.length ? "Analyzing registry data..." : "No registry data available for analysis.")}
+                {insight || "Analyzing registry data..."}
               </div>
             )}
           </div>
