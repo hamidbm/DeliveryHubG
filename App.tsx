@@ -21,8 +21,8 @@ declare global {
     openSelectKey: () => Promise<void>;
   }
   interface Window {
-    // Fix: Added readonly modifier to ensure identical modifiers for all declarations of 'aistudio' on the Window interface.
-    readonly aistudio: AIStudio;
+    // Fix: Removed readonly modifier to satisfy TypeScript requirements when merging multiple declarations of 'aistudio' on the Window interface.
+    aistudio: AIStudio;
   }
 }
 
