@@ -14,14 +14,15 @@ import LoginPage from './app/login/page';
 import RegisterPage from './app/register/page';
 import { Bundle, Application, WorkItem, WorkItemType } from './types';
 
-// Fix: Redefined aistudio declaration to match the expected AIStudio type and readonly modifier from the environment.
+// Global declaration for the platform AI selection bridge
 declare global {
   interface AIStudio {
     hasSelectedApiKey: () => Promise<boolean>;
     openSelectKey: () => Promise<void>;
   }
   interface Window {
-    readonly aistudio: AIStudio;
+    // Fix: Removed readonly modifier to avoid "All declarations of 'aistudio' must have identical modifiers" error.
+    aistudio: AIStudio;
   }
 }
 
@@ -57,34 +58,87 @@ export function usePathname() {
 }
 
 export default function Home() {
-  // Use state-based routing to avoid browser history.pushState domain errors in sandboxes
   const [currentPath, setCurrentPath] = useState('/');
   const [queryString, setQueryString] = useState('');
+  const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
+
+  // Check for API Key selection on boot
+  useEffect(() => {
+    const checkKey = async () => {
+      if (window.aistudio) {
+        const selected = await window.aistudio.hasSelectedApiKey();
+        setHasApiKey(selected);
+      } else {
+        // Fallback for environments where the bridge might not be ready
+        setHasApiKey(true);
+      }
+    };
+    checkKey();
+  }, []);
+
+  const handleSelectKey = async () => {
+    if (window.aistudio) {
+      await window.aistudio.openSelectKey();
+      // Assume success as per instructions to avoid race conditions
+      setHasApiKey(true);
+    }
+  };
 
   const searchParams = useMemo(() => new URLSearchParams(queryString), [queryString]);
 
   const navigationValue = {
     push: (url: string) => {
-      // Parse URL for internal state update
       const [path, query] = url.split('?');
       if (path && path.startsWith('/')) {
         setCurrentPath(path);
       }
       setQueryString(query || '');
-      
-      // Attempt pushState only if origin matches to avoid "Script error" / Security block
       try {
         if (!window.location.origin.includes('blob')) {
           window.history.pushState({}, '', url);
         }
-      } catch (e) {
-        console.warn("Navigation: history.pushState suppressed due to sandbox constraints.");
-      }
+      } catch (e) {}
     },
     searchParams,
     currentPath,
     pathname: currentPath,
   };
+
+  if (hasApiKey === false) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6 relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-96 h-96 bg-blue-600/10 rounded-full blur-[120px]"></div>
+        <div className="absolute bottom-0 left-0 w-96 h-96 bg-indigo-600/10 rounded-full blur-[120px]"></div>
+        
+        <div className="max-w-md w-full bg-slate-900/50 backdrop-blur-3xl border border-white/10 rounded-[3rem] p-12 text-center shadow-2xl animate-fadeIn relative z-10">
+          <div className="w-20 h-20 bg-blue-600 rounded-3xl flex items-center justify-center text-white text-3xl mx-auto mb-8 shadow-2xl shadow-blue-500/20 rotate-3">
+            <i className="fas fa-robot"></i>
+          </div>
+          <h1 className="text-3xl font-black text-white tracking-tighter mb-4 uppercase">AI Core Authorization</h1>
+          <p className="text-slate-400 text-sm font-medium leading-relaxed mb-10">
+            Nexus requires a valid Gemini API Key to power Infrastructure Mapping and Architecture Reasoning. Please select a key from a paid GCP project to continue.
+          </p>
+          
+          <div className="space-y-4">
+            <button 
+              onClick={handleSelectKey}
+              className="w-full py-4 bg-white text-slate-900 font-black text-xs uppercase tracking-[0.2em] rounded-2xl hover:bg-blue-50 transition-all shadow-xl active:scale-95"
+            >
+              Authorize Nexus AI
+            </button>
+            <a 
+              href="https://ai.google.dev/gemini-api/docs/billing" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest hover:text-blue-400 transition-colors"
+            >
+              View Billing Documentation
+            </a>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <NavigationContext.Provider value={navigationValue}>
@@ -93,7 +147,7 @@ export default function Home() {
           <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
         </div>
       }>
-        <RouterSwitcher />
+        {hasApiKey === null ? null : <RouterSwitcher />}
       </Suspense>
     </NavigationContext.Provider>
   );
@@ -101,14 +155,11 @@ export default function Home() {
 
 function RouterSwitcher() {
   const { currentPath } = useContext(NavigationContext);
-
   if (currentPath === '/login') return <LoginPage />;
   if (currentPath === '/register') return <RegisterPage />;
-  
   return <HomeContent />;
 }
 
-// Fix: Completed the truncated HomeContent component and added robust data fetching and layout integration.
 function HomeContent() {
   const router = useRouter();
   const searchParams = useSearchParams();

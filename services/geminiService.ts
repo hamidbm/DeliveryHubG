@@ -1,7 +1,7 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 
-const getAI = () => new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+// Fix: Obtaining API key exclusively from process.env.API_KEY as per coding guidelines.
+const getAI = () => new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 export const getPortfolioSummary = async (portfolioData: any) => {
   const ai = getAI();
@@ -57,10 +57,10 @@ export const generateDiagramFromTerraform = async (code: string) => {
 
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
+      model: 'gemini-3-pro-preview',
       contents: prompt
     });
-    // Use .text property directly as per guidelines
+    
     const text = response.text || "";
     const cleanMermaid = text.replace(/```mermaid/g, '').replace(/```/g, '').trim();
     
@@ -71,9 +71,10 @@ export const generateDiagramFromTerraform = async (code: string) => {
     return cleanMermaid;
   } catch (error: any) {
     console.error("Gemini Diagram Error:", error);
-    // Return a specific error code that the UI can interpret if it's an auth issue
-    if (error?.message?.includes("API_KEY_INVALID") || error?.message?.includes("403") || error?.message?.includes("401")) {
-        return "ERROR_CONFIG: Unauthorized or Missing API Key";
+    const errStr = error?.message || "";
+    // Pass back clear signals for UI logic
+    if (errStr.includes("401") || errStr.includes("403") || errStr.includes("key")) {
+        return "ERROR_AUTH: API Key Unauthorized or Missing";
     }
     return "graph LR\n  Error[AI failed to parse HCL]";
   }
