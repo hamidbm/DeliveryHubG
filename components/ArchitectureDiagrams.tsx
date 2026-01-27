@@ -300,6 +300,7 @@ const ArchitectureDesigner: React.FC<{
   const [saving, setSaving] = useState(false);
   const [activeBundleId, setActiveBundleId] = useState(diagram.bundleId || '');
   const [activeAppId, setActiveAppId] = useState(diagram.applicationId || '');
+  const [isContextOpen, setIsContextOpen] = useState(true);
   
   const [exportTrigger, setExportTrigger] = useState(0);
 
@@ -383,66 +384,85 @@ const ArchitectureDesigner: React.FC<{
       </header>
 
       <div className="flex-1 flex overflow-hidden bg-slate-50 relative">
-        {format === DiagramFormat.MINDMAP_MD ? (
-          <Suspense fallback={<div className="flex-1 flex items-center justify-center bg-white"><i className="fas fa-circle-notch fa-spin text-blue-500 text-2xl"></i></div>}>
-            <MindMapMarkdownEditor initialContent={code} onSave={handleSave} readOnly={readOnly} />
-          </Suspense>
-        ) : format === DiagramFormat.MINDMAP_FLOW ? (
-          <Suspense fallback={
-            <div className="flex-1 flex flex-col items-center justify-center bg-white gap-4">
-              <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Activating Canvas...</p>
-            </div>
-          }>
-            <MindMapFlowEditor 
-              initialContent={code} 
-              onSave={handleSave} 
-              readOnly={readOnly}
-            />
-          </Suspense>
-        ) : format === DiagramFormat.MERMAID ? (
-          <div className="flex-1 flex overflow-hidden">
-             <div className="w-1/3 bg-slate-900 flex flex-col border-r border-white/5">
-                <textarea 
-                  value={code} 
-                  onChange={(e) => setCode(e.target.value)}
-                  readOnly={readOnly}
-                  className="flex-1 bg-transparent text-emerald-400 font-mono text-sm p-8 outline-none resize-none custom-scrollbar"
-                />
-             </div>
-             <div className="flex-1 bg-white flex items-center justify-center p-12 overflow-auto">
-                <MermaidRenderer content={code || DEFAULT_MERMAID_CODE} id={diagram._id || 'temp'} />
-             </div>
-          </div>
-        ) : (
-          <DrawioEditor 
-            xml={code || DEFAULT_DRAWIO_XML} 
-            onSave={(xml) => setCode(xml)} 
-            readOnly={readOnly} 
-          />
-        )}
-
-        <aside className="w-80 border-l border-slate-200 bg-white p-8 space-y-10 overflow-y-auto custom-scrollbar shrink-0 z-[204]">
-           <section>
-              <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-8 flex items-center gap-2"><i className="fas fa-link"></i> Context Mapping</h4>
-              <div className="space-y-6">
-                 <div className="space-y-2">
-                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Business Bundle</label>
-                    <select disabled={readOnly} value={activeBundleId} onChange={(e) => setActiveBundleId(e.target.value)} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-xs font-bold text-slate-700 outline-none hover:border-blue-200 transition-all disabled:opacity-50">
-                       <option value="">Cross-Bundle</option>
-                       {bundles.map(b => <option key={b._id} value={b._id}>{b.name}</option>)}
-                    </select>
-                 </div>
-                 <div className="space-y-2">
-                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Application Mapping</label>
-                    <select disabled={readOnly} value={activeAppId} onChange={(e) => setActiveAppId(e.target.value)} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-xs font-bold text-slate-700 outline-none hover:border-blue-200 transition-all disabled:opacity-50">
-                       <option value="">Global Resource</option>
-                       {applications.filter(a => !activeBundleId || a.bundleId === activeBundleId).map(a => <option key={a._id} value={a._id}>{a.name}</option>)}
-                    </select>
-                 </div>
+        {/* Editor Main Canvas - Consistently on the left/center */}
+        <div className="flex-1 relative overflow-hidden flex flex-col">
+          {format === DiagramFormat.MINDMAP_MD ? (
+            <Suspense fallback={<div className="flex-1 flex items-center justify-center bg-white"><i className="fas fa-circle-notch fa-spin text-blue-500 text-2xl"></i></div>}>
+              <MindMapMarkdownEditor initialContent={code} onSave={handleSave} readOnly={readOnly} />
+            </Suspense>
+          ) : format === DiagramFormat.MINDMAP_FLOW ? (
+            <Suspense fallback={
+              <div className="flex-1 flex flex-col items-center justify-center bg-white gap-4">
+                <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Activating Canvas...</p>
               </div>
-           </section>
+            }>
+              <MindMapFlowEditor 
+                initialContent={code} 
+                onSave={handleSave} 
+                readOnly={readOnly}
+              />
+            </Suspense>
+          ) : format === DiagramFormat.MERMAID ? (
+            <div className="flex-1 flex overflow-hidden">
+               <div className="w-1/3 bg-slate-900 flex flex-col border-r border-white/5">
+                  <textarea 
+                    value={code} 
+                    onChange={(e) => setCode(e.target.value)}
+                    readOnly={readOnly}
+                    className="flex-1 bg-transparent text-emerald-400 font-mono text-sm p-8 outline-none resize-none custom-scrollbar"
+                  />
+               </div>
+               <div className="flex-1 bg-white flex items-center justify-center p-12 overflow-auto">
+                  <MermaidRenderer content={code || DEFAULT_MERMAID_CODE} id={diagram._id || 'temp'} />
+               </div>
+            </div>
+          ) : (
+            <DrawioEditor 
+              xml={code || DEFAULT_DRAWIO_XML} 
+              onSave={(xml) => setCode(xml)} 
+              readOnly={readOnly} 
+            />
+          )}
+        </div>
+
+        {/* Right Sidebar: Context Mapping */}
+        <aside className={`border-l border-slate-200 bg-white transition-all duration-500 ease-in-out shrink-0 z-[204] relative flex flex-col ${isContextOpen ? 'w-80' : 'w-0 overflow-hidden'}`}>
+           <div className="p-8 space-y-10 min-w-[320px]">
+             <section>
+                <div className="flex items-center justify-between mb-8">
+                  <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                    <i className="fas fa-link"></i> Context Mapping
+                  </h4>
+                </div>
+                <div className="space-y-6">
+                   <div className="space-y-2">
+                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Business Bundle</label>
+                      <select disabled={readOnly} value={activeBundleId} onChange={(e) => setActiveBundleId(e.target.value)} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-xs font-bold text-slate-700 outline-none hover:border-blue-200 transition-all disabled:opacity-50">
+                         <option value="">Cross-Bundle</option>
+                         {bundles.map(b => <option key={b._id} value={b._id}>{b.name}</option>)}
+                      </select>
+                   </div>
+                   <div className="space-y-2">
+                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Application Mapping</label>
+                      <select disabled={readOnly} value={activeAppId} onChange={(e) => setActiveAppId(e.target.value)} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-xs font-bold text-slate-700 outline-none hover:border-blue-200 transition-all disabled:opacity-50">
+                         <option value="">Global Resource</option>
+                         {applications.filter(a => !activeBundleId || a.bundleId === activeBundleId).map(a => <option key={a._id} value={a._id}>{a.name}</option>)}
+                      </select>
+                   </div>
+                </div>
+             </section>
+           </div>
         </aside>
+
+        {/* Sidebar Toggle Button */}
+        <button 
+          onClick={() => setIsContextOpen(!isContextOpen)}
+          className={`absolute bottom-8 right-8 z-[215] w-12 h-12 rounded-full shadow-2xl flex items-center justify-center transition-all ${isContextOpen ? 'bg-slate-900 text-white' : 'bg-blue-600 text-white'}`}
+          title={isContextOpen ? "Collapse Sidebar" : "Show Context Mapping"}
+        >
+          <i className={`fas ${isContextOpen ? 'fa-chevron-right' : 'fa-link'}`}></i>
+        </button>
       </div>
 
       <style dangerouslySetInnerHTML={{ __html: `
