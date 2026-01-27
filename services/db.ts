@@ -1,7 +1,7 @@
 
 import clientPromise from '../lib/mongodb';
 import { ObjectId } from 'mongodb';
-import { WikiPage, WikiSpace, WikiTheme, Bundle, Application, TaxonomyCategory, TaxonomyDocumentType, WorkItem, WorkItemType, WorkItemStatus, WorkItemActivity, Sprint, Milestone, Notification, ArchitectureDiagram } from '../types';
+import { WikiPage, WikiSpace, WikiTheme, Bundle, Application, TaxonomyCategory, TaxonomyDocumentType, WorkItem, WorkItemType, WorkItemStatus, WorkItemActivity, Sprint, Milestone, Notification, ArchitectureDiagram, BusinessCapability } from '../types';
 
 export const getDb = async () => {
   try {
@@ -642,4 +642,26 @@ export const saveArchitectureDiagram = async (diagram: Partial<ArchitectureDiagr
 export const deleteArchitectureDiagram = async (id: string) => {
   const db = await getDb();
   return await db.collection('architecture_diagrams').deleteOne({ _id: new ObjectId(id) });
+};
+
+export const fetchCapabilities = async () => {
+  try {
+    const db = await getDb();
+    return await db.collection('capabilities').find({}).sort({ level: 1, name: 1 }).toArray();
+  } catch { return []; }
+};
+
+export const saveCapability = async (capability: Partial<BusinessCapability>) => {
+  const db = await getDb();
+  const { _id, ...data } = capability;
+  if (_id) {
+    return await db.collection('capabilities').updateOne({ _id: new ObjectId(_id) }, { $set: data });
+  } else {
+    return await db.collection('capabilities').insertOne(data);
+  }
+};
+
+export const deleteCapability = async (id: string) => {
+  const db = await getDb();
+  return await db.collection('capabilities').deleteOne({ _id: new ObjectId(id) });
 };
