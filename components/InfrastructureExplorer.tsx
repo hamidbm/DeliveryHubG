@@ -182,6 +182,13 @@ const InfrastructureExplorer: React.FC<{ applications: Application[], onUpdate?:
     }
   };
 
+  // Auto-trigger audit if tab switched and no data exists
+  useEffect(() => {
+    if (activeTab === 'audit' && !aiInsight && !isAiLoading && tfCode) {
+      runAiAudit();
+    }
+  }, [activeTab]);
+
   const handleGenerateTopography = async () => {
     if (!tfCode || tfCode.trim().length < 10) {
       alert("IaC Definition is too brief to map.");
@@ -382,6 +389,12 @@ const InfrastructureExplorer: React.FC<{ applications: Application[], onUpdate?:
           </div>
         )}
       </main>
+
+      <style dangerouslySetInnerHTML={{ __html: `
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+      `}} />
     </div>
   );
 };
