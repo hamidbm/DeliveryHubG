@@ -1,8 +1,10 @@
+
 import React, { useState } from 'react';
 import AdminThemes from './AdminThemes';
 import AdminBundles from './AdminBundles';
 import AdminApplications from './AdminApplications';
 import AdminTaxonomy from './AdminTaxonomy';
+import AdminAiSettings from './AdminAiSettings';
 
 type AdminModuleId = 'home' | 'wiki-themes' | 'vendors' | 'roles' | 'bundles' | 'applications' | 'taxonomy' | 'artifact-rules' | 'milestone-templates' | 'users' | 'sharepoint' | 'ai-settings';
 
@@ -90,7 +92,6 @@ const Admin: React.FC = () => {
                           m.color === 'orange' ? 'bg-orange-500' :
                           m.color === 'purple' ? 'bg-purple-600' :
                           m.color === 'cyan' ? 'bg-cyan-500' :
-                          // Fix: Added missing opening quote for 'bg-slate-900' to resolve syntax and cascading type errors.
                           m.color === 'sky' ? 'bg-sky-500' : 'bg-slate-900'
                         } text-white`}>
                           <i className={`fas ${m.icon} text-xl`}></i>
@@ -123,6 +124,8 @@ const Admin: React.FC = () => {
         return <AdminBundles />;
       case 'applications':
         return <AdminApplications />;
+      case 'ai-settings':
+        return <AdminAiSettings />;
       default:
         return (
           <div className="flex flex-col h-full bg-white relative">

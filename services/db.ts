@@ -13,6 +13,32 @@ export const getDb = async () => {
   }
 };
 
+// Global Settings Management
+export const fetchSystemSettings = async () => {
+  try {
+    const db = await getDb();
+    const settings = await db.collection('settings').findOne({ key: 'global_config' });
+    return settings || {
+      key: 'global_config',
+      ai: {
+        defaultProvider: 'GEMINI',
+        defaultModel: 'gemini-3-pro-preview',
+        flashModel: 'gemini-3-flash-preview',
+        proModel: 'gemini-3-pro-preview'
+      }
+    };
+  } catch { return null; }
+};
+
+export const saveSystemSettings = async (settings: any) => {
+  const db = await getDb();
+  return await db.collection('settings').updateOne(
+    { key: 'global_config' },
+    { $set: settings },
+    { upsate: true }
+  );
+};
+
 const safeIdMatch = (id: string) => {
   if (!id || id === 'all') return null;
   const conditions: any[] = [{ [id.includes('-') ? 'key' : 'id']: id }];
