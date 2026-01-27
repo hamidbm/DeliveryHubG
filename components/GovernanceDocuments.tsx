@@ -41,9 +41,11 @@ const GovernanceDocuments: React.FC = () => {
   }, [docTypes]);
 
   const filteredDocs = useMemo(() => {
-    // If we are on specific tabs, we override the filter
     if (activeGovTab === 'adr') {
       return pages.filter(p => docTypes.find(t => t._id === p.documentTypeId)?.key === 'ADR');
+    }
+    if (activeGovTab === 'review') {
+      return pages.filter(p => docTypes.find(t => t._id === p.documentTypeId)?.key === 'SECURITY_ASSESSMENT');
     }
     
     if (activeFilter === 'ALL') {
@@ -54,6 +56,11 @@ const GovernanceDocuments: React.FC = () => {
 
   const navigateToWiki = (page: WikiPage) => {
     router.push(`/?tab=wiki&pageId=${page.slug || page._id || page.id}`);
+  };
+
+  const triggerArtifactCreation = () => {
+    // Navigate to Wiki tab and set trigger for artifact creation
+    router.push('/?tab=wiki&trigger=create-wiki-artifact');
   };
 
   const renderStandards = () => (
@@ -89,7 +96,7 @@ const GovernanceDocuments: React.FC = () => {
            </div>
            <h3 className="text-xl font-black text-slate-800 tracking-tight uppercase">Registry Entry Pending</h3>
            <p className="text-slate-400 font-medium max-w-md mt-2">No documents of the selected type have been verified in the Wiki Registry yet.</p>
-           <button onClick={() => router.push('/?tab=wiki')} className="mt-8 px-8 py-3 bg-slate-900 text-white text-[10px] font-black uppercase rounded-xl">Create Compliance Artifact</button>
+           <button onClick={triggerArtifactCreation} className="mt-8 px-8 py-3 bg-slate-900 text-white text-[10px] font-black uppercase rounded-xl">Create Compliance Artifact</button>
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -140,6 +147,73 @@ const GovernanceDocuments: React.FC = () => {
       )}
     </div>
   );
+
+  const renderSecurityReviews = () => {
+    const assessmentType = docTypes.find(t => t.key === 'SECURITY_ASSESSMENT');
+    const assessments = pages.filter(p => p.documentTypeId === assessmentType?._id);
+
+    return (
+      <div className="space-y-10 animate-fadeIn">
+        <header className="flex justify-between items-center bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
+           <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-red-50 text-red-600 flex items-center justify-center text-xl shadow-inner">
+                 <i className="fas fa-user-shield"></i>
+              </div>
+              <div>
+                 <h3 className="text-xl font-black text-slate-800 tracking-tight">System Security Reviews</h3>
+                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Formal AppSec Evaluation Registry</p>
+              </div>
+           </div>
+           <button 
+             onClick={triggerArtifactCreation}
+             className="px-8 py-3 bg-red-600 text-white text-[10px] font-black uppercase rounded-2xl shadow-xl shadow-red-200 hover:bg-red-700 transition-all flex items-center gap-2"
+           >
+             <i className="fas fa-plus"></i>
+             Launch Formal Assessment
+           </button>
+        </header>
+
+        {assessments.length === 0 ? (
+          <div className="py-24 bg-white rounded-[3rem] border border-slate-50 flex flex-col items-center justify-center text-center">
+             <i className="fas fa-clipboard-list text-5xl text-slate-100 mb-6"></i>
+             <p className="text-sm font-black text-slate-300 uppercase tracking-widest">No active assessments found in registry</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+             {assessments.map(doc => {
+               const app = applications.find(a => a._id === doc.applicationId || a.id === doc.applicationId);
+               return (
+                 <div 
+                   key={doc._id} 
+                   onClick={() => navigateToWiki(doc)}
+                   className="bg-white border border-slate-200 rounded-[2rem] p-8 hover:shadow-2xl hover:border-red-100 transition-all cursor-pointer group"
+                 >
+                    <div className="flex justify-between items-start mb-6">
+                       <span className={`px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest border ${
+                         doc.status === 'Published' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-amber-50 text-amber-600 border-amber-100'
+                       }`}>
+                         {doc.status || 'DRAFT'}
+                       </span>
+                       <span className="text-[9px] font-black text-slate-300">v{doc.version || 1.0}</span>
+                    </div>
+                    <h4 className="text-lg font-black text-slate-800 leading-tight group-hover:text-red-600 transition-colors mb-4 line-clamp-2">{doc.title}</h4>
+                    <div className="flex items-center gap-3 pt-6 border-t border-slate-50 mt-auto">
+                       <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center text-slate-400 group-hover:bg-red-50 group-hover:text-red-500 transition-all">
+                          <i className="fas fa-cube text-xs"></i>
+                       </div>
+                       <div className="min-w-0 flex-1">
+                          <p className="text-[10px] font-black text-slate-800 truncate">{app?.name || 'Context Missing'}</p>
+                          <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">{app?.aid || 'GLOBAL'}</p>
+                       </div>
+                    </div>
+                 </div>
+               );
+             })}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   const renderScorecard = () => {
     const mandatoryKeys = ['ADR', 'SECURITY_POLICY', 'SECURITY_ASSESSMENT'];
@@ -303,13 +377,8 @@ const GovernanceDocuments: React.FC = () => {
         <div className="animate-fadeIn">
           {activeGovTab === 'standards' && renderStandards()}
           {activeGovTab === 'scorecard' && renderScorecard()}
-          {activeGovTab === 'adr' && renderStandards()} {/* Reusing standards view but filtered */}
-          {activeGovTab === 'review' && (
-             <div className="py-32 text-center text-slate-300">
-                <i className="fas fa-user-shield text-5xl mb-6 opacity-20"></i>
-                <p className="text-sm font-black uppercase tracking-widest">Security Review Module Pending Implementation</p>
-             </div>
-          )}
+          {activeGovTab === 'adr' && renderStandards()}
+          {activeGovTab === 'review' && renderSecurityReviews()}
           {activeGovTab === 'intake' && (
              <div className="py-32 text-center text-slate-300">
                 <i className="fas fa-file-signature text-5xl mb-6 opacity-20"></i>
@@ -320,7 +389,7 @@ const GovernanceDocuments: React.FC = () => {
       )}
 
       {/* Governance Scorecard Promo (Static footer banner) */}
-      {activeGovTab !== 'scorecard' && (
+      {activeGovTab !== 'scorecard' && activeGovTab !== 'review' && (
         <div className="p-12 bg-gradient-to-br from-blue-900 to-indigo-950 rounded-[3.5rem] text-white flex flex-col lg:flex-row items-center justify-between gap-10 relative overflow-hidden shadow-2xl border border-white/5">
           <div className="absolute top-0 right-0 w-96 h-96 bg-white/5 rounded-full -mr-32 -mt-32 blur-3xl"></div>
           <div className="absolute bottom-0 left-0 w-64 h-64 bg-blue-500/10 rounded-full -ml-32 -mb-32 blur-3xl"></div>

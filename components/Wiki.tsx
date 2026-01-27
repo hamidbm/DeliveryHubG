@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter, useSearchParams, usePathname } from '../App';
 import { WikiPage, WikiTheme, HierarchyMode, Application, WikiSpace, Bundle, TaxonomyCategory, TaxonomyDocumentType } from '../types';
@@ -40,6 +39,14 @@ const Wiki: React.FC<WikiProps> = ({
   
   const [hierarchyMode, setHierarchyMode] = useState<HierarchyMode>(HierarchyMode.SPACE_BUNDLE_APP_MILESTONE);
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
+
+  // Handle external triggers (e.g., from Governance)
+  useEffect(() => {
+    if (externalTrigger === 'create-wiki-artifact') {
+      setIsCreating(true);
+      if (onTriggerProcessed) onTriggerProcessed();
+    }
+  }, [externalTrigger, onTriggerProcessed]);
 
   // 1. Initial Data Fetch (Only on Mount)
   useEffect(() => {
@@ -385,7 +392,6 @@ const Wiki: React.FC<WikiProps> = ({
         />
       )}
 
-      {/* Fix: Replaced style jsx with standard style tag and dangerouslySetInnerHTML for compatibility */}
       <style dangerouslySetInnerHTML={{ __html: `
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }

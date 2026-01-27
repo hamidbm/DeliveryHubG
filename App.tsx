@@ -21,8 +21,8 @@ declare global {
     openSelectKey: () => Promise<void>;
   }
   interface Window {
-    // Fix: Added readonly modifier to satisfy TypeScript requirements when merging multiple declarations of 'aistudio' on the Window interface.
-    readonly aistudio: AIStudio;
+    // Fix: Removed readonly modifier to resolve "All declarations of 'aistudio' must have identical modifiers" error
+    aistudio: AIStudio;
   }
 }
 
@@ -69,7 +69,6 @@ export default function Home() {
         const selected = await window.aistudio.hasSelectedApiKey();
         setHasApiKey(selected);
       } else {
-        // Fallback for environments where the bridge might not be ready
         setHasApiKey(true);
       }
     };
@@ -79,7 +78,6 @@ export default function Home() {
   const handleSelectKey = async () => {
     if (window.aistudio) {
       await window.aistudio.openSelectKey();
-      // Assume success as per instructions to avoid race conditions
       setHasApiKey(true);
     }
   };
@@ -177,6 +175,14 @@ function HomeContent() {
   const [user, setUser] = useState<any>(null);
   const [externalTrigger, setExternalTrigger] = useState<string | null>(null);
 
+  // Fix: Sync local activeTab state when URL search params change (e.g., from cross-tab router push)
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    const trigger = searchParams.get('trigger');
+    if (tab) setActiveTab(tab);
+    if (trigger) setExternalTrigger(trigger);
+  }, [searchParams]);
+
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -246,6 +252,8 @@ function HomeContent() {
             searchQuery={searchQuery}
             bundles={bundles}
             applications={applications}
+            externalTrigger={externalTrigger}
+            onTriggerProcessed={() => setExternalTrigger(null)}
           />
         );
       case 'ai-insights':
@@ -257,10 +265,18 @@ function HomeContent() {
     }
   };
 
+  const handleSetActiveTab = (tab: string) => {
+    setActiveTab(tab);
+    // Persist to URL
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('tab', tab);
+    router.push(`/?${params.toString()}`);
+  };
+
   return (
     <Layout
       activeTab={activeTab}
-      setActiveTab={setActiveTab}
+      setActiveTab={handleSetActiveTab}
       selSpaceId={selSpaceId}
       setSelSpaceId={setSelSpaceId}
       activeBundle={activeBundle}
@@ -281,7 +297,7 @@ function HomeContent() {
       userName={user?.name}
       userRole={user?.role}
       onLogout={handleLogout}
-      onCreateWorkItem={() => { setActiveTab('work-items'); setExternalTrigger('create-item'); }}
+      onCreateWorkItem={() => { handleSetActiveTab('work-items'); setExternalTrigger('create-item'); }}
     >
       {renderActiveView()}
     </Layout>
