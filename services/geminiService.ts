@@ -37,6 +37,32 @@ export const generateWorkPlan = async (workItem: any) => {
   } catch (error) { return "AI offline."; }
 };
 
+export const suggestRationalization = async (app: any) => {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const prompt = `Act as an Enterprise Architect. Based on this application data: ${JSON.stringify(app)}, recommend one of the following TIME quadrants: INVEST, TOLERATE, MIGRATE, ELIMINATE. Provide a 2-sentence technical justification. Return JSON with 'recommendation' and 'justification' fields.`;
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: prompt,
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            recommendation: { type: Type.STRING },
+            justification: { type: Type.STRING }
+          },
+          required: ['recommendation', 'justification']
+        }
+      }
+    });
+    return JSON.parse(response.text || '{}');
+  } catch (error) { 
+    console.error("AI Rationalization Error", error);
+    return { recommendation: 'TOLERATE', justification: 'AI analysis failed. Falling back to default baseline.' };
+  }
+};
+
 export const generateStandupDigest = async (item: any) => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const prompt = `Summarize progress for this item: ${JSON.stringify(item)}`;

@@ -11,12 +11,25 @@ interface PortfolioStrategyProps {
 const PortfolioStrategy: React.FC<PortfolioStrategyProps> = ({ applications, bundles = [], onUpdate }) => {
   const [selectedApp, setSelectedApp] = useState<Application | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [isAiLoading, setIsAiLoading] = useState(false);
+  const [aiJustification, setAiJustification] = useState<string | null>(null);
   const [filterBundleId, setFilterBundleId] = useState<string>('all');
 
   const filteredApps = useMemo(() => {
     if (filterBundleId === 'all') return applications;
     return applications.filter(a => a.bundleId === filterBundleId);
   }, [applications, filterBundleId]);
+
+  const stats = useMemo(() => {
+    const total = filteredApps.length;
+    const eliminated = filteredApps.filter(a => a.lifecycle?.timeStatus === TimeModelStatus.ELIMINATE).length;
+    const critical = filteredApps.filter(a => a.status.health === 'Critical').length;
+    return {
+      reductionTarget: total > 0 ? Math.round((eliminated / total) * 100) : 0,
+      riskConcentration: total > 0 ? Math.round((critical / total) * 100) : 0,
+      mappedCount: filteredApps.filter(a => a.lifecycle?.timeStatus).length
+    };
+  }, [filteredApps]);
 
   const quadrants = [
     { 
@@ -66,11 +79,34 @@ const PortfolioStrategy: React.FC<PortfolioStrategyProps> = ({ applications, bun
       });
       if (res.ok) {
         setSelectedApp(null);
-        // Call the parent update instead of hard reload to preserve internal navigation state
+        setAiJustification(null);
         if (onUpdate) onUpdate();
       }
     } finally {
       setIsUpdating(false);
+    }
+  };
+
+  const runAiAdvisor = async () => {
+    if (!selectedApp) return;
+    setIsAiLoading(true);
+    setAiJustification(null);
+    try {
+      const res = await fetch('/api/ai/rationalize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(selectedApp)
+      });
+      const data = await res.json();
+      if (data.recommendation) {
+        setSelectedApp({
+          ...selectedApp,
+          lifecycle: { ...selectedApp.lifecycle!, timeStatus: data.recommendation as TimeModelStatus }
+        });
+        setAiJustification(data.justification);
+      }
+    } finally {
+      setIsAiLoading(false);
     }
   };
 
@@ -87,12 +123,25 @@ const PortfolioStrategy: React.FC<PortfolioStrategyProps> = ({ applications, bun
           <h2 className="text-4xl font-black text-slate-900 tracking-tighter uppercase italic">Portfolio Rationalization</h2>
           <p className="text-slate-400 font-medium text-lg">The TIME Framework: Managing technology fit vs. business value.</p>
         </div>
-        <div className="flex items-center gap-3">
-          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Scope:</label>
+        <div className="flex items-center gap-6">
+          <div className="flex items-center gap-10 bg-white border border-slate-200 px-8 py-3 rounded-[1.5rem] shadow-sm">
+             <div className="text-center">
+                <span className="text-[8px] font-black text-slate-300 uppercase block mb-0.5">Footprint Reduction</span>
+                <span className="text-lg font-black text-red-600">{stats.reductionTarget}%</span>
+             </div>
+             <div className="text-center">
+                <span className="text-[8px] font-black text-slate-300 uppercase block mb-0.5">Risk Concentration</span>
+                <span className="text-lg font-black text-amber-500">{stats.riskConcentration}%</span>
+             </div>
+             <div className="text-center">
+                <span className="text-[8px] font-black text-slate-300 uppercase block mb-0.5">Matrix Mapping</span>
+                <span className="text-lg font-black text-blue-600">{stats.mappedCount}/{filteredApps.length}</span>
+             </div>
+          </div>
           <select 
             value={filterBundleId} 
             onChange={(e) => setFilterBundleId(e.target.value)}
-            className="bg-white border border-slate-200 rounded-2xl px-6 py-3 text-[10px] font-black uppercase tracking-widest outline-none focus:ring-4 focus:ring-blue-500/10 transition-all shadow-sm"
+            className="bg-white border border-slate-200 rounded-2xl px-6 py-4 text-[10px] font-black uppercase tracking-widest outline-none focus:ring-4 focus:ring-blue-500/10 transition-all shadow-sm h-full"
           >
             <option value="all">Enterprise Portfolio</option>
             {bundles.map(b => <option key={b._id} value={b._id}>{b.name}</option>)}
@@ -102,11 +151,10 @@ const PortfolioStrategy: React.FC<PortfolioStrategyProps> = ({ applications, bun
 
       {/* 2x2 Matrix */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 relative bg-slate-50/50 p-8 rounded-[3.5rem] border border-slate-100">
-        {/* Axes Labels */}
-        <div className="absolute left-0 top-1/2 -translate-y-1/2 -rotate-90 hidden xl:block">
+        <div className="absolute left-0 top-1/2 -translate-y-1/2 -rotate-90 hidden xl:block z-0">
            <span className="text-[10px] font-black text-slate-300 uppercase tracking-[0.5em]">Business Value →</span>
         </div>
-        <div className="absolute bottom-0 left-1/2 -translate-x-1/2 hidden xl:block mb-4">
+        <div className="absolute bottom-0 left-1/2 -translate-x-1/2 hidden xl:block mb-4 z-0">
            <span className="text-[10px] font-black text-slate-300 uppercase tracking-[0.5em]">Technical Fit →</span>
         </div>
 
@@ -139,9 +187,15 @@ const PortfolioStrategy: React.FC<PortfolioStrategyProps> = ({ applications, bun
                   onClick={() => setSelectedApp(app)}
                   className="w-full flex items-center justify-between p-4 bg-slate-50 border border-slate-100 rounded-2xl hover:bg-white hover:shadow-lg hover:border-blue-200 transition-all group/item text-left"
                  >
-                    <div className="min-w-0">
-                       <p className="text-sm font-black text-slate-700 truncate">{app.name}</p>
-                       <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{app.aid}</p>
+                    <div className="min-w-0 flex items-center gap-3">
+                       <div className={`w-2 h-2 rounded-full shrink-0 ${
+                         app.status.health === 'Healthy' ? 'bg-emerald-500' :
+                         app.status.health === 'Risk' ? 'bg-amber-500' : 'bg-red-500 animate-pulse'
+                       }`}></div>
+                       <div className="min-w-0">
+                          <p className="text-sm font-black text-slate-700 truncate">{app.name}</p>
+                          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{app.aid}</p>
+                       </div>
                     </div>
                     <i className="fas fa-arrow-right text-[10px] text-slate-300 group-hover/item:text-blue-500 group-hover/item:translate-x-1 transition-all"></i>
                  </button>
@@ -181,7 +235,9 @@ const PortfolioStrategy: React.FC<PortfolioStrategyProps> = ({ applications, bun
               onClick={() => setSelectedApp(app)}
               className="flex items-center gap-4 p-5 bg-slate-50 border border-slate-100 rounded-[2rem] hover:bg-white hover:shadow-xl transition-all group"
              >
-                <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-slate-300 group-hover:text-blue-500 shadow-sm border border-slate-100 transition-colors">
+                <div className={`w-10 h-10 rounded-xl bg-white flex items-center justify-center shadow-sm border border-slate-100 transition-colors ${
+                  app.status.health === 'Healthy' ? 'text-emerald-500' : app.status.health === 'Risk' ? 'text-amber-500' : 'text-red-500'
+                }`}>
                    <i className="fas fa-cube text-sm"></i>
                 </div>
                 <div className="text-left min-w-0">
@@ -201,24 +257,49 @@ const PortfolioStrategy: React.FC<PortfolioStrategyProps> = ({ applications, bun
       {/* Lifecycle Modal */}
       {selectedApp && (
         <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-md z-[500] flex items-center justify-center p-6">
-          <div className="bg-white rounded-[3.5rem] w-full max-w-2xl p-12 shadow-2xl animate-fadeIn border border-slate-100 relative">
+          <div className="bg-white rounded-[3.5rem] w-full max-w-2xl p-12 shadow-2xl animate-fadeIn border border-slate-100 relative max-h-[90vh] overflow-y-auto custom-scrollbar">
             <button 
-              onClick={() => setSelectedApp(null)} 
+              onClick={() => { setSelectedApp(null); setAiJustification(null); }} 
               className="absolute top-10 right-10 w-12 h-12 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 hover:text-red-500 transition-colors"
             >
               <i className="fas fa-times"></i>
             </button>
             
             <header className="mb-12">
-              <div className="flex items-center gap-4 mb-4">
-                 <div className="w-16 h-16 rounded-[1.5rem] bg-blue-600 text-white flex items-center justify-center text-2xl shadow-xl shadow-blue-500/20">
-                    <i className="fas fa-rocket"></i>
+              <div className="flex items-center justify-between mb-4">
+                 <div className="flex items-center gap-4">
+                    <div className="w-16 h-16 rounded-[1.5rem] bg-blue-600 text-white flex items-center justify-center text-2xl shadow-xl shadow-blue-500/20">
+                       <i className="fas fa-rocket"></i>
+                    </div>
+                    <div>
+                       <h3 className="text-3xl font-black text-slate-900 tracking-tight">{selectedApp.name}</h3>
+                       <p className="text-[11px] font-black text-blue-500 uppercase tracking-[0.2em]">{selectedApp.aid} • System Node</p>
+                    </div>
                  </div>
-                 <div>
-                    <h3 className="text-3xl font-black text-slate-900 tracking-tight">{selectedApp.name}</h3>
-                    <p className="text-[11px] font-black text-blue-500 uppercase tracking-[0.2em]">{selectedApp.aid} • System Node</p>
-                 </div>
+                 <button 
+                  type="button"
+                  onClick={runAiAdvisor}
+                  disabled={isAiLoading}
+                  className="px-6 py-2.5 bg-slate-900 text-white text-[9px] font-black uppercase rounded-xl hover:bg-blue-600 transition-all flex items-center gap-2 shadow-xl"
+                 >
+                    {isAiLoading ? <i className="fas fa-circle-notch fa-spin"></i> : <i className="fas fa-brain"></i>}
+                    Ask Gemini
+                 </button>
               </div>
+
+              {aiJustification && (
+                <div className="bg-blue-900 p-6 rounded-[2rem] text-blue-50 border border-blue-800 shadow-2xl relative overflow-hidden animate-slideUp mb-8">
+                   <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -mr-16 -mt-16"></div>
+                   <div className="relative z-10">
+                      <div className="flex items-center gap-2 mb-2">
+                         <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse"></div>
+                         <span className="text-[9px] font-black uppercase tracking-widest">AI Rationalization Reason</span>
+                      </div>
+                      <p className="text-sm font-medium leading-relaxed italic">"{aiJustification}"</p>
+                   </div>
+                </div>
+              )}
+
               <p className="text-slate-400 text-sm font-medium leading-relaxed">Assign the lifecycle status and strategic intent for this application within the enterprise portfolio.</p>
             </header>
 
@@ -263,7 +344,7 @@ const PortfolioStrategy: React.FC<PortfolioStrategyProps> = ({ applications, bun
                         className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-sm font-bold text-slate-700 outline-none focus:border-blue-500 transition-all appearance-none"
                       >
                          <option value="MISSION_CRITICAL">Mission Critical</option>
-                         <option value="BUSINESS_CRITICAL">Business Critical</option>
+                         <option value="BUSINESS_CRITICAL">Business Business Critical</option>
                          <option value="SUPPORT">Support / Utility</option>
                       </select>
                    </div>
@@ -283,7 +364,7 @@ const PortfolioStrategy: React.FC<PortfolioStrategyProps> = ({ applications, bun
               </section>
 
               <footer className="pt-8 flex gap-4">
-                <button type="button" onClick={() => setSelectedApp(null)} className="flex-1 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-900 transition-colors">Discard changes</button>
+                <button type="button" onClick={() => { setSelectedApp(null); setAiJustification(null); }} className="flex-1 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-900 transition-colors">Discard changes</button>
                 <button 
                   type="submit" 
                   disabled={isUpdating}
@@ -303,7 +384,6 @@ const PortfolioStrategy: React.FC<PortfolioStrategyProps> = ({ applications, bun
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
         
-        /* Helper classes for dynamic coloring in tailwind */
         .text-emerald-600 { color: #059669; }
         .bg-emerald-50 { background-color: #ecfdf5; }
         .border-emerald-200 { border-color: #a7f3d0; }
