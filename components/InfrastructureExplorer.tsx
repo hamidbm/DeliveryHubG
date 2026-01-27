@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Application, Bundle } from '../types';
 import { marked } from 'marked';
 import DOMPurify from 'isomorphic-dompurify';
 import mermaid from 'mermaid';
+import * as d3 from 'd3';
 
 const MOCK_TF = `resource "azurerm_resource_group" "nexus" {
   name     = "rg-delivery-hub-prod"
@@ -28,6 +29,18 @@ resource "azurerm_kubernetes_cluster" "aks" {
 
 const InfraMermaidRenderer: React.FC<{ content: string; appId: string }> = ({ content, appId }) => {
   const containerRef = useRef<HTMLDivElement>(null);
+  const zoomRef = useRef<any>(null);
+
+  const handleZoom = useCallback((direction: 'in' | 'out' | 'reset') => {
+    if (!zoomRef.current || !containerRef.current) return;
+    const svg = d3.select(containerRef.current).select('svg');
+    
+    if (direction === 'reset') {
+      svg.transition().duration(750).call(zoomRef.current.transform, d3.zoomIdentity);
+    } else {
+      svg.transition().duration(300).call(zoomRef.current.scaleBy, direction === 'in' ? 1.3 : 0.7);
+    }
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -36,18 +49,40 @@ const InfraMermaidRenderer: React.FC<{ content: string; appId: string }> = ({ co
       try {
         containerRef.current.innerHTML = '';
         const uniqueId = `infra-render-${appId.replace(/[^a-zA-Z0-9]/g, '-')}-${Date.now()}`;
-        mermaid.initialize({ startOnLoad: false, theme: 'neutral', securityLevel: 'loose', fontFamily: 'Inter' });
+        mermaid.initialize({ 
+          startOnLoad: false, 
+          theme: 'neutral', 
+          securityLevel: 'loose', 
+          fontFamily: 'Inter' 
+        });
+        
         const { svg } = await mermaid.render(uniqueId, content);
+        
         if (isMounted && containerRef.current) {
           containerRef.current.innerHTML = svg;
           const svgEl = containerRef.current.querySelector('svg');
+          
           if (svgEl) {
             svgEl.setAttribute('width', '100%');
             svgEl.setAttribute('height', '100%');
-            svgEl.style.maxWidth = '100%';
-            svgEl.style.maxHeight = '650px';
+            svgEl.style.maxWidth = 'none';
+            svgEl.style.maxHeight = 'none';
+            svgEl.style.cursor = 'grab';
             svgEl.style.display = 'block';
-            svgEl.style.margin = 'auto';
+
+            const svgSelection = d3.select(svgEl);
+            const zoom = d3.zoom()
+              .scaleExtent([0.1, 8])
+              .on('zoom', (event) => {
+                svgSelection.selectAll('g').filter(function() {
+                  // Only apply transform to the top-level groups to maintain zoom correctly
+                  return this.parentNode === svgEl;
+                }).attr('transform', event.transform);
+              });
+
+            zoomRef.current = zoom;
+            svgSelection.call(zoom as any);
+            svgSelection.call(zoom.transform as any, d3.zoomIdentity);
           }
         }
       } catch (err) {
@@ -67,8 +102,18 @@ const InfraMermaidRenderer: React.FC<{ content: string; appId: string }> = ({ co
   }, [content, appId]);
 
   return (
-    <div className="w-full h-full flex items-center justify-center overflow-hidden animate-fadeIn">
-      <div ref={containerRef} className="w-full h-full" />
+    <div className="relative w-full h-full group/infra-vis">
+      <div ref={containerRef} className="w-full h-full flex items-center justify-center overflow-hidden animate-fadeIn" />
+      
+      {/* Zoom Controls Overlay */}
+      <div className="absolute bottom-6 left-6 flex flex-col gap-2 opacity-0 group-hover/infra-vis:opacity-100 transition-opacity duration-300 z-50">
+        <div className="flex flex-col bg-white/80 backdrop-blur-md border border-slate-200 rounded-2xl shadow-2xl overflow-hidden">
+          <button onClick={() => handleZoom('in')} className="p-3 text-slate-600 hover:bg-blue-50 hover:text-blue-600 border-b border-slate-100 transition-colors" title="Zoom In"><i className="fas fa-plus text-xs"></i></button>
+          <button onClick={() => handleZoom('out')} className="p-3 text-slate-600 hover:bg-blue-50 hover:text-blue-600 transition-colors border-b border-slate-100" title="Zoom Out"><i className="fas fa-minus text-xs"></i></button>
+          <button onClick={() => handleZoom('reset')} className="p-3 text-slate-600 hover:bg-blue-50 hover:text-blue-600 transition-colors" title="Reset View"><i className="fas fa-compress text-xs"></i></button>
+        </div>
+        <div className="px-3 py-1.5 bg-slate-900 text-white rounded-xl text-[8px] font-black uppercase tracking-widest text-center shadow-lg">D3 Zoom Engine</div>
+      </div>
     </div>
   );
 };
@@ -232,14 +277,14 @@ const InfrastructureExplorer: React.FC<{ applications: Application[], onUpdate?:
                {activeTab === 'iac' && <textarea value={tfCode} onChange={(e) => setTfCode(e.target.value)} spellCheck={false} className="w-full h-full p-10 bg-slate-950 text-emerald-400 font-mono text-sm outline-none resize-none custom-scrollbar" />}
                
                {activeTab === 'topography' && (
-                 <div className="p-12 h-full flex flex-col overflow-hidden">
+                 <div className="p-0 h-full flex flex-col overflow-hidden">
                     {isTopographyLoading ? (
                         <div className="flex-1 flex flex-col items-center justify-center gap-6">
                             <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] animate-pulse">Consulting AI Engine...</p>
                         </div>
                     ) : isAuthError ? (
-                        <div className="flex-1 flex flex-col items-center justify-center text-center">
+                        <div className="flex-1 flex flex-col items-center justify-center text-center p-12">
                             <div className="w-20 h-20 bg-amber-50 text-amber-500 rounded-full flex items-center justify-center mb-6 border border-amber-100 shadow-inner">
                                 <i className="fas fa-lock text-2xl"></i>
                             </div>
@@ -248,7 +293,7 @@ const InfrastructureExplorer: React.FC<{ applications: Application[], onUpdate?:
                             <button onClick={handleReAuthorize} className="mt-8 px-10 py-4 bg-blue-600 text-white text-[10px] font-black uppercase rounded-2xl shadow-xl hover:bg-blue-700 transition-all active:scale-95">Authorize Logic Engine</button>
                         </div>
                     ) : topographyError ? (
-                        <div className="flex-1 flex flex-col items-center justify-center text-center">
+                        <div className="flex-1 flex flex-col items-center justify-center text-center p-12">
                             <div className="w-20 h-20 bg-red-50 text-red-500 rounded-full flex items-center justify-center mb-6 border border-red-100">
                                 <i className="fas fa-circle-exclamation text-2xl"></i>
                             </div>
@@ -258,7 +303,7 @@ const InfrastructureExplorer: React.FC<{ applications: Application[], onUpdate?:
                         </div>
                     ) : topographyContent ? (
                         <div className="h-full flex flex-col">
-                            <header className="mb-6 flex justify-between items-center">
+                            <header className="px-10 py-6 flex justify-between items-center border-b border-slate-50">
                                 <div className="flex items-center gap-3">
                                   <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><i className="fas fa-circle text-emerald-500 text-[6px]"></i> Active Topology Snapshotted</span>
                                   <div className="px-3 py-1 bg-blue-50 text-blue-600 rounded-lg text-[8px] font-black uppercase tracking-widest border border-blue-100 flex items-center gap-2">
@@ -271,12 +316,12 @@ const InfrastructureExplorer: React.FC<{ applications: Application[], onUpdate?:
                                   <button onClick={() => setTopographyContent(null)} className="px-4 py-2 bg-white border border-slate-200 text-slate-400 rounded-xl text-[9px] font-black uppercase">Clear</button>
                                 </div>
                             </header>
-                            <div className="flex-1 border border-slate-100 rounded-[2.5rem] bg-slate-50/50 flex items-center justify-center p-12 overflow-hidden shadow-inner relative">
+                            <div className="flex-1 bg-slate-50/50 flex items-center justify-center overflow-hidden shadow-inner relative">
                                 <InfraMermaidRenderer content={topographyContent} appId={selectedApp._id!} />
                             </div>
                         </div>
                     ) : (
-                        <div className="flex-1 flex flex-col items-center justify-center text-center">
+                        <div className="flex-1 flex flex-col items-center justify-center text-center p-12">
                             <div className="w-24 h-24 bg-slate-50 rounded-[2.5rem] flex items-center justify-center mb-8 border border-slate-100 shadow-inner"><i className="fas fa-diagram-project text-slate-200 text-4xl"></i></div>
                             <h3 className="text-xl font-black text-slate-800 tracking-tight uppercase">Live Topography</h3>
                             <p className="text-slate-400 font-medium max-w-sm mt-3 leading-relaxed">Reverse-engineer logical resource relationships from the Terraform state definition using the default System LLM.</p>
