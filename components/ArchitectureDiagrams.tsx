@@ -14,7 +14,142 @@ interface ArchitectureDiagramsProps {
   activeAppId?: string;
 }
 
-const DEFAULT_MERMAID_CODE = 'graph TD\n  Start --> Process\n  Process --> End';
+const DEFAULT_MERMAID_CODE = `%%{init: {
+  "theme": "base",
+  "flowchart": {
+    "curve": "basis",
+    "nodeSpacing": 60,
+    "rankSpacing": 70
+  }
+}}%%
+flowchart LR
+
+%% =========================
+%% Internet & Edge
+%% =========================
+subgraph EDGE["Internet & Edge"]
+direction TB
+U[Users\\nBrowser / Mobile]:::user
+DNS[Public DNS]:::edge
+WAF[WAF & DDoS Protection]:::edge
+CDN[CDN / Static Content]:::edge
+end
+
+%% =========================
+%% Azure Platform
+%% =========================
+subgraph AZ["Azure Landing Zone"]
+direction LR
+
+subgraph ID["Identity & Secrets"]
+ENTRA[Microsoft Entra ID\\nOIDC / OAuth2]:::security
+KV[Azure Key Vault\\nSecrets & Certificates]:::security
+end
+
+subgraph ROUTING["Ingress & APIs"]
+AGW[Application Gateway\\nTLS + WAF]:::platform
+APIM[API Management\\nPolicies & Throttling]:::platform
+end
+
+subgraph APP["Application Tier"]
+FE[Web Application\\nNext.js / SPA]:::app
+end
+
+subgraph COMPUTE["Business Logic"]
+AKS[AKS Cluster\\nMicroservices]:::compute
+ACA[Azure Container Apps\\nServerless APIs]:::compute
+end
+
+subgraph INTEGRATION["Integration"]
+SB[Service Bus\\nQueues & Topics]:::integration
+EH[Event Hubs\\nStreaming Events]:::integration
+end
+
+subgraph DATA["Data Layer"]
+SQL[(Azure SQL Database)]:::data
+COS[(Cosmos DB)]:::data
+BLOB[(Blob Storage)]:::data
+REDIS[(Redis Cache)]:::data
+end
+
+subgraph BATCH["Batch & Automation"]
+FUNC[Azure Functions\\nScheduled Jobs]:::batch
+BATCHJOB[Batch Processing]:::batch
+end
+
+subgraph OPS["Observability & DevOps"]
+MON[Azure Monitor\\nLogs & Traces]:::ops
+CI[CI/CD Pipelines]:::ops
+end
+
+end
+
+%% =========================
+%% Traffic Flow
+%% =========================
+U --> DNS --> WAF --> CDN --> AGW --> APIM --> FE
+FE --> APIM
+APIM --> AKS
+APIM --> ACA
+
+%% =========================
+%% Identity & Secrets
+%% =========================
+FE -. Authenticate .-> ENTRA
+AKS -. Validate Token .-> ENTRA
+ACA -. Validate Token .-> ENTRA
+
+AKS -. Secrets .-> KV
+ACA -. Secrets .-> KV
+FUNC -. Secrets .-> KV
+
+%% =========================
+%% Data Access
+%% =========================
+AKS --> REDIS
+AKS --> SQL
+ACA --> COS
+ACA --> BLOB
+
+%% =========================
+%% Async & Batch
+%% =========================
+AKS --> SB
+SB --> FUNC
+FUNC --> BATCHJOB
+BATCHJOB --> SQL
+ACA --> EH
+EH --> COS
+
+%% =========================
+%% Observability & Delivery
+%% =========================
+FE -. Telemetry .-> MON
+AKS -. Telemetry .-> MON
+ACA -. Telemetry .-> MON
+APIM -. Metrics .-> MON
+FUNC -. Logs .-> MON
+
+CI --> FE
+CI --> AKS
+CI --> ACA
+CI --> APIM
+CI --> FUNC
+
+%% =========================
+%% Styling
+%% =========================
+classDef user fill:#e0f2fe,stroke:#0284c7,stroke-width:2px;
+classDef edge fill:#f8fafc,stroke:#94a3b8,stroke-dasharray: 5 5;
+classDef security fill:#fff1f2,stroke:#e11d48,stroke-width:2px;
+classDef platform fill:#f0f9ff,stroke:#0ea5e9,stroke-width:2px;
+classDef app fill:#f0fdf4,stroke:#22c55e,stroke-width:2px;
+classDef compute fill:#faf5ff,stroke:#a855f7,stroke-width:2px;
+classDef integration fill:#fffbeb,stroke:#f59e0b,stroke-width:2px;
+classDef data fill:#eff6ff,stroke:#3b82f6,stroke-width:2px;
+classDef batch fill:#f5f3ff,stroke:#8b5cf6,stroke-width:2px;
+classDef ops fill:#f8fafc,stroke:#475569,stroke-width:2px;`;
+
 const DEFAULT_DRAWIO_XML = '<mxfile><diagram id="page-1" name="Page-1"><mxGraphModel dx="1000" dy="1000" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0"><root><mxCell id="0"/><mxCell id="1" parent="0"/></root></mxGraphModel></diagram></mxfile>';
 
 const MermaidRenderer: React.FC<{ content: string; id: string }> = ({ content, id }) => {
@@ -294,7 +429,7 @@ const ArchitectureDesigner: React.FC<{
   isEditMode: boolean;
 }> = ({ diagram, onClose, onSuccess, bundles, applications, isEditMode }) => {
   const [format, setFormat] = useState<DiagramFormat>(diagram.format || DiagramFormat.MERMAID);
-  const [code, setCode] = useState(diagram.content || '');
+  const [code, setCode] = useState(diagram.content || (diagram.format === DiagramFormat.MERMAID ? DEFAULT_MERMAID_CODE : ''));
   const [title, setTitle] = useState(diagram.title || '');
   const [readOnly, setReadOnly] = useState(!isEditMode);
   const [saving, setSaving] = useState(false);
@@ -303,6 +438,14 @@ const ArchitectureDesigner: React.FC<{
   const [isContextOpen, setIsContextOpen] = useState(true);
   
   const [exportTrigger, setExportTrigger] = useState(0);
+
+  // When format switches and code is empty, populate with default samples
+  useEffect(() => {
+    if (!code || code === '') {
+      if (format === DiagramFormat.MERMAID) setCode(DEFAULT_MERMAID_CODE);
+      else if (format === DiagramFormat.DRAWIO) setCode(DEFAULT_DRAWIO_XML);
+    }
+  }, [format]);
 
   const persistToRegistry = useCallback(async (finalCode: string) => {
     if (!title.trim()) return alert("Artifact title is mandatory.");
@@ -383,9 +526,10 @@ const ArchitectureDesigner: React.FC<{
         </div>
       </header>
 
-      <div className="flex-1 flex overflow-hidden bg-slate-50 relative">
-        {/* Editor Main Canvas - Consistently on the left/center */}
-        <div className="flex-1 relative overflow-hidden flex flex-col">
+      {/* Main Designer Layout - STRICT FLEX-ROW TO ENSURE PANEL IS ON RIGHT */}
+      <div className="flex-1 flex flex-row overflow-hidden bg-slate-50 relative">
+        {/* Editor Main Canvas - Center/Left Area */}
+        <div className="flex-1 relative overflow-hidden flex flex-col min-w-0">
           {format === DiagramFormat.MINDMAP_MD ? (
             <Suspense fallback={<div className="flex-1 flex items-center justify-center bg-white"><i className="fas fa-circle-notch fa-spin text-blue-500 text-2xl"></i></div>}>
               <MindMapMarkdownEditor initialContent={code} onSave={handleSave} readOnly={readOnly} />
@@ -418,16 +562,18 @@ const ArchitectureDesigner: React.FC<{
                </div>
             </div>
           ) : (
-            <DrawioEditor 
-              xml={code || DEFAULT_DRAWIO_XML} 
-              onSave={(xml) => setCode(xml)} 
-              readOnly={readOnly} 
-            />
+            <div className="flex-1 relative bg-white h-full w-full">
+               <DrawioEditor 
+                 xml={code || DEFAULT_DRAWIO_XML} 
+                 onSave={(xml) => setCode(xml)} 
+                 readOnly={readOnly} 
+               />
+            </div>
           )}
         </div>
 
-        {/* Right Sidebar: Context Mapping */}
-        <aside className={`border-l border-slate-200 bg-white transition-all duration-500 ease-in-out shrink-0 z-[204] relative flex flex-col ${isContextOpen ? 'w-80' : 'w-0 overflow-hidden'}`}>
+        {/* Right Sidebar: Context Mapping - FIXED TO RIGHT SIDE */}
+        <aside className={`border-l border-slate-200 bg-white transition-all duration-500 ease-in-out shrink-0 z-[204] relative flex flex-col ${isContextOpen ? 'w-80' : 'w-0 overflow-hidden opacity-0'}`}>
            <div className="p-8 space-y-10 min-w-[320px]">
              <section>
                 <div className="flex items-center justify-between mb-8">
@@ -452,14 +598,21 @@ const ArchitectureDesigner: React.FC<{
                    </div>
                 </div>
              </section>
+             <div className="pt-10 border-t border-slate-50">
+               <div className="p-5 bg-blue-50 rounded-2xl border border-blue-100">
+                 <p className="text-[10px] text-blue-600 font-bold leading-relaxed">
+                   Linking this blueprint to a bundle or app ensures it appears in the specific Registry inventory.
+                 </p>
+               </div>
+             </div>
            </div>
         </aside>
 
-        {/* Sidebar Toggle Button */}
+        {/* Sidebar Toggle Button - Floating indicator */}
         <button 
           onClick={() => setIsContextOpen(!isContextOpen)}
-          className={`absolute bottom-8 right-8 z-[215] w-12 h-12 rounded-full shadow-2xl flex items-center justify-center transition-all ${isContextOpen ? 'bg-slate-900 text-white' : 'bg-blue-600 text-white'}`}
-          title={isContextOpen ? "Collapse Sidebar" : "Show Context Mapping"}
+          className={`absolute bottom-8 right-8 z-[215] w-12 h-12 rounded-full shadow-2xl flex items-center justify-center transition-all ${isContextOpen ? 'bg-slate-900 text-white' : 'bg-blue-600 text-white animate-bounce'}`}
+          title={isContextOpen ? "Collapse Mapping Panel" : "Expand Mapping Panel"}
         >
           <i className={`fas ${isContextOpen ? 'fa-chevron-right' : 'fa-link'}`}></i>
         </button>
