@@ -549,14 +549,16 @@ const ArchitectureDesigner: React.FC<{
             </Suspense>
           ) : format === DiagramFormat.MERMAID ? (
             <div className="flex-1 flex overflow-hidden">
-               <div className="w-1/3 bg-slate-900 flex flex-col border-r border-white/5">
-                  <textarea 
-                    value={code} 
-                    onChange={(e) => setCode(e.target.value)}
-                    readOnly={readOnly}
-                    className="flex-1 bg-transparent text-emerald-400 font-mono text-sm p-8 outline-none resize-none custom-scrollbar"
-                  />
-               </div>
+               {!readOnly && (
+                 <div className="w-1/3 bg-slate-900 flex flex-col border-r border-white/5 animate-slideRight">
+                    <textarea 
+                      value={code} 
+                      onChange={(e) => setCode(e.target.value)}
+                      readOnly={readOnly}
+                      className="flex-1 bg-transparent text-emerald-400 font-mono text-sm p-8 outline-none resize-none custom-scrollbar"
+                    />
+                 </div>
+               )}
                <div className="flex-1 bg-white flex items-center justify-center p-12 overflow-auto">
                   <MermaidRenderer content={code || DEFAULT_MERMAID_CODE} id={diagram._id || 'temp'} />
                </div>
