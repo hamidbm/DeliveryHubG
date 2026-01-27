@@ -130,6 +130,13 @@ export interface Application {
   tags?: string[];
   capabilityIds?: string[];
   techStack?: string[];
+  cloudMetadata?: {
+    provider: 'AZURE' | 'GCP' | 'AWS' | 'HYBRID';
+    subscriptionId: string;
+    environment: 'PROD' | 'UAT' | 'DEV';
+    terraformCode?: string;
+    lastAppliedAt?: string;
+  };
   lifecycle?: {
     goLiveDate?: string;
     sunsetDate?: string;

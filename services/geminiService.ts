@@ -25,6 +25,18 @@ export const analyzeOperationsIntelligence = async (telemetryData: any, infraDat
   } catch (error) { return "Operations Intelligence offline."; }
 };
 
+export const analyzeTerraform = async (code: string, provider: string) => {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const prompt = `Act as a Cloud Architect. Analyze this ${provider} Terraform script for: 1. Security Risks 2. Cost Optimization 3. Best Practices. Provide a structured review in Markdown. Terraform code: \n\n${code}`;
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: prompt
+    });
+    return response.text || "IaC Analysis unavailable.";
+  } catch (error) { return "AI Infra Analyzer offline."; }
+};
+
 export const generateWorkPlan = async (workItem: any) => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const prompt = `Analyze this work item and provide a structured implementation roadmap: ${JSON.stringify(workItem)}`;
