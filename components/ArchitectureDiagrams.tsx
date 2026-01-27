@@ -4,7 +4,6 @@ import { ArchitectureDiagram, DiagramFormat, Application, Bundle, Milestone } fr
 import mermaid from 'mermaid';
 import * as d3 from 'd3';
 
-// Use React.lazy instead of next/dynamic for standard browser module compatibility
 const MindMapMarkdownEditor = lazy(() => import('./MindMapMarkdownEditor'));
 
 interface ArchitectureDiagramsProps {
@@ -293,7 +292,6 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
   const [loading, setLoading] = useState(true);
   const [milestones, setMilestones] = useState<Milestone[]>([]);
 
-  // Metadata Filter State
   const [selBundle, setSelBundle] = useState(activeBundleId || 'all');
   const [selApp, setSelApp] = useState(activeAppId || 'all');
   const [selMilestone, setSelMilestone] = useState('all');
@@ -302,7 +300,6 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
   const fetchDiagrams = useCallback(async () => {
     setLoading(true);
     try {
-      // In a real app we might fetch with all filters, but here we filter client-side for smoother UI
       const res = await fetch(`/api/architecture/diagrams`);
       const data = await res.json();
       setDiagrams(Array.isArray(data) ? data : []);
@@ -318,7 +315,6 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
     fetch('/api/milestones').then(r => r.json()).then(data => setMilestones(Array.isArray(data) ? data : []));
   }, [fetchDiagrams]);
 
-  // Sync props to state if they change
   useEffect(() => { if (activeBundleId) setSelBundle(activeBundleId); }, [activeBundleId]);
   useEffect(() => { if (activeAppId) setSelApp(activeAppId); }, [activeAppId]);
 
@@ -342,7 +338,7 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
     if (!diag) {
       setEditingDiagram({
         title: 'New Architecture Blueprint',
-        format: DiagramFormat.MINDMAP_MD,
+        format: DiagramFormat.MERMAID,
         content: '', 
         status: 'DRAFT',
         bundleId: selBundle !== 'all' ? selBundle : undefined,
@@ -381,7 +377,6 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
             </button>
           </header>
 
-          {/* Filter Bar */}
           <div className="bg-white border border-slate-200 p-6 rounded-[2rem] shadow-sm flex flex-wrap items-center gap-6">
              <div className="flex items-center gap-3">
                 <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Bundle</label>
@@ -497,20 +492,43 @@ const ArchitectureDesigner: React.FC<{
   const [title, setTitle] = useState(diagram.title || '');
   const [readOnly, setReadOnly] = useState(!isEditMode);
   const [saving, setSaving] = useState(false);
+  const [isAiGenerating, setIsAiGenerating] = useState(false);
   const [activeBundleId, setActiveBundleId] = useState(diagram.bundleId || '');
   const [activeAppId, setActiveAppId] = useState(diagram.applicationId || '');
   const [activeMilestoneId, setActiveMilestoneId] = useState(diagram.milestoneId || '');
   const [tagsInput, setTagsInput] = useState(diagram.tags?.join(', ') || '');
   const [isContextOpen, setIsContextOpen] = useState(true);
   
-  const [exportTrigger, setExportTrigger] = useState(0);
-
   useEffect(() => {
     if (!code || code === '') {
       if (format === DiagramFormat.MERMAID) setCode(DEFAULT_MERMAID_CODE);
       else if (format === DiagramFormat.DRAWIO) setCode(DEFAULT_DRAWIO_XML);
     }
   }, [format, code]);
+
+  const handleAiGeneration = async () => {
+    const app = applications.find(a => a._id === activeAppId);
+    if (!app?.cloudMetadata?.terraformCode) {
+      alert("Selected application context has no Terraform (IaC) code stored in the registry. Please add IaC code in the Infrastructure tab first.");
+      return;
+    }
+
+    setIsAiGenerating(true);
+    setFormat(DiagramFormat.MERMAID); // AI generation optimized for Mermaid
+    try {
+      const res = await fetch('/api/ai/generate-diagram', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: app.cloudMetadata.terraformCode })
+      });
+      const data = await res.json();
+      if (data.mermaid) {
+        setCode(data.mermaid);
+      }
+    } finally {
+      setIsAiGenerating(false);
+    }
+  };
 
   const persistToRegistry = useCallback(async (finalCode: string) => {
     if (!title.trim()) return alert("Artifact title is mandatory.");
@@ -537,14 +555,9 @@ const ArchitectureDesigner: React.FC<{
     }
   }, [title, diagram, format, activeBundleId, activeAppId, activeMilestoneId, tagsInput, onSuccess]);
 
-  const handleSave = (newCode: string) => {
-    setCode(newCode);
-    persistToRegistry(newCode);
-  };
-
   return (
     <div className="fixed inset-0 z-[200] bg-white flex flex-col animate-fadeIn overflow-hidden">
-      <header className="px-10 py-5 bg-white border-b border-slate-200 flex items-center justify-between shadow-sm shrink-0 z-[210]">
+      <header className="px-10 py-5 bg-white border-b border-slate-200 flex items-center justify-between shrink-0 z-[210]">
         <div className="flex items-center gap-6">
           <button onClick={onClose} className="w-10 h-10 rounded-full bg-slate-50 hover:bg-slate-100 flex items-center justify-center text-slate-400 border border-slate-100 transition-all"><i className="fas fa-times"></i></button>
           <div className="flex flex-col">
@@ -560,10 +573,20 @@ const ArchitectureDesigner: React.FC<{
               ))}
             </div>
           )}
+          {activeAppId && !readOnly && (
+             <button 
+                onClick={handleAiGeneration}
+                disabled={isAiGenerating}
+                className="px-6 py-3.5 bg-blue-50 text-blue-600 border border-blue-200 rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center gap-3 active:scale-95 transition-all shadow-sm"
+             >
+                {isAiGenerating ? <i className="fas fa-circle-notch fa-spin"></i> : <i className="fas fa-wand-sparkles"></i>}
+                Generate from IaC
+             </button>
+          )}
           {readOnly ? (
             <button onClick={() => setReadOnly(false)} className="px-10 py-3.5 bg-blue-600 text-white rounded-2xl shadow-xl font-black text-[10px] uppercase tracking-widest flex items-center gap-3 active:scale-95 transition-all"><i className="fas fa-pen"></i> Edit</button>
           ) : (
-            <button onClick={() => { handleSave(code); }} disabled={saving} className="px-10 py-3.5 bg-slate-900 text-white rounded-2xl shadow-xl font-black text-[10px] uppercase tracking-widest flex items-center gap-3 active:scale-95 transition-all disabled:opacity-50">
+            <button onClick={() => { persistToRegistry(code); }} disabled={saving} className="px-10 py-3.5 bg-slate-900 text-white rounded-2xl shadow-xl font-black text-[10px] uppercase tracking-widest flex items-center gap-3 active:scale-95 transition-all disabled:opacity-50">
               {saving ? <i className="fas fa-circle-notch fa-spin"></i> : <i className="fas fa-save"></i>} {saving ? 'Syncing...' : 'Sync to Registry'}
             </button>
           )}
@@ -573,11 +596,20 @@ const ArchitectureDesigner: React.FC<{
       <div className="flex-1 flex flex-row overflow-hidden bg-slate-50 relative">
         <div className="flex-1 relative overflow-hidden flex flex-col min-w-0">
           {format === DiagramFormat.MINDMAP_MD ? (
-            <Suspense fallback={<div className="flex-1 flex items-center justify-center bg-white"><i className="fas fa-circle-notch fa-spin text-blue-500 text-2xl"></i></div>}><MindMapMarkdownEditor initialContent={code} onSave={handleSave} readOnly={readOnly} /></Suspense>
+            <Suspense fallback={<div className="flex-1 flex items-center justify-center bg-white"><i className="fas fa-circle-notch fa-spin text-blue-500 text-2xl"></i></div>}><MindMapMarkdownEditor initialContent={code} onSave={setCode} readOnly={readOnly} /></Suspense>
           ) : format === DiagramFormat.MERMAID ? (
             <div className="flex-1 flex overflow-hidden">
                {!readOnly && <div className="w-1/3 bg-slate-900 flex flex-col border-r border-white/5"><textarea value={code} onChange={(e) => setCode(e.target.value)} readOnly={readOnly} className="flex-1 bg-transparent text-emerald-400 font-mono text-sm p-8 outline-none resize-none custom-scrollbar" /></div>}
-               <div className="flex-1 bg-white p-0 overflow-hidden relative"><MermaidRenderer content={code || DEFAULT_MERMAID_CODE} id={diagram._id || 'temp'} /></div>
+               <div className="flex-1 bg-white p-0 overflow-hidden relative">
+                 {isAiGenerating ? (
+                    <div className="h-full flex flex-col items-center justify-center bg-white gap-6">
+                       <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] animate-pulse">Gemini Reverse-Engineering Infrastructure...</p>
+                    </div>
+                 ) : (
+                    <MermaidRenderer content={code || DEFAULT_MERMAID_CODE} id={diagram._id || 'temp'} />
+                 )}
+               </div>
             </div>
           ) : (
             <div className="flex-1 relative bg-white h-full w-full"><DrawioEditor xml={code || DEFAULT_DRAWIO_XML} onSave={(xml) => setCode(xml)} readOnly={readOnly} /></div>

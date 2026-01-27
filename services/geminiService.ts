@@ -37,6 +37,32 @@ export const analyzeTerraform = async (code: string, provider: string) => {
   } catch (error) { return "AI Infra Analyzer offline."; }
 };
 
+export const generateDiagramFromTerraform = async (code: string) => {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const prompt = `As a Cloud Architect, convert this Terraform HCL code into a high-quality Mermaid.js flowchart (LR). 
+  Guidelines:
+  1. Use subgraphs to group tiers (e.g., Edge, App Tier, Data Layer).
+  2. Create logical connections (e.g., LB to VM, VM to DB).
+  3. Use clean node labels (e.g., instead of 'azurerm_kubernetes_cluster.aks', use 'AKS Cluster').
+  4. Include basic Mermaid styling classes (classDef).
+  Return ONLY the Mermaid code block starting with 'graph LR' or 'flowchart LR'.
+  
+  Terraform Code:
+  ${code}`;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: prompt
+    });
+    // Extract code block if AI wraps it in markdown
+    const text = response.text || "";
+    return text.replace(/```mermaid/g, '').replace(/```/g, '').trim();
+  } catch (error) {
+    return "graph LR\n  Error[AI failed to parse HCL]";
+  }
+};
+
 export const generateWorkPlan = async (workItem: any) => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const prompt = `Analyze this work item and provide a structured implementation roadmap: ${JSON.stringify(workItem)}`;
