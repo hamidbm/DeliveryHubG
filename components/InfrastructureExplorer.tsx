@@ -1,8 +1,9 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Application, Bundle } from '../types';
 import { marked } from 'marked';
 import DOMPurify from 'isomorphic-dompurify';
+import mermaid from 'mermaid';
 
 const MOCK_TF = `resource "azurerm_resource_group" "nexus" {
   name     = "rg-delivery-hub-prod"
@@ -31,16 +32,63 @@ const InfrastructureExplorer: React.FC<{ applications: Application[], onUpdate?:
   const [tfCode, setTfCode] = useState('');
   const [aiInsight, setAiInsight] = useState<string | null>(null);
   const [isAiLoading, setIsAiLoading] = useState(false);
+  
+  // Topography State
+  const [topographyContent, setTopographyContent] = useState<string | null>(null);
+  const [isTopographyLoading, setIsTopographyLoading] = useState(false);
+  const topographyRef = useRef<HTMLDivElement>(null);
+
   const [activeTab, setActiveTab] = useState<'iac' | 'topography' | 'audit'>('iac');
   const [searchTerm, setSearchTerm] = useState('');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
+    mermaid.initialize({ 
+      startOnLoad: false, 
+      theme: 'neutral',
+      securityLevel: 'loose',
+      fontFamily: 'Inter'
+    });
+  }, []);
+
+  useEffect(() => {
     if (selectedApp) {
       setTfCode(selectedApp.cloudMetadata?.terraformCode || MOCK_TF);
       setAiInsight(null);
+      setTopographyContent(null); // Clear previous topography when switching apps
     }
   }, [selectedApp]);
+
+  // Render Topography SVG whenever content changes
+  useEffect(() => {
+    if (activeTab === 'topography' && topographyContent && topographyRef.current) {
+        const renderMap = async () => {
+            try {
+                topographyRef.current!.innerHTML = '';
+                const uniqueId = `infra-map-${selectedApp?._id || 'temp'}-${Date.now()}`;
+                const { svg } = await mermaid.render(uniqueId, topographyContent);
+                topographyRef.current!.innerHTML = svg;
+                
+                const svgEl = topographyRef.current!.querySelector('svg');
+                if (svgEl) {
+                    svgEl.setAttribute('width', '100%');
+                    svgEl.setAttribute('height', '100%');
+                    svgEl.style.maxWidth = '100%';
+                    svgEl.style.maxHeight = '600px';
+                }
+            } catch (e) {
+                console.error("Infrastructure Mapping Error:", e);
+                topographyRef.current!.innerHTML = `
+                    <div class="p-10 text-red-500 bg-red-50 rounded-2xl border border-red-100 flex flex-col items-center">
+                        <i class="fas fa-triangle-exclamation text-2xl mb-2"></i>
+                        <p class="text-[10px] font-black uppercase tracking-widest">Logic Visualization Error</p>
+                    </div>
+                `;
+            }
+        };
+        renderMap();
+    }
+  }, [activeTab, topographyContent, selectedApp?._id]);
 
   const filteredApps = useMemo(() => {
     return applications.filter(a => 
@@ -69,6 +117,24 @@ const InfrastructureExplorer: React.FC<{ applications: Application[], onUpdate?:
     }
   };
 
+  const handleGenerateTopography = async () => {
+    if (!tfCode) return;
+    setIsTopographyLoading(true);
+    try {
+      const res = await fetch('/api/ai/generate-diagram', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: tfCode })
+      });
+      const data = await res.json();
+      if (data.mermaid) {
+        setTopographyContent(data.mermaid);
+      }
+    } finally {
+      setIsTopographyLoading(false);
+    }
+  };
+
   const handleSaveTf = async () => {
     if (!selectedApp?._id) return;
     setSaving(true);
@@ -84,9 +150,7 @@ const InfrastructureExplorer: React.FC<{ applications: Application[], onUpdate?:
         body: JSON.stringify({ cloudMetadata: metadata })
       });
       if (res.ok) {
-        // Update local app state so switching tabs works immediately
         setSelectedApp({ ...selectedApp, cloudMetadata: metadata as any });
-        // Notify parent to refresh global registry
         if (onUpdate) onUpdate();
       }
     } finally {
@@ -218,15 +282,40 @@ const InfrastructureExplorer: React.FC<{ applications: Application[], onUpdate?:
                )}
 
                {activeTab === 'topography' && (
-                 <div className="p-12 h-full flex flex-col items-center justify-center text-center">
-                    <div className="w-24 h-24 bg-slate-50 rounded-[2.5rem] flex items-center justify-center mb-8 border border-slate-100 shadow-inner">
-                       <i className="fas fa-diagram-project text-slate-200 text-4xl"></i>
-                    </div>
-                    <h3 className="text-xl font-black text-slate-800 tracking-tight uppercase">Live Topography</h3>
-                    <p className="text-slate-400 font-medium max-w-sm mt-3 leading-relaxed">
-                      Reverse-engineering resource relationships from the Terraform state to generate an interactive spatial map.
-                    </p>
-                    <button className="mt-8 px-10 py-4 bg-slate-900 text-white text-[10px] font-black uppercase rounded-2xl shadow-xl hover:bg-blue-600 transition-all">Generate Graph</button>
+                 <div className="p-12 h-full flex flex-col overflow-hidden">
+                    {isTopographyLoading ? (
+                        <div className="flex-1 flex flex-col items-center justify-center gap-6">
+                            <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] animate-pulse">Reverse-Engineering Logical State...</p>
+                        </div>
+                    ) : topographyContent ? (
+                        <div className="h-full flex flex-col">
+                            <header className="mb-6 flex justify-between items-center">
+                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                                    <i className="fas fa-circle text-emerald-500 text-[6px]"></i>
+                                    Active Workspace Diagram
+                                </span>
+                                <button onClick={() => setTopographyContent(null)} className="text-[9px] font-black text-blue-600 uppercase hover:underline">Reset View</button>
+                            </header>
+                            <div ref={topographyRef} className="flex-1 border border-slate-100 rounded-[2rem] bg-slate-50/50 flex items-center justify-center p-8 overflow-hidden shadow-inner"></div>
+                        </div>
+                    ) : (
+                        <div className="flex-1 flex flex-col items-center justify-center text-center">
+                            <div className="w-24 h-24 bg-slate-50 rounded-[2.5rem] flex items-center justify-center mb-8 border border-slate-100 shadow-inner">
+                               <i className="fas fa-diagram-project text-slate-200 text-4xl"></i>
+                            </div>
+                            <h3 className="text-xl font-black text-slate-800 tracking-tight uppercase">Live Topography</h3>
+                            <p className="text-slate-400 font-medium max-w-sm mt-3 leading-relaxed">
+                              Reverse-engineering resource relationships from the Terraform state to generate an interactive spatial map.
+                            </p>
+                            <button 
+                                onClick={handleGenerateTopography}
+                                className="mt-8 px-10 py-4 bg-slate-900 text-white text-[10px] font-black uppercase rounded-2xl shadow-xl hover:bg-blue-600 transition-all active:scale-95"
+                            >
+                                Generate Graph
+                            </button>
+                        </div>
+                    )}
                  </div>
                )}
 
