@@ -27,6 +27,70 @@ resource "azurerm_kubernetes_cluster" "aks" {
   }
 }`;
 
+// Dedicated Robust Mermaid Renderer for Infrastructure Topography
+const InfraMermaidRenderer: React.FC<{ content: string; appId: string }> = ({ content, appId }) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const renderMap = async () => {
+      if (!containerRef.current || !content) return;
+
+      try {
+        // Prepare container
+        containerRef.current.innerHTML = '';
+        const uniqueId = `infra-render-${appId.replace(/[^a-zA-Z0-9]/g, '-')}-${Date.now()}`;
+        
+        // Initialize Mermaid (Ensure it's ready)
+        mermaid.initialize({ 
+          startOnLoad: false, 
+          theme: 'neutral',
+          securityLevel: 'loose',
+          fontFamily: 'Inter'
+        });
+
+        // Generate SVG
+        const { svg } = await mermaid.render(uniqueId, content);
+        
+        if (isMounted && containerRef.current) {
+          containerRef.current.innerHTML = svg;
+          const svgEl = containerRef.current.querySelector('svg');
+          if (svgEl) {
+            svgEl.setAttribute('width', '100%');
+            svgEl.setAttribute('height', '100%');
+            svgEl.style.maxWidth = '100%';
+            svgEl.style.maxHeight = '650px';
+            svgEl.style.display = 'block';
+            svgEl.style.margin = 'auto';
+          }
+        }
+      } catch (err) {
+        console.error("Mermaid Render Error:", err);
+        if (isMounted && containerRef.current) {
+          containerRef.current.innerHTML = `
+            <div class="p-12 text-red-500 bg-red-50 rounded-[2rem] border border-red-100 flex flex-col items-center text-center max-w-md mx-auto shadow-sm">
+              <i class="fas fa-triangle-exclamation text-3xl mb-4"></i>
+              <h4 class="text-sm font-black uppercase tracking-widest mb-2">Visualization Failed</h4>
+              <p class="text-xs font-medium text-red-400">The generated Mermaid code contains syntax errors. Please refine the IaC script and retry.</p>
+              <pre class="mt-4 p-4 bg-white/50 rounded-xl text-[8px] font-mono w-full overflow-hidden text-left border border-red-100">${content.substring(0, 100)}...</pre>
+            </div>
+          `;
+        }
+      }
+    };
+
+    renderMap();
+    return () => { isMounted = false; };
+  }, [content, appId]);
+
+  return (
+    <div className="w-full h-full flex items-center justify-center overflow-hidden animate-fadeIn">
+      <div ref={containerRef} className="w-full h-full" />
+    </div>
+  );
+};
+
 const InfrastructureExplorer: React.FC<{ applications: Application[], onUpdate?: () => void }> = ({ applications, onUpdate }) => {
   const [selectedApp, setSelectedApp] = useState<Application | null>(null);
   const [tfCode, setTfCode] = useState('');
@@ -36,59 +100,20 @@ const InfrastructureExplorer: React.FC<{ applications: Application[], onUpdate?:
   // Topography State
   const [topographyContent, setTopographyContent] = useState<string | null>(null);
   const [isTopographyLoading, setIsTopographyLoading] = useState(false);
-  const topographyRef = useRef<HTMLDivElement>(null);
+  const [topographyError, setTopographyError] = useState<string | null>(null);
 
   const [activeTab, setActiveTab] = useState<'iac' | 'topography' | 'audit'>('iac');
   const [searchTerm, setSearchTerm] = useState('');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    mermaid.initialize({ 
-      startOnLoad: false, 
-      theme: 'neutral',
-      securityLevel: 'loose',
-      fontFamily: 'Inter'
-    });
-  }, []);
-
-  useEffect(() => {
     if (selectedApp) {
       setTfCode(selectedApp.cloudMetadata?.terraformCode || MOCK_TF);
       setAiInsight(null);
-      setTopographyContent(null); // Clear previous topography when switching apps
+      setTopographyContent(null);
+      setTopographyError(null);
     }
   }, [selectedApp]);
-
-  // Render Topography SVG whenever content changes
-  useEffect(() => {
-    if (activeTab === 'topography' && topographyContent && topographyRef.current) {
-        const renderMap = async () => {
-            try {
-                topographyRef.current!.innerHTML = '';
-                const uniqueId = `infra-map-${selectedApp?._id || 'temp'}-${Date.now()}`;
-                const { svg } = await mermaid.render(uniqueId, topographyContent);
-                topographyRef.current!.innerHTML = svg;
-                
-                const svgEl = topographyRef.current!.querySelector('svg');
-                if (svgEl) {
-                    svgEl.setAttribute('width', '100%');
-                    svgEl.setAttribute('height', '100%');
-                    svgEl.style.maxWidth = '100%';
-                    svgEl.style.maxHeight = '600px';
-                }
-            } catch (e) {
-                console.error("Infrastructure Mapping Error:", e);
-                topographyRef.current!.innerHTML = `
-                    <div class="p-10 text-red-500 bg-red-50 rounded-2xl border border-red-100 flex flex-col items-center">
-                        <i class="fas fa-triangle-exclamation text-2xl mb-2"></i>
-                        <p class="text-[10px] font-black uppercase tracking-widest">Logic Visualization Error</p>
-                    </div>
-                `;
-            }
-        };
-        renderMap();
-    }
-  }, [activeTab, topographyContent, selectedApp?._id]);
 
   const filteredApps = useMemo(() => {
     return applications.filter(a => 
@@ -112,24 +137,41 @@ const InfrastructureExplorer: React.FC<{ applications: Application[], onUpdate?:
       });
       const data = await res.json();
       setAiInsight(data.analysis);
+    } catch (e) {
+      alert("Intelligence service unreachable.");
     } finally {
       setIsAiLoading(false);
     }
   };
 
   const handleGenerateTopography = async () => {
-    if (!tfCode) return;
+    if (!tfCode || tfCode.trim().length < 10) {
+      alert("Please provide valid Terraform HCL code in the 'IaC Definition' tab first.");
+      return;
+    }
+
     setIsTopographyLoading(true);
+    setTopographyError(null);
+    setTopographyContent(null);
+    
     try {
       const res = await fetch('/api/ai/generate-diagram', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ code: tfCode })
       });
+      
+      if (!res.ok) throw new Error("Gateway failure.");
+      
       const data = await res.json();
       if (data.mermaid) {
         setTopographyContent(data.mermaid);
+      } else {
+        throw new Error("AI returned empty diagram.");
       }
+    } catch (err: any) {
+      console.error("Topography Generation Failed:", err);
+      setTopographyError(err.message || "Failed to generate infrastructure map.");
     } finally {
       setIsTopographyLoading(false);
     }
@@ -288,16 +330,41 @@ const InfrastructureExplorer: React.FC<{ applications: Application[], onUpdate?:
                             <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] animate-pulse">Reverse-Engineering Logical State...</p>
                         </div>
+                    ) : topographyError ? (
+                        <div className="flex-1 flex flex-col items-center justify-center text-center">
+                            <div className="w-20 h-20 bg-red-50 text-red-500 rounded-full flex items-center justify-center mb-6 border border-red-100">
+                                <i className="fas fa-circle-exclamation text-2xl"></i>
+                            </div>
+                            <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">Generation Failed</h3>
+                            <p className="text-slate-400 font-medium max-w-sm mt-3 leading-relaxed">{topographyError}</p>
+                            <button 
+                                onClick={handleGenerateTopography}
+                                className="mt-8 px-10 py-4 bg-slate-900 text-white text-[10px] font-black uppercase rounded-2xl shadow-xl hover:bg-blue-600 transition-all"
+                            >
+                                Try Again
+                            </button>
+                        </div>
                     ) : topographyContent ? (
                         <div className="h-full flex flex-col">
                             <header className="mb-6 flex justify-between items-center">
-                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                                    <i className="fas fa-circle text-emerald-500 text-[6px]"></i>
-                                    Active Workspace Diagram
-                                </span>
-                                <button onClick={() => setTopographyContent(null)} className="text-[9px] font-black text-blue-600 uppercase hover:underline">Reset View</button>
+                                <div className="flex flex-col gap-1">
+                                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                                        <i className="fas fa-circle text-emerald-500 text-[6px]"></i>
+                                        Active Infrastructure Topography
+                                    </span>
+                                    <span className="text-[8px] font-bold text-slate-300 uppercase">Snapshot: {new Date().toLocaleTimeString()}</span>
+                                </div>
+                                <div className="flex gap-2">
+                                  <button onClick={handleGenerateTopography} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all">Re-Sync</button>
+                                  <button onClick={() => setTopographyContent(null)} className="px-4 py-2 bg-white border border-slate-200 text-slate-400 hover:text-red-500 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all">Clear View</button>
+                                </div>
                             </header>
-                            <div ref={topographyRef} className="flex-1 border border-slate-100 rounded-[2rem] bg-slate-50/50 flex items-center justify-center p-8 overflow-hidden shadow-inner"></div>
+                            <div className="flex-1 border border-slate-100 rounded-[2.5rem] bg-slate-50/50 flex items-center justify-center p-12 overflow-hidden shadow-inner relative">
+                                <InfraMermaidRenderer content={topographyContent} appId={selectedApp._id!} />
+                                <div className="absolute bottom-6 right-6">
+                                   <div className="px-3 py-1.5 bg-slate-900/10 backdrop-blur-md rounded-full text-[7px] font-black text-slate-400 uppercase tracking-[0.2em] border border-slate-200/50">Vector Logic Map v1.2</div>
+                                </div>
+                            </div>
                         </div>
                     ) : (
                         <div className="flex-1 flex flex-col items-center justify-center text-center">
@@ -306,7 +373,7 @@ const InfrastructureExplorer: React.FC<{ applications: Application[], onUpdate?:
                             </div>
                             <h3 className="text-xl font-black text-slate-800 tracking-tight uppercase">Live Topography</h3>
                             <p className="text-slate-400 font-medium max-w-sm mt-3 leading-relaxed">
-                              Reverse-engineering resource relationships from the Terraform state to generate an interactive spatial map.
+                              Reverse-engineering resource relationships from the Terraform state to generate an interactive spatial map of the application's cloud footprint.
                             </p>
                             <button 
                                 onClick={handleGenerateTopography}
