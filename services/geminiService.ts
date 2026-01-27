@@ -1,8 +1,10 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
 
+const getAI = () => new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+
 export const getPortfolioSummary = async (portfolioData: any) => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const ai = getAI();
   const prompt = `Perform an in-depth analysis on this software delivery portfolio: ${JSON.stringify(portfolioData)}`;
   try {
     const response = await ai.models.generateContent({
@@ -10,11 +12,14 @@ export const getPortfolioSummary = async (portfolioData: any) => {
       contents: prompt
     });
     return response.text || "Analysis unavailable.";
-  } catch (error) { return "Error generating AI insights."; }
+  } catch (error) { 
+    console.error("Gemini Error:", error);
+    return "Error generating AI insights. Check API configuration."; 
+  }
 };
 
 export const analyzeOperationsIntelligence = async (telemetryData: any, infraData: any) => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const ai = getAI();
   const prompt = `As a Senior SRE AI, analyze this telemetry: ${JSON.stringify(telemetryData)} and infra: ${JSON.stringify(infraData)}. Detect anomalies and suggest scaling actions in Markdown.`;
   try {
     const response = await ai.models.generateContent({
@@ -26,7 +31,7 @@ export const analyzeOperationsIntelligence = async (telemetryData: any, infraDat
 };
 
 export const analyzeTerraform = async (code: string, provider: string) => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const ai = getAI();
   const prompt = `Act as a Cloud Architect. Analyze this ${provider} Terraform script for: 1. Security Risks 2. Cost Optimization 3. Best Practices. Provide a structured review in Markdown. Terraform code: \n\n${code}`;
   try {
     const response = await ai.models.generateContent({
@@ -38,7 +43,7 @@ export const analyzeTerraform = async (code: string, provider: string) => {
 };
 
 export const generateDiagramFromTerraform = async (code: string) => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const ai = getAI();
   const prompt = `As a Cloud Architect, convert this Terraform HCL code into a high-quality Mermaid.js flowchart (LR). 
   Guidelines:
   1. Use subgraphs to group tiers (e.g., Edge, App Tier, Data Layer).
@@ -55,16 +60,27 @@ export const generateDiagramFromTerraform = async (code: string) => {
       model: 'gemini-3-flash-preview',
       contents: prompt
     });
-    // Extract code block if AI wraps it in markdown
+    // Use .text property directly as per guidelines
     const text = response.text || "";
-    return text.replace(/```mermaid/g, '').replace(/```/g, '').trim();
-  } catch (error) {
+    const cleanMermaid = text.replace(/```mermaid/g, '').replace(/```/g, '').trim();
+    
+    if (!cleanMermaid || (!cleanMermaid.toLowerCase().includes('graph') && !cleanMermaid.toLowerCase().includes('flowchart'))) {
+        throw new Error("Invalid Output Format");
+    }
+    
+    return cleanMermaid;
+  } catch (error: any) {
+    console.error("Gemini Diagram Error:", error);
+    // Return a specific error code that the UI can interpret if it's an auth issue
+    if (error?.message?.includes("API_KEY_INVALID") || error?.message?.includes("403") || error?.message?.includes("401")) {
+        return "ERROR_CONFIG: Unauthorized or Missing API Key";
+    }
     return "graph LR\n  Error[AI failed to parse HCL]";
   }
 };
 
 export const generateWorkPlan = async (workItem: any) => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const ai = getAI();
   const prompt = `Analyze this work item and provide a structured implementation roadmap: ${JSON.stringify(workItem)}`;
   try {
     const response = await ai.models.generateContent({
@@ -76,7 +92,7 @@ export const generateWorkPlan = async (workItem: any) => {
 };
 
 export const suggestRationalization = async (app: any) => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const ai = getAI();
   const prompt = `Act as an Enterprise Architect. Based on this application data: ${JSON.stringify(app)}, recommend one of the following TIME quadrants: INVEST, TOLERATE, MIGRATE, ELIMINATE. Provide a 2-sentence technical justification. Return JSON with 'recommendation' and 'justification' fields.`;
   try {
     const response = await ai.models.generateContent({
@@ -102,7 +118,7 @@ export const suggestRationalization = async (app: any) => {
 };
 
 export const generateStandupDigest = async (item: any) => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const ai = getAI();
   const prompt = `Summarize progress for this item: ${JSON.stringify(item)}`;
   try {
     const response = await ai.models.generateContent({
@@ -114,7 +130,7 @@ export const generateStandupDigest = async (item: any) => {
 };
 
 export const suggestReassignment = async (item: any, teamCapacity: any[]) => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const ai = getAI();
   const prompt = `Suggest peer for task handover: ${JSON.stringify(item)} Team: ${JSON.stringify(teamCapacity)}`;
   try {
     const response = await ai.models.generateContent({
