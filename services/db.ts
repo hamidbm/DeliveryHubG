@@ -17,8 +17,6 @@ export const fetchSystemSettings = async () => {
   try {
     const db = await getDb();
     const settings = await db.collection('settings').findOne({ key: 'global_config' });
-    
-    // Default to OPENAI if no settings exist in DB
     return settings || {
       key: 'global_config',
       ai: {
@@ -100,7 +98,7 @@ export const saveWikiPage = async (page: Partial<WikiPage>) => {
   const { _id, ...data } = page;
   const now = new Date().toISOString();
   
-  if (_id) {
+  if (_id && ObjectId.isValid(_id as string)) {
     const existing = await db.collection('wikipages').findOne({ _id: new ObjectId(_id) });
     if (existing) {
       await db.collection('wiki_versions').insertOne({
@@ -142,17 +140,18 @@ export const revertWikiPage = async (pageId: string, versionId: string) => {
 export const fetchWikiSpaces = async () => {
   try {
     const db = await getDb();
-    return await db.collection('spaces').find({}).toArray();
+    // Standardizing on 'wikispaces' to prevent naming conflicts with system collections
+    return await db.collection('wikispaces').find({}).toArray();
   } catch { return []; }
 };
 
 export const saveWikiSpace = async (space: Partial<WikiSpace>) => {
   const db = await getDb();
   const { _id, ...data } = space;
-  if (_id) {
-    return await db.collection('spaces').updateOne({ _id: new ObjectId(_id) }, { $set: data });
+  if (_id && ObjectId.isValid(_id as string)) {
+    return await db.collection('wikispaces').updateOne({ _id: new ObjectId(_id) }, { $set: data });
   } else {
-    return await db.collection('spaces').insertOne(data);
+    return await db.collection('wikispaces').insertOne(data);
   }
 };
 
@@ -185,7 +184,7 @@ export const saveBundle = async (bundle: Partial<Bundle>, user?: any) => {
   const db = await getDb();
   const { _id, ...data } = bundle;
   const now = new Date().toISOString();
-  if (_id) {
+  if (_id && ObjectId.isValid(_id as string)) {
     return await db.collection('bundles').updateOne({ _id: new ObjectId(_id) }, { $set: { ...data, updatedAt: now } });
   } else {
     return await db.collection('bundles').insertOne({ ...data, createdAt: now, updatedAt: now });
@@ -203,7 +202,7 @@ export const fetchWikiThemes = async (activeOnly: boolean = false) => {
 export const saveWikiTheme = async (theme: Partial<WikiTheme>) => {
   const db = await getDb();
   const { _id, ...data } = theme;
-  if (_id) {
+  if (_id && ObjectId.isValid(_id as string)) {
     return await db.collection('themes').updateOne({ _id: new ObjectId(_id) }, { $set: data });
   } else {
     return await db.collection('themes').insertOne(data);
@@ -232,7 +231,7 @@ export const saveApplication = async (app: Partial<Application>, user?: any) => 
   const db = await getDb();
   const { _id, ...data } = app;
   const now = new Date().toISOString();
-  if (_id) {
+  if (_id && ObjectId.isValid(_id as string)) {
     return await db.collection('applications').updateOne({ _id: new ObjectId(_id) }, { $set: { ...data, updatedAt: now } });
   } else {
     return await db.collection('applications').insertOne({ ...data, createdAt: now, updatedAt: now });
@@ -250,7 +249,7 @@ export const fetchTaxonomyCategories = async (activeOnly: boolean = false) => {
 export const saveTaxonomyCategory = async (cat: Partial<TaxonomyCategory>) => {
   const db = await getDb();
   const { _id, ...data } = cat;
-  if (_id) {
+  if (_id && ObjectId.isValid(_id as string)) {
     return await db.collection('taxonomy_categories').updateOne({ _id: new ObjectId(_id) }, { $set: data });
   } else {
     return await db.collection('taxonomy_categories').insertOne(data);
@@ -273,7 +272,7 @@ export const fetchTaxonomyDocumentTypes = async (activeOnly: boolean = false, ca
 export const saveTaxonomyDocumentType = async (type: Partial<TaxonomyDocumentType>) => {
   const db = await getDb();
   const { _id, ...data } = type;
-  if (_id) {
+  if (_id && ObjectId.isValid(_id as string)) {
     return await db.collection('taxonomy_document_types').updateOne({ _id: new ObjectId(_id) }, { $set: data });
   } else {
     return await db.collection('taxonomy_document_types').insertOne(data);
@@ -367,7 +366,7 @@ export const saveWorkItem = async (item: Partial<WorkItem>, user?: any) => {
   const now = new Date().toISOString();
   const userName = user?.name || 'Nexus System';
 
-  if (_id) {
+  if (_id && ObjectId.isValid(_id as string)) {
     const existing = await db.collection('workitems').findOne({ _id: new ObjectId(_id) });
     if (!existing) throw new Error("Work item not found");
 
@@ -498,7 +497,7 @@ export const saveMilestone = async (milestone: Partial<Milestone>) => {
   const db = await getDb();
   const { _id, ...data } = milestone;
   const now = new Date().toISOString();
-  if (_id) {
+  if (_id && ObjectId.isValid(_id as string)) {
     return await db.collection('milestones').updateOne({ _id: new ObjectId(_id) }, { $set: { ...data, updatedAt: now } });
   } else {
     return await db.collection('milestones').insertOne({ ...data, createdAt: now, updatedAt: now });
@@ -564,7 +563,7 @@ export const saveSprint = async (sprint: Partial<Sprint>) => {
   const db = await getDb();
   const { _id, ...data } = sprint;
   const now = new Date().toISOString();
-  if (_id) {
+  if (_id && ObjectId.isValid(_id as string)) {
     return await db.collection('sprints').updateOne({ _id: new ObjectId(_id) }, { $set: data });
   } else {
     return await db.collection('sprints').insertOne({ ...data, createdAt: now });
@@ -656,7 +655,7 @@ export const saveArchitectureDiagram = async (diagram: Partial<ArchitectureDiagr
   const now = new Date().toISOString();
   const userName = user?.name || 'System';
 
-  if (_id) {
+  if (_id && ObjectId.isValid(_id as string)) {
     return await db.collection('architecture_diagrams').updateOne(
       { _id: new ObjectId(_id) },
       { $set: { ...data, updatedAt: now } }
@@ -685,7 +684,7 @@ export const fetchCapabilities = async () => {
 export const saveCapability = async (capability: Partial<BusinessCapability>) => {
   const db = await getDb();
   const { _id, ...data } = capability;
-  if (_id) {
+  if (_id && ObjectId.isValid(_id as string)) {
     return await db.collection('capabilities').updateOne({ _id: new ObjectId(_id) }, { $set: data });
   } else {
     return await db.collection('capabilities').insertOne(data);
@@ -708,7 +707,7 @@ export const fetchInterfaces = async (appId?: string) => {
 export const saveInterface = async (data: Partial<AppInterface>) => {
   const db = await getDb();
   const { _id, ...rest } = data;
-  if (_id) {
+  if (_id && ObjectId.isValid(_id as string)) {
     return await db.collection('interfaces').updateOne({ _id: new ObjectId(_id) }, { $set: rest });
   } else {
     return await db.collection('interfaces').insertOne(rest);

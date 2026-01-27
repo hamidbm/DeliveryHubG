@@ -23,7 +23,6 @@ const Wiki: React.FC<WikiProps> = ({
 }) => {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const pathname = usePathname();
 
   const [spaces, setSpaces] = useState<WikiSpace[]>([]);
   const [themes, setThemes] = useState<WikiTheme[]>([]);
@@ -48,53 +47,52 @@ const Wiki: React.FC<WikiProps> = ({
     }
   }, [externalTrigger, onTriggerProcessed]);
 
-  // 1. Initial Data Fetch (Only on Mount)
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        const [spRes, pgRes, thRes, catRes, typRes] = await Promise.all([
-          fetch('/api/wiki/spaces'),
-          fetch('/api/wiki'),
-          fetch('/api/wiki/themes?active=true'),
-          fetch('/api/taxonomy/categories?active=true'),
-          fetch('/api/taxonomy/document-types?active=true')
-        ]);
-        
-        const rawSpaces = await spRes.json();
-        const pagesData = await pgRes.json();
-        const themesData = await thRes.json();
-        const categoriesData = await catRes.json();
-        const typesData = await typRes.json();
-        
-        const validSpaces = Array.isArray(rawSpaces) ? rawSpaces : [];
-        const validPages = Array.isArray(pagesData) ? pagesData : [];
-        
-        const spaceMap = new Map<string, WikiSpace>();
-        validSpaces.forEach(s => {
-          const id = String(s._id || s.id);
-          if (!spaceMap.has(id)) spaceMap.set(id, s);
-        });
-        const uniqueSpaces = Array.from(spaceMap.values());
-        
-        setSpaces(uniqueSpaces);
-        setPages(validPages);
-        setThemes(Array.isArray(themesData) ? themesData : []);
-        setCategories(Array.isArray(categoriesData) ? categoriesData : []);
-        setDocTypes(Array.isArray(typesData) ? typesData : []);
-
-        const urlPageId = searchParams.get('pageId');
-        if (!urlPageId) {
-          const rootIds = uniqueSpaces.map(s => `folder-space-${String(s._id || s.id)}`);
-          setExpandedNodes(new Set(rootIds));
+  // Robust Data Fetching
+  const loadAllWikiData = useCallback(async () => {
+    setLoading(true);
+    try {
+      // Helper to handle individual fetch failures gracefully
+      const safeFetch = async (url: string) => {
+        try {
+          const res = await fetch(url);
+          if (!res.ok) return [];
+          const data = await res.json();
+          return Array.isArray(data) ? data : [];
+        } catch (e) {
+          console.warn(`Wiki silent fetch fail: ${url}`, e);
+          return [];
         }
-      } catch (e) { 
-        console.error("Wiki Init Error", e); 
-      } finally { 
-        setLoading(false); 
+      };
+
+      const [rawSpaces, rawPages, rawThemes, rawCats, rawTypes] = await Promise.all([
+        safeFetch('/api/wiki/spaces'),
+        safeFetch('/api/wiki'),
+        safeFetch('/api/wiki/themes?active=true'),
+        safeFetch('/api/taxonomy/categories?active=true'),
+        safeFetch('/api/taxonomy/document-types?active=true')
+      ]);
+      
+      setSpaces(rawSpaces);
+      setPages(rawPages);
+      setThemes(rawThemes);
+      setCategories(rawCats);
+      setDocTypes(rawTypes);
+
+      // Expand spaces by default if no specific page is selected
+      const urlPageId = searchParams.get('pageId');
+      if (!urlPageId && rawSpaces.length > 0) {
+        const rootIds = rawSpaces.map(s => `folder-space-${String(s._id || s.id)}`);
+        setExpandedNodes(new Set(rootIds));
       }
-    };
-    fetchData();
+    } catch (e) { 
+      console.error("Wiki Critical Init Error", e); 
+    } finally { 
+      setLoading(false); 
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    loadAllWikiData();
   }, []);
 
   const resolvePage = useCallback((target: string, pageList: WikiPage[]): WikiPage | null => {
@@ -106,7 +104,7 @@ const Wiki: React.FC<WikiProps> = ({
     ) || null;
   }, []);
 
-  // 2. Sync Active Page with URL and Expand Parents
+  // Sync Active Page with URL
   useEffect(() => {
     if (loading || !Array.isArray(pages) || pages.length === 0) return;
 
@@ -133,13 +131,6 @@ const Wiki: React.FC<WikiProps> = ({
     }
   }, [searchParams, pages, loading, resolvePage]);
 
-  const handleNavigate = (target: string) => {
-    const page = resolvePage(target, pages);
-    if (page) {
-      handlePageSelect(page);
-    }
-  };
-
   const handlePageSelect = (page: WikiPage) => {
     setActivePage(page);
     const params = new URLSearchParams(searchParams.toString());
@@ -155,18 +146,20 @@ const Wiki: React.FC<WikiProps> = ({
   };
 
   const refreshPages = async (activeId?: string) => {
-    const pgRes = await fetch('/api/wiki');
-    const newPages = await pgRes.json();
-    const validPages = Array.isArray(newPages) ? newPages : [];
-    setPages(validPages);
-    if (activeId) {
-      const updated = resolvePage(activeId, validPages);
-      if (updated) setActivePage(updated);
+    const res = await fetch('/api/wiki');
+    if (res.ok) {
+      const newPages = await res.json();
+      const validPages = Array.isArray(newPages) ? newPages : [];
+      setPages(validPages);
+      if (activeId) {
+        const updated = resolvePage(activeId, validPages);
+        if (updated) setActivePage(updated);
+      }
     }
   };
 
   const treeData = useMemo(() => {
-    if (!Array.isArray(pages) || !Array.isArray(spaces)) return [];
+    if (!Array.isArray(pages)) return [];
     
     let filtered = pages;
     if (selSpaceId !== 'all') {
@@ -203,10 +196,10 @@ const Wiki: React.FC<WikiProps> = ({
       const mId = page.milestoneId || 'no_milestone';
       const dtId = page.documentTypeId ? String(page.documentTypeId) : 'artifact';
 
-      const spaceObj = spaces.find(s => String(s._id || s.id) === sId);
-      const bundleObj = bundles.find(b => String(b._id || b.id) === bId);
-      const appObj = applications.find(a => String(a._id || a.id) === aId);
-      const typeObj = docTypes.find(t => String(t._id || t.id) === dtId);
+      const spaceObj = Array.isArray(spaces) ? spaces.find(s => String(s._id || s.id) === sId) : null;
+      const bundleObj = Array.isArray(bundles) ? bundles.find(b => String(b._id || b.id) === bId) : null;
+      const appObj = Array.isArray(applications) ? applications.find(a => String(a._id || a.id) === aId) : null;
+      const typeObj = Array.isArray(docTypes) ? docTypes.find(t => String(t._id || t.id) === dtId) : null;
 
       const spaceName = spaceObj?.name || (sId === 'unassigned' ? 'Shared Registry' : 'Unknown Space');
       const bundleName = bId === 'general' ? 'General' : (bundleObj?.name || 'Unknown Cluster');
@@ -225,10 +218,6 @@ const Wiki: React.FC<WikiProps> = ({
         addNode(bundleName, 'bundle', `folder-bundle-${sId}-${bId}`);
         addNode(appName, 'app', `folder-app-${sId}-${bId}-${aId}`);
         addNode(msName, 'milestone', `folder-ms-${sId}-${bId}-${aId}-${mId}`);
-      } else if (hierarchyMode === HierarchyMode.BUNDLE_MILESTONE_TYPE) {
-        addNode(bundleName, 'bundle', `folder-bundle-${bId}`);
-        addNode(msName, 'milestone', `folder-ms-${bId}-${mId}`);
-        addNode(typeName, 'type', `folder-type-${bId}-${mId}-${dtId}`);
       } else {
         addNode(spaceName, 'space', `folder-space-${sId}`);
         addNode(bundleName, 'bundle', `folder-bundle-${sId}-${bId}`);
@@ -348,7 +337,7 @@ const Wiki: React.FC<WikiProps> = ({
                    Refine Artifact
                 </button>
              </div>
-             <WikiPageDisplay page={activePage} onNavigate={handleNavigate} bundles={bundles} applications={applications} />
+             <WikiPageDisplay page={activePage} bundles={bundles} applications={applications} />
           </div>
         ) : (
           <div className="h-full flex flex-col items-center justify-center p-20 text-center bg-slate-50/10">
