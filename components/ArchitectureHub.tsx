@@ -14,11 +14,12 @@ interface ArchitectureHubProps {
   bundles: Bundle[];
   activeBundleId?: string;
   activeAppId?: string;
+  onUpdateApplications?: () => void;
 }
 
 type SubTab = 'capabilities' | 'integrations' | 'lifecycle' | 'diagrams' | 'infrastructure' | 'observability' | 'governance';
 
-const ArchitectureHub: React.FC<ArchitectureHubProps> = ({ applications, bundles, activeBundleId = 'all', activeAppId = 'all' }) => {
+const ArchitectureHub: React.FC<ArchitectureHubProps> = ({ applications, bundles, activeBundleId = 'all', activeAppId = 'all', onUpdateApplications }) => {
   const [activeSubTab, setActiveSubTab] = useState<SubTab>('capabilities');
 
   const tabs = [
@@ -35,7 +36,7 @@ const ArchitectureHub: React.FC<ArchitectureHubProps> = ({ applications, bundles
     switch (activeSubTab) {
       case 'capabilities': return <CapabilityMap applications={applications} />;
       case 'integrations': return <IntegrationMatrix applications={applications} />;
-      case 'lifecycle': return <PortfolioStrategy applications={applications} />;
+      case 'lifecycle': return <PortfolioStrategy applications={applications} bundles={bundles} onUpdate={onUpdateApplications} />;
       case 'diagrams': return <ArchitectureDiagrams applications={applications} bundles={bundles} activeBundleId={activeBundleId} activeAppId={activeAppId} />;
       case 'infrastructure': return <InfrastructureExplorer applications={applications} />;
       case 'observability': return <OpsCenter applications={applications} />;

@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useState, useEffect, Suspense, createContext, useContext, useMemo } from 'react';
+import React, { useState, useEffect, Suspense, createContext, useContext, useMemo, useCallback } from 'react';
 import Layout from './components/Layout';
 import Dashboard from './components/Dashboard';
 import Applications from './components/Applications';
@@ -110,6 +110,23 @@ function HomeContent() {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
+  const fetchRegistryData = useCallback(async () => {
+    try {
+      const [bRes, aRes] = await Promise.all([
+        fetch('/api/bundles?active=true'),
+        fetch('/api/applications?active=true')
+      ]);
+      
+      const bData = await bRes.json();
+      const aData = await aRes.json();
+      
+      setBundles(Array.isArray(bData) ? bData : []);
+      setApplications(Array.isArray(aData) ? aData : []);
+    } catch (err) {
+      console.error("Failed to refresh registry", err);
+    }
+  }, []);
+
   useEffect(() => {
     const tab = searchParams.get('tab');
     if (tab && tab !== activeTab) setActiveTab(tab);
@@ -129,16 +146,7 @@ function HomeContent() {
         if (authRes.ok) {
           const authData = await authRes.json();
           setUser(authData.user);
-          const [bRes, aRes] = await Promise.all([
-            fetch('/api/bundles?active=true'),
-            fetch('/api/applications?active=true')
-          ]);
-          
-          const bData = await bRes.json();
-          const aData = await aRes.json();
-          
-          setBundles(Array.isArray(bData) ? bData : []);
-          setApplications(Array.isArray(aData) ? aData : []);
+          await fetchRegistryData();
         } else {
           // If we're not logged in or API fails, provide demo context
           const devUser = { name: 'Demo Architect', role: 'Enterprise Architect', email: 'demo@nexus.com' };
@@ -155,7 +163,7 @@ function HomeContent() {
       }
     }
     init();
-  }, []);
+  }, [fetchRegistryData]);
 
   useEffect(() => {
     if (activeTab === 'work-items') {
@@ -187,7 +195,15 @@ function HomeContent() {
     switch (activeTab) {
       case 'dashboard': return <Dashboard applications={applications} bundles={bundles} />;
       case 'applications': return <Applications filterBundle={activeBundle} applications={applications} bundles={bundles} />;
-      case 'architecture': return <ArchitectureHub applications={applications} bundles={bundles} activeBundleId={activeBundle} activeAppId={activeApp} />;
+      case 'architecture': return (
+        <ArchitectureHub 
+          applications={applications} 
+          bundles={bundles} 
+          activeBundleId={activeBundle} 
+          activeAppId={activeApp} 
+          onUpdateApplications={fetchRegistryData}
+        />
+      );
       case 'ai-insights': return <AIInsights applications={applications} bundles={bundles} />;
       case 'work-items': return <WorkItems applications={applications} bundles={bundles} selBundleId={activeBundle} selAppId={activeApp} selMilestone="all" selEpicId="all" searchQuery="" />;
       case 'wiki': return <Wiki currentUser={user} selSpaceId="all" selBundleId={activeBundle} selAppId={activeApp} selMilestone="all" searchQuery="" bundles={bundles} applications={applications} />;

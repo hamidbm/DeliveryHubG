@@ -5,9 +5,10 @@ import { Application, TimeModelStatus, Bundle } from '../types';
 interface PortfolioStrategyProps {
   applications: Application[];
   bundles?: Bundle[];
+  onUpdate?: () => void;
 }
 
-const PortfolioStrategy: React.FC<PortfolioStrategyProps> = ({ applications, bundles = [] }) => {
+const PortfolioStrategy: React.FC<PortfolioStrategyProps> = ({ applications, bundles = [], onUpdate }) => {
   const [selectedApp, setSelectedApp] = useState<Application | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
   const [filterBundleId, setFilterBundleId] = useState<string>('all');
@@ -65,8 +66,8 @@ const PortfolioStrategy: React.FC<PortfolioStrategyProps> = ({ applications, bun
       });
       if (res.ok) {
         setSelectedApp(null);
-        // Refresh would normally happen via parent state or context
-        window.location.reload(); 
+        // Call the parent update instead of hard reload to preserve internal navigation state
+        if (onUpdate) onUpdate();
       }
     } finally {
       setIsUpdating(false);
