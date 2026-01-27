@@ -77,8 +77,8 @@ export const seedDatabase = async (applications: any[], workItems: any[], wikiPa
   try {
     const db = await getDb();
     if (applications.length) await db.collection('applications').insertMany(applications);
-    if (workItems.length) await db.collection('workitems').insertMany(workItems);
-    if (wikiPages.length) await db.collection('wikipages').insertMany(wikiPages);
+    if (workItems.length) await db.collection('wiki_items').insertMany(workItems);
+    if (wikiPages.length) await db.collection('wiki_pages').insertMany(wikiPages);
     return { success: true };
   } catch (error) {
     console.error("Seed error:", error);
@@ -89,7 +89,7 @@ export const seedDatabase = async (applications: any[], workItems: any[], wikiPa
 export const fetchWikiPages = async () => {
   try {
     const db = await getDb();
-    return await db.collection('wikipages').find({}).toArray();
+    return await db.collection('wiki_pages').find({}).toArray();
   } catch { return []; }
 };
 
@@ -99,21 +99,21 @@ export const saveWikiPage = async (page: Partial<WikiPage>) => {
   const now = new Date().toISOString();
   
   if (_id && ObjectId.isValid(_id as string)) {
-    const existing = await db.collection('wikipages').findOne({ _id: new ObjectId(_id) });
+    const existing = await db.collection('wiki_pages').findOne({ _id: new ObjectId(_id) });
     if (existing) {
-      await db.collection('wiki_versions').insertOne({
+      await db.collection('wiki_history').insertOne({
         ...existing,
         pageId: existing._id,
         _id: new ObjectId(),
         versionedAt: now
       });
     }
-    return await db.collection('wikipages').updateOne(
+    return await db.collection('wiki_pages').updateOne(
       { _id: new ObjectId(_id) },
       { $set: { ...data, updatedAt: now } }
     );
   } else {
-    return await db.collection('wikipages').insertOne({
+    return await db.collection('wiki_pages').insertOne({
       ...data,
       createdAt: now,
       updatedAt: now,
@@ -125,13 +125,13 @@ export const saveWikiPage = async (page: Partial<WikiPage>) => {
 export const fetchWikiHistory = async (pageId: string) => {
   try {
     const db = await getDb();
-    return await db.collection('wiki_versions').find({ pageId: new ObjectId(pageId) }).sort({ versionedAt: -1 }).toArray();
+    return await db.collection('wiki_history').find({ pageId: new ObjectId(pageId) }).sort({ versionedAt: -1 }).toArray();
   } catch { return []; }
 };
 
 export const revertWikiPage = async (pageId: string, versionId: string) => {
   const db = await getDb();
-  const version = await db.collection('wiki_versions').findOne({ _id: new ObjectId(versionId) });
+  const version = await db.collection('wiki_history').findOne({ _id: new ObjectId(versionId) });
   if (!version) throw new Error("Version not found");
   const { _id, pageId: pid, versionedAt, ...data } = version;
   return await saveWikiPage({ ...data, _id: pageId } as any);
@@ -140,8 +140,7 @@ export const revertWikiPage = async (pageId: string, versionId: string) => {
 export const fetchWikiSpaces = async () => {
   try {
     const db = await getDb();
-    // Standardizing on 'wikispaces' to prevent naming conflicts with system collections
-    return await db.collection('wikispaces').find({}).toArray();
+    return await db.collection('wiki_spaces').find({}).toArray();
   } catch { return []; }
 };
 
@@ -149,16 +148,16 @@ export const saveWikiSpace = async (space: Partial<WikiSpace>) => {
   const db = await getDb();
   const { _id, ...data } = space;
   if (_id && ObjectId.isValid(_id as string)) {
-    return await db.collection('wikispaces').updateOne({ _id: new ObjectId(_id) }, { $set: data });
+    return await db.collection('wiki_spaces').updateOne({ _id: new ObjectId(_id) }, { $set: data });
   } else {
-    return await db.collection('wikispaces').insertOne(data);
+    return await db.collection('wiki_spaces').insertOne(data);
   }
 };
 
 export const fetchWikiComments = async (pageId: string) => {
   try {
     const db = await getDb();
-    const page = await db.collection('wikipages').findOne({ _id: new ObjectId(pageId) });
+    const page = await db.collection('wiki_pages').findOne({ _id: new ObjectId(pageId) });
     return page?.comments || [];
   } catch { return []; }
 };
@@ -166,7 +165,7 @@ export const fetchWikiComments = async (pageId: string) => {
 export const saveWikiComment = async (commentData: any) => {
   const db = await getDb();
   const { pageId, ...comment } = commentData;
-  return await db.collection('wikipages').updateOne(
+  return await db.collection('wiki_pages').updateOne(
     { _id: new ObjectId(pageId) },
     { $push: { comments: { ...comment, createdAt: new Date().toISOString() } } }
   );
@@ -195,7 +194,7 @@ export const fetchWikiThemes = async (activeOnly: boolean = false) => {
   try {
     const db = await getDb();
     const query = activeOnly ? { isActive: true } : {};
-    return await db.collection('themes').find(query).toArray();
+    return await db.collection('wiki_themes').find(query).toArray();
   } catch { return []; }
 };
 
@@ -203,15 +202,15 @@ export const saveWikiTheme = async (theme: Partial<WikiTheme>) => {
   const db = await getDb();
   const { _id, ...data } = theme;
   if (_id && ObjectId.isValid(_id as string)) {
-    return await db.collection('themes').updateOne({ _id: new ObjectId(_id) }, { $set: data });
+    return await db.collection('wiki_themes').updateOne({ _id: new ObjectId(_id) }, { $set: data });
   } else {
-    return await db.collection('themes').insertOne(data);
+    return await db.collection('wiki_themes').insertOne(data);
   }
 };
 
 export const deleteWikiTheme = async (id: string) => {
   const db = await getDb();
-  return await db.collection('themes').deleteOne({ _id: new ObjectId(id) });
+  return await db.collection('wiki_themes').deleteOne({ _id: new ObjectId(id) });
 };
 
 export const fetchApplications = async (bundleId?: string, activeOnly: boolean = false) => {
@@ -342,7 +341,7 @@ export const fetchWorkItems = async (filters: any) => {
       ];
     }
     
-    return await db.collection('workitems').find(query).sort(sort).toArray();
+    return await db.collection('wiki_items').find(query).sort(sort).toArray();
   } catch { return []; }
 };
 
@@ -350,11 +349,11 @@ export const fetchWorkItemById = async (id: string) => {
   try {
     const db = await getDb();
     if (ObjectId.isValid(id)) {
-      return await db.collection('workitems').findOne({ 
+      return await db.collection('wiki_items').findOne({ 
         $or: [{ _id: new ObjectId(id) }, { id: id }, { key: id }] 
       });
     }
-    return await db.collection('workitems').findOne({ 
+    return await db.collection('wiki_items').findOne({ 
       $or: [{ id: id }, { key: id }] 
     });
   } catch { return null; }
@@ -367,7 +366,7 @@ export const saveWorkItem = async (item: Partial<WorkItem>, user?: any) => {
   const userName = user?.name || 'Nexus System';
 
   if (_id && ObjectId.isValid(_id as string)) {
-    const existing = await db.collection('workitems').findOne({ _id: new ObjectId(_id) });
+    const existing = await db.collection('wiki_items').findOne({ _id: new ObjectId(_id) });
     if (!existing) throw new Error("Work item not found");
 
     const activities: any[] = [];
@@ -420,7 +419,7 @@ export const saveWorkItem = async (item: Partial<WorkItem>, user?: any) => {
     const finalSet = { ...data, updatedAt: now, updatedBy: userName };
     const finalPush = { activity: { $each: activities } };
 
-    return await db.collection('workitems').updateOne(
+    return await db.collection('wiki_items').updateOne(
       { _id: new ObjectId(_id) },
       { $set: finalSet, $push: finalPush }
     );
@@ -433,7 +432,7 @@ export const saveWorkItem = async (item: Partial<WorkItem>, user?: any) => {
           : { key: data.bundleId }
       );
       const prefix = bundle?.key || 'TASK';
-      const count = await db.collection('workitems').countDocuments({ bundleId: data.bundleId });
+      const count = await db.collection('wiki_items').countDocuments({ bundleId: data.bundleId });
       key = `${prefix}-${count + 1}`;
     }
 
@@ -445,7 +444,7 @@ export const saveWorkItem = async (item: Partial<WorkItem>, user?: any) => {
       createdBy: userName,
       activity: [{ user: userName, action: 'CREATED', createdAt: now }]
     };
-    return await db.collection('workitems').insertOne(newItem);
+    return await db.collection('wiki_items').insertOne(newItem);
   }
 };
 
@@ -454,10 +453,10 @@ export const updateWorkItemStatus = async (id: string, toStatus: string, newRank
   const now = new Date().toISOString();
   const userName = user?.name || 'Nexus System';
   
-  const existing = await db.collection('workitems').findOne({ _id: new ObjectId(id) });
+  const existing = await db.collection('wiki_items').findOne({ _id: new ObjectId(id) });
   if (!existing) return null;
 
-  return await db.collection('workitems').updateOne(
+  return await db.collection('wiki_items').updateOne(
     { _id: new ObjectId(id) },
     { 
       $set: { status: toStatus, rank: newRank, updatedAt: now },
