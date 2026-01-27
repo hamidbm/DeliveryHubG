@@ -38,7 +38,7 @@ const ArchitectureHub: React.FC<ArchitectureHubProps> = ({ applications, bundles
       case 'integrations': return <IntegrationMatrix applications={applications} />;
       case 'lifecycle': return <PortfolioStrategy applications={applications} bundles={bundles} onUpdate={onUpdateApplications} />;
       case 'diagrams': return <ArchitectureDiagrams applications={applications} bundles={bundles} activeBundleId={activeBundleId} activeAppId={activeAppId} />;
-      case 'infrastructure': return <InfrastructureExplorer applications={applications} />;
+      case 'infrastructure': return <InfrastructureExplorer applications={applications} onUpdate={onUpdateApplications} />;
       case 'observability': return <OpsCenter applications={applications} />;
       case 'governance': return <GovernanceDocuments />;
       default: return <CapabilityMap applications={applications} />;

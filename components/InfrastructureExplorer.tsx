@@ -26,7 +26,7 @@ resource "azurerm_kubernetes_cluster" "aks" {
   }
 }`;
 
-const InfrastructureExplorer: React.FC<{ applications: Application[] }> = ({ applications }) => {
+const InfrastructureExplorer: React.FC<{ applications: Application[], onUpdate?: () => void }> = ({ applications, onUpdate }) => {
   const [selectedApp, setSelectedApp] = useState<Application | null>(null);
   const [tfCode, setTfCode] = useState('');
   const [aiInsight, setAiInsight] = useState<string | null>(null);
@@ -78,11 +78,17 @@ const InfrastructureExplorer: React.FC<{ applications: Application[] }> = ({ app
         lastAppliedAt: new Date().toISOString()
     };
     try {
-      await fetch(`/api/applications/${selectedApp._id}`, {
+      const res = await fetch(`/api/applications/${selectedApp._id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ cloudMetadata: metadata })
       });
+      if (res.ok) {
+        // Update local app state so switching tabs works immediately
+        setSelectedApp({ ...selectedApp, cloudMetadata: metadata as any });
+        // Notify parent to refresh global registry
+        if (onUpdate) onUpdate();
+      }
     } finally {
       setSaving(false);
     }

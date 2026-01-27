@@ -41,7 +41,7 @@ subgraph AZ["Azure Landing Zone"]
 direction LR
 
 subgraph ID["Identity & Secrets"]
-ENTRA[Microsoft Entra ID\\nOIDC / OAuth2]:::security
+ENTRA[Microsoft Enra ID\\nOIDC / OAuth2]:::security
 KV[Azure Key Vault\\nSecrets & Certificates]:::security
 end
 
@@ -507,9 +507,14 @@ const ArchitectureDesigner: React.FC<{
   }, [format, code]);
 
   const handleAiGeneration = async () => {
-    const app = applications.find(a => a._id === activeAppId);
+    if (!activeAppId || activeAppId === 'all') {
+      alert("Please select a valid Application Context in the Mapping sidebar before generating from IaC.");
+      return;
+    }
+
+    const app = applications.find(a => (a._id || a.id) === activeAppId);
     if (!app?.cloudMetadata?.terraformCode) {
-      alert("Selected application context has no Terraform (IaC) code stored in the registry. Please add IaC code in the Infrastructure tab first.");
+      alert(`The selected application (${app?.name || 'Unknown'}) does not have a Terraform script saved in the Registry. Go to Infrastructure -> IaC Definition to add it.`);
       return;
     }
 
@@ -555,6 +560,11 @@ const ArchitectureDesigner: React.FC<{
     }
   }, [title, diagram, format, activeBundleId, activeAppId, activeMilestoneId, tagsInput, onSuccess]);
 
+  // Determine if we should show the "Generate from IaC" button
+  const showAiGenButton = useMemo(() => {
+    return activeAppId && activeAppId !== 'all' && !readOnly;
+  }, [activeAppId, readOnly]);
+
   return (
     <div className="fixed inset-0 z-[200] bg-white flex flex-col animate-fadeIn overflow-hidden">
       <header className="px-10 py-5 bg-white border-b border-slate-200 flex items-center justify-between shrink-0 z-[210]">
@@ -573,7 +583,7 @@ const ArchitectureDesigner: React.FC<{
               ))}
             </div>
           )}
-          {activeAppId && !readOnly && (
+          {showAiGenButton && (
              <button 
                 onClick={handleAiGeneration}
                 disabled={isAiGenerating}
@@ -631,7 +641,7 @@ const ArchitectureDesigner: React.FC<{
                    <div className="space-y-2">
                       <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Application Mapping</label>
                       <select disabled={readOnly} value={activeAppId} onChange={(e) => setActiveAppId(e.target.value)} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-xs font-bold text-slate-700 outline-none hover:border-blue-200 transition-all disabled:opacity-50">
-                         <option value="">Global Resource</option>
+                         <option value="all">Global Resource</option>
                          {applications.filter(a => !activeBundleId || a.bundleId === activeBundleId).map(a => <option key={a._id} value={a._id}>{a.name}</option>)}
                       </select>
                    </div>
