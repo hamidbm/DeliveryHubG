@@ -1,6 +1,6 @@
 import clientPromise from '../lib/mongodb';
 import { ObjectId } from 'mongodb';
-import { WikiPage, WikiSpace, WikiTheme, Bundle, Application, TaxonomyCategory, TaxonomyDocumentType, WorkItem, WorkItemType, WorkItemStatus, WorkItemActivity, Sprint, Milestone, Notification, ArchitectureDiagram, BusinessCapability, AppInterface } from '../types';
+import { WikiPage, WikiSpace, WikiTheme, Bundle, Application, TaxonomyCategory, TaxonomyDocumentType, WorkItem, WorkItemType, WorkItemStatus, WorkItemActivity, Sprint, Milestone, Notification, ArchitectureDiagram, BusinessCapability, AppInterface, WikiAsset } from '../types';
 
 export const getDb = async () => {
   try {
@@ -91,6 +91,32 @@ export const fetchWikiPages = async () => {
     const db = await getDb();
     return await db.collection('wiki_pages').find({}).toArray();
   } catch { return []; }
+};
+
+export const fetchWikiAssets = async () => {
+  try {
+    const db = await getDb();
+    return await db.collection('wiki_assets').find({}).toArray();
+  } catch { return []; }
+};
+
+export const saveWikiAsset = async (asset: Partial<WikiAsset>) => {
+  const db = await getDb();
+  const { _id, ...data } = asset;
+  const now = new Date().toISOString();
+  if (_id && ObjectId.isValid(_id as string)) {
+    return await db.collection('wiki_assets').updateOne(
+      { _id: new ObjectId(_id) },
+      { $set: { ...data, updatedAt: now } }
+    );
+  } else {
+    return await db.collection('wiki_assets').insertOne({
+      ...data,
+      createdAt: now,
+      updatedAt: now,
+      version: 1
+    });
+  }
 };
 
 export const saveWikiPage = async (page: Partial<WikiPage>) => {

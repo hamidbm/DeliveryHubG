@@ -1,4 +1,3 @@
-
 export enum Role {
   ARCHITECT = 'Enterprise Architect',
   INTERNAL_ENGINEER = 'Internal Engineer',
@@ -227,6 +226,49 @@ export interface Milestone {
 }
 
 export interface WikiPage { id?: string; _id?: string; slug?: string; title: string; content: string; parentId?: string; spaceId: string; bundleId?: string; applicationId?: string; milestoneId?: string; documentTypeId?: string; createdAt?: string; updatedAt?: string; author?: string; lastModifiedBy?: string; version?: number; status?: 'Draft' | 'Published' | 'Archived'; themeKey?: string; }
+
+export interface WikiAsset {
+  _id?: string;
+  id?: string;
+  title: string;
+  spaceId: string;
+  category?: string;
+  tags?: string[];
+  author: string;
+  lastModifiedBy: string;
+  createdAt: string;
+  updatedAt: string;
+  version: number;
+  status: 'Published' | 'Draft';
+  themeKey?: string;
+  applicationId?: string;
+  bundleId?: string;
+  milestoneId?: string;
+  documentTypeId?: string;
+  file: {
+    originalName: string;
+    ext: string;
+    mimeType: string;
+    sizeBytes: number;
+    checksumSha256?: string;
+  };
+  storage: {
+    provider: 'gridfs' | 'base64';
+    objectKey: string; // The data or ID
+  };
+  preview: {
+    status: 'pending' | 'ready' | 'failed';
+    kind: 'pdf' | 'html' | 'images' | 'markdown' | 'none';
+    objectKey?: string;
+    meta?: {
+      pageCount?: number;
+      slideCount?: number;
+      sheetNames?: string[];
+    };
+    error?: string | null;
+  };
+}
+
 export interface WikiVersion extends WikiPage { versionedAt: string; pageId: string; }
 export interface WikiSpace { _id?: string; id?: string; key: string; name: string; description?: string; icon?: string; color?: string; visibility: 'internal' | 'vendors' | 'specific'; createdAt?: string; defaultThemeKey?: string; }
 export interface WikiTheme { _id?: string; key: string; name: string; description?: string; css: string; isActive: boolean; isDefault: boolean; createdAt?: string; updatedAt?: string; }

@@ -21,8 +21,8 @@ declare global {
     openSelectKey: () => Promise<void>;
   }
   interface Window {
-    // Removed readonly modifier to resolve "All declarations of 'aistudio' must have identical modifiers" error.
-    aistudio: AIStudio;
+    // Fix: Added readonly modifier back to match external property declarations and resolve "All declarations of 'aistudio' must have identical modifiers" error.
+    readonly aistudio: AIStudio;
   }
 }
 

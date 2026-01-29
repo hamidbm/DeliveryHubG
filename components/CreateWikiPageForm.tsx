@@ -19,6 +19,7 @@ interface CreateWikiPageFormProps {
 const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({ 
   spaceId, initialBundleId = '', initialApplicationId = '', initialMilestoneId = '', currentUser, onSaveSuccess, onCancel, bundles, applications
 }) => {
+  const [mode, setMode] = useState<'author' | 'upload'>('author');
   const [title, setTitle] = useState('');
   const [slug, setSlug] = useState('');
   const [content, setContent] = useState('');
@@ -32,11 +33,14 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'edit' | 'preview'>('edit');
   const [editorFormat, setEditorFormat] = useState<'markdown' | 'html'>('html');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  
   const [themes, setThemes] = useState<WikiTheme[]>([]);
   const [categories, setCategories] = useState<TaxonomyCategory[]>([]);
   const [docTypes, setDocTypes] = useState<TaxonomyDocumentType[]>([]);
 
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const loadData = async () => {
@@ -67,6 +71,52 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
     }
   };
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setSelectedFile(file);
+      if (!title) handleTitleChange(file.name.split('.').shift() || '');
+    }
+  };
+
+  const handleSave = async () => {
+    if (!title.trim()) { setSaveError("Title required."); return; }
+    setIsSaving(true);
+    setSaveError(null);
+
+    try {
+      if (mode === 'author') {
+        const payload: Partial<WikiPage> = {
+          title: title.trim(), content, slug, spaceId, bundleId: bundleId || undefined,
+          applicationId: applicationId || undefined, milestoneId: milestoneId || undefined,
+          documentTypeId: documentTypeId || undefined, themeKey: themeKey || undefined, status,
+          author: currentUser?.name || 'System', lastModifiedBy: currentUser?.name || 'System'
+        };
+        const res = await fetch('/api/wiki', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        const data = await res.json();
+        if (res.ok) onSaveSuccess(data.result?.insertedId || '');
+        else setSaveError(data.error || "Save failed.");
+      } else {
+        if (!selectedFile) { setSaveError("Please select a file."); setIsSaving(false); return; }
+        const formData = new FormData();
+        formData.append('file', selectedFile);
+        formData.append('title', title.trim());
+        formData.append('spaceId', spaceId);
+        if (bundleId) formData.append('bundleId', bundleId);
+        if (applicationId) formData.append('applicationId', applicationId);
+        if (milestoneId) formData.append('milestoneId', milestoneId);
+        if (documentTypeId) formData.append('documentTypeId', documentTypeId);
+        if (themeKey) formData.append('themeKey', themeKey);
+
+        const res = await fetch('/api/wiki/assets', { method: 'POST', body: formData });
+        const data = await res.json();
+        if (res.ok) onSaveSuccess(data.result?.insertedId || '');
+        else setSaveError(data.error || "Upload failed.");
+      }
+    } catch (err) { setSaveError("Network failure."); }
+    finally { setIsSaving(false); }
+  };
+
   const insertText = (before: string, after: string = '') => {
     if (!textAreaRef.current) return;
     const textarea = textAreaRef.current;
@@ -77,111 +127,116 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
     setTimeout(() => { textarea.focus(); textarea.setSelectionRange(start + before.length, start + before.length + (end - start)); }, 0);
   };
 
-  const handleTypeChange = (val: string) => {
-    setDocumentTypeId(val);
-    const selected = docTypes.find(t => t._id === val);
-    if (selected?.defaultTemplate && (!content || content.trim() === "")) {
-      setContent(selected.defaultTemplate);
-    }
-  };
-
-  const handleSave = async () => {
-    if (!title.trim()) { setSaveError("Title required."); return; }
-    setIsSaving(true);
-    const payload: Partial<WikiPage> = {
-      title: title.trim(), content, slug, spaceId, bundleId: bundleId || undefined,
-      applicationId: applicationId || undefined, milestoneId: milestoneId || undefined,
-      documentTypeId: documentTypeId || undefined, themeKey: themeKey || undefined, status,
-      author: currentUser?.name || 'System', lastModifiedBy: currentUser?.name || 'System'
-    };
-    try {
-      const res = await fetch('/api/wiki', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-      const data = await res.json();
-      if (res.ok) onSaveSuccess(data.result?.insertedId || '');
-      else setSaveError("Save failed.");
-    } catch (err) { setSaveError("Network failure."); }
-    finally { setIsSaving(false); }
-  };
-
   return (
     <div className="fixed inset-0 z-[100] bg-slate-50 flex flex-col animate-fadeIn">
       <header className="px-10 py-5 bg-white border-b border-slate-200 flex items-center justify-between shadow-sm shrink-0">
         <div className="flex items-center gap-6">
           <button onClick={onCancel} className="w-10 h-10 rounded-full bg-slate-50 hover:bg-slate-100 flex items-center justify-center text-slate-400 border border-slate-100"><i className="fas fa-times"></i></button>
           <div className="flex flex-col">
-            <span className="text-[9px] font-black text-blue-600 uppercase tracking-widest leading-none mb-1">New Artifact Creator</span>
-            <input value={title} onChange={(e) => handleTitleChange(e.target.value)} className="text-2xl font-black text-slate-800 border-none p-0 focus:ring-0 outline-none bg-transparent w-[400px]" placeholder="Untitled Artifact" />
+            <span className="text-[9px] font-black text-blue-600 uppercase tracking-widest leading-none mb-1">Provisioning Registry Artifact</span>
+            <input value={title} onChange={(e) => handleTitleChange(e.target.value)} className="text-2xl font-black text-slate-800 border-none p-0 focus:ring-0 outline-none bg-transparent w-[400px]" placeholder="Artifact Title" />
           </div>
         </div>
-        <div className="flex items-center gap-4">
-          <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 mr-2 shadow-inner">
-            <button onClick={() => setEditorFormat('markdown')} className={`px-4 py-2 text-[9px] font-black uppercase rounded-lg transition-all ${editorFormat === 'markdown' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}>Markdown</button>
-            <button onClick={() => setEditorFormat('html')} className={`px-4 py-2 text-[9px] font-black uppercase rounded-lg transition-all ${editorFormat === 'html' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}>HTML</button>
+        
+        <div className="flex items-center gap-6">
+          <div className="flex bg-slate-100 p-1.5 rounded-2xl border border-slate-200 shadow-inner">
+             <button onClick={() => setMode('author')} className={`px-6 py-2.5 text-[10px] font-black uppercase rounded-xl transition-all flex items-center gap-2 ${mode === 'author' ? 'bg-white text-blue-600 shadow-xl' : 'text-slate-400 hover:text-slate-600'}`}>
+                <i className="fas fa-pen-nib"></i> Editor Mode
+             </button>
+             <button onClick={() => setMode('upload')} className={`px-6 py-2.5 text-[10px] font-black uppercase rounded-xl transition-all flex items-center gap-2 ${mode === 'upload' ? 'bg-white text-blue-600 shadow-xl' : 'text-slate-400 hover:text-slate-600'}`}>
+                <i className="fas fa-file-upload"></i> Asset Upload
+             </button>
           </div>
 
-          <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 mr-4 shadow-inner">
-            <button onClick={() => setStatus('Draft')} className={`px-4 py-2 text-[10px] font-black uppercase rounded-lg ${status === 'Draft' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}>Draft</button>
-            <button onClick={() => setStatus('Published')} className={`px-4 py-2 text-[10px] font-black uppercase rounded-lg ${status === 'Published' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}>Publish</button>
-          </div>
           <button onClick={handleSave} disabled={isSaving} className="px-10 py-3.5 bg-slate-900 text-white rounded-2xl shadow-xl font-black text-[10px] uppercase tracking-widest flex items-center gap-3 active:scale-95 transition-all">
-            {isSaving ? <i className="fas fa-circle-notch fa-spin"></i> : <i className="fas fa-save"></i>} {isSaving ? 'Creating...' : 'Create Artifact'}
+            {isSaving ? <i className="fas fa-circle-notch fa-spin"></i> : <i className="fas fa-save"></i>} 
+            {isSaving ? (mode === 'upload' ? 'Uploading...' : 'Saving...') : (mode === 'upload' ? 'Upload Asset' : 'Commit Artifact')}
           </button>
         </div>
       </header>
 
       <div className="flex flex-1 overflow-hidden">
         <main className="flex-1 flex flex-col overflow-hidden bg-white shadow-inner relative">
-          <div className="px-8 py-3 border-b border-slate-100 bg-slate-50 flex items-center justify-between z-50">
-             <div className="flex items-center gap-1">
-                <ToolbarButton icon="fa-bold" onClick={() => insertText(editorFormat === 'html' ? '<b>' : '**', editorFormat === 'html' ? '</b>' : '**')} />
-                <ToolbarButton icon="fa-italic" onClick={() => insertText(editorFormat === 'html' ? '<i>' : '*', editorFormat === 'html' ? '</i>' : '*')} />
-                <ToolbarButton icon="fa-heading" onClick={() => insertText(editorFormat === 'html' ? '<h2>' : '## ', editorFormat === 'html' ? '</h2>' : '')} />
-                <ToolbarButton icon="fa-paragraph" onClick={() => insertText(editorFormat === 'html' ? '<p>' : '', editorFormat === 'html' ? '</p>' : '\n\n')} />
-                <div className="w-[1px] h-6 bg-slate-200 mx-2"></div>
-                <ToolbarButton icon="fa-list-ul" onClick={() => insertText(editorFormat === 'html' ? '<ul>\n  <li>' : '- ', editorFormat === 'html' ? '</li>\n</ul>' : '')} />
-                <ToolbarButton icon="fa-table" onClick={() => insertText(editorFormat === 'html' ? '\n<table>\n  <tr><th>Header</th></tr>\n  <tr><td>Cell</td></tr>\n</table>\n' : '\n| Header |\n| --- |\n| Cell |\n')} />
-                <div className="w-[1px] h-6 bg-slate-200 mx-2"></div>
-                <ToolbarButton icon="fa-link" onClick={() => insertText(editorFormat === 'html' ? '<a href="/wiki/TARGET-SLUG">Link Title' : '[Link Title](/wiki/TARGET-SLUG', editorFormat === 'html' ? '</a>' : ')')} />
-                <div className="w-[1px] h-6 bg-slate-200 mx-2"></div>
-                <ToolbarButton icon="fa-circle-info" onClick={() => insertText('<div class="callout info">\n  <div class="title"><i class="fas fa-circle-info"></i> INFO</div>\n  <p>', '</p>\n</div>')} />
-                <ToolbarButton icon="fa-triangle-exclamation" onClick={() => insertText('<div class="callout warn">\n  <div class="title"><i class="fas fa-triangle-exclamation"></i> WARNING</div>\n  <p>', '</p>\n</div>')} />
-                <ToolbarButton icon="fa-grip" onClick={() => insertText('<div class="cards">\n  <div class="card accent span-6">\n    <div class="card-title">Card Title</div>\n    <div class="card-meta">META TAG</div>\n    <p>', '</p>\n  </div>\n</div>')} />
-                <ToolbarButton icon="fa-code" onClick={() => insertText(editorFormat === 'html' ? '<pre><code>' : '```\n', editorFormat === 'html' ? '</code></pre>' : '\n```')} />
-             </div>
-             <button onClick={() => setViewMode(viewMode === 'preview' ? 'edit' : 'preview')} className={`px-4 py-1.5 text-[9px] font-black uppercase rounded-xl transition-all ${viewMode === 'preview' ? 'bg-slate-900 text-white' : 'bg-white border border-slate-200 text-slate-500'}`}>
-                {viewMode === 'preview' ? 'Editor View' : 'Preview Artifact'}
-             </button>
-          </div>
-          <div className="flex-1 overflow-y-auto">
-            {viewMode === 'edit' ? (
-              <textarea 
-                value={content} 
-                onChange={(e) => setContent(e.target.value)} 
-                ref={textAreaRef}
-                className="w-full h-full p-12 text-slate-700 leading-relaxed resize-none text-lg outline-none font-medium placeholder:text-slate-300" 
-                placeholder="Start authoring content..." 
-              />
-            ) : (
-              <div className="p-12 max-w-5xl mx-auto">
-                <WikiPageDisplay page={{ title, content, slug, spaceId, bundleId, applicationId, milestoneId, documentTypeId, themeKey }} bundles={bundles} applications={applications} />
+          {mode === 'author' ? (
+            <>
+              <div className="px-8 py-3 border-b border-slate-100 bg-slate-50 flex items-center justify-between z-50">
+                 <div className="flex items-center gap-1">
+                    <ToolbarButton icon="fa-bold" onClick={() => insertText(editorFormat === 'html' ? '<b>' : '**', editorFormat === 'html' ? '</b>' : '**')} />
+                    <ToolbarButton icon="fa-italic" onClick={() => insertText(editorFormat === 'html' ? '<i>' : '*', editorFormat === 'html' ? '</i>' : '*')} />
+                    <ToolbarButton icon="fa-heading" onClick={() => insertText(editorFormat === 'html' ? '<h2>' : '## ', editorFormat === 'html' ? '</h2>' : '')} />
+                    <div className="w-[1px] h-6 bg-slate-200 mx-2"></div>
+                    <ToolbarButton icon="fa-link" onClick={() => insertText(editorFormat === 'html' ? '<a href="/wiki/TARGET-SLUG">' : '[Link Title](/wiki/TARGET-SLUG', editorFormat === 'html' ? '</a>' : ')')} />
+                    <ToolbarButton icon="fa-circle-info" onClick={() => insertText('<div class="callout info">\n  <div class="title"><i class="fas fa-circle-info"></i> INFO</div>\n  <p>', '</p>\n</div>')} />
+                 </div>
+                 <div className="flex gap-2">
+                    <div className="flex bg-white rounded-lg p-0.5 border border-slate-200 text-[8px] font-black uppercase">
+                       <button onClick={() => setEditorFormat('markdown')} className={`px-3 py-1 rounded ${editorFormat === 'markdown' ? 'bg-blue-600 text-white' : 'text-slate-400'}`}>MD</button>
+                       <button onClick={() => setEditorFormat('html')} className={`px-3 py-1 rounded ${editorFormat === 'html' ? 'bg-blue-600 text-white' : 'text-slate-400'}`}>HTML</button>
+                    </div>
+                    <button onClick={() => setViewMode(viewMode === 'preview' ? 'edit' : 'preview')} className={`px-4 py-1.5 text-[9px] font-black uppercase rounded-xl transition-all ${viewMode === 'preview' ? 'bg-slate-900 text-white' : 'bg-white border border-slate-200 text-slate-500'}`}>
+                       {viewMode === 'preview' ? 'Editor' : 'Preview'}
+                    </button>
+                 </div>
               </div>
-            )}
-          </div>
+              <div className="flex-1 overflow-y-auto">
+                {viewMode === 'edit' ? (
+                  <textarea value={content} onChange={(e) => setContent(e.target.value)} ref={textAreaRef} className="w-full h-full p-12 text-slate-700 leading-relaxed resize-none text-lg outline-none font-medium placeholder:text-slate-300" placeholder="Start authoring artifact content..." />
+                ) : (
+                  <div className="p-12 max-w-5xl mx-auto"><WikiPageDisplay page={{ title, content, slug, spaceId, bundleId, applicationId, milestoneId, documentTypeId, themeKey }} bundles={bundles} applications={applications} /></div>
+                )}
+              </div>
+            </>
+          ) : (
+            <div className="flex-1 flex flex-col items-center justify-center p-20 text-center">
+               <div 
+                 onClick={() => fileInputRef.current?.click()}
+                 onDragOver={(e) => e.preventDefault()}
+                 onDrop={(e) => { e.preventDefault(); if (e.dataTransfer.files[0]) handleFileChange({ target: { files: e.dataTransfer.files } } as any); }}
+                 className="w-full max-w-2xl border-4 border-dashed border-slate-100 rounded-[3.5rem] p-24 hover:border-blue-500 hover:bg-blue-50/30 transition-all cursor-pointer group flex flex-col items-center"
+               >
+                  <div className="w-24 h-24 bg-white rounded-3xl flex items-center justify-center text-4xl text-slate-200 group-hover:text-blue-500 shadow-xl group-hover:scale-110 transition-all mb-8">
+                     <i className="fas fa-cloud-arrow-up"></i>
+                  </div>
+                  {selectedFile ? (
+                    <div className="space-y-2">
+                       <h3 className="text-xl font-black text-slate-800">{selectedFile.name}</h3>
+                       <p className="text-sm font-bold text-blue-600 uppercase tracking-widest">{(selectedFile.size / 1024).toFixed(1)} KB READY</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                       <h3 className="text-2xl font-black text-slate-800 tracking-tight">Stage Local Document</h3>
+                       <p className="text-slate-400 font-medium max-w-sm">Drop PDF, DOCX, XLSX, or images here to synchronize with the Enterprise Wiki registry.</p>
+                       <span className="inline-block px-6 py-2 bg-slate-900 text-white rounded-xl text-[9px] font-black uppercase tracking-widest mt-4">Select Source File</span>
+                    </div>
+                  )}
+                  <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileChange} />
+               </div>
+               
+               <div className="mt-12 flex gap-12 text-slate-300">
+                  <div className="flex flex-col items-center gap-2"><i className="fas fa-file-pdf text-2xl"></i><span className="text-[8px] font-black uppercase">PDF</span></div>
+                  <div className="flex flex-col items-center gap-2"><i className="fas fa-file-word text-2xl"></i><span className="text-[8px] font-black uppercase">Word</span></div>
+                  <div className="flex flex-col items-center gap-2"><i className="fas fa-file-excel text-2xl"></i><span className="text-[8px] font-black uppercase">Excel</span></div>
+                  <div className="flex flex-col items-center gap-2"><i className="fas fa-file-powerpoint text-2xl"></i><span className="text-[8px] font-black uppercase">PPTX</span></div>
+               </div>
+            </div>
+          )}
         </main>
         
         <aside className="w-80 border-l border-slate-200 bg-slate-50 p-8 space-y-10 shrink-0 overflow-y-auto custom-scrollbar">
           <div className="space-y-6">
             <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><i className="fas fa-cog"></i> Classification</h4>
             
-            <div className="space-y-2">
-              <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Document Slug (Stable URL)</label>
-              <input value={slug} onChange={(e) => setSlug(generateSlug(e.target.value))} className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-4 text-xs font-bold text-blue-600 outline-none shadow-sm focus:border-blue-500 transition-all" placeholder="my-stable-link" />
-            </div>
+            {mode === 'author' && (
+              <div className="space-y-2">
+                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Stable Link (Slug)</label>
+                <input value={slug} onChange={(e) => setSlug(generateSlug(e.target.value))} className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-4 text-xs font-bold text-blue-600 outline-none shadow-sm focus:border-blue-500 transition-all" />
+              </div>
+            )}
 
             <div className="space-y-2">
-              <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Document Type</label>
-              <select value={documentTypeId} onChange={(e) => handleTypeChange(e.target.value)} className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-4 text-xs font-bold text-slate-700 outline-none shadow-sm focus:border-blue-500 transition-all">
-                <option value="">Generic Document</option>
+              <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Semantic Doc Type</label>
+              <select value={documentTypeId} onChange={(e) => setDocumentTypeId(e.target.value)} className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-4 text-xs font-bold text-slate-700 outline-none shadow-sm focus:border-blue-500 transition-all">
+                <option value="">Select Bluepint...</option>
                 {categories.map(cat => (
                   <optgroup key={cat._id} label={cat.name}>
                     {docTypes.filter(t => t.categoryId === cat._id).map(type => (
@@ -192,25 +247,19 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
               </select>
             </div>
 
-            <SidebarField label="Target Bundle" value={bundleId} onChange={setBundleId} options={bundles.map(b => ({ id: b._id, name: b.name }))} />
+            <SidebarField label="Business Bundle" value={bundleId} onChange={setBundleId} options={bundles.map(b => ({ id: b._id, name: b.name }))} />
             <SidebarField label="Target Application" value={applicationId} onChange={setApplicationId} options={applications.filter(a => !bundleId || a.bundleId === bundleId).map(a => ({ id: a._id || a.id, name: a.name }))} />
-            <SidebarField label="Milestone" value={milestoneId} onChange={setMilestoneId} options={[...Array(10)].map((_, i) => ({ id: `M${i+1}`, name: `M${i+1}` }))} />
-            <SidebarField label="Visual Theme" value={themeKey} onChange={setThemeKey} options={themes.map(t => ({ id: t.key, name: t.name }))} />
+            <SidebarField label="Release Milestone" value={milestoneId} onChange={setMilestoneId} options={[...Array(10)].map((_, i) => ({ id: `M${i+1}`, name: `M${i+1}` }))} />
+            <SidebarField label="Visual Identity" value={themeKey} onChange={setThemeKey} options={themes.map(t => ({ id: t.key, name: t.name }))} />
           </div>
 
           {saveError && (
             <div className="p-4 bg-red-50 border border-red-100 rounded-2xl text-red-500 text-[10px] font-black uppercase tracking-widest flex items-center gap-2 animate-fadeIn">
-              <i className="fas fa-exclamation-triangle"></i>
-              {saveError}
+              <i className="fas fa-exclamation-triangle"></i> {saveError}
             </div>
           )}
         </aside>
       </div>
-      <style dangerouslySetInnerHTML={{ __html: `
-        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
-      `}} />
     </div>
   );
 };
@@ -223,7 +272,7 @@ const SidebarField = ({ label, value, onChange, options }: any) => (
   <div className="space-y-2">
     <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">{label}</label>
     <select value={value} onChange={(e) => onChange(e.target.value)} className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-4 text-xs font-bold text-slate-700 outline-none shadow-sm focus:border-blue-500 transition-all">
-      <option value="">None Selected</option>
+      <option value="">Global / None</option>
       {options.map((o: any) => <option key={o.id} value={o.id}>{o.name}</option>)}
     </select>
   </div>
