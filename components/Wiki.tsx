@@ -18,6 +18,13 @@ interface WikiProps {
   applications?: Application[];
 }
 
+interface TreeContext {
+  spaceId?: string;
+  bundleId?: string;
+  applicationId?: string;
+  milestoneId?: string;
+}
+
 const Wiki: React.FC<WikiProps> = ({ 
   currentUser, selSpaceId, selBundleId, selAppId, selMilestone, searchQuery, externalTrigger, onTriggerProcessed, bundles = [], applications = []
 }) => {
@@ -43,6 +50,8 @@ const Wiki: React.FC<WikiProps> = ({
   const [showMilestone, setShowMilestone] = useState(true);
 
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [contextualMetadata, setContextualMetadata] = useState<TreeContext>({});
 
   // Handle external triggers (e.g., from Governance)
   useEffect(() => {
@@ -115,16 +124,39 @@ const Wiki: React.FC<WikiProps> = ({
       const page = resolvePage(urlPageId, pages);
       if (page) {
         setActivePage(page);
-        // We don't auto-expand here because the path is dynamic now
+        setSelectedNodeId(`page-${page._id || page.id}`);
+        setContextualMetadata({
+          spaceId: page.spaceId,
+          bundleId: page.bundleId,
+          applicationId: page.applicationId,
+          milestoneId: page.milestoneId
+        });
       }
     }
   }, [searchParams, pages, loading, resolvePage]);
 
   const handlePageSelect = (page: WikiPage) => {
     setActivePage(page);
+    setSelectedNodeId(`page-${page._id || page.id}`);
+    setContextualMetadata({
+      spaceId: page.spaceId,
+      bundleId: page.bundleId,
+      applicationId: page.applicationId,
+      milestoneId: page.milestoneId
+    });
     const params = new URLSearchParams(searchParams.toString());
     params.set('pageId', (page.slug || page._id || page.id || '') as string);
     router.push(`?${params.toString()}`);
+  };
+
+  const handleFolderSelect = (nodeId: string, context: TreeContext) => {
+    setSelectedNodeId(nodeId);
+    setContextualMetadata(context);
+    setExpandedNodes(prev => { 
+      const n = new Set(prev); 
+      n.has(nodeId) ? n.delete(nodeId) : n.add(nodeId); 
+      return n; 
+    });
   };
 
   const handleCopyLink = () => {
@@ -171,10 +203,10 @@ const Wiki: React.FC<WikiProps> = ({
 
     const tree: any[] = [];
 
-    const findOrCreateNode = (list: any[], id: string, label: string, type: string) => {
+    const findOrCreateNode = (list: any[], id: string, label: string, type: string, context: TreeContext) => {
       let node = list.find(n => n.id === id);
       if (!node) {
-        node = { id, label, type: 'folder', nodeType: type, children: [] };
+        node = { id, label, type: 'folder', nodeType: type, children: [], context };
         list.push(node);
       }
       return node;
@@ -200,50 +232,62 @@ const Wiki: React.FC<WikiProps> = ({
 
       let currentLevel = tree;
       let pathPrefix = "";
+      const currentContext: TreeContext = { spaceId: sId };
 
       // 1. Root: Space (Mandatory)
       pathPrefix += `space-${sId}`;
-      const spaceNode = findOrCreateNode(currentLevel, pathPrefix, spaceName, 'space');
+      const spaceNode = findOrCreateNode(currentLevel, pathPrefix, spaceName, 'space', { ...currentContext });
       currentLevel = spaceNode.children;
 
       // 2. Level: Bundle (Optional)
       if (showBundle) {
         pathPrefix += `:bundle-${bId}`;
-        const bundleNode = findOrCreateNode(currentLevel, pathPrefix, bundleName, 'bundle');
+        currentContext.bundleId = bId;
+        const bundleNode = findOrCreateNode(currentLevel, pathPrefix, bundleName, 'bundle', { ...currentContext });
         currentLevel = bundleNode.children;
-      }
-
-      // 3. Middle Tiers: App vs DocType
-      if (primaryGrouping === 'app') {
-        // App First
-        pathPrefix += `:app-${aId}`;
-        const appNode = findOrCreateNode(currentLevel, pathPrefix, appName, 'app');
-        currentLevel = appNode.children;
-
-        // Then DocType (Optional)
-        if (showDocType) {
-          pathPrefix += `:type-${dtId}`;
-          const typeNode = findOrCreateNode(currentLevel, pathPrefix, typeName, 'type');
-          currentLevel = typeNode.children;
-        }
       } else {
-        // DocType First (Optional)
-        if (showDocType) {
-          pathPrefix += `:type-${dtId}`;
-          const typeNode = findOrCreateNode(currentLevel, pathPrefix, typeName, 'type');
-          currentLevel = typeNode.children;
-        }
-        // Then App
-        pathPrefix += `:app-${aId}`;
-        const appNode = findOrCreateNode(currentLevel, pathPrefix, appName, 'app');
-        currentLevel = appNode.children;
+        currentContext.bundleId = bId;
       }
+
+      const buildMiddleTiers = () => {
+        if (primaryGrouping === 'app') {
+          // App First
+          pathPrefix += `:app-${aId}`;
+          currentContext.applicationId = aId;
+          const appNode = findOrCreateNode(currentLevel, pathPrefix, appName, 'app', { ...currentContext });
+          currentLevel = appNode.children;
+
+          // Then DocType (Optional)
+          if (showDocType) {
+            pathPrefix += `:type-${dtId}`;
+            const typeNode = findOrCreateNode(currentLevel, pathPrefix, typeName, 'type', { ...currentContext });
+            currentLevel = typeNode.children;
+          }
+        } else {
+          // DocType First (Optional)
+          if (showDocType) {
+            pathPrefix += `:type-${dtId}`;
+            const typeNode = findOrCreateNode(currentLevel, pathPrefix, typeName, 'type', { ...currentContext });
+            currentLevel = typeNode.children;
+          }
+          // Then App
+          pathPrefix += `:app-${aId}`;
+          currentContext.applicationId = aId;
+          const appNode = findOrCreateNode(currentLevel, pathPrefix, appName, 'app', { ...currentContext });
+          currentLevel = appNode.children;
+        }
+      };
+
+      buildMiddleTiers();
 
       // 4. Final Meta Level: Milestone (Optional)
       if (showMilestone) {
         pathPrefix += `:ms-${msId}`;
-        const msNode = findOrCreateNode(currentLevel, pathPrefix, milestoneName, 'milestone');
+        currentContext.milestoneId = msId;
+        const msNode = findOrCreateNode(currentLevel, pathPrefix, milestoneName, 'milestone', { ...currentContext });
         currentLevel = msNode.children;
+      } else {
+        currentContext.milestoneId = msId;
       }
 
       // 5. Leaf Node: Page
@@ -251,7 +295,8 @@ const Wiki: React.FC<WikiProps> = ({
         id: `page-${page._id || page.id}`,
         label: page.title,
         type: 'page',
-        data: page
+        data: page,
+        context: { ...currentContext }
       });
     });
 
@@ -269,7 +314,8 @@ const Wiki: React.FC<WikiProps> = ({
   const renderTreeNode = (node: any, depth = 0) => {
     const isPage = node.type === 'page';
     const isExpanded = expandedNodes.has(node.id);
-    const isActive = isPage && (String(activePage?._id) === String(node.data?._id) || String(activePage?.id) === String(node.data?.id));
+    const isSelected = selectedNodeId === node.id;
+    const isActivePage = isPage && activePage && (String(activePage._id) === String(node.data._id) || String(activePage.id) === String(node.data.id));
     
     const getIcon = () => {
       if (isPage) return 'fa-file-lines';
@@ -286,18 +332,18 @@ const Wiki: React.FC<WikiProps> = ({
     return (
       <div key={node.id} className="flex flex-col">
         <button 
-          onClick={() => isPage ? handlePageSelect(node.data) : setExpandedNodes(prev => { 
-            const n = new Set(prev); 
-            n.has(node.id) ? n.delete(node.id) : n.add(node.id); 
-            return n; 
-          })}
-          className={`text-left px-3 py-2 flex items-center gap-3 rounded-xl hover:bg-white hover:shadow-sm transition-all group ${isActive ? 'bg-blue-600 text-white shadow-xl' : 'text-slate-600'}`} 
+          onClick={() => isPage ? handlePageSelect(node.data) : handleFolderSelect(node.id, node.context)}
+          className={`text-left px-3 py-2 flex items-center gap-3 rounded-xl transition-all group ${
+            isSelected 
+              ? 'bg-blue-600 text-white shadow-xl' 
+              : 'text-slate-600 hover:bg-slate-100/60'
+          }`} 
           style={{ marginLeft: `${depth * 10}px` }}
         >
           {!isPage && <i className={`fas ${isExpanded ? 'fa-caret-down' : 'fa-caret-right'} w-2 opacity-30 text-[10px]`}></i>}
           {isPage && <div className="w-2"></div>}
-          <i className={`fas ${getIcon()} ${isActive ? 'text-white' : 'text-slate-300 group-hover:text-blue-400'} text-[10px] w-4 text-center`}></i>
-          <span className={`text-[11px] truncate ${isActive ? 'font-black' : 'font-medium'}`}>{node.label}</span>
+          <i className={`fas ${getIcon()} ${isSelected ? 'text-white' : 'text-slate-300 group-hover:text-blue-400'} text-[10px] w-4 text-center`}></i>
+          <span className={`text-[11px] truncate ${isSelected ? 'font-black' : 'font-medium'}`}>{node.label}</span>
         </button>
         {node.children && isExpanded && (
           <div className="flex flex-col">
@@ -416,7 +462,10 @@ const Wiki: React.FC<WikiProps> = ({
 
       {isCreating && (
         <CreateWikiPageForm 
-          spaceId={selSpaceId === 'all' ? (spaces[0]?._id || spaces[0]?.id || 'default') : selSpaceId}
+          spaceId={contextualMetadata.spaceId || (selSpaceId === 'all' ? (spaces[0]?._id || spaces[0]?.id || 'default') : selSpaceId)}
+          initialBundleId={contextualMetadata.bundleId}
+          initialApplicationId={contextualMetadata.applicationId}
+          initialMilestoneId={contextualMetadata.milestoneId}
           allPages={pages}
           currentUser={currentUser}
           onSaveSuccess={(id) => { setIsCreating(false); refreshPages(id); }}

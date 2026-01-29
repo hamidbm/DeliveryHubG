@@ -5,6 +5,9 @@ import WikiPageDisplay from './WikiPageDisplay';
 interface CreateWikiPageFormProps {
   parentId?: string;
   spaceId: string;
+  initialBundleId?: string;
+  initialApplicationId?: string;
+  initialMilestoneId?: string;
   allPages: WikiPage[];
   currentUser?: { name: string };
   onSaveSuccess: (savedId: string) => void;
@@ -14,17 +17,17 @@ interface CreateWikiPageFormProps {
 }
 
 const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({ 
-  spaceId, currentUser, onSaveSuccess, onCancel, bundles, applications
+  spaceId, initialBundleId = '', initialApplicationId = '', initialMilestoneId = '', currentUser, onSaveSuccess, onCancel, bundles, applications
 }) => {
   const [title, setTitle] = useState('');
   const [slug, setSlug] = useState('');
   const [content, setContent] = useState('');
   const [documentTypeId, setDocumentTypeId] = useState('');
-  const [bundleId, setBundleId] = useState('');
-  const [applicationId, setApplicationId] = useState('');
-  const [milestoneId, setMilestoneId] = useState('');
+  const [bundleId, setBundleId] = useState(initialBundleId);
+  const [applicationId, setApplicationId] = useState(initialApplicationId);
+  const [milestoneId, setMilestoneId] = useState(initialMilestoneId);
   const [themeKey, setThemeKey] = useState('');
-  const [status, setStatus] = useState<'Draft' | 'Published'>('Draft');
+  const [status, setStatus] = useState<'Draft' | 'Published'>('Published');
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'edit' | 'preview'>('edit');
@@ -203,7 +206,6 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
           )}
         </aside>
       </div>
-      {/* Fix: Replaced style jsx with standard style tag and dangerouslySetInnerHTML for compatibility */}
       <style dangerouslySetInnerHTML={{ __html: `
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
