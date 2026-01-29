@@ -36,7 +36,12 @@ const Wiki: React.FC<WikiProps> = ({
   const [isSidebarVisible, setIsSidebarVisible] = useState(true);
   const [copyFeedback, setCopyFeedback] = useState(false);
   
-  const [hierarchyMode, setHierarchyMode] = useState<HierarchyMode>(HierarchyMode.SPACE_BUNDLE_APP_MILESTONE);
+  // Dynamic Hierarchy State
+  const [primaryGrouping, setPrimaryGrouping] = useState<'app' | 'type'>('app');
+  const [showBundle, setShowBundle] = useState(true);
+  const [showDocType, setShowDocType] = useState(true);
+  const [showMilestone, setShowMilestone] = useState(true);
+
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
 
   // Handle external triggers (e.g., from Governance)
@@ -51,7 +56,6 @@ const Wiki: React.FC<WikiProps> = ({
   const loadAllWikiData = useCallback(async () => {
     setLoading(true);
     try {
-      // Helper to handle individual fetch failures gracefully
       const safeFetch = async (url: string) => {
         try {
           const res = await fetch(url);
@@ -78,10 +82,9 @@ const Wiki: React.FC<WikiProps> = ({
       setCategories(rawCats);
       setDocTypes(rawTypes);
 
-      // Expand spaces by default if no specific page is selected
       const urlPageId = searchParams.get('pageId');
       if (!urlPageId && rawSpaces.length > 0) {
-        const rootIds = rawSpaces.map(s => `folder-space-${String(s._id || s.id)}`);
+        const rootIds = rawSpaces.map(s => `space-${String(s._id || s.id)}`);
         setExpandedNodes(new Set(rootIds));
       }
     } catch (e) { 
@@ -107,26 +110,12 @@ const Wiki: React.FC<WikiProps> = ({
   // Sync Active Page with URL
   useEffect(() => {
     if (loading || !Array.isArray(pages) || pages.length === 0) return;
-
     const urlPageId = searchParams.get('pageId');
     if (urlPageId) {
       const page = resolvePage(urlPageId, pages);
       if (page) {
         setActivePage(page);
-        
-        const sId = page.spaceId ? String(page.spaceId) : 'unassigned';
-        const bId = page.bundleId ? String(page.bundleId) : 'general';
-        const aId = page.applicationId ? String(page.applicationId) : 'no_app';
-        const mId = page.milestoneId || 'no_milestone';
-
-        setExpandedNodes(prev => {
-          const next = new Set(prev);
-          next.add(`folder-space-${sId}`);
-          next.add(`folder-bundle-${sId}-${bId}`);
-          next.add(`folder-app-${sId}-${bId}-${aId}`);
-          next.add(`folder-ms-${sId}-${bId}-${aId}-${mId}`);
-          return next;
-        });
+        // We don't auto-expand here because the path is dynamic now
       }
     }
   }, [searchParams, pages, loading, resolvePage]);
@@ -158,8 +147,9 @@ const Wiki: React.FC<WikiProps> = ({
     }
   };
 
+  // Dynamic Tree Builder Logic
   const treeData = useMemo(() => {
-    if (!Array.isArray(pages)) return [];
+    if (!Array.isArray(pages) || !Array.isArray(spaces)) return [];
     
     let filtered = pages;
     if (selSpaceId !== 'all') {
@@ -180,7 +170,8 @@ const Wiki: React.FC<WikiProps> = ({
     }
 
     const tree: any[] = [];
-    const getFolder = (list: any[], label: string, type: string, id: string) => {
+
+    const findOrCreateNode = (list: any[], id: string, label: string, type: string) => {
       let node = list.find(n => n.id === id);
       if (!node) {
         node = { id, label, type: 'folder', nodeType: type, children: [] };
@@ -193,37 +184,69 @@ const Wiki: React.FC<WikiProps> = ({
       const sId = page.spaceId ? String(page.spaceId) : 'unassigned';
       const bId = page.bundleId ? String(page.bundleId) : 'general';
       const aId = page.applicationId ? String(page.applicationId) : 'no_app';
-      const mId = page.milestoneId || 'no_milestone';
       const dtId = page.documentTypeId ? String(page.documentTypeId) : 'artifact';
+      const msId = page.milestoneId || 'no_milestone';
 
-      const spaceObj = Array.isArray(spaces) ? spaces.find(s => String(s._id || s.id) === sId) : null;
-      const bundleObj = Array.isArray(bundles) ? bundles.find(b => String(b._id || b.id) === bId) : null;
-      const appObj = Array.isArray(applications) ? applications.find(a => String(a._id || a.id) === aId) : null;
-      const typeObj = Array.isArray(docTypes) ? docTypes.find(t => String(t._id || t.id) === dtId) : null;
+      const spaceObj = spaces.find(s => String(s._id || s.id) === sId);
+      const bundleObj = bundles.find(b => String(b._id || b.id) === bId);
+      const appObj = applications.find(a => String(a._id || a.id) === aId);
+      const typeObj = docTypes.find(t => String(t._id || t.id) === dtId);
 
       const spaceName = spaceObj?.name || (sId === 'unassigned' ? 'Shared Registry' : 'Unknown Space');
-      const bundleName = bId === 'general' ? 'General' : (bundleObj?.name || 'Unknown Cluster');
-      const appName = aId === 'no_app' ? 'No App' : (appObj?.name || 'Unknown App');
-      const msName = mId === 'no_milestone' ? 'No Milestone' : mId;
+      const bundleName = bundleObj?.name || 'General Cluster';
+      const appName = appObj?.name || 'Generic App Context';
       const typeName = typeObj?.name || 'Artifact';
+      const milestoneName = msId === 'no_milestone' ? 'No Milestone' : msId;
 
       let currentLevel = tree;
-      const addNode = (label: string, type: string, id: string) => {
-        const folder = getFolder(currentLevel, label, type, id);
-        currentLevel = folder.children;
-      };
+      let pathPrefix = "";
 
-      if (hierarchyMode === HierarchyMode.SPACE_BUNDLE_APP_MILESTONE) {
-        addNode(spaceName, 'space', `folder-space-${sId}`);
-        addNode(bundleName, 'bundle', `folder-bundle-${sId}-${bId}`);
-        addNode(appName, 'app', `folder-app-${sId}-${bId}-${aId}`);
-        addNode(msName, 'milestone', `folder-ms-${sId}-${bId}-${aId}-${mId}`);
-      } else {
-        addNode(spaceName, 'space', `folder-space-${sId}`);
-        addNode(bundleName, 'bundle', `folder-bundle-${sId}-${bId}`);
-        addNode(appName, 'app', `folder-app-${sId}-${bId}-${aId}`);
+      // 1. Root: Space (Mandatory)
+      pathPrefix += `space-${sId}`;
+      const spaceNode = findOrCreateNode(currentLevel, pathPrefix, spaceName, 'space');
+      currentLevel = spaceNode.children;
+
+      // 2. Level: Bundle (Optional)
+      if (showBundle) {
+        pathPrefix += `:bundle-${bId}`;
+        const bundleNode = findOrCreateNode(currentLevel, pathPrefix, bundleName, 'bundle');
+        currentLevel = bundleNode.children;
       }
 
+      // 3. Middle Tiers: App vs DocType
+      if (primaryGrouping === 'app') {
+        // App First
+        pathPrefix += `:app-${aId}`;
+        const appNode = findOrCreateNode(currentLevel, pathPrefix, appName, 'app');
+        currentLevel = appNode.children;
+
+        // Then DocType (Optional)
+        if (showDocType) {
+          pathPrefix += `:type-${dtId}`;
+          const typeNode = findOrCreateNode(currentLevel, pathPrefix, typeName, 'type');
+          currentLevel = typeNode.children;
+        }
+      } else {
+        // DocType First (Optional)
+        if (showDocType) {
+          pathPrefix += `:type-${dtId}`;
+          const typeNode = findOrCreateNode(currentLevel, pathPrefix, typeName, 'type');
+          currentLevel = typeNode.children;
+        }
+        // Then App
+        pathPrefix += `:app-${aId}`;
+        const appNode = findOrCreateNode(currentLevel, pathPrefix, appName, 'app');
+        currentLevel = appNode.children;
+      }
+
+      // 4. Final Meta Level: Milestone (Optional)
+      if (showMilestone) {
+        pathPrefix += `:ms-${msId}`;
+        const msNode = findOrCreateNode(currentLevel, pathPrefix, milestoneName, 'milestone');
+        currentLevel = msNode.children;
+      }
+
+      // 5. Leaf Node: Page
       currentLevel.push({
         id: `page-${page._id || page.id}`,
         label: page.title,
@@ -241,7 +264,7 @@ const Wiki: React.FC<WikiProps> = ({
     };
     sortTree(tree);
     return tree;
-  }, [pages, spaces, bundles, applications, selSpaceId, selBundleId, selAppId, selMilestone, searchQuery, hierarchyMode, docTypes]);
+  }, [pages, spaces, bundles, applications, docTypes, selSpaceId, selBundleId, selAppId, selMilestone, searchQuery, primaryGrouping, showBundle, showDocType, showMilestone]);
 
   const renderTreeNode = (node: any, depth = 0) => {
     const isPage = node.type === 'page';
@@ -268,13 +291,13 @@ const Wiki: React.FC<WikiProps> = ({
             n.has(node.id) ? n.delete(node.id) : n.add(node.id); 
             return n; 
           })}
-          className={`text-left px-3 py-2 flex items-center gap-3 rounded-xl hover:bg-white hover:shadow-sm transition-all group ${isActive ? 'bg-blue-50 text-blue-700 font-bold' : 'text-slate-600'}`} 
-          style={{ marginLeft: `${depth * 12}px` }}
+          className={`text-left px-3 py-2 flex items-center gap-3 rounded-xl hover:bg-white hover:shadow-sm transition-all group ${isActive ? 'bg-blue-600 text-white shadow-xl' : 'text-slate-600'}`} 
+          style={{ marginLeft: `${depth * 10}px` }}
         >
           {!isPage && <i className={`fas ${isExpanded ? 'fa-caret-down' : 'fa-caret-right'} w-2 opacity-30 text-[10px]`}></i>}
           {isPage && <div className="w-2"></div>}
-          <i className={`fas ${getIcon()} ${isActive ? 'text-blue-500' : 'text-slate-300 group-hover:text-blue-400'} text-[10px] w-4 text-center`}></i>
-          <span className="text-[12px] truncate font-medium">{node.label}</span>
+          <i className={`fas ${getIcon()} ${isActive ? 'text-white' : 'text-slate-300 group-hover:text-blue-400'} text-[10px] w-4 text-center`}></i>
+          <span className={`text-[11px] truncate ${isActive ? 'font-black' : 'font-medium'}`}>{node.label}</span>
         </button>
         {node.children && isExpanded && (
           <div className="flex flex-col">
@@ -288,7 +311,7 @@ const Wiki: React.FC<WikiProps> = ({
   if (loading) return (
     <div className="flex flex-col items-center justify-center h-[500px] bg-white rounded-[3rem] border border-slate-100">
       <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-      <p className="text-slate-400 font-bold text-[10px] uppercase tracking-widest animate-pulse">Initializing Wiki...</p>
+      <p className="text-slate-400 font-bold text-[10px] uppercase tracking-widest animate-pulse">Synchronizing Registry...</p>
     </div>
   );
 
@@ -296,12 +319,33 @@ const Wiki: React.FC<WikiProps> = ({
     <div className="flex h-[800px] bg-white rounded-[3rem] border border-slate-200 shadow-2xl overflow-hidden animate-fadeIn">
       {isSidebarVisible && (
         <aside className="w-80 border-r border-slate-100 flex flex-col bg-slate-50/30 shrink-0">
-          <div className="p-8 border-b border-slate-100 flex items-center justify-between bg-white/50 backdrop-blur">
-            <h3 className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Registry Navigator</h3>
+          <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-white/50 backdrop-blur">
+            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Registry Navigator</h3>
             <button onClick={() => setIsSidebarVisible(false)} className="text-slate-300 hover:text-slate-500 transition-colors">
               <i className="fas fa-chevron-left"></i>
             </button>
           </div>
+
+          {/* Hierarchy Exploration Logic Panel */}
+          <div className="px-6 py-5 bg-white border-b border-slate-50 space-y-4">
+             <div className="flex flex-col gap-2">
+                <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-1">Organize By</label>
+                <select 
+                  value={primaryGrouping} 
+                  onChange={(e) => setPrimaryGrouping(e.target.value as any)}
+                  className="w-full bg-slate-50 border border-slate-100 rounded-xl px-3 py-2 text-[10px] font-bold text-slate-600 focus:ring-2 focus:ring-blue-500/10 outline-none transition-all"
+                >
+                  <option value="app">Application → Type</option>
+                  <option value="type">Type → Application</option>
+                </select>
+             </div>
+             <div className="grid grid-cols-1 gap-2 pt-2 border-t border-slate-50">
+                <HierarchyToggle label="Show Bundles" active={showBundle} onToggle={setShowBundle} />
+                <HierarchyToggle label="Show Doc Types" active={showDocType} onToggle={setShowDocType} />
+                <HierarchyToggle label="Show Milestones" active={showMilestone} onToggle={setShowMilestone} />
+             </div>
+          </div>
+
           <nav className="flex-1 overflow-y-auto p-4 custom-scrollbar">
             {treeData.length === 0 ? (
                <div className="p-10 text-center">
@@ -309,8 +353,9 @@ const Wiki: React.FC<WikiProps> = ({
                </div>
             ) : treeData.map((node: any) => renderTreeNode(node))}
           </nav>
+          
           <div className="p-6 border-t border-slate-100 bg-white">
-             <button onClick={() => setIsCreating(true)} className="w-full py-3.5 bg-blue-600 text-white text-[10px] font-black rounded-2xl uppercase tracking-widest shadow-xl shadow-blue-500/20 hover:bg-blue-700 active:scale-95 transition-all flex items-center justify-center gap-2">
+             <button onClick={() => setIsCreating(true)} className="w-full py-4 bg-blue-600 text-white text-[10px] font-black rounded-2xl uppercase tracking-widest shadow-xl shadow-blue-500/20 hover:bg-blue-700 active:scale-95 transition-all flex items-center justify-center gap-2">
                <i className="fas fa-plus"></i>
                New Artifact
              </button>
@@ -389,5 +434,17 @@ const Wiki: React.FC<WikiProps> = ({
     </div>
   );
 };
+
+const HierarchyToggle: React.FC<{ label: string; active: boolean; onToggle: (v: boolean) => void }> = ({ label, active, onToggle }) => (
+  <button 
+    onClick={() => onToggle(!active)}
+    className="flex items-center justify-between group py-1"
+  >
+     <span className={`text-[9px] font-bold uppercase tracking-tight transition-colors ${active ? 'text-slate-600' : 'text-slate-300'}`}>{label}</span>
+     <div className={`w-6 h-3 rounded-full relative transition-all ${active ? 'bg-blue-600' : 'bg-slate-200'}`}>
+        <div className={`absolute top-0.5 w-2 h-2 bg-white rounded-full transition-all ${active ? 'left-3.5' : 'left-0.5'}`} />
+     </div>
+  </button>
+);
 
 export default Wiki;
