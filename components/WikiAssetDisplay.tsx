@@ -1,5 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { WikiAsset, Bundle, Application, TaxonomyCategory, TaxonomyDocumentType } from '../types';
+import { marked } from 'marked';
+import DOMPurify from 'isomorphic-dompurify';
 
 interface WikiAssetDisplayProps {
   asset: WikiAsset;
@@ -38,6 +40,14 @@ const WikiAssetDisplay: React.FC<WikiAssetDisplayProps> = ({ asset, bundles = []
     link.click();
   };
 
+  const renderedContent = useMemo(() => {
+    if (asset.preview.kind === 'markdown' && asset.preview.objectKey) {
+      const html = marked.parse(asset.preview.objectKey, { gfm: true, breaks: true }) as string;
+      return DOMPurify.sanitize(html);
+    }
+    return null;
+  }, [asset.preview.kind, asset.preview.objectKey]);
+
   const renderPreview = () => {
     if (asset.preview.status === 'pending') {
       return (
@@ -45,6 +55,27 @@ const WikiAssetDisplay: React.FC<WikiAssetDisplayProps> = ({ asset, bundles = []
            <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-6"></div>
            <h4 className="text-xl font-black text-slate-800 tracking-tight uppercase">Generating Virtual Preview</h4>
            <p className="text-slate-400 font-medium">Nexus is normalizing the document for secure inline viewing...</p>
+        </div>
+      );
+    }
+
+    if (asset.preview.status === 'failed') {
+      return (
+        <div className="py-24 flex flex-col items-center justify-center bg-red-50 rounded-[3rem] border border-red-100">
+           <i className="fas fa-circle-exclamation text-4xl text-red-300 mb-6"></i>
+           <h4 className="text-xl font-black text-red-800 tracking-tight uppercase">Preview Generation Failed</h4>
+           <p className="text-red-400 font-medium mb-10">The document could not be converted for inline viewing. You can still download the original source.</p>
+           <button onClick={handleDownload} className="px-10 py-4 bg-white text-slate-900 text-[10px] font-black uppercase tracking-widest rounded-2xl shadow-xl hover:bg-slate-50 transition-all flex items-center gap-3">
+              <i className="fas fa-download"></i> Download Original
+           </button>
+        </div>
+      );
+    }
+
+    if (asset.preview.kind === 'markdown' && renderedContent) {
+      return (
+        <div className="bg-white border border-slate-100 p-12 rounded-[2.5rem] shadow-inner">
+           <div className="wiki-content prose max-w-none" dangerouslySetInnerHTML={{ __html: renderedContent }} />
         </div>
       );
     }
@@ -89,8 +120,8 @@ const WikiAssetDisplay: React.FC<WikiAssetDisplayProps> = ({ asset, bundles = []
         <MetaChip label="Size" value={`${(asset.file.sizeBytes / 1024).toFixed(1)} KB`} icon="fa-weight-hanging" />
         <div className="ml-auto flex items-center gap-2">
            <span className="px-3 py-1 bg-slate-900 text-white rounded-lg text-[9px] font-black uppercase tracking-widest">VER {asset.version}</span>
-           <span className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border ${asset.preview.status === 'ready' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-amber-50 text-amber-600 border-amber-100 animate-pulse'}`}>
-             {asset.preview.status === 'ready' ? 'Preview Active' : 'Processing'}
+           <span className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border ${asset.preview.status === 'ready' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : asset.preview.status === 'failed' ? 'bg-red-50 text-red-600 border-red-100' : 'bg-amber-50 text-amber-600 border-amber-100 animate-pulse'}`}>
+             {asset.preview.status === 'ready' ? 'Preview Active' : asset.preview.status === 'failed' ? 'Preview Fault' : 'Processing'}
            </span>
         </div>
       </section>
@@ -107,7 +138,7 @@ const WikiAssetDisplay: React.FC<WikiAssetDisplayProps> = ({ asset, bundles = []
         </button>
       </header>
 
-      <div className="wiki-content">
+      <div className="wiki-preview-engine">
          {renderPreview()}
       </div>
 

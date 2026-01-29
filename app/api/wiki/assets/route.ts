@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
-// Fix: Added explicit import for Buffer to resolve "Cannot find name 'Buffer'" error in Node.js route context.
 import { Buffer } from 'buffer';
 import { saveWikiAsset, getDb } from '../../../../services/db';
 import { jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
+import mammoth from 'mammoth';
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
 
@@ -34,9 +34,34 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'No file uploaded' }, { status: 400 });
     }
 
-    const buffer = Buffer.from(await file.arrayBuffer());
+    const arrayBuffer = await file.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
     const base64Data = buffer.toString('base64');
     const ext = file.name.split('.').pop()?.toLowerCase() || '';
+
+    let previewKind: 'pdf' | 'html' | 'images' | 'markdown' | 'none' = 'none';
+    let previewData = base64Data;
+    let previewStatus: 'ready' | 'pending' | 'failed' = 'ready';
+
+    // Mammoth logic for Word documents
+    if (ext === 'docx') {
+      try {
+        const result = await mammoth.convertToMarkdown({ buffer: buffer });
+        previewKind = 'markdown';
+        previewData = result.value; // Store the actual markdown text
+        // Note: result.messages might contain warnings if we wanted to log them
+      } catch (err) {
+        console.error("Mammoth conversion failed:", err);
+        previewStatus = 'failed';
+      }
+    } else if (ext === 'pdf') {
+      previewKind = 'pdf';
+    } else if (['png', 'jpg', 'jpeg', 'gif'].includes(ext)) {
+      previewKind = 'images';
+    } else if (ext === 'md' || ext === 'markdown') {
+      previewKind = 'markdown';
+      previewData = buffer.toString('utf-8');
+    }
 
     // Create the asset record
     const assetData = {
@@ -59,12 +84,12 @@ export async function POST(request: Request) {
       },
       storage: {
         provider: 'base64',
-        objectKey: base64Data
+        objectKey: base64Data // Still store the original file
       },
       preview: {
-        status: 'ready', // Simulated - in real app would be 'pending'
-        kind: ext === 'pdf' ? 'pdf' : (['png', 'jpg', 'jpeg', 'gif'].includes(ext) ? 'images' : 'none'),
-        objectKey: base64Data
+        status: previewStatus,
+        kind: previewKind,
+        objectKey: previewData // Store converted text or original base64 for PDF/Images
       }
     };
 
