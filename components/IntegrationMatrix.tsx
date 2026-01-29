@@ -1,7 +1,7 @@
+"use client";
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { AppInterface, Application } from '../types';
-import mermaid from 'mermaid';
 
 const IntegrationMatrix: React.FC<{ applications: Application[] }> = ({ applications }) => {
   const [interfaces, setInterfaces] = useState<AppInterface[]>([]);
@@ -26,7 +26,6 @@ const IntegrationMatrix: React.FC<{ applications: Application[] }> = ({ applicat
 
   useEffect(() => {
     fetchInterfacesData();
-    mermaid.initialize({ startOnLoad: false, theme: 'neutral', fontFamily: 'Inter' });
   }, []);
 
   const handleSave = async (e: React.FormEvent) => {
@@ -72,6 +71,9 @@ const IntegrationMatrix: React.FC<{ applications: Application[] }> = ({ applicat
   useEffect(() => {
     if (viewMode === 'visual' && mermaidRef.current) {
       const generateDiagram = async () => {
+        const mermaid = (await import('mermaid')).default;
+        mermaid.initialize({ startOnLoad: false, theme: 'neutral', fontFamily: 'Inter' });
+        
         const relevant = selectedAppId === 'all' 
           ? filteredInterfaces.slice(0, 20) 
           : interfaces.filter(i => i.sourceAppId === selectedAppId || i.targetAppId === selectedAppId);

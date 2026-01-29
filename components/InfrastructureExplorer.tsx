@@ -1,8 +1,9 @@
+"use client";
+
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Application, Bundle } from '../types';
 import { marked } from 'marked';
 import DOMPurify from 'isomorphic-dompurify';
-import mermaid from 'mermaid';
 import * as d3 from 'd3';
 
 const MOCK_TF = `resource "azurerm_resource_group" "nexus" {
@@ -47,6 +48,7 @@ const InfraMermaidRenderer: React.FC<{ content: string; appId: string }> = ({ co
     const renderMap = async () => {
       if (!containerRef.current || !content) return;
       try {
+        const mermaid = (await import('mermaid')).default;
         containerRef.current.innerHTML = '';
         const uniqueId = `infra-render-${appId.replace(/[^a-zA-Z0-9]/g, '-')}-${Date.now()}`;
         mermaid.initialize({ 

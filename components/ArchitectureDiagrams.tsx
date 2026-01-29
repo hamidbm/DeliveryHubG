@@ -1,7 +1,7 @@
+"use client";
 
 import React, { useState, useEffect, useRef, useCallback, Suspense, lazy, useMemo } from 'react';
 import { ArchitectureDiagram, DiagramFormat, Application, Bundle, Milestone } from '../types';
-import mermaid from 'mermaid';
 import * as d3 from 'd3';
 
 const MindMapMarkdownEditor = lazy(() => import('./MindMapMarkdownEditor'));
@@ -169,6 +169,14 @@ const MermaidRenderer: React.FC<{ content: string; id: string }> = ({ content, i
   const render = useCallback(async () => {
     if (!containerRef.current || !content || content.trim().startsWith('{') || content.trim().startsWith('<')) return;
     try {
+      const mermaid = (await import('mermaid')).default;
+      mermaid.initialize({ 
+        startOnLoad: false, 
+        theme: 'neutral',
+        securityLevel: 'loose',
+        fontFamily: 'Inter'
+      });
+      
       containerRef.current.innerHTML = ''; 
       const safeId = `mermaid-${id.replace(/[^a-zA-Z0-9]/g, '-')}-${Math.floor(Math.random() * 10000)}`;
       const { svg } = await mermaid.render(safeId, content);
@@ -196,20 +204,16 @@ const MermaidRenderer: React.FC<{ content: string; id: string }> = ({ content, i
         svgSelection.call(zoom.transform as any, d3.zoomIdentity);
       }
     } catch (err) {
-      containerRef.current.innerHTML = `<div class="p-10 text-red-500 bg-red-50 rounded-2xl border border-red-100 flex flex-col items-center">
-        <i class="fas fa-triangle-exclamation text-2xl mb-2"></i>
-        <p class="text-[10px] font-black uppercase tracking-widest">Mermaid Syntax Error</p>
-      </div>`;
+      if (containerRef.current) {
+        containerRef.current.innerHTML = `<div class="p-10 text-red-500 bg-red-50 rounded-2xl border border-red-100 flex flex-col items-center">
+          <i class="fas fa-triangle-exclamation text-2xl mb-2"></i>
+          <p class="text-[10px] font-black uppercase tracking-widest">Mermaid Syntax Error</p>
+        </div>`;
+      }
     }
   }, [content, id]);
 
   useEffect(() => {
-    mermaid.initialize({ 
-      startOnLoad: false, 
-      theme: 'neutral',
-      securityLevel: 'loose',
-      fontFamily: 'Inter'
-    });
     render();
   }, [render]);
 
