@@ -8,21 +8,36 @@ import mammoth from 'mammoth';
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
 
 /**
- * Robust Docx to HTML conversion using Mammoth.js.
- * This is a pure JS solution that works in all Node environments without 
- * needing external binaries like Pandoc. It preserves headings, tables, and lists.
+ * Enhanced Docx to HTML conversion using Mammoth.js.
+ * Includes a custom style map to catch common Word styles that are often 
+ * lost during default conversion, specifically headings and titles.
  */
 async function convertDocxToPreview(buffer: Buffer): Promise<string> {
   try {
-    // Mammoth maps Word styles (Heading 1, etc.) directly to HTML tags.
-    // This is much safer for web rendering than generic markdown conversion.
-    const result = await mammoth.convertToHtml({ buffer });
+    // Explicitly mapping Word styles to HTML tags ensures that 
+    // standard Enterprise Word templates render correctly in the web view.
+    const options = {
+      styleMap: [
+        "p[style-name='Title'] => h1:fresh",
+        "p[style-name='Subtitle'] => h2:fresh",
+        "p[style-name='Heading 1'] => h1:fresh",
+        "p[style-name='Heading 2'] => h2:fresh",
+        "p[style-name='Heading 3'] => h3:fresh",
+        "p[style-name='Heading 4'] => h4:fresh",
+        "p[style-name='Heading 5'] => h5:fresh",
+        "p[style-name='Heading 6'] => h6:fresh",
+        // Fallbacks for commonly used bolded paragraph "pseudo-headings"
+        "p:bold => strong" 
+      ]
+    };
+
+    const result = await mammoth.convertToHtml({ buffer }, options);
     
     if (result.messages.length > 0) {
-      console.log("Mammoth conversion notes:", result.messages);
+      console.log("Mammoth conversion diagnostics:", result.messages);
     }
     
-    return result.value; // This is the clean HTML string
+    return result.value; 
   } catch (err: any) {
     console.error("Mammoth core conversion failed:", err.message);
     throw new Error(`Word parsing failed: ${err.message}`);
@@ -65,22 +80,20 @@ export async function POST(request: Request) {
     let previewData = base64Data;
     let previewStatus: 'ready' | 'pending' | 'failed' = 'ready';
 
-    // Handle .docx via Mammoth (Modern Word)
     if (ext === 'docx') {
       try {
-        console.log(`Initiating Mammoth conversion for: ${file.name}`);
+        console.log(`Initiating High-Fidelity conversion for: ${file.name}`);
         const html = await convertDocxToPreview(buffer);
-        previewKind = 'markdown'; // Store as markdown kind because marked handles the HTML perfectly
+        previewKind = 'markdown'; // Marked handles the HTML inside the markdown context perfectly
         previewData = html; 
       } catch (err: any) {
         console.error("Critical: Docx conversion failure:", err.message);
         previewStatus = 'failed';
       }
     } 
-    // .doc (Legacy) usually requires system binaries, so we treat it as source-only if Mammoth fails
     else if (ext === 'doc') {
       previewStatus = 'failed';
-      console.warn("Legacy .doc format detected. Conversion skipped for security/stability.");
+      console.warn("Legacy .doc format (binary) not supported for conversion.");
     }
     else if (ext === 'pdf') {
       previewKind = 'pdf';
