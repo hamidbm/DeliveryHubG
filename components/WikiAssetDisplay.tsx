@@ -42,7 +42,10 @@ const WikiAssetDisplay: React.FC<WikiAssetDisplayProps> = ({ asset, bundles = []
 
   const renderedContent = useMemo(() => {
     if (asset.preview.kind === 'markdown' && asset.preview.objectKey) {
-      const html = marked.parse(asset.preview.objectKey, { gfm: true, breaks: true }) as string;
+      // Standardize markdown string before parse
+      const md = asset.preview.objectKey;
+      // Using parseSync for reliable UI rendering
+      const html = marked.parse(md, { gfm: true, breaks: true }) as string;
       return DOMPurify.sanitize(html);
     }
     return null;
@@ -74,8 +77,8 @@ const WikiAssetDisplay: React.FC<WikiAssetDisplayProps> = ({ asset, bundles = []
 
     if (asset.preview.kind === 'markdown' && renderedContent) {
       return (
-        <div className="bg-white border border-slate-100 p-12 rounded-[2.5rem] shadow-inner">
-           <div className="wiki-content prose max-w-none" dangerouslySetInnerHTML={{ __html: renderedContent }} />
+        <div className="bg-white border border-slate-100 p-12 rounded-[2.5rem] shadow-inner overflow-x-auto">
+           <div className="wiki-content prose max-w-none prose-img:rounded-2xl prose-img:shadow-lg" dangerouslySetInnerHTML={{ __html: renderedContent }} />
         </div>
       );
     }

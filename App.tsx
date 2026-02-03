@@ -22,8 +22,8 @@ declare global {
     openSelectKey: () => Promise<void>;
   }
   interface Window {
-    // Fix: Added readonly modifier to match the ambient environment's declaration of aistudio on the Window object and resolve identical modifiers error.
-    readonly aistudio: AIStudio;
+    // Fix: Removed readonly modifier to match the ambient environment's declaration of aistudio on the Window object and resolve identical modifiers error.
+    aistudio: AIStudio;
   }
 }
 

@@ -11,37 +11,39 @@ import os from 'os';
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
 
 /**
- * Scans Markdown for local image paths (media/...) and replaces them
- * with embedded Base64 Data URIs from the extracted media folder.
+ * Robustly embeds images as Base64.
+ * Pandoc often inserts the absolute path of the temporary media directory into the Markdown.
+ * This function finds those paths and replaces them with Data URIs.
  */
 function embedImagesAsBase64(markdown: string, mediaDir: string): string {
   let processedMarkdown = markdown;
   
   if (!fs.existsSync(mediaDir)) return markdown;
 
-  // Pandoc usually extracts to media/image1.png, etc.
   const mediaFiles = fs.readdirSync(mediaDir);
   
+  // Normalize the media directory path for regex matching (handling both Windows/Unix slashes)
+  const normalizedMediaDir = mediaDir.replace(/\\/g, '/');
+
   for (const fileName of mediaFiles) {
     const filePath = path.join(mediaDir, fileName);
     const stats = fs.statSync(filePath);
     
     if (stats.isFile()) {
       const ext = path.extname(fileName).toLowerCase().replace('.', '');
-      const mimeType = ext === 'jpg' ? 'image/jpeg' : `image/${ext}`;
+      const mimeType = (ext === 'jpg' || ext === 'jpeg') ? 'image/jpeg' : `image/${ext}`;
       const base64 = fs.readFileSync(filePath).toString('base64');
       const dataUri = `data:${mimeType};base64,${base64}`;
       
-      // Escape special characters in filename for regex
-      const safeName = fileName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      // We look for any src or markdown image path that ends with /media/filename
+      // This covers Pandoc's tendency to use absolute paths in the temp directory
+      const safeFileName = fileName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       
-      // Replace Markdown style: ![](media/image1.png)
-      const mdRegex = new RegExp(`!\\[(.*?)\\]\\(media\\/${safeName}\\)`, 'g');
-      processedMarkdown = processedMarkdown.replace(mdRegex, `![$1](${dataUri})`);
+      // Pattern to match common image references in both Markdown and HTML
+      // It looks for strings ending in /media/filename or just media/filename
+      const pattern = new RegExp(`[^"\\(\\s]*?\\/?media\\/${safeFileName}`, 'g');
       
-      // Replace HTML style: <img src="media/image1.png" ... />
-      const htmlRegex = new RegExp(`src="media\\/${safeName}"`, 'g');
-      processedMarkdown = processedMarkdown.replace(htmlRegex, `src="${dataUri}"`);
+      processedMarkdown = processedMarkdown.replace(pattern, dataUri);
     }
   }
 
@@ -53,49 +55,48 @@ function embedImagesAsBase64(markdown: string, mediaDir: string): string {
  */
 async function convertDocxToMarkdown(buffer: Buffer): Promise<string> {
   const tempId = Date.now();
+  // Create a unique temporary workspace
   const workDir = path.join(os.tmpdir(), `nexus_conv_${tempId}`);
   const tempDocxPath = path.join(workDir, `input.docx`);
   const tempMdPath = path.join(workDir, `output.md`);
 
   try {
-    // 1. Create workspace
     if (!fs.existsSync(workDir)) fs.mkdirSync(workDir, { recursive: true });
-    
-    // 2. Write input
     fs.writeFileSync(tempDocxPath, buffer);
 
-    // 3. Run Pandoc
-    // --extract-media tells pandoc to dump images into the specified folder
-    // -t gfm ensures GitHub Flavored Markdown (standard headers)
-    // --wrap=none prevents unwanted line breaks
+    // Execute Pandoc with media extraction
+    // --extract-media="." relative to the output makes paths simpler
+    // However, --extract-media="${workDir}" is safer for absolute path isolation
     execSync(`pandoc -f docx -t gfm --wrap=none --extract-media="${workDir}" "${tempDocxPath}" -o "${tempMdPath}"`);
 
-    // 4. Read raw markdown
     let content = fs.readFileSync(tempMdPath, 'utf8');
 
-    // 5. Post-process to embed images
+    // Process images: find extracted files and embed them
     const mediaDir = path.join(workDir, 'media');
     content = embedImagesAsBase64(content, mediaDir);
 
-    // 6. Cleanup noisy Pandoc artifacts
+    // Standardize headers and cleanup Word artifacts
     content = content
-      .replace(/\{#.*?\}/g, '') // Remove header IDs
-      .replace(/<a id="[^"]+"><\/a>/g, '') // Remove empty anchors
-      .replace(/\\([.\-_!*+])/g, '$1') // Unescape common safe chars
+      // Remove Pandoc header IDs: # Header {#id}
+      .replace(/\{#.*?\}/g, '')
+      // Remove empty HTML anchors injected by Word
+      .replace(/<a id="[^"]+"><\/a>/g, '')
+      // Fix potential over-escaping from gfm writer
+      .replace(/\\([.\-_!*+])/g, '$1')
       .trim();
 
     return content;
   } catch (err: any) {
-    console.error("Pandoc pipeline failed:", err.message);
-    throw new Error(`Advanced conversion failed: ${err.message}`);
+    console.error("Pandoc conversion pipeline failed:", err.message);
+    throw new Error(`Advanced document conversion failed: ${err.message}`);
   } finally {
-    // 7. Recursive cleanup of workspace
+    // Recursive cleanup of the workspace
     try {
       if (fs.existsSync(workDir)) {
         fs.rmSync(workDir, { recursive: true, force: true });
       }
     } catch (e) {
-      console.warn("Temporary directory cleanup warning:", e);
+      console.warn("Workspace cleanup warning:", e);
     }
   }
 }
@@ -138,12 +139,12 @@ export async function POST(request: Request) {
 
     if (ext === 'docx') {
       try {
-        console.log(`Processing deep media extraction for: ${file.name}`);
+        console.log(`[Pandoc] Normalizing document for registry: ${file.name}`);
         const markdown = await convertDocxToMarkdown(buffer);
         previewKind = 'markdown';
         previewData = markdown; 
       } catch (err: any) {
-        console.error("Critical conversion failure:", err.message);
+        console.error("[Pandoc] Error:", err.message);
         previewStatus = 'failed';
       }
     } 
@@ -191,7 +192,7 @@ export async function POST(request: Request) {
     const result = await saveWikiAsset(assetData as any);
     return NextResponse.json({ success: true, result });
   } catch (error: any) {
-    console.error("Asset Upload API failure:", error);
-    return NextResponse.json({ error: 'Upload process failed' }, { status: 500 });
+    console.error("Asset API Panic:", error);
+    return NextResponse.json({ error: 'System upload failure' }, { status: 500 });
   }
 }
