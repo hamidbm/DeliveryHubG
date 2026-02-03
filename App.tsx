@@ -21,8 +21,8 @@ declare global {
     openSelectKey: () => Promise<void>;
   }
   interface Window {
-    // Fix: Removed readonly modifier to ensure matching modifiers with platform declarations and resolve "All declarations of 'aistudio' must have identical modifiers" error.
-    aistudio: AIStudio;
+    // Fixed: Added readonly modifier to ensure matching modifiers with platform declarations and resolve "All declarations of 'aistudio' must have identical modifiers" error.
+    readonly aistudio: AIStudio;
   }
 }
 
@@ -236,7 +236,7 @@ function HomeContent() {
           <ArchitectureHub 
             applications={applications} 
             bundles={bundles} 
-            // Fix: Changed activeBundleId={activeBundleId} to activeBundleId={activeBundle} to resolve "Cannot find name 'activeBundleId'" error.
+            // Corrected: Uses activeBundle state instead of undefined activeBundleId variable
             activeBundleId={activeBundle} 
             activeAppId={activeApp}
             onUpdateApplications={() => fetch('/api/applications').then(r => r.json()).then(setApplications)}
