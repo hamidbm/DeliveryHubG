@@ -11,62 +11,71 @@ import os from 'os';
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
 
 /**
- * Utility to convert Docx to Markdown using a temporary file.
- * Piping binary .docx through stdin often results in lost formatting/headings.
+ * Utility to convert Docx to Markdown using temporary files for both input and output.
+ * Disk-to-disk conversion is the most robust way to ensure Pandoc preserves 
+ * complex Word formatting like headings, tables, and lists.
  */
 async function runPandoc(buffer: Buffer): Promise<string> {
   const tempId = Math.random().toString(36).substring(7);
   const tempDir = os.tmpdir();
-  const inputPath = path.join(tempDir, `nexus_input_${tempId}.docx`);
+  const inputPath = path.join(tempDir, `nexus_in_${tempId}.docx`);
+  const outputPath = path.join(tempDir, `nexus_out_${tempId}.md`);
   
-  // Write the binary buffer to a real file on disk
+  // 1. Write incoming binary to disk
   fs.writeFileSync(inputPath, buffer);
 
   return new Promise((resolve, reject) => {
     try {
-      // Use the file path as the first argument
-      // gfm+atx_headers: Forces '#' style headings which are more robust
+      // 2. Execute Pandoc
+      // -t gfm+atx_headers: Uses GitHub Flavored Markdown and FORCES # style headings
+      // --wrap=none: Prevents unwanted line breaks in long paragraphs
+      // -o: Writes directly to file which is safer than stdout for some Pandoc versions
       const pandoc = spawn('pandoc', [
         inputPath, 
-        '--from', 'docx', 
-        '--to', 'gfm+atx_headers', 
-        '--wrap=none'
+        '-t', 'gfm+atx_headers', 
+        '--wrap=none',
+        '-o', outputPath
       ]);
       
-      let output = '';
-      let error = '';
-
-      pandoc.stdout.on('data', (data) => {
-        output += data.toString();
-      });
+      let errorData = '';
 
       pandoc.stderr.on('data', (data) => {
-        error += data.toString();
+        errorData += data.toString();
       });
 
       pandoc.on('close', (code) => {
-        // Cleanup the temporary file
-        try { if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath); } catch (e) {}
-
         if (code === 0) {
-          console.log(`Pandoc conversion successful. Output length: ${output.length}`);
-          resolve(output);
+          try {
+            // 3. Read the result from the output file
+            const result = fs.readFileSync(outputPath, 'utf8');
+            console.log(`Pandoc success: Generated ${result.length} characters of Markdown.`);
+            
+            // Cleanup
+            if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
+            if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
+            
+            resolve(result);
+          } catch (readErr: any) {
+            reject(new Error(`Failed to read Pandoc output: ${readErr.message}`));
+          }
         } else {
-          console.error(`Pandoc process error: ${error}`);
-          reject(new Error(error || `Pandoc process exited with code ${code}`));
+          // Cleanup on failure
+          if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
+          if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
+          
+          console.error(`Pandoc process exited with code ${code}. Error: ${errorData}`);
+          reject(new Error(errorData || `Pandoc failed with exit code ${code}`));
         }
       });
 
       pandoc.on('error', (err) => {
-        // Cleanup the temporary file
-        try { if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath); } catch (e) {}
-        console.error(`Failed to start Pandoc process: ${err.message}`);
-        reject(new Error(`Failed to start Pandoc process: ${err.message}`));
+        if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
+        console.error(`Pandoc execution error: ${err.message}`);
+        reject(new Error(`Pandoc binary not found or inaccessible: ${err.message}`));
       });
 
     } catch (err: any) {
-      // Emergency cleanup
-      try { if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath); } catch (e) {}
+      if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
       reject(err);
     }
   });
@@ -108,16 +117,16 @@ export async function POST(request: Request) {
     let previewData = base64Data;
     let previewStatus: 'ready' | 'pending' | 'failed' = 'ready';
 
-    // Word documents use our enhanced Pandoc file-based flow
     if (ext === 'docx' || ext === 'doc') {
       try {
-        console.log(`Initiating file-based Pandoc conversion for: ${file.name}`);
+        console.log(`Starting disk-based conversion for: ${file.name}`);
         const markdown = await runPandoc(buffer);
         previewKind = 'markdown';
         previewData = markdown; 
       } catch (err: any) {
-        console.error("Pandoc conversion failed:", err);
+        console.error("Critical: Pandoc Pipeline Failure:", err.message);
         previewStatus = 'failed';
+        // The error is logged, and previewStatus 'failed' triggers the UI error message
       }
     } else if (ext === 'pdf') {
       previewKind = 'pdf';
@@ -160,7 +169,7 @@ export async function POST(request: Request) {
     const result = await saveWikiAsset(assetData as any);
     return NextResponse.json({ success: true, result });
   } catch (error: any) {
-    console.error("Asset upload fail:", error);
-    return NextResponse.json({ error: 'Upload failed' }, { status: 500 });
+    console.error("Asset API Route Panic:", error);
+    return NextResponse.json({ error: 'Upload process failed' }, { status: 500 });
   }
 }
