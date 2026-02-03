@@ -1,3 +1,4 @@
+
 export enum Role {
   ARCHITECT = 'Enterprise Architect',
   INTERNAL_ENGINEER = 'Internal Engineer',
@@ -231,6 +232,7 @@ export interface WikiAsset {
   _id?: string;
   id?: string;
   title: string;
+  content: string; // Added content field to support Markdown extracted from assets
   spaceId: string;
   category?: string;
   tags?: string[];

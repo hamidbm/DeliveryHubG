@@ -3,49 +3,58 @@ import { Buffer } from 'buffer';
 import { saveWikiAsset, getDb } from '../../../../services/db';
 import { jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
-import mammoth from 'mammoth';
+import { execSync } from 'child_process';
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
 
 /**
- * Strips Mammoth's aggressive escaping and Word's noisy HTML anchors
- * to produce human-readable "Standard" Markdown.
+ * Strips remaining Pandoc noise and Word bookmarks.
+ * Ensures headings are clean and text isn't over-escaped.
  */
-function cleanMammothMarkdown(raw: string): string {
-  return raw
-    // 1. Unescape periods, dashes, and underscores that Mammoth over-escapes
-    // Example: "headings\." becomes "headings."
-    .replace(/\\([.\-_!*+])(?!\d)/g, '$1') 
-    
-    // 2. Remove empty HTML anchors often placed inside headings by Word
-    // Example: "# <a id="_top"></a>Title" becomes "# Title"
+function cleanPandocMarkdown(text: string): string {
+  return text
+    // 1. Remove Pandoc's explicit header IDs if generated: # Header {#id}
+    .replace(/\{#.*?\}/g, '')
+    // 2. Remove empty HTML anchors injected by Word as bookmarks
     .replace(/<a id="[^"]+"><\/a>/g, '')
-    
-    // 3. Normalize multiple spaces that sometimes occur around stripped tags
-    .replace(/  +/g, ' ')
-    
-    // 4. Ensure there's a space after headings (sometimes Mammoth concatenates them)
-    .replace(/^(#+)([^#\s])/gm, '$1 $2')
-    
+    // 3. Normalize escaping for common characters Pandoc might still escape occasionally
+    .replace(/\\([.\-_!*+])/g, '$1')
+    // 4. Cleanup multiple empty lines
+    .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
 
 /**
- * Converts Docx to High-Quality, Clean Markdown.
+ * Converts Docx to High-Quality Markdown using Pandoc.
  */
 async function convertDocxToMarkdown(buffer: Buffer): Promise<string> {
+  const tempId = Date.now();
+  const tempDocxPath = path.join(os.tmpdir(), `nexus_input_${tempId}.docx`);
+  const tempMdPath = path.join(os.tmpdir(), `nexus_output_${tempId}.md`);
+
   try {
-    const result = await mammoth.convertToMarkdown({ buffer });
-    
-    if (result.messages.length > 0) {
-      console.log("Mammoth conversion notes:", result.messages);
-    }
-    
-    // Process the raw output to get "Clean Markdown"
-    return cleanMammothMarkdown(result.value);
+    // Write the buffer to a temporary file
+    fs.writeFileSync(tempDocxPath, buffer);
+
+    // Execute Pandoc command: docx -> gfm (GitHub Flavored Markdown)
+    // --wrap=none prevents unwanted line breaking in mid-sentence
+    execSync(`pandoc -f docx -t gfm --wrap=none "${tempDocxPath}" -o "${tempMdPath}"`);
+
+    // Read the converted content
+    const rawMarkdown = fs.readFileSync(tempMdPath, 'utf8');
+
+    // Clean up
+    return cleanPandocMarkdown(rawMarkdown);
   } catch (err: any) {
-    console.error("Mammoth markdown conversion failed:", err.message);
-    throw new Error(`Word parsing failed: ${err.message}`);
+    console.error("Pandoc conversion process failed:", err.message);
+    throw new Error(`External conversion tool (Pandoc) failed: ${err.message}`);
+  } finally {
+    // Cleanup temporary files
+    try { if (fs.existsSync(tempDocxPath)) fs.unlinkSync(tempDocxPath); } catch (e) {}
+    try { if (fs.existsSync(tempMdPath)) fs.unlinkSync(tempMdPath); } catch (e) {}
   }
 }
 
@@ -87,12 +96,12 @@ export async function POST(request: Request) {
 
     if (ext === 'docx') {
       try {
-        console.log(`Processing Clean Markdown conversion for: ${file.name}`);
+        console.log(`Invoking Pandoc Engine for: ${file.name}`);
         const markdown = await convertDocxToMarkdown(buffer);
         previewKind = 'markdown';
         previewData = markdown; 
       } catch (err: any) {
-        console.error("Critical: Docx conversion failure:", err.message);
+        console.error("Critical: Pandoc execution failure:", err.message);
         previewStatus = 'failed';
       }
     } 
