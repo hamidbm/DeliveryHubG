@@ -10,13 +10,14 @@ const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_sup
 /**
  * Utility to convert Docx buffer to Markdown using system Pandoc binary.
  * Expects pandoc to be in the system PATH.
+ * Updated to use explicit format flags matching successful local tests.
  */
 async function runPandoc(buffer: Buffer): Promise<string> {
   return new Promise((resolve, reject) => {
-    // -f docx: input format is Word
-    // -t gfm: output format is GitHub Flavored Markdown
-    // --wrap=none: prevent unwanted line breaks in paragraphs
-    const pandoc = spawn('pandoc', ['-f', 'docx', '-t', 'gfm', '--wrap=none']);
+    // --from docx: Input is Word
+    // --to gfm: Output is GitHub Flavored Markdown (ensures # headings)
+    // --wrap=none: Prevents hard line breaks in paragraphs
+    const pandoc = spawn('pandoc', ['--from', 'docx', '--to', 'gfm', '--wrap=none']);
     
     let output = '';
     let error = '';
@@ -31,19 +32,27 @@ async function runPandoc(buffer: Buffer): Promise<string> {
 
     pandoc.on('close', (code) => {
       if (code === 0) {
+        // Log success for debugging purposes
+        console.log(`Pandoc conversion successful. Output length: ${output.length}`);
         resolve(output);
       } else {
+        console.error(`Pandoc process error: ${error}`);
         reject(new Error(error || `Pandoc process exited with code ${code}`));
       }
     });
 
     pandoc.on('error', (err) => {
+      console.error(`Failed to start Pandoc process: ${err.message}`);
       reject(new Error(`Failed to start Pandoc process: ${err.message}`));
     });
 
-    // Write buffer to stdin
-    pandoc.stdin.write(buffer);
-    pandoc.stdin.end();
+    // Write binary buffer to pandoc's stdin
+    try {
+      pandoc.stdin.write(buffer);
+      pandoc.stdin.end();
+    } catch (writeErr: any) {
+      reject(new Error(`Failed to write to Pandoc stdin: ${writeErr.message}`));
+    }
   });
 }
 
@@ -83,15 +92,17 @@ export async function POST(request: Request) {
     let previewData = base64Data;
     let previewStatus: 'ready' | 'pending' | 'failed' = 'ready';
 
-    // Pandoc logic for Word documents
+    // Enhanced logic for Word documents using Pandoc with GFM target
     if (ext === 'docx' || ext === 'doc') {
       try {
+        console.log(`Initiating Pandoc conversion for: ${file.name}`);
         const markdown = await runPandoc(buffer);
         previewKind = 'markdown';
         previewData = markdown; 
-      } catch (err) {
+      } catch (err: any) {
         console.error("Pandoc conversion failed:", err);
         previewStatus = 'failed';
+        // We still save the asset so the user can download it, but preview will show failure
       }
     } else if (ext === 'pdf') {
       previewKind = 'pdf';
@@ -102,7 +113,7 @@ export async function POST(request: Request) {
       previewData = buffer.toString('utf-8');
     }
 
-    // Create the asset record
+    // Create the asset record in the registry
     const assetData = {
       title: title || file.name,
       spaceId,
@@ -123,12 +134,12 @@ export async function POST(request: Request) {
       },
       storage: {
         provider: 'base64',
-        objectKey: base64Data // The binary original
+        objectKey: base64Data // Storing the original binary for download
       },
       preview: {
         status: previewStatus,
         kind: previewKind,
-        objectKey: previewData // The converted markdown text (for docx)
+        objectKey: previewData // Storing the generated markdown or preview metadata
       }
     };
 
