@@ -11,50 +11,92 @@ import os from 'os';
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
 
 /**
- * Strips remaining Pandoc noise and Word bookmarks.
- * Ensures headings are clean and text isn't over-escaped.
+ * Scans Markdown for local image paths (media/...) and replaces them
+ * with embedded Base64 Data URIs from the extracted media folder.
  */
-function cleanPandocMarkdown(text: string): string {
-  return text
-    // 1. Remove Pandoc's explicit header IDs if generated: # Header {#id}
-    .replace(/\{#.*?\}/g, '')
-    // 2. Remove empty HTML anchors injected by Word as bookmarks
-    .replace(/<a id="[^"]+"><\/a>/g, '')
-    // 3. Normalize escaping for common characters Pandoc might still escape occasionally
-    .replace(/\\([.\-_!*+])/g, '$1')
-    // 4. Cleanup multiple empty lines
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
+function embedImagesAsBase64(markdown: string, mediaDir: string): string {
+  let processedMarkdown = markdown;
+  
+  if (!fs.existsSync(mediaDir)) return markdown;
+
+  // Pandoc usually extracts to media/image1.png, etc.
+  const mediaFiles = fs.readdirSync(mediaDir);
+  
+  for (const fileName of mediaFiles) {
+    const filePath = path.join(mediaDir, fileName);
+    const stats = fs.statSync(filePath);
+    
+    if (stats.isFile()) {
+      const ext = path.extname(fileName).toLowerCase().replace('.', '');
+      const mimeType = ext === 'jpg' ? 'image/jpeg' : `image/${ext}`;
+      const base64 = fs.readFileSync(filePath).toString('base64');
+      const dataUri = `data:${mimeType};base64,${base64}`;
+      
+      // Escape special characters in filename for regex
+      const safeName = fileName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      
+      // Replace Markdown style: ![](media/image1.png)
+      const mdRegex = new RegExp(`!\\[(.*?)\\]\\(media\\/${safeName}\\)`, 'g');
+      processedMarkdown = processedMarkdown.replace(mdRegex, `![$1](${dataUri})`);
+      
+      // Replace HTML style: <img src="media/image1.png" ... />
+      const htmlRegex = new RegExp(`src="media\\/${safeName}"`, 'g');
+      processedMarkdown = processedMarkdown.replace(htmlRegex, `src="${dataUri}"`);
+    }
+  }
+
+  return processedMarkdown;
 }
 
 /**
- * Converts Docx to High-Quality Markdown using Pandoc.
+ * Converts Docx to High-Quality Markdown using Pandoc with embedded media.
  */
 async function convertDocxToMarkdown(buffer: Buffer): Promise<string> {
   const tempId = Date.now();
-  const tempDocxPath = path.join(os.tmpdir(), `nexus_input_${tempId}.docx`);
-  const tempMdPath = path.join(os.tmpdir(), `nexus_output_${tempId}.md`);
+  const workDir = path.join(os.tmpdir(), `nexus_conv_${tempId}`);
+  const tempDocxPath = path.join(workDir, `input.docx`);
+  const tempMdPath = path.join(workDir, `output.md`);
 
   try {
-    // Write the buffer to a temporary file
+    // 1. Create workspace
+    if (!fs.existsSync(workDir)) fs.mkdirSync(workDir, { recursive: true });
+    
+    // 2. Write input
     fs.writeFileSync(tempDocxPath, buffer);
 
-    // Execute Pandoc command: docx -> gfm (GitHub Flavored Markdown)
-    // --wrap=none prevents unwanted line breaking in mid-sentence
-    execSync(`pandoc -f docx -t gfm --wrap=none "${tempDocxPath}" -o "${tempMdPath}"`);
+    // 3. Run Pandoc
+    // --extract-media tells pandoc to dump images into the specified folder
+    // -t gfm ensures GitHub Flavored Markdown (standard headers)
+    // --wrap=none prevents unwanted line breaks
+    execSync(`pandoc -f docx -t gfm --wrap=none --extract-media="${workDir}" "${tempDocxPath}" -o "${tempMdPath}"`);
 
-    // Read the converted content
-    const rawMarkdown = fs.readFileSync(tempMdPath, 'utf8');
+    // 4. Read raw markdown
+    let content = fs.readFileSync(tempMdPath, 'utf8');
 
-    // Clean up
-    return cleanPandocMarkdown(rawMarkdown);
+    // 5. Post-process to embed images
+    const mediaDir = path.join(workDir, 'media');
+    content = embedImagesAsBase64(content, mediaDir);
+
+    // 6. Cleanup noisy Pandoc artifacts
+    content = content
+      .replace(/\{#.*?\}/g, '') // Remove header IDs
+      .replace(/<a id="[^"]+"><\/a>/g, '') // Remove empty anchors
+      .replace(/\\([.\-_!*+])/g, '$1') // Unescape common safe chars
+      .trim();
+
+    return content;
   } catch (err: any) {
-    console.error("Pandoc conversion process failed:", err.message);
-    throw new Error(`External conversion tool (Pandoc) failed: ${err.message}`);
+    console.error("Pandoc pipeline failed:", err.message);
+    throw new Error(`Advanced conversion failed: ${err.message}`);
   } finally {
-    // Cleanup temporary files
-    try { if (fs.existsSync(tempDocxPath)) fs.unlinkSync(tempDocxPath); } catch (e) {}
-    try { if (fs.existsSync(tempMdPath)) fs.unlinkSync(tempMdPath); } catch (e) {}
+    // 7. Recursive cleanup of workspace
+    try {
+      if (fs.existsSync(workDir)) {
+        fs.rmSync(workDir, { recursive: true, force: true });
+      }
+    } catch (e) {
+      console.warn("Temporary directory cleanup warning:", e);
+    }
   }
 }
 
@@ -96,12 +138,12 @@ export async function POST(request: Request) {
 
     if (ext === 'docx') {
       try {
-        console.log(`Invoking Pandoc Engine for: ${file.name}`);
+        console.log(`Processing deep media extraction for: ${file.name}`);
         const markdown = await convertDocxToMarkdown(buffer);
         previewKind = 'markdown';
         previewData = markdown; 
       } catch (err: any) {
-        console.error("Critical: Pandoc execution failure:", err.message);
+        console.error("Critical conversion failure:", err.message);
         previewStatus = 'failed';
       }
     } 
@@ -149,7 +191,7 @@ export async function POST(request: Request) {
     const result = await saveWikiAsset(assetData as any);
     return NextResponse.json({ success: true, result });
   } catch (error: any) {
-    console.error("Asset Upload API Route Panic:", error);
+    console.error("Asset Upload API failure:", error);
     return NextResponse.json({ error: 'Upload process failed' }, { status: 500 });
   }
 }

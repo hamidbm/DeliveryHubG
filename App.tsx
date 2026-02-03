@@ -7,7 +7,8 @@ import Applications from './components/Applications';
 import AIInsights from './components/AIInsights';
 import WorkItems from './components/WorkItems';
 import Wiki from './components/Wiki';
-import Milestones from './Milestones';
+// Fix: Corrected import path for Milestones component as it is located in the components directory
+import Milestones from './components/Milestones';
 import Admin from './components/Admin';
 import ArchitectureHub from './components/ArchitectureHub';
 import LoginPage from './app/login/page';
@@ -21,8 +22,8 @@ declare global {
     openSelectKey: () => Promise<void>;
   }
   interface Window {
-    // Fix: Removed readonly modifier to match other global declarations and resolve "All declarations of 'aistudio' must have identical modifiers" error.
-    aistudio: AIStudio;
+    // Fix: Added readonly modifier to match the ambient environment's declaration of aistudio on the Window object and resolve identical modifiers error.
+    readonly aistudio: AIStudio;
   }
 }
 
