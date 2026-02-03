@@ -3,82 +3,30 @@ import { Buffer } from 'buffer';
 import { saveWikiAsset, getDb } from '../../../../services/db';
 import { jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
-import { spawn } from 'child_process';
-import fs from 'fs';
-import path from 'path';
-import os from 'os';
+import mammoth from 'mammoth';
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
 
 /**
- * Utility to convert Docx to Markdown using temporary files for both input and output.
- * Disk-to-disk conversion is the most robust way to ensure Pandoc preserves 
- * complex Word formatting like headings, tables, and lists.
+ * Robust Docx to HTML conversion using Mammoth.js.
+ * This is a pure JS solution that works in all Node environments without 
+ * needing external binaries like Pandoc. It preserves headings, tables, and lists.
  */
-async function runPandoc(buffer: Buffer): Promise<string> {
-  const tempId = Math.random().toString(36).substring(7);
-  const tempDir = os.tmpdir();
-  const inputPath = path.join(tempDir, `nexus_in_${tempId}.docx`);
-  const outputPath = path.join(tempDir, `nexus_out_${tempId}.md`);
-  
-  // 1. Write incoming binary to disk
-  fs.writeFileSync(inputPath, buffer);
-
-  return new Promise((resolve, reject) => {
-    try {
-      // 2. Execute Pandoc
-      // -t gfm+atx_headers: Uses GitHub Flavored Markdown and FORCES # style headings
-      // --wrap=none: Prevents unwanted line breaks in long paragraphs
-      // -o: Writes directly to file which is safer than stdout for some Pandoc versions
-      const pandoc = spawn('pandoc', [
-        inputPath, 
-        '-t', 'gfm+atx_headers', 
-        '--wrap=none',
-        '-o', outputPath
-      ]);
-      
-      let errorData = '';
-
-      pandoc.stderr.on('data', (data) => {
-        errorData += data.toString();
-      });
-
-      pandoc.on('close', (code) => {
-        if (code === 0) {
-          try {
-            // 3. Read the result from the output file
-            const result = fs.readFileSync(outputPath, 'utf8');
-            console.log(`Pandoc success: Generated ${result.length} characters of Markdown.`);
-            
-            // Cleanup
-            if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
-            if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
-            
-            resolve(result);
-          } catch (readErr: any) {
-            reject(new Error(`Failed to read Pandoc output: ${readErr.message}`));
-          }
-        } else {
-          // Cleanup on failure
-          if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
-          if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
-          
-          console.error(`Pandoc process exited with code ${code}. Error: ${errorData}`);
-          reject(new Error(errorData || `Pandoc failed with exit code ${code}`));
-        }
-      });
-
-      pandoc.on('error', (err) => {
-        if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
-        console.error(`Pandoc execution error: ${err.message}`);
-        reject(new Error(`Pandoc binary not found or inaccessible: ${err.message}`));
-      });
-
-    } catch (err: any) {
-      if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
-      reject(err);
+async function convertDocxToPreview(buffer: Buffer): Promise<string> {
+  try {
+    // Mammoth maps Word styles (Heading 1, etc.) directly to HTML tags.
+    // This is much safer for web rendering than generic markdown conversion.
+    const result = await mammoth.convertToHtml({ buffer });
+    
+    if (result.messages.length > 0) {
+      console.log("Mammoth conversion notes:", result.messages);
     }
-  });
+    
+    return result.value; // This is the clean HTML string
+  } catch (err: any) {
+    console.error("Mammoth core conversion failed:", err.message);
+    throw new Error(`Word parsing failed: ${err.message}`);
+  }
 }
 
 export async function GET() {
@@ -117,18 +65,24 @@ export async function POST(request: Request) {
     let previewData = base64Data;
     let previewStatus: 'ready' | 'pending' | 'failed' = 'ready';
 
-    if (ext === 'docx' || ext === 'doc') {
+    // Handle .docx via Mammoth (Modern Word)
+    if (ext === 'docx') {
       try {
-        console.log(`Starting disk-based conversion for: ${file.name}`);
-        const markdown = await runPandoc(buffer);
-        previewKind = 'markdown';
-        previewData = markdown; 
+        console.log(`Initiating Mammoth conversion for: ${file.name}`);
+        const html = await convertDocxToPreview(buffer);
+        previewKind = 'markdown'; // Store as markdown kind because marked handles the HTML perfectly
+        previewData = html; 
       } catch (err: any) {
-        console.error("Critical: Pandoc Pipeline Failure:", err.message);
+        console.error("Critical: Docx conversion failure:", err.message);
         previewStatus = 'failed';
-        // The error is logged, and previewStatus 'failed' triggers the UI error message
       }
-    } else if (ext === 'pdf') {
+    } 
+    // .doc (Legacy) usually requires system binaries, so we treat it as source-only if Mammoth fails
+    else if (ext === 'doc') {
+      previewStatus = 'failed';
+      console.warn("Legacy .doc format detected. Conversion skipped for security/stability.");
+    }
+    else if (ext === 'pdf') {
       previewKind = 'pdf';
     } else if (['png', 'jpg', 'jpeg', 'gif'].includes(ext)) {
       previewKind = 'images';
@@ -169,7 +123,7 @@ export async function POST(request: Request) {
     const result = await saveWikiAsset(assetData as any);
     return NextResponse.json({ success: true, result });
   } catch (error: any) {
-    console.error("Asset API Route Panic:", error);
+    console.error("Asset Upload API Route Panic:", error);
     return NextResponse.json({ error: 'Upload process failed' }, { status: 500 });
   }
 }
