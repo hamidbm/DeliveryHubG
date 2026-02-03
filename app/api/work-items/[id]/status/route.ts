@@ -6,8 +6,7 @@ import { cookies } from 'next/headers';
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
 
-export async function PATCH(request: Request, props: { params: Promise<{ id: string }> }) {
-  const params = await props.params;
+export async function PATCH(request: Request, { params }: { params: { id: string } }) {
   try {
     const cookieStore = await cookies();
     const token = cookieStore.get('nexus_auth_token')?.value;

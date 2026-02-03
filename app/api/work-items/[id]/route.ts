@@ -7,15 +7,13 @@ import { ObjectId } from 'mongodb';
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
 
-export async function GET(request: Request, props: { params: Promise<{ id: string }> }) {
-  const params = await props.params;
+export async function GET(request: Request, { params }: { params: { id: string } }) {
   const item = await fetchWorkItemById(params.id);
   if (!item) return NextResponse.json({ error: 'Not found' }, { status: 404 });
   return NextResponse.json(item);
 }
 
-export async function PATCH(request: Request, props: { params: Promise<{ id: string }> }) {
-  const params = await props.params;
+export async function PATCH(request: Request, { params }: { params: { id: string } }) {
   try {
     const cookieStore = await cookies();
     const token = cookieStore.get('nexus_auth_token')?.value;

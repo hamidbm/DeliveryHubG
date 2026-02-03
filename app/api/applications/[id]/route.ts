@@ -3,8 +3,7 @@ import { NextResponse } from 'next/server';
 import { getDb } from '../../../../services/db';
 import { ObjectId } from 'mongodb';
 
-export async function PATCH(request: Request, props: { params: Promise<{ id: string }> }) {
-  const params = await props.params;
+export async function PATCH(request: Request, { params }: { params: { id: string } }) {
   try {
     const data = await request.json();
     const db = await getDb();

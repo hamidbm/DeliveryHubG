@@ -205,7 +205,7 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
                   ) : (
                     <div className="space-y-4">
                        <h3 className="text-2xl font-black text-slate-800 tracking-tight">Stage Local Document</h3>
-                       <p className="text-slate-400 font-medium max-w-sm">Drop PDF, DOCX, XLSX, or images here to synchronize with the Enterprise Wiki registry.</p>
+                       <p className="text-slate-400 font-medium max-w-sm mt-3 leading-relaxed">Drop PDF, DOCX, XLSX, or images here to synchronize with the Enterprise Wiki registry.</p>
                        <span className="inline-block px-6 py-2 bg-slate-900 text-white rounded-xl text-[9px] font-black uppercase tracking-widest mt-4">Select Source File</span>
                     </div>
                   )}
@@ -271,7 +271,7 @@ const ToolbarButton = ({ icon, onClick }: any) => (
 const SidebarField = ({ label, value, onChange, options }: any) => (
   <div className="space-y-2">
     <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">{label}</label>
-    <select value={value} onChange={(e) => onChange(e.target.value)} className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-4 text-xs font-bold text-slate-700 outline-none shadow-sm focus:border-blue-500 transition-all">
+    <select value={value ?? ''} onChange={(e) => onChange(e.target.value)} className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-4 text-xs font-bold text-slate-700 outline-none shadow-sm focus:border-blue-500 transition-all">
       <option value="">Global / None</option>
       {options.map((o: any) => <option key={o.id} value={o.id}>{o.name}</option>)}
     </select>

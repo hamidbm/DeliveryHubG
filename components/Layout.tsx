@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from '../App';
 import { NAV_ITEMS } from '../constants';
@@ -252,7 +251,7 @@ const FilterSelect = ({ label, value, onChange, options }: any) => (
   <div className="flex items-center gap-2 whitespace-nowrap">
     <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{label}</label>
     <select 
-      value={value} 
+      value={value ?? ''} 
       onChange={(e) => onChange(e.target.value)}
       className="text-[11px] font-bold border border-slate-200 rounded-xl px-3 py-1.5 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 transition-all min-w-[100px]"
     >

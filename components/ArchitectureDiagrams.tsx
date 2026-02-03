@@ -166,56 +166,57 @@ const MermaidRenderer: React.FC<{ content: string; id: string }> = ({ content, i
     }
   }, []);
 
-  const render = useCallback(async () => {
-    if (!containerRef.current || !content || content.trim().startsWith('{') || content.trim().startsWith('<')) return;
-    try {
-      const mermaid = (await import('mermaid')).default;
-      mermaid.initialize({ 
-        startOnLoad: false, 
-        theme: 'neutral',
-        securityLevel: 'loose',
-        fontFamily: 'Inter'
-      });
-      
-      containerRef.current.innerHTML = ''; 
-      const safeId = `mermaid-${id.replace(/[^a-zA-Z0-9]/g, '-')}-${Math.floor(Math.random() * 10000)}`;
-      const { svg } = await mermaid.render(safeId, content);
-      
-      containerRef.current.innerHTML = svg;
-      const svgElement = containerRef.current.querySelector('svg');
-      
-      if (svgElement) {
-        svgElement.setAttribute('width', '100%');
-        svgElement.setAttribute('height', '100%');
-        svgElement.style.maxWidth = 'none';
-        svgElement.style.cursor = 'grab';
-
-        const svgSelection = d3.select(svgElement);
-        const zoom = d3.zoom()
-          .scaleExtent([0.05, 5])
-          .on('zoom', (event) => {
-            svgSelection.selectAll('g').filter(function() {
-                return this.parentNode === svgElement;
-            }).attr('transform', event.transform);
-          });
-
-        zoomRef.current = zoom;
-        svgSelection.call(zoom as any);
-        svgSelection.call(zoom.transform as any, d3.zoomIdentity);
-      }
-    } catch (err) {
-      if (containerRef.current) {
-        containerRef.current.innerHTML = `<div class="p-10 text-red-500 bg-red-50 rounded-2xl border border-red-100 flex flex-col items-center">
-          <i class="fas fa-triangle-exclamation text-2xl mb-2"></i>
-          <p class="text-[10px] font-black uppercase tracking-widest">Mermaid Syntax Error</p>
-        </div>`;
-      }
-    }
-  }, [content, id]);
-
   useEffect(() => {
+    const render = async () => {
+      if (!containerRef.current || !content || content.trim().startsWith('{') || content.trim().startsWith('<')) return;
+      try {
+        const mermaid = (await import('mermaid')).default;
+        mermaid.initialize({ 
+          startOnLoad: false, 
+          theme: 'neutral',
+          securityLevel: 'loose',
+          fontFamily: 'Inter'
+        });
+        
+        containerRef.current.innerHTML = ''; 
+        const safeId = `mermaid-${id.replace(/[^a-zA-Z0-9]/g, '-')}-${Math.floor(Math.random() * 10000)}`;
+        const { svg } = await mermaid.render(safeId, content);
+        
+        if (containerRef.current) {
+          containerRef.current.innerHTML = svg;
+          const svgElement = containerRef.current.querySelector('svg');
+          
+          if (svgElement) {
+            svgElement.setAttribute('width', '100%');
+            svgElement.setAttribute('height', '100%');
+            svgElement.style.maxWidth = 'none';
+            svgElement.style.cursor = 'grab';
+
+            const svgSelection = d3.select(svgElement);
+            const zoom = d3.zoom()
+              .scaleExtent([0.05, 5])
+              .on('zoom', (event) => {
+                svgSelection.selectAll('g').filter(function() {
+                    return this.parentNode === svgElement;
+                }).attr('transform', event.transform);
+              });
+
+            zoomRef.current = zoom;
+            svgSelection.call(zoom as any);
+            svgSelection.call(zoom.transform as any, d3.zoomIdentity);
+          }
+        }
+      } catch (err) {
+        if (containerRef.current) {
+          containerRef.current.innerHTML = `<div class="p-10 text-red-500 bg-red-50 rounded-2xl border border-red-100 flex flex-col items-center">
+            <i class="fas fa-triangle-exclamation text-2xl mb-2"></i>
+            <p class="text-[10px] font-black uppercase tracking-widest">Mermaid Syntax Error</p>
+          </div>`;
+        }
+      }
+    };
     render();
-  }, [render]);
+  }, [content, id]);
 
   return (
     <div className="relative w-full h-full group/mermaid">

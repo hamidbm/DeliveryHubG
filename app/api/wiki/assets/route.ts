@@ -3,9 +3,49 @@ import { Buffer } from 'buffer';
 import { saveWikiAsset, getDb } from '../../../../services/db';
 import { jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
-import mammoth from 'mammoth';
+import { spawn } from 'child_process';
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
+
+/**
+ * Utility to convert Docx buffer to Markdown using system Pandoc binary.
+ * Expects pandoc to be in the system PATH.
+ */
+async function runPandoc(buffer: Buffer): Promise<string> {
+  return new Promise((resolve, reject) => {
+    // -f docx: input format is Word
+    // -t gfm: output format is GitHub Flavored Markdown
+    // --wrap=none: prevent unwanted line breaks in paragraphs
+    const pandoc = spawn('pandoc', ['-f', 'docx', '-t', 'gfm', '--wrap=none']);
+    
+    let output = '';
+    let error = '';
+
+    pandoc.stdout.on('data', (data) => {
+      output += data.toString();
+    });
+
+    pandoc.stderr.on('data', (data) => {
+      error += data.toString();
+    });
+
+    pandoc.on('close', (code) => {
+      if (code === 0) {
+        resolve(output);
+      } else {
+        reject(new Error(error || `Pandoc process exited with code ${code}`));
+      }
+    });
+
+    pandoc.on('error', (err) => {
+      reject(new Error(`Failed to start Pandoc process: ${err.message}`));
+    });
+
+    // Write buffer to stdin
+    pandoc.stdin.write(buffer);
+    pandoc.stdin.end();
+  });
+}
 
 export async function GET() {
   const db = await getDb();
@@ -43,15 +83,14 @@ export async function POST(request: Request) {
     let previewData = base64Data;
     let previewStatus: 'ready' | 'pending' | 'failed' = 'ready';
 
-    // Mammoth logic for Word documents
-    if (ext === 'docx') {
+    // Pandoc logic for Word documents
+    if (ext === 'docx' || ext === 'doc') {
       try {
-        const result = await mammoth.convertToMarkdown({ buffer: buffer });
+        const markdown = await runPandoc(buffer);
         previewKind = 'markdown';
-        previewData = result.value; // Store the actual markdown text
-        // Note: result.messages might contain warnings if we wanted to log them
+        previewData = markdown; 
       } catch (err) {
-        console.error("Mammoth conversion failed:", err);
+        console.error("Pandoc conversion failed:", err);
         previewStatus = 'failed';
       }
     } else if (ext === 'pdf') {
@@ -84,12 +123,12 @@ export async function POST(request: Request) {
       },
       storage: {
         provider: 'base64',
-        objectKey: base64Data // Still store the original file
+        objectKey: base64Data // The binary original
       },
       preview: {
         status: previewStatus,
         kind: previewKind,
-        objectKey: previewData // Store converted text or original base64 for PDF/Images
+        objectKey: previewData // The converted markdown text (for docx)
       }
     };
 

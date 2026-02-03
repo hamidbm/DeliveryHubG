@@ -2,8 +2,7 @@
 import { NextResponse } from 'next/server';
 import { deleteInterface } from '../../../../../services/db';
 
-export async function DELETE(request: Request, props: { params: Promise<{ id: string }> }) {
-  const params = await props.params;
+export async function DELETE(request: Request, { params }: { params: { id: string } }) {
   try {
     await deleteInterface(params.id);
     return NextResponse.json({ success: true });

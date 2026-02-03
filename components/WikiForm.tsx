@@ -225,7 +225,6 @@ const WikiForm: React.FC<WikiFormProps> = ({
           )}
         </aside>
       </div>
-      {/* Fix: Replaced style jsx with standard style tag and dangerouslySetInnerHTML for compatibility */}
       <style dangerouslySetInnerHTML={{ __html: `
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
@@ -242,7 +241,7 @@ const ToolbarButton = ({ icon, onClick }: any) => (
 const SidebarField = ({ label, value, onChange, options }: any) => (
   <div className="space-y-2">
     <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">{label}</label>
-    <select value={value} onChange={(e) => onChange(e.target.value)} className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-4 text-xs font-bold text-slate-700 outline-none shadow-sm focus:border-blue-500 transition-all">
+    <select value={value ?? ''} onChange={(e) => onChange(e.target.value)} className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-4 text-xs font-bold text-slate-700 outline-none shadow-sm focus:border-blue-500 transition-all">
       <option value="">None Selected</option>
       {options.map((o: any) => <option key={o.id} value={o.id}>{o.name}</option>)}
     </select>

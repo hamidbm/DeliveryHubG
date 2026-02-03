@@ -4,6 +4,7 @@ const nextConfig = {
   // and remove the need for node_modules in the runner stage.
   output: 'standalone',
   reactStrictMode: true,
+  swcMinify: true,
 };
 
 module.exports = nextConfig;
