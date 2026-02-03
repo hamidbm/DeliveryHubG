@@ -8,20 +8,41 @@ import mammoth from 'mammoth';
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
 
 /**
- * Enhanced Docx to Markdown conversion using Mammoth.js.
- * This ensures headings (#), bold, and lists are converted to standard Markdown.
+ * Strips Mammoth's aggressive escaping and Word's noisy HTML anchors
+ * to produce human-readable "Standard" Markdown.
+ */
+function cleanMammothMarkdown(raw: string): string {
+  return raw
+    // 1. Unescape periods, dashes, and underscores that Mammoth over-escapes
+    // Example: "headings\." becomes "headings."
+    .replace(/\\([.\-_!*+])(?!\d)/g, '$1') 
+    
+    // 2. Remove empty HTML anchors often placed inside headings by Word
+    // Example: "# <a id="_top"></a>Title" becomes "# Title"
+    .replace(/<a id="[^"]+"><\/a>/g, '')
+    
+    // 3. Normalize multiple spaces that sometimes occur around stripped tags
+    .replace(/  +/g, ' ')
+    
+    // 4. Ensure there's a space after headings (sometimes Mammoth concatenates them)
+    .replace(/^(#+)([^#\s])/gm, '$1 $2')
+    
+    .trim();
+}
+
+/**
+ * Converts Docx to High-Quality, Clean Markdown.
  */
 async function convertDocxToMarkdown(buffer: Buffer): Promise<string> {
   try {
-    // mammoth.convertToMarkdown automatically maps standard Word headings 
-    // to Markdown headers (# , ## , etc.)
     const result = await mammoth.convertToMarkdown({ buffer });
     
     if (result.messages.length > 0) {
-      console.log("Mammoth conversion diagnostics:", result.messages);
+      console.log("Mammoth conversion notes:", result.messages);
     }
     
-    return result.value; 
+    // Process the raw output to get "Clean Markdown"
+    return cleanMammothMarkdown(result.value);
   } catch (err: any) {
     console.error("Mammoth markdown conversion failed:", err.message);
     throw new Error(`Word parsing failed: ${err.message}`);
@@ -61,12 +82,12 @@ export async function POST(request: Request) {
     const ext = file.name.split('.').pop()?.toLowerCase() || '';
 
     let previewKind: 'pdf' | 'html' | 'images' | 'markdown' | 'none' = 'none';
-    let previewData = base64Data;
+    let previewData = ""; 
     let previewStatus: 'ready' | 'pending' | 'failed' = 'ready';
 
     if (ext === 'docx') {
       try {
-        console.log(`Initiating High-Fidelity Markdown conversion for: ${file.name}`);
+        console.log(`Processing Clean Markdown conversion for: ${file.name}`);
         const markdown = await convertDocxToMarkdown(buffer);
         previewKind = 'markdown';
         previewData = markdown; 
@@ -77,8 +98,10 @@ export async function POST(request: Request) {
     } 
     else if (ext === 'pdf') {
       previewKind = 'pdf';
+      previewData = base64Data; 
     } else if (['png', 'jpg', 'jpeg', 'gif'].includes(ext)) {
       previewKind = 'images';
+      previewData = base64Data;
     } else if (ext === 'md' || ext === 'markdown') {
       previewKind = 'markdown';
       previewData = buffer.toString('utf-8');
@@ -87,7 +110,6 @@ export async function POST(request: Request) {
     const assetData = {
       title: title || file.name,
       spaceId,
-      // Added top-level content field for Markdown storage
       content: previewKind === 'markdown' ? previewData : "", 
       author: payload.name as string,
       lastModifiedBy: payload.name as string,
