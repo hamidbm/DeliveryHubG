@@ -8,38 +8,23 @@ import mammoth from 'mammoth';
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
 
 /**
- * Enhanced Docx to HTML conversion using Mammoth.js.
- * Includes a custom style map to catch common Word styles that are often 
- * lost during default conversion, specifically headings and titles.
+ * Enhanced Docx to Markdown conversion using Mammoth.js.
+ * By using convertToMarkdown, we get actual markdown syntax (# Header) 
+ * instead of HTML, which matches the user's storage expectations.
  */
-async function convertDocxToPreview(buffer: Buffer): Promise<string> {
+async function convertDocxToMarkdown(buffer: Buffer): Promise<string> {
   try {
-    // Explicitly mapping Word styles to HTML tags ensures that 
-    // standard Enterprise Word templates render correctly in the web view.
-    const options = {
-      styleMap: [
-        "p[style-name='Title'] => h1:fresh",
-        "p[style-name='Subtitle'] => h2:fresh",
-        "p[style-name='Heading 1'] => h1:fresh",
-        "p[style-name='Heading 2'] => h2:fresh",
-        "p[style-name='Heading 3'] => h3:fresh",
-        "p[style-name='Heading 4'] => h4:fresh",
-        "p[style-name='Heading 5'] => h5:fresh",
-        "p[style-name='Heading 6'] => h6:fresh",
-        // Fallbacks for commonly used bolded paragraph "pseudo-headings"
-        "p:bold => strong" 
-      ]
-    };
-
-    const result = await mammoth.convertToHtml({ buffer }, options);
+    // mammoth.convertToMarkdown identifies Word styles (Heading 1, 2, etc.)
+    // and converts them directly to Markdown headers (# , ## ).
+    const result = await mammoth.convertToMarkdown({ buffer });
     
     if (result.messages.length > 0) {
-      console.log("Mammoth conversion diagnostics:", result.messages);
+      console.log("Mammoth conversion notes:", result.messages);
     }
     
-    return result.value; 
+    return result.value; // This is now a pure Markdown string
   } catch (err: any) {
-    console.error("Mammoth core conversion failed:", err.message);
+    console.error("Mammoth markdown conversion failed:", err.message);
     throw new Error(`Word parsing failed: ${err.message}`);
   }
 }
@@ -77,28 +62,27 @@ export async function POST(request: Request) {
     const ext = file.name.split('.').pop()?.toLowerCase() || '';
 
     let previewKind: 'pdf' | 'html' | 'images' | 'markdown' | 'none' = 'none';
-    let previewData = base64Data;
+    let previewData = ""; 
     let previewStatus: 'ready' | 'pending' | 'failed' = 'ready';
 
+    // Handle .docx via Mammoth (Modern Word) to Markdown
     if (ext === 'docx') {
       try {
-        console.log(`Initiating High-Fidelity conversion for: ${file.name}`);
-        const html = await convertDocxToPreview(buffer);
-        previewKind = 'markdown'; // Marked handles the HTML inside the markdown context perfectly
-        previewData = html; 
+        console.log(`Initiating Markdown conversion for: ${file.name}`);
+        const markdown = await convertDocxToMarkdown(buffer);
+        previewKind = 'markdown';
+        previewData = markdown; 
       } catch (err: any) {
         console.error("Critical: Docx conversion failure:", err.message);
         previewStatus = 'failed';
       }
     } 
-    else if (ext === 'doc') {
-      previewStatus = 'failed';
-      console.warn("Legacy .doc format (binary) not supported for conversion.");
-    }
     else if (ext === 'pdf') {
       previewKind = 'pdf';
+      previewData = base64Data; // PDF uses base64 for iframe display
     } else if (['png', 'jpg', 'jpeg', 'gif'].includes(ext)) {
       previewKind = 'images';
+      previewData = base64Data;
     } else if (ext === 'md' || ext === 'markdown') {
       previewKind = 'markdown';
       previewData = buffer.toString('utf-8');
@@ -107,6 +91,8 @@ export async function POST(request: Request) {
     const assetData = {
       title: title || file.name,
       spaceId,
+      // FIX: Added 'content' field to the root level as requested
+      content: previewKind === 'markdown' ? previewData : "", 
       author: payload.name as string,
       lastModifiedBy: payload.name as string,
       status: 'Published',
@@ -124,12 +110,12 @@ export async function POST(request: Request) {
       },
       storage: {
         provider: 'base64',
-        objectKey: base64Data 
+        objectKey: base64Data // Always keep the source binary
       },
       preview: {
         status: previewStatus,
         kind: previewKind,
-        objectKey: previewData 
+        objectKey: previewData // Stores the converted Markdown or reference base64
       }
     };
 
