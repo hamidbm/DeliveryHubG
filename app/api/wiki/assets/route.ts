@@ -22,9 +22,6 @@ function embedImagesAsBase64(markdown: string, mediaDir: string): string {
 
   const mediaFiles = fs.readdirSync(mediaDir);
   
-  // Normalize the media directory path for regex matching (handling both Windows/Unix slashes)
-  const normalizedMediaDir = mediaDir.replace(/\\/g, '/');
-
   for (const fileName of mediaFiles) {
     const filePath = path.join(mediaDir, fileName);
     const stats = fs.statSync(filePath);
@@ -35,15 +32,16 @@ function embedImagesAsBase64(markdown: string, mediaDir: string): string {
       const base64 = fs.readFileSync(filePath).toString('base64');
       const dataUri = `data:${mimeType};base64,${base64}`;
       
-      // We look for any src or markdown image path that ends with /media/filename
-      // This covers Pandoc's tendency to use absolute paths in the temp directory
+      // Escape filename for regex
       const safeFileName = fileName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       
-      // Pattern to match common image references in both Markdown and HTML
-      // It looks for strings ending in /media/filename or just media/filename
-      const pattern = new RegExp(`[^"\\(\\s]*?\\/?media\\/${safeFileName}`, 'g');
+      // Pattern 1: Replace Markdown style ![](path/to/media/image.png)
+      const mdPattern = new RegExp(`\\([^"\\)]*?\\/?media\\/${safeFileName}\\)`, 'g');
+      processedMarkdown = processedMarkdown.replace(mdPattern, `(${dataUri})`);
       
-      processedMarkdown = processedMarkdown.replace(pattern, dataUri);
+      // Pattern 2: Replace HTML style src="path/to/media/image.png"
+      const htmlPattern = new RegExp(`src="[^"]*?\\/?media\\/${safeFileName}"`, 'g');
+      processedMarkdown = processedMarkdown.replace(htmlPattern, `src="${dataUri}"`);
     }
   }
 
@@ -55,7 +53,6 @@ function embedImagesAsBase64(markdown: string, mediaDir: string): string {
  */
 async function convertDocxToMarkdown(buffer: Buffer): Promise<string> {
   const tempId = Date.now();
-  // Create a unique temporary workspace
   const workDir = path.join(os.tmpdir(), `nexus_conv_${tempId}`);
   const tempDocxPath = path.join(workDir, `input.docx`);
   const tempMdPath = path.join(workDir, `output.md`);
@@ -65,13 +62,12 @@ async function convertDocxToMarkdown(buffer: Buffer): Promise<string> {
     fs.writeFileSync(tempDocxPath, buffer);
 
     // Execute Pandoc with media extraction
-    // --extract-media="." relative to the output makes paths simpler
-    // However, --extract-media="${workDir}" is safer for absolute path isolation
+    // -t gfm ensures GitHub Flavored Markdown (standard ATX headers)
     execSync(`pandoc -f docx -t gfm --wrap=none --extract-media="${workDir}" "${tempDocxPath}" -o "${tempMdPath}"`);
 
     let content = fs.readFileSync(tempMdPath, 'utf8');
 
-    // Process images: find extracted files and embed them
+    // Process images: find extracted files and embed them as Data URIs
     const mediaDir = path.join(workDir, 'media');
     content = embedImagesAsBase64(content, mediaDir);
 
@@ -79,10 +75,10 @@ async function convertDocxToMarkdown(buffer: Buffer): Promise<string> {
     content = content
       // Remove Pandoc header IDs: # Header {#id}
       .replace(/\{#.*?\}/g, '')
-      // Remove empty HTML anchors injected by Word
+      // Remove empty HTML anchors
       .replace(/<a id="[^"]+"><\/a>/g, '')
-      // Fix potential over-escaping from gfm writer
-      .replace(/\\([.\-_!*+])/g, '$1')
+      // Ensure headers have a newline before them if they don't already
+      .replace(/([^\n])\n#(?!#)/g, '$1\n\n#')
       .trim();
 
     return content;
@@ -139,12 +135,12 @@ export async function POST(request: Request) {
 
     if (ext === 'docx') {
       try {
-        console.log(`[Pandoc] Normalizing document for registry: ${file.name}`);
+        console.log(`[Pandoc] Converting document: ${file.name}`);
         const markdown = await convertDocxToMarkdown(buffer);
         previewKind = 'markdown';
         previewData = markdown; 
       } catch (err: any) {
-        console.error("[Pandoc] Error:", err.message);
+        console.error("[Pandoc] Conversion failed:", err.message);
         previewStatus = 'failed';
       }
     } 
@@ -192,7 +188,7 @@ export async function POST(request: Request) {
     const result = await saveWikiAsset(assetData as any);
     return NextResponse.json({ success: true, result });
   } catch (error: any) {
-    console.error("Asset API Panic:", error);
-    return NextResponse.json({ error: 'System upload failure' }, { status: 500 });
+    console.error("Asset Upload API Error:", error);
+    return NextResponse.json({ error: 'System upload failed' }, { status: 500 });
   }
 }

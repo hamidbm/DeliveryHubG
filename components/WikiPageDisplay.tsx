@@ -1,4 +1,3 @@
-
 import React, { useMemo, useEffect, useRef, useState } from 'react';
 import { marked } from 'marked';
 import DOMPurify from 'isomorphic-dompurify';
@@ -41,7 +40,9 @@ const WikiPageDisplay: React.FC<WikiPageDisplayProps> = ({ page, onNavigate, bun
 
   const htmlContent = useMemo(() => {
     if (!page.content) return "";
-    const rendered = marked.parse(page.content, { gfm: true, breaks: true }) as string;
+    // Normalize newlines
+    const rawMd = page.content.replace(/\\n/g, '\n').replace(/\\r/g, '').trim();
+    const rendered = marked.parse(rawMd, { gfm: true, breaks: true }) as string;
     return DOMPurify.sanitize(rendered);
   }, [page.content]);
 
@@ -97,7 +98,7 @@ const WikiPageDisplay: React.FC<WikiPageDisplayProps> = ({ page, onNavigate, bun
       <div 
         ref={contentRef}
         onClick={handleContentClick}
-        className={`wiki-content prose max-w-none theme-${activeTheme?.key || 'default'}`} 
+        className={`wiki-content prose max-w-none theme-${activeTheme?.key || 'default'} prose-headings:block`} 
         dangerouslySetInnerHTML={{ __html: htmlContent }} 
       />
     </article>
