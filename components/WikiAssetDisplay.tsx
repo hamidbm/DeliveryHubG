@@ -1,7 +1,6 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { WikiAsset, Bundle, Application, TaxonomyCategory, TaxonomyDocumentType } from '../types';
-import { marked } from 'marked';
-import DOMPurify from 'isomorphic-dompurify';
+import MarkdownRenderer from './MarkdownRenderer';
 
 interface WikiAssetDisplayProps {
   asset: WikiAsset;
@@ -40,32 +39,6 @@ const WikiAssetDisplay: React.FC<WikiAssetDisplayProps> = ({ asset, bundles = []
     link.click();
   };
 
-  const renderedContent = useMemo(() => {
-    if (asset.preview.kind === 'markdown' && asset.preview.objectKey) {
-      // Normalize potential literal \n strings into actual newlines
-      // and fix double backslashes that might have been introduced during JSON storage
-      let rawMd = asset.preview.objectKey
-        .replace(/\\n/g, '\n')
-        .replace(/\\r/g, '')
-        .trim();
-        
-      // Ensure the parser handles the normalized string
-      try {
-        const html = marked.parse(rawMd, { 
-          gfm: true, 
-          breaks: true,
-          headerIds: false,
-          mangle: false
-        }) as string;
-        return DOMPurify.sanitize(html);
-      } catch (e) {
-        console.error("Markdown parse error:", e);
-        return "Parsing error occurred.";
-      }
-    }
-    return null;
-  }, [asset.preview.kind, asset.preview.objectKey]);
-
   const renderPreview = () => {
     if (asset.preview.status === 'pending') {
       return (
@@ -90,13 +63,10 @@ const WikiAssetDisplay: React.FC<WikiAssetDisplayProps> = ({ asset, bundles = []
       );
     }
 
-    if (asset.preview.kind === 'markdown' && renderedContent) {
+    if (asset.preview.kind === 'markdown' && asset.preview.objectKey) {
       return (
         <div className="bg-white border border-slate-100 p-12 rounded-[2.5rem] shadow-inner overflow-x-auto">
-           <div 
-             className="wiki-content prose max-w-none prose-img:rounded-2xl prose-img:shadow-lg prose-headings:block" 
-             dangerouslySetInnerHTML={{ __html: renderedContent }} 
-           />
+           <MarkdownRenderer content={asset.preview.objectKey} />
         </div>
       );
     }

@@ -1,7 +1,6 @@
-import React, { useMemo, useEffect, useRef, useState } from 'react';
-import { marked } from 'marked';
-import DOMPurify from 'isomorphic-dompurify';
-import { WikiPage, WikiTheme, WikiSpace, Bundle, Application, TaxonomyCategory, TaxonomyDocumentType } from '../types';
+import React, { useEffect, useRef, useState } from 'react';
+import { WikiPage, WikiTheme, Bundle, Application, TaxonomyCategory, TaxonomyDocumentType } from '../types';
+import MarkdownRenderer from './MarkdownRenderer';
 
 interface WikiPageDisplayProps {
   page: WikiPage;
@@ -37,14 +36,6 @@ const WikiPageDisplay: React.FC<WikiPageDisplayProps> = ({ page, onNavigate, bun
     };
     loadMetadata();
   }, [page]);
-
-  const htmlContent = useMemo(() => {
-    if (!page.content) return "";
-    // Normalize newlines
-    const rawMd = page.content.replace(/\\n/g, '\n').replace(/\\r/g, '').trim();
-    const rendered = marked.parse(rawMd, { gfm: true, breaks: true }) as string;
-    return DOMPurify.sanitize(rendered);
-  }, [page.content]);
 
   // Intercept internal links
   const handleContentClick = (e: React.MouseEvent) => {
@@ -98,9 +89,10 @@ const WikiPageDisplay: React.FC<WikiPageDisplayProps> = ({ page, onNavigate, bun
       <div 
         ref={contentRef}
         onClick={handleContentClick}
-        className={`wiki-content prose max-w-none theme-${activeTheme?.key || 'default'} prose-headings:block`} 
-        dangerouslySetInnerHTML={{ __html: htmlContent }} 
-      />
+        className={`wiki-content theme-${activeTheme?.key || 'default'}`} 
+      >
+        <MarkdownRenderer content={page.content} />
+      </div>
     </article>
   );
 };
