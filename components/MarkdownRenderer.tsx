@@ -92,6 +92,30 @@ const sanitizeSchema: any = {
   },
 };
 
+const allowedImageProtocols = new Set(['http:', 'https:', 'data:']);
+const allowedLinkProtocols = new Set(['http:', 'https:', 'mailto:', 'tel:']);
+
+const urlTransform = (url: string, key: string, node: any) => {
+  if (!url) return url;
+
+  if (url.startsWith('#') || url.startsWith('/') || url.startsWith('wiki:')) {
+    return url;
+  }
+
+  try {
+    const parsed = new URL(url);
+    if (key === 'src') {
+      return allowedImageProtocols.has(parsed.protocol) ? url : '';
+    }
+    if (key === 'href') {
+      return allowedLinkProtocols.has(parsed.protocol) ? url : '';
+    }
+    return url;
+  } catch {
+    return url;
+  }
+};
+
 export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
   const normalizedContent = useMemo(() => {
     if (!content) return '';
@@ -109,6 +133,7 @@ export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
           rehypeFixColgroupWhitespace,
           [rehypeSanitize, sanitizeSchema],
         ]}
+        urlTransform={urlTransform}
         components={{
           img({ src, alt, ...props }) {
             // 👇 prevent <img src="">
