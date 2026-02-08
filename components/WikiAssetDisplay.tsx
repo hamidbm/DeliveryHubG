@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { WikiAsset, Bundle, Application, TaxonomyCategory, TaxonomyDocumentType } from '../types';
+import { WikiAsset, Bundle, Application, TaxonomyCategory, TaxonomyDocumentType, WikiTheme } from '../types';
 import MarkdownRenderer from './MarkdownRenderer';
 
 interface WikiAssetDisplayProps {
@@ -11,19 +11,23 @@ interface WikiAssetDisplayProps {
 const WikiAssetDisplay: React.FC<WikiAssetDisplayProps> = ({ asset, bundles = [], applications = [] }) => {
   const [taxCat, setTaxCat] = useState<TaxonomyCategory | null>(null);
   const [taxType, setTaxType] = useState<TaxonomyDocumentType | null>(null);
+  const [activeTheme, setActiveTheme] = useState<WikiTheme | null>(null);
 
   useEffect(() => {
     const loadMetadata = async () => {
       try {
-        const [catRes, typRes] = await Promise.all([
+        const [thRes, catRes, typRes] = await Promise.all([
+          fetch('/api/wiki/themes?active=true'),
           fetch('/api/taxonomy/categories?active=true'),
           fetch('/api/taxonomy/document-types?active=true')
         ]);
+        const themes = await thRes.json();
         const categories = await catRes.json();
         const types = await typRes.json();
         const type = types.find((t: any) => t._id === asset.documentTypeId);
         setTaxType(type || null);
         if (type) setTaxCat(categories.find((c: any) => c._id === type.categoryId) || null);
+        setActiveTheme(themes.find((t: any) => t.key === asset.themeKey) || themes.find((t: any) => t.isDefault) || null);
       } catch (err) {}
     };
     loadMetadata();
@@ -65,7 +69,9 @@ const WikiAssetDisplay: React.FC<WikiAssetDisplayProps> = ({ asset, bundles = []
 
     if (asset.preview.kind === 'markdown' && asset.preview.objectKey) {
       return (
-        <div className="bg-white border border-slate-100 p-12 rounded-[2.5rem] shadow-inner overflow-x-auto">
+        <div
+          className={`wiki-content theme-${activeTheme?.key || 'default'} bg-white border border-slate-100 p-12 rounded-[2.5rem] shadow-inner overflow-x-auto`}
+        >
            <MarkdownRenderer content={asset.preview.objectKey} />
         </div>
       );
@@ -102,6 +108,7 @@ const WikiAssetDisplay: React.FC<WikiAssetDisplayProps> = ({ asset, bundles = []
 
   return (
     <article className="w-full animate-fadeIn">
+      {activeTheme && <style dangerouslySetInnerHTML={{ __html: activeTheme.css }} />}
       <section className="mb-12 flex flex-wrap gap-4">
         <MetaChip label="Category" value={taxCat?.name || 'General'} icon={taxCat?.icon || 'fa-tag'} />
         <MetaChip label="Blueprint" value={taxType?.name || 'Artifact'} icon="fa-file-contract" />
