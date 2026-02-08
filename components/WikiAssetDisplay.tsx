@@ -83,7 +83,7 @@ const WikiAssetDisplay: React.FC<WikiAssetDisplayProps> = ({ asset, bundles = []
 
     if (asset.preview.kind === 'sheet' && asset.preview.objectKey) {
       if (showDashboards) {
-        return <WikiAssetDashboardView asset={asset} />;
+        return <WikiAssetDashboardView asset={asset} onBack={() => setShowDashboards(false)} />;
       }
       return (
         <WikiAssetSpreadsheetPreview asset={asset} />

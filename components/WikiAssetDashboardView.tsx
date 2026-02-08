@@ -16,6 +16,7 @@ import { WikiAsset } from '../types';
 
 interface WikiAssetDashboardViewProps {
   asset: WikiAsset;
+  onBack?: () => void;
 }
 
 const parseNumber = (value: any) => {
@@ -37,7 +38,7 @@ const getSheetData = (asset: WikiAsset) => {
   }
 };
 
-const WikiAssetDashboardView: React.FC<WikiAssetDashboardViewProps> = ({ asset }) => {
+const WikiAssetDashboardView: React.FC<WikiAssetDashboardViewProps> = ({ asset, onBack }) => {
   const sheetData = useMemo(() => getSheetData(asset), [asset]);
   const sheets = sheetData?.sheets || [];
   const [activeSheetIndex, setActiveSheetIndex] = useState(0);
@@ -86,6 +87,14 @@ const WikiAssetDashboardView: React.FC<WikiAssetDashboardViewProps> = ({ asset }
   return (
     <div className="bg-white border border-slate-100 p-8 rounded-[2.5rem] shadow-inner">
       <div className="mb-6 flex flex-wrap gap-4 items-center">
+        {onBack && (
+          <button
+            onClick={onBack}
+            className="px-3 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg bg-slate-100 text-slate-600 border border-slate-200 hover:bg-white transition-all flex items-center gap-2"
+          >
+            <i className="fas fa-arrow-left"></i> Back to Tiles
+          </button>
+        )}
         <div className="flex items-center gap-2">
           <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Sheet</label>
           <select
