@@ -172,7 +172,7 @@ const WikiAssetSpreadsheetPreview: React.FC<WikiAssetSpreadsheetPreviewProps> = 
                 </button>
               )}
             </div>
-            <div className="grid gap-3">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
               {columns.map((column) => (
                 <div key={column} className="flex flex-col gap-1">
                   <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">
