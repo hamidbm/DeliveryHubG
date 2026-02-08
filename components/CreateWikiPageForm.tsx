@@ -104,76 +104,6 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
     return specialized[name] ? [...specialized[name], ...suggestions] : suggestions;
   }, [docTypes, documentTypeId]);
 
-  const buildTemplate = (docTypeName: string, prompt: string) => {
-    const header = `# ${title || docTypeName || 'New Document'}\n\n`;
-    const promptNote = prompt.trim()
-      ? `> **AI Prompt Used:** ${prompt.trim()}\n\n`
-      : '';
-
-    const templates: Record<string, string> = {
-      'Low Level Design': [
-        '## Overview',
-        '## Scope',
-        '## Architecture',
-        '## Interfaces & APIs',
-        '## Data Model',
-        '## Error Handling',
-        '## Security',
-        '## NFRs',
-        '## Deployment',
-        '## Open Questions'
-      ].join('\n\n'),
-      'High Level Design': [
-        '## Business Context',
-        '## System Overview',
-        '## Architecture',
-        '## Key Components',
-        '## Integrations',
-        '## Risks & Mitigations',
-        '## Assumptions',
-        '## Open Questions'
-      ].join('\n\n'),
-      Runbook: [
-        '## Purpose',
-        '## Prerequisites',
-        '## Step-by-step Procedure',
-        '## Validation',
-        '## Rollback Plan',
-        '## Monitoring & Alerts',
-        '## Escalation'
-      ].join('\n\n'),
-      'Test Plan': [
-        '## Scope',
-        '## Test Strategy',
-        '## Environments',
-        '## Test Data',
-        '## Test Cases',
-        '## Exit Criteria',
-        '## Risks'
-      ].join('\n\n'),
-      'Migration Plan': [
-        '## Goals',
-        '## Phases',
-        '## Data Migration',
-        '## Cutover Steps',
-        '## Rollback Plan',
-        '## Risks & Mitigations',
-        '## Timeline'
-      ].join('\n\n'),
-    };
-
-    const fallback = [
-      '## Overview',
-      '## Scope',
-      '## Requirements',
-      '## Design',
-      '## Risks',
-      '## Open Questions'
-    ].join('\n\n');
-
-    return `${header}${promptNote}${templates[docTypeName] || fallback}\n`;
-  };
-
   const generateSlug = (val: string) => {
     return val.toLowerCase()
       .trim()
@@ -332,15 +262,15 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
                   <button
                     type="button"
                     onClick={() => {
-                      const selectedType = docTypes.find((type) => type._id === documentTypeId);
-                      const template = buildTemplate(selectedType?.name || 'Document', aiPrompt);
-                      setContent(template);
-                      setEditorFormat('markdown');
+                      if (aiPrompt.trim()) {
+                        setContent(aiPrompt.trim());
+                        setEditorFormat('markdown');
+                      }
                       setMode('author');
                     }}
                     className="px-8 py-3 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest rounded-2xl shadow-xl hover:bg-slate-800 transition-all"
                   >
-                    Start with Template
+                    Start in Editor
                   </button>
                   <button
                     type="button"
