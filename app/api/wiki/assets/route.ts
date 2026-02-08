@@ -7,6 +7,7 @@ import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import * as XLSX from 'xlsx';
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
 
@@ -129,9 +130,10 @@ export async function POST(request: Request) {
     const base64Data = buffer.toString('base64');
     const ext = file.name.split('.').pop()?.toLowerCase() || '';
 
-    let previewKind: 'pdf' | 'html' | 'images' | 'markdown' | 'none' = 'none';
+    let previewKind: 'pdf' | 'html' | 'images' | 'markdown' | 'none' | 'sheet' = 'none';
     let previewData = ""; 
     let previewStatus: 'ready' | 'pending' | 'failed' = 'ready';
+    let previewMeta: { sheetNames?: string[] } = {};
 
     if (ext === 'docx') {
       try {
@@ -143,7 +145,37 @@ export async function POST(request: Request) {
         console.error("[Pandoc] Conversion failed:", err.message);
         previewStatus = 'failed';
       }
-    } 
+    }
+    else if (['xlsx', 'xls', 'csv'].includes(ext)) {
+      try {
+        const workbook = XLSX.read(buffer, { type: 'buffer' });
+        const sheetNames = workbook.SheetNames || [];
+        const sheets = sheetNames.map((name) => {
+          const sheet = workbook.Sheets[name];
+          const rows = XLSX.utils.sheet_to_json<Record<string, any>>(sheet, {
+            defval: '',
+            raw: false,
+          });
+          const columns = Array.from(
+            rows.reduce((set, row) => {
+              Object.keys(row || {}).forEach((key) => set.add(key));
+              return set;
+            }, new Set<string>())
+          );
+          const normalizedRows = rows.map((row, index) => ({
+            _rowId: index + 1,
+            ...row,
+          }));
+          return { name, columns, rows: normalizedRows };
+        });
+        previewKind = 'sheet';
+        previewData = JSON.stringify({ sheets });
+        previewMeta = { sheetNames };
+      } catch (err: any) {
+        console.error("[XLSX] Conversion failed:", err.message);
+        previewStatus = 'failed';
+      }
+    }
     else if (ext === 'pdf') {
       previewKind = 'pdf';
       previewData = base64Data; 
@@ -181,7 +213,8 @@ export async function POST(request: Request) {
       preview: {
         status: previewStatus,
         kind: previewKind,
-        objectKey: previewData 
+        objectKey: previewData,
+        meta: previewMeta,
       }
     };
 
@@ -190,5 +223,34 @@ export async function POST(request: Request) {
   } catch (error: any) {
     console.error("Asset Upload API Error:", error);
     return NextResponse.json({ error: 'System upload failed' }, { status: 500 });
+  }
+}
+
+export async function PATCH(request: Request) {
+  try {
+    const cookieStore = await cookies();
+    const token = cookieStore.get('nexus_auth_token')?.value;
+    if (!token) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
+    await jwtVerify(token, JWT_SECRET);
+
+    const { id, sheetData } = await request.json();
+    if (!id || !sheetData) {
+      return NextResponse.json({ error: 'Missing asset id or sheet data' }, { status: 400 });
+    }
+
+    const result = await saveWikiAsset({
+      _id: id,
+      preview: {
+        status: 'ready',
+        kind: 'sheet',
+        objectKey: JSON.stringify(sheetData),
+        meta: { sheetNames: sheetData?.sheets?.map((sheet: any) => sheet.name) || [] },
+      },
+    } as any);
+
+    return NextResponse.json({ success: true, result });
+  } catch (error: any) {
+    console.error("Asset Update API Error:", error);
+    return NextResponse.json({ error: 'System update failed' }, { status: 500 });
   }
 }

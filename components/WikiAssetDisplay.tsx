@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { WikiAsset, Bundle, Application, TaxonomyCategory, TaxonomyDocumentType } from '../types';
+import React, { useMemo, useState, useEffect } from 'react';
+import { WikiAsset, Bundle, Application, TaxonomyCategory, TaxonomyDocumentType, WikiTheme } from '../types';
 import MarkdownRenderer from './MarkdownRenderer';
 
 interface WikiAssetDisplayProps {
@@ -11,22 +11,50 @@ interface WikiAssetDisplayProps {
 const WikiAssetDisplay: React.FC<WikiAssetDisplayProps> = ({ asset, bundles = [], applications = [] }) => {
   const [taxCat, setTaxCat] = useState<TaxonomyCategory | null>(null);
   const [taxType, setTaxType] = useState<TaxonomyDocumentType | null>(null);
+  const [activeTheme, setActiveTheme] = useState<WikiTheme | null>(null);
+  const [activeSheetIndex, setActiveSheetIndex] = useState(0);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterColumn, setFilterColumn] = useState('all');
+  const [filterValue, setFilterValue] = useState('');
+  const [editingRowId, setEditingRowId] = useState<number | null>(null);
+  const [editedRow, setEditedRow] = useState<Record<string, any>>({});
+  const [isSaving, setIsSaving] = useState(false);
+  const sheetData = useMemo(() => {
+    if (asset.preview.kind !== 'sheet' || !asset.preview.objectKey) return null;
+    try {
+      return JSON.parse(asset.preview.objectKey);
+    } catch {
+      return null;
+    }
+  }, [asset.preview.kind, asset.preview.objectKey]);
 
   useEffect(() => {
     const loadMetadata = async () => {
       try {
-        const [catRes, typRes] = await Promise.all([
+        const [thRes, catRes, typRes] = await Promise.all([
+          fetch('/api/wiki/themes?active=true'),
           fetch('/api/taxonomy/categories?active=true'),
           fetch('/api/taxonomy/document-types?active=true')
         ]);
+        const themes = await thRes.json();
         const categories = await catRes.json();
         const types = await typRes.json();
         const type = types.find((t: any) => t._id === asset.documentTypeId);
         setTaxType(type || null);
         if (type) setTaxCat(categories.find((c: any) => c._id === type.categoryId) || null);
+        setActiveTheme(themes.find((t: any) => t.key === asset.themeKey) || themes.find((t: any) => t.isDefault) || null);
       } catch (err) {}
     };
     loadMetadata();
+  }, [asset]);
+
+  useEffect(() => {
+    setActiveSheetIndex(0);
+    setSearchTerm('');
+    setFilterColumn('all');
+    setFilterValue('');
+    setEditingRowId(null);
+    setEditedRow({});
   }, [asset]);
 
   const bundle = bundles.find(b => b._id === asset.bundleId);
@@ -65,8 +93,189 @@ const WikiAssetDisplay: React.FC<WikiAssetDisplayProps> = ({ asset, bundles = []
 
     if (asset.preview.kind === 'markdown' && asset.preview.objectKey) {
       return (
-        <div className="bg-white border border-slate-100 p-12 rounded-[2.5rem] shadow-inner overflow-x-auto">
+        <div
+          className={`wiki-content theme-${activeTheme?.key || 'default'} bg-white border border-slate-100 p-12 rounded-[2.5rem] shadow-inner overflow-x-auto`}
+        >
            <MarkdownRenderer content={asset.preview.objectKey} />
+        </div>
+      );
+    }
+
+    if (asset.preview.kind === 'sheet' && asset.preview.objectKey) {
+      const sheets = sheetData?.sheets || [];
+      if (!sheets.length) {
+        return (
+          <div className="bg-white border border-slate-100 p-8 rounded-[2.5rem] shadow-inner">
+            <p className="text-sm text-slate-500">No spreadsheet data available.</p>
+          </div>
+        );
+      }
+      const activeSheet = sheets[activeSheetIndex] || sheets[0];
+      const columns: string[] = activeSheet?.columns || [];
+      const rows: Record<string, any>[] = activeSheet?.rows || [];
+
+      const filteredRows = rows.filter((row) => {
+        const matchesSearch = searchTerm
+          ? Object.values(row || {}).some((value) =>
+              String(value ?? '')
+                .toLowerCase()
+                .includes(searchTerm.toLowerCase())
+            )
+          : true;
+        const matchesFilter = filterValue
+          ? String(row?.[filterColumn] ?? '')
+              .toLowerCase()
+              .includes(filterValue.toLowerCase())
+          : true;
+        return matchesSearch && (filterColumn === 'all' ? true : matchesFilter);
+      });
+
+      const handleEditRow = (row: Record<string, any>) => {
+        setEditingRowId(row._rowId);
+        setEditedRow({ ...row });
+      };
+
+      const handleRowChange = (column: string, value: string) => {
+        setEditedRow((prev) => ({ ...prev, [column]: value }));
+      };
+
+      const handleSaveRow = async () => {
+        if (!activeSheet || editingRowId === null) return;
+        setIsSaving(true);
+        const updatedRows = rows.map((row) =>
+          row._rowId === editingRowId ? { ...editedRow } : row
+        );
+        const updatedSheets = sheets.map((sheet: any, index: number) =>
+          index === activeSheetIndex ? { ...sheet, rows: updatedRows } : sheet
+        );
+        const updatedData = { ...sheetData, sheets: updatedSheets };
+
+        try {
+          await fetch('/api/wiki/assets', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: asset._id || asset.id, sheetData: updatedData }),
+          });
+          setEditingRowId(null);
+          setEditedRow({});
+        } catch (err) {
+        } finally {
+          setIsSaving(false);
+        }
+      };
+
+      return (
+        <div className="bg-white border border-slate-100 p-8 rounded-[2.5rem] shadow-inner overflow-x-auto">
+          <div className="mb-6 flex flex-wrap gap-4 items-center">
+            <div className="flex items-center gap-2">
+              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Sheet</label>
+              <select
+                className="border border-slate-200 rounded-lg px-3 py-2 text-xs font-semibold"
+                value={activeSheetIndex}
+                onChange={(e) => setActiveSheetIndex(Number(e.target.value))}
+              >
+                {sheets.map((sheet: any, index: number) => (
+                  <option value={index} key={sheet.name || index}>
+                    {sheet.name || `Sheet ${index + 1}`}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Search</label>
+              <input
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="border border-slate-200 rounded-lg px-3 py-2 text-xs font-semibold"
+                placeholder="Search rows"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Filter</label>
+              <select
+                className="border border-slate-200 rounded-lg px-3 py-2 text-xs font-semibold"
+                value={filterColumn}
+                onChange={(e) => setFilterColumn(e.target.value)}
+              >
+                <option value="all">All Columns</option>
+                {columns.map((column) => (
+                  <option value={column} key={column}>
+                    {column}
+                  </option>
+                ))}
+              </select>
+              <input
+                value={filterValue}
+                onChange={(e) => setFilterValue(e.target.value)}
+                className="border border-slate-200 rounded-lg px-3 py-2 text-xs font-semibold"
+                placeholder="Filter value"
+              />
+            </div>
+          </div>
+          <div className="grid gap-6">
+            {filteredRows.map((row) => (
+              <div
+                key={row._rowId}
+                className="border border-slate-200 rounded-2xl p-5 shadow-sm bg-slate-50"
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                    Row {row._rowId}
+                  </span>
+                  {editingRowId === row._rowId ? (
+                    <div className="flex gap-2">
+                      <button
+                        className="px-3 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg bg-blue-600 text-white"
+                        onClick={handleSaveRow}
+                        disabled={isSaving}
+                      >
+                        {isSaving ? 'Saving...' : 'Save'}
+                      </button>
+                      <button
+                        className="px-3 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg bg-slate-200 text-slate-600"
+                        onClick={() => {
+                          setEditingRowId(null);
+                          setEditedRow({});
+                        }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      className="px-3 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg bg-slate-900 text-white"
+                      onClick={() => handleEditRow(row)}
+                    >
+                      Edit Row
+                    </button>
+                  )}
+                </div>
+                <div className="grid gap-3">
+                  {columns.map((column) => (
+                    <div key={column} className="flex flex-col gap-1">
+                      <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+                        {column}
+                      </span>
+                      {editingRowId === row._rowId ? (
+                        <input
+                          className="border border-slate-200 rounded-lg px-3 py-2 text-xs font-semibold bg-white"
+                          value={editedRow[column] ?? ''}
+                          onChange={(e) => handleRowChange(column, e.target.value)}
+                        />
+                      ) : (
+                        <span className="text-sm font-medium text-slate-700">
+                          {String(row[column] ?? '')}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+            {!filteredRows.length && (
+              <div className="text-sm text-slate-500">No rows match your search.</div>
+            )}
+          </div>
         </div>
       );
     }
@@ -102,6 +311,7 @@ const WikiAssetDisplay: React.FC<WikiAssetDisplayProps> = ({ asset, bundles = []
 
   return (
     <article className="w-full animate-fadeIn">
+      {activeTheme && <style dangerouslySetInnerHTML={{ __html: activeTheme.css }} />}
       <section className="mb-12 flex flex-wrap gap-4">
         <MetaChip label="Category" value={taxCat?.name || 'General'} icon={taxCat?.icon || 'fa-tag'} />
         <MetaChip label="Blueprint" value={taxType?.name || 'Artifact'} icon="fa-file-contract" />
