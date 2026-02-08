@@ -455,16 +455,8 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
                       >
                         Generate Template
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => navigator.clipboard?.writeText(aiPrompt)}
-                        className="px-4 py-2 text-[9px] font-black uppercase tracking-widest rounded-xl bg-white text-slate-500 border border-slate-200 hover:border-slate-400 transition-all"
-                        disabled={!aiPrompt.trim()}
-                      >
-                        Copy Prompt
-                      </button>
                       <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">
-                        Updates editor with the latest prompt.
+                        Generates a fresh template from the latest prompt.
                       </span>
                     </div>
                   </div>
