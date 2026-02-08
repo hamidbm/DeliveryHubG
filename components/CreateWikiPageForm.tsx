@@ -440,17 +440,31 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
                       className="w-full bg-white border border-slate-200 rounded-2xl px-4 py-3 text-xs font-semibold text-slate-700 outline-none shadow-sm focus:border-blue-500 transition-all min-h-[120px]"
                       placeholder="Select a suggestion or customize your own prompt..."
                     />
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const selectedType = docTypes.find((type) => type._id === documentTypeId);
+                          const template = buildTemplate(selectedType?.name || 'Document', aiPrompt);
+                          setContent(template);
+                          setEditorFormat('markdown');
+                          setMode('author');
+                        }}
+                        className="px-4 py-2 text-[9px] font-black uppercase tracking-widest rounded-xl bg-slate-900 text-white hover:bg-slate-800 transition-all"
+                        disabled={!aiPrompt.trim()}
+                      >
+                        Generate Template
+                      </button>
                       <button
                         type="button"
                         onClick={() => navigator.clipboard?.writeText(aiPrompt)}
-                        className="px-4 py-2 text-[9px] font-black uppercase tracking-widest rounded-xl bg-slate-900 text-white hover:bg-slate-800 transition-all"
+                        className="px-4 py-2 text-[9px] font-black uppercase tracking-widest rounded-xl bg-white text-slate-500 border border-slate-200 hover:border-slate-400 transition-all"
                         disabled={!aiPrompt.trim()}
                       >
                         Copy Prompt
                       </button>
                       <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">
-                        Use with Generate with AI (coming soon)
+                        Updates editor with the latest prompt.
                       </span>
                     </div>
                   </div>
