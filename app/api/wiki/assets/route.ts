@@ -7,6 +7,7 @@ import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import * as XLSX from 'xlsx';
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
 
@@ -97,6 +98,49 @@ async function convertDocxToMarkdown(buffer: Buffer): Promise<string> {
   }
 }
 
+const buildSheetData = (sheet: XLSX.WorkSheet) => {
+  const grid = XLSX.utils.sheet_to_json<any[]>(sheet, {
+    header: 1,
+    defval: '',
+    raw: false,
+  });
+
+  if (!grid.length) {
+    return { columns: [], rows: [] };
+  }
+
+  const headerRowIndex = grid.reduce(
+    (best, row, index) => {
+      const nonEmptyCount = row.filter((cell) => String(cell ?? '').trim() !== '').length;
+      if (nonEmptyCount > best.count) {
+        return { index, count: nonEmptyCount };
+      }
+      return best;
+    },
+    { index: 0, count: 0 }
+  ).index;
+
+  const headerRow = grid[headerRowIndex] || [];
+  const columns = headerRow.map((cell, colIndex) => {
+    const label = String(cell ?? '').trim();
+    if (label) return label;
+    const colLetter = XLSX.utils.encode_col(colIndex);
+    return `Column ${colLetter}`;
+  });
+
+  const rows = grid.slice(headerRowIndex + 1).map((row, rowIndex) => {
+    const rowData: Record<string, any> = { _rowId: rowIndex + 1 };
+    columns.forEach((col, colIndex) => {
+      rowData[col] = row[colIndex] ?? '';
+    });
+    return rowData;
+  }).filter((row) => {
+    return Object.entries(row).some(([key, value]) => key !== '_rowId' && String(value ?? '').trim() !== '');
+  });
+
+  return { columns, rows };
+};
+
 export async function GET() {
   const db = await getDb();
   const assets = await db.collection('wiki_assets').find({}).toArray();
@@ -129,9 +173,10 @@ export async function POST(request: Request) {
     const base64Data = buffer.toString('base64');
     const ext = file.name.split('.').pop()?.toLowerCase() || '';
 
-    let previewKind: 'pdf' | 'html' | 'images' | 'markdown' | 'none' = 'none';
+    let previewKind: 'pdf' | 'html' | 'images' | 'markdown' | 'none' | 'sheet' = 'none';
     let previewData = ""; 
     let previewStatus: 'ready' | 'pending' | 'failed' = 'ready';
+    let previewMeta: { sheetNames?: string[] } = {};
 
     if (ext === 'docx') {
       try {
@@ -143,7 +188,24 @@ export async function POST(request: Request) {
         console.error("[Pandoc] Conversion failed:", err.message);
         previewStatus = 'failed';
       }
-    } 
+    }
+    else if (['xlsx', 'xls', 'csv'].includes(ext)) {
+      try {
+        const workbook = XLSX.read(buffer, { type: 'buffer' });
+        const sheetNames = workbook.SheetNames || [];
+        const sheets = sheetNames.map((name) => {
+          const sheet = workbook.Sheets[name];
+          const { columns, rows } = buildSheetData(sheet);
+          return { name, columns, rows };
+        });
+        previewKind = 'sheet';
+        previewData = JSON.stringify({ sheets });
+        previewMeta = { sheetNames };
+      } catch (err: any) {
+        console.error("[XLSX] Conversion failed:", err.message);
+        previewStatus = 'failed';
+      }
+    }
     else if (ext === 'pdf') {
       previewKind = 'pdf';
       previewData = base64Data; 
@@ -181,7 +243,8 @@ export async function POST(request: Request) {
       preview: {
         status: previewStatus,
         kind: previewKind,
-        objectKey: previewData 
+        objectKey: previewData,
+        meta: previewMeta,
       }
     };
 
@@ -190,5 +253,34 @@ export async function POST(request: Request) {
   } catch (error: any) {
     console.error("Asset Upload API Error:", error);
     return NextResponse.json({ error: 'System upload failed' }, { status: 500 });
+  }
+}
+
+export async function PATCH(request: Request) {
+  try {
+    const cookieStore = await cookies();
+    const token = cookieStore.get('nexus_auth_token')?.value;
+    if (!token) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
+    await jwtVerify(token, JWT_SECRET);
+
+    const { id, sheetData } = await request.json();
+    if (!id || !sheetData) {
+      return NextResponse.json({ error: 'Missing asset id or sheet data' }, { status: 400 });
+    }
+
+    const result = await saveWikiAsset({
+      _id: id,
+      preview: {
+        status: 'ready',
+        kind: 'sheet',
+        objectKey: JSON.stringify(sheetData),
+        meta: { sheetNames: sheetData?.sheets?.map((sheet: any) => sheet.name) || [] },
+      },
+    } as any);
+
+    return NextResponse.json({ success: true, result });
+  } catch (error: any) {
+    console.error("Asset Update API Error:", error);
+    return NextResponse.json({ error: 'System update failed' }, { status: 500 });
   }
 }
