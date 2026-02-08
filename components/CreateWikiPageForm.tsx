@@ -8,7 +8,6 @@ interface CreateWikiPageFormProps {
   initialBundleId?: string;
   initialApplicationId?: string;
   initialMilestoneId?: string;
-  initialMode?: 'author' | 'upload' | 'ai';
   allPages: WikiPage[];
   currentUser?: { name: string };
   onSaveSuccess: (savedId: string) => void;
@@ -18,18 +17,9 @@ interface CreateWikiPageFormProps {
 }
 
 const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({ 
-  spaceId,
-  initialBundleId = '',
-  initialApplicationId = '',
-  initialMilestoneId = '',
-  initialMode = 'author',
-  currentUser,
-  onSaveSuccess,
-  onCancel,
-  bundles,
-  applications
+  spaceId, initialBundleId = '', initialApplicationId = '', initialMilestoneId = '', currentUser, onSaveSuccess, onCancel, bundles, applications
 }) => {
-  const [mode, setMode] = useState<'author' | 'upload' | 'ai'>(initialMode);
+  const [mode, setMode] = useState<'author' | 'upload'>('author');
   const [title, setTitle] = useState('');
   const [slug, setSlug] = useState('');
   const [content, setContent] = useState('');
@@ -103,76 +93,6 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
 
     return specialized[name] ? [...specialized[name], ...suggestions] : suggestions;
   }, [docTypes, documentTypeId]);
-
-  const buildTemplate = (docTypeName: string, prompt: string) => {
-    const header = `# ${title || docTypeName || 'New Document'}\n\n`;
-    const promptNote = prompt.trim()
-      ? `> **AI Prompt Used:** ${prompt.trim()}\n\n`
-      : '';
-
-    const templates: Record<string, string> = {
-      'Low Level Design': [
-        '## Overview',
-        '## Scope',
-        '## Architecture',
-        '## Interfaces & APIs',
-        '## Data Model',
-        '## Error Handling',
-        '## Security',
-        '## NFRs',
-        '## Deployment',
-        '## Open Questions'
-      ].join('\n\n'),
-      'High Level Design': [
-        '## Business Context',
-        '## System Overview',
-        '## Architecture',
-        '## Key Components',
-        '## Integrations',
-        '## Risks & Mitigations',
-        '## Assumptions',
-        '## Open Questions'
-      ].join('\n\n'),
-      Runbook: [
-        '## Purpose',
-        '## Prerequisites',
-        '## Step-by-step Procedure',
-        '## Validation',
-        '## Rollback Plan',
-        '## Monitoring & Alerts',
-        '## Escalation'
-      ].join('\n\n'),
-      'Test Plan': [
-        '## Scope',
-        '## Test Strategy',
-        '## Environments',
-        '## Test Data',
-        '## Test Cases',
-        '## Exit Criteria',
-        '## Risks'
-      ].join('\n\n'),
-      'Migration Plan': [
-        '## Goals',
-        '## Phases',
-        '## Data Migration',
-        '## Cutover Steps',
-        '## Rollback Plan',
-        '## Risks & Mitigations',
-        '## Timeline'
-      ].join('\n\n'),
-    };
-
-    const fallback = [
-      '## Overview',
-      '## Scope',
-      '## Requirements',
-      '## Design',
-      '## Risks',
-      '## Open Questions'
-    ].join('\n\n');
-
-    return `${header}${promptNote}${templates[docTypeName] || fallback}\n`;
-  };
 
   const generateSlug = (val: string) => {
     return val.toLowerCase()
@@ -264,24 +184,11 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
              <button onClick={() => setMode('upload')} className={`px-6 py-2.5 text-[10px] font-black uppercase rounded-xl transition-all flex items-center gap-2 ${mode === 'upload' ? 'bg-white text-blue-600 shadow-xl' : 'text-slate-400 hover:text-slate-600'}`}>
                 <i className="fas fa-file-upload"></i> Asset Upload
              </button>
-             <button onClick={() => setMode('ai')} className={`px-6 py-2.5 text-[10px] font-black uppercase rounded-xl transition-all flex items-center gap-2 ${mode === 'ai' ? 'bg-white text-blue-600 shadow-xl' : 'text-slate-400 hover:text-slate-600'}`}>
-                <i className="fas fa-wand-magic-sparkles"></i> AI Prompt
-             </button>
           </div>
 
-          <button
-            onClick={handleSave}
-            disabled={isSaving || mode === 'ai'}
-            className={`px-10 py-3.5 rounded-2xl shadow-xl font-black text-[10px] uppercase tracking-widest flex items-center gap-3 active:scale-95 transition-all ${
-              mode === 'ai'
-                ? 'bg-slate-200 text-slate-500 cursor-not-allowed'
-                : 'bg-slate-900 text-white'
-            }`}
-          >
+          <button onClick={handleSave} disabled={isSaving} className="px-10 py-3.5 bg-slate-900 text-white rounded-2xl shadow-xl font-black text-[10px] uppercase tracking-widest flex items-center gap-3 active:scale-95 transition-all">
             {isSaving ? <i className="fas fa-circle-notch fa-spin"></i> : <i className="fas fa-save"></i>} 
-            {isSaving
-              ? (mode === 'upload' ? 'Uploading...' : 'Saving...')
-              : (mode === 'upload' ? 'Upload Asset' : mode === 'ai' ? 'Switch to Editor' : 'Commit Artifact')}
+            {isSaving ? (mode === 'upload' ? 'Uploading...' : 'Saving...') : (mode === 'upload' ? 'Upload Asset' : 'Commit Artifact')}
           </button>
         </div>
       </header>
@@ -317,41 +224,6 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
                 )}
               </div>
             </>
-          ) : mode === 'ai' ? (
-            <div className="flex-1 flex flex-col items-center justify-center p-20 text-center">
-              <div className="max-w-3xl space-y-6">
-                <div className="w-24 h-24 bg-white rounded-3xl flex items-center justify-center text-4xl text-blue-500 shadow-xl mx-auto">
-                  <i className="fas fa-wand-magic-sparkles"></i>
-                </div>
-                <h3 className="text-2xl font-black text-slate-800 tracking-tight">Generate with AI</h3>
-                <p className="text-slate-400 font-medium leading-relaxed">
-                  Select a document type on the right to get AI prompt suggestions. Customize a prompt,
-                  then switch to Editor Mode to start drafting with that template.
-                </p>
-                <div className="flex items-center justify-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const selectedType = docTypes.find((type) => type._id === documentTypeId);
-                      const template = buildTemplate(selectedType?.name || 'Document', aiPrompt);
-                      setContent(template);
-                      setEditorFormat('markdown');
-                      setMode('author');
-                    }}
-                    className="px-8 py-3 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest rounded-2xl shadow-xl hover:bg-slate-800 transition-all"
-                  >
-                    Start with Template
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setMode('author')}
-                    className="px-8 py-3 bg-white text-slate-600 text-[10px] font-black uppercase tracking-widest rounded-2xl border border-slate-200 hover:bg-slate-50 transition-all"
-                  >
-                    Skip AI
-                  </button>
-                </div>
-              </div>
-            </div>
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center p-20 text-center">
                <div 
@@ -413,7 +285,7 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
               </select>
             </div>
 
-            {mode !== 'upload' && (
+            {mode === 'author' && (
               <div className="space-y-3">
                 <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">AI Prompt Suggestions</label>
                 {promptSuggestions.length ? (
@@ -440,23 +312,17 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
                       className="w-full bg-white border border-slate-200 rounded-2xl px-4 py-3 text-xs font-semibold text-slate-700 outline-none shadow-sm focus:border-blue-500 transition-all min-h-[120px]"
                       placeholder="Select a suggestion or customize your own prompt..."
                     />
-                    <div className="flex items-center gap-2 flex-wrap">
+                    <div className="flex items-center gap-2">
                       <button
                         type="button"
-                        onClick={() => {
-                          const selectedType = docTypes.find((type) => type._id === documentTypeId);
-                          const template = buildTemplate(selectedType?.name || 'Document', aiPrompt);
-                          setContent(template);
-                          setEditorFormat('markdown');
-                          setMode('author');
-                        }}
+                        onClick={() => navigator.clipboard?.writeText(aiPrompt)}
                         className="px-4 py-2 text-[9px] font-black uppercase tracking-widest rounded-xl bg-slate-900 text-white hover:bg-slate-800 transition-all"
                         disabled={!aiPrompt.trim()}
                       >
-                        Generate Template
+                        Copy Prompt
                       </button>
                       <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">
-                        Generates a fresh template from the latest prompt.
+                        Use with Generate with AI (coming soon)
                       </span>
                     </div>
                   </div>
