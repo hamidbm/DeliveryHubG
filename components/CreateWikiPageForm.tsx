@@ -34,6 +34,7 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
   const [viewMode, setViewMode] = useState<'edit' | 'preview'>('edit');
   const [editorFormat, setEditorFormat] = useState<'markdown' | 'html'>('html');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [aiPrompt, setAiPrompt] = useState('');
   
   const [themes, setThemes] = useState<WikiTheme[]>([]);
   const [categories, setCategories] = useState<TaxonomyCategory[]>([]);
@@ -55,6 +56,43 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
     };
     loadData();
   }, []);
+
+  const promptSuggestions = useMemo(() => {
+    const selectedType = docTypes.find((type) => type._id === documentTypeId);
+    if (!selectedType) return [];
+    const name = selectedType.name;
+    const base = `Create a Markdown template for a "${name}" document.`;
+    const suggestions = [
+      `${base} Include sections for Overview, Scope, Assumptions, and Key Decisions.`,
+      `${base} Provide a structured outline with headings, bullet points, and placeholders for data.`,
+      `${base} Emphasize diagrams or tables where helpful and include a revision history section.`,
+    ];
+
+    const specialized: Record<string, string[]> = {
+      'Low Level Design': [
+        `${base} Include Architecture, Interfaces, Data Model, Error Handling, and NFRs.`,
+        `${base} Add API contracts, sequence flows, and deployment considerations sections.`,
+      ],
+      'High Level Design': [
+        `${base} Include Business Context, System Overview, Architecture, and Risks.`,
+        `${base} Add components, integrations, and security considerations sections.`,
+      ],
+      Runbook: [
+        `${base} Include Prerequisites, Step-by-step Procedures, Validation, and Rollback.`,
+        `${base} Add monitoring, alerts, and escalation paths sections.`,
+      ],
+      'Test Plan': [
+        `${base} Include Scope, Test Strategy, Test Cases, and Exit Criteria.`,
+        `${base} Add environments, test data, and traceability sections.`,
+      ],
+      'Migration Plan': [
+        `${base} Include Phases, Cutover Steps, Data Migration, and Rollback.`,
+        `${base} Add risk mitigation and timeline sections.`,
+      ],
+    };
+
+    return specialized[name] ? [...specialized[name], ...suggestions] : suggestions;
+  }, [docTypes, documentTypeId]);
 
   const generateSlug = (val: string) => {
     return val.toLowerCase()
@@ -246,6 +284,53 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
                 ))}
               </select>
             </div>
+
+            {mode === 'author' && (
+              <div className="space-y-3">
+                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">AI Prompt Suggestions</label>
+                {promptSuggestions.length ? (
+                  <div className="space-y-3">
+                    <div className="flex flex-col gap-2">
+                      {promptSuggestions.map((suggestion, index) => (
+                        <button
+                          key={`${documentTypeId}-${index}`}
+                          type="button"
+                          onClick={() => setAiPrompt(suggestion)}
+                          className={`text-left px-4 py-3 rounded-2xl border text-[10px] font-black uppercase tracking-widest transition-all ${
+                            aiPrompt === suggestion
+                              ? 'bg-blue-600 text-white border-blue-600'
+                              : 'bg-white text-slate-500 border-slate-200 hover:border-blue-400'
+                          }`}
+                        >
+                          {suggestion}
+                        </button>
+                      ))}
+                    </div>
+                    <textarea
+                      value={aiPrompt}
+                      onChange={(e) => setAiPrompt(e.target.value)}
+                      className="w-full bg-white border border-slate-200 rounded-2xl px-4 py-3 text-xs font-semibold text-slate-700 outline-none shadow-sm focus:border-blue-500 transition-all min-h-[120px]"
+                      placeholder="Select a suggestion or customize your own prompt..."
+                    />
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => navigator.clipboard?.writeText(aiPrompt)}
+                        className="px-4 py-2 text-[9px] font-black uppercase tracking-widest rounded-xl bg-slate-900 text-white hover:bg-slate-800 transition-all"
+                        disabled={!aiPrompt.trim()}
+                      >
+                        Copy Prompt
+                      </button>
+                      <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">
+                        Use with Generate with AI (coming soon)
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-400 font-medium">Select a document type to see AI prompt suggestions.</p>
+                )}
+              </div>
+            )}
 
             <SidebarField label="Business Bundle" value={bundleId} onChange={setBundleId} options={bundles.map(b => ({ id: b._id, name: b.name }))} />
             <SidebarField label="Target Application" value={applicationId} onChange={setApplicationId} options={applications.filter(a => !bundleId || a.bundleId === bundleId).map(a => ({ id: a._id || a.id, name: a.name }))} />
