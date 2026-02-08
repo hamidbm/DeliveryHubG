@@ -13,28 +13,39 @@ export const buildSheetData = (sheet: XLSX.WorkSheet) => {
 
   const headerRowIndex = grid.reduce(
     (best, row, index) => {
-      const nonEmptyCount = row.filter((cell) => String(cell ?? '').trim() !== '').length;
-      if (nonEmptyCount > best.count) {
-        return { index, count: nonEmptyCount };
+      const nonEmptyCells = row.filter((cell) => String(cell ?? '').trim() !== '');
+      const nonEmptyCount = nonEmptyCells.length;
+      const labelCount = nonEmptyCells.filter((cell) => /[a-zA-Z]/.test(String(cell))).length;
+      const numericCount = nonEmptyCells.filter((cell) => !isNaN(Number(cell))).length;
+      const score = labelCount * 2 + nonEmptyCount - numericCount;
+      if (score > best.score) {
+        return { index, score };
       }
       return best;
     },
-    { index: 0, count: 0 }
+    { index: 0, score: -1 }
   ).index;
 
   const headerRow = grid[headerRowIndex] || [];
-  const columns = headerRow.map((cell, colIndex) => {
+  const rawColumns = headerRow.map((cell, colIndex) => {
     const label = String(cell ?? '').trim();
-    if (label) return label;
+    if (label && !/^__EMPTY/i.test(label)) return label;
     const colLetter = XLSX.utils.encode_col(colIndex);
     return `Column ${colLetter}`;
+  });
+
+  const columns = rawColumns.filter((col, colIndex) => {
+    if (!col) return false;
+    if (headerRow[colIndex] && String(headerRow[colIndex]).trim() !== '') return true;
+    return grid.slice(headerRowIndex + 1).some((row) => String(row[colIndex] ?? '').trim() !== '');
   });
 
   const rows = grid
     .slice(headerRowIndex + 1)
     .map((row, rowIndex) => {
       const rowData: Record<string, any> = { _rowId: rowIndex + 1 };
-      columns.forEach((col, colIndex) => {
+      rawColumns.forEach((col, colIndex) => {
+        if (!columns.includes(col)) return;
         rowData[col] = row[colIndex] ?? '';
       });
       return rowData;

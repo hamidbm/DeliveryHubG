@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { WikiAsset, Bundle, Application, TaxonomyCategory, TaxonomyDocumentType, WikiTheme } from '../types';
 import MarkdownRenderer from './MarkdownRenderer';
 import WikiAssetSpreadsheetPreview from './WikiAssetSpreadsheetPreview';
+import WikiAssetDashboardView from './WikiAssetDashboardView';
 
 interface WikiAssetDisplayProps {
   asset: WikiAsset;
@@ -13,6 +14,7 @@ const WikiAssetDisplay: React.FC<WikiAssetDisplayProps> = ({ asset, bundles = []
   const [taxCat, setTaxCat] = useState<TaxonomyCategory | null>(null);
   const [taxType, setTaxType] = useState<TaxonomyDocumentType | null>(null);
   const [activeTheme, setActiveTheme] = useState<WikiTheme | null>(null);
+  const [showDashboards, setShowDashboards] = useState(false);
 
   useEffect(() => {
     const loadMetadata = async () => {
@@ -80,6 +82,9 @@ const WikiAssetDisplay: React.FC<WikiAssetDisplayProps> = ({ asset, bundles = []
     }
 
     if (asset.preview.kind === 'sheet' && asset.preview.objectKey) {
+      if (showDashboards) {
+        return <WikiAssetDashboardView asset={asset} onBack={() => setShowDashboards(false)} />;
+      }
       return (
         <WikiAssetSpreadsheetPreview asset={asset} />
       );
@@ -139,9 +144,22 @@ const WikiAssetDisplay: React.FC<WikiAssetDisplayProps> = ({ asset, bundles = []
              <i className="fas fa-fingerprint text-[8px]"></i> SHA-256: {asset.file.checksumSha256 || 'SYSTEM_VERIFIED_REGISTRY_ID'}
            </p>
         </div>
-        <button onClick={handleDownload} className="px-8 py-3 bg-slate-100 text-slate-600 text-[10px] font-black uppercase rounded-xl border border-slate-200 hover:bg-white hover:shadow-xl transition-all flex items-center gap-2">
-           <i className="fas fa-file-download"></i> Get Source
-        </button>
+        <div className="flex items-center gap-3">
+          {asset.preview.kind === 'sheet' && asset.preview.objectKey && (
+            <button
+              onClick={() => setShowDashboards((prev) => !prev)}
+              className="px-8 py-3 bg-slate-900 text-white text-[10px] font-black uppercase rounded-xl border border-slate-900 hover:bg-slate-800 transition-all flex items-center gap-2"
+            >
+              <i className="fas fa-chart-column"></i> {showDashboards ? 'View Data' : 'Dashboards'}
+            </button>
+          )}
+          <button
+            onClick={handleDownload}
+            className="px-8 py-3 bg-slate-100 text-slate-600 text-[10px] font-black uppercase rounded-xl border border-slate-200 hover:bg-white hover:shadow-xl transition-all flex items-center gap-2"
+          >
+            <i className="fas fa-file-download"></i> Get Source
+          </button>
+        </div>
       </header>
 
       <div className="wiki-preview-registry">
