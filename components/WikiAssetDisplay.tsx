@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { WikiAsset, Bundle, Application, TaxonomyCategory, TaxonomyDocumentType, WikiTheme } from '../types';
 import MarkdownRenderer from './MarkdownRenderer';
+import WikiAssetSpreadsheetPreview from './WikiAssetSpreadsheetPreview';
 
 interface WikiAssetDisplayProps {
   asset: WikiAsset;
@@ -32,6 +33,7 @@ const WikiAssetDisplay: React.FC<WikiAssetDisplayProps> = ({ asset, bundles = []
     };
     loadMetadata();
   }, [asset]);
+
 
   const bundle = bundles.find(b => b._id === asset.bundleId);
   const app = applications.find(a => a._id === asset.applicationId || a.id === asset.applicationId);
@@ -74,6 +76,12 @@ const WikiAssetDisplay: React.FC<WikiAssetDisplayProps> = ({ asset, bundles = []
         >
            <MarkdownRenderer content={asset.preview.objectKey} />
         </div>
+      );
+    }
+
+    if (asset.preview.kind === 'sheet' && asset.preview.objectKey) {
+      return (
+        <WikiAssetSpreadsheetPreview asset={asset} />
       );
     }
 
