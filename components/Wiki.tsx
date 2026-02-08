@@ -42,7 +42,6 @@ const Wiki: React.FC<WikiProps> = ({
   const [activeArtifact, setActiveArtifact] = useState<WikiPage | WikiAsset | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
-  const [createMode, setCreateMode] = useState<'author' | 'upload' | 'ai'>('author');
   const [loading, setLoading] = useState(true);
   const [isSidebarVisible, setIsSidebarVisible] = useState(true);
   const [copyFeedback, setCopyFeedback] = useState(false);
@@ -373,23 +372,8 @@ const Wiki: React.FC<WikiProps> = ({
           </nav>
           
           <div className="p-6 border-t border-slate-100 bg-white">
-             <button
-               onClick={() => {
-                 setCreateMode('author');
-                 setIsCreating(true);
-               }}
-               className="w-full py-4 bg-blue-600 text-white text-[10px] font-black rounded-2xl uppercase tracking-widest shadow-xl shadow-blue-500/20 hover:bg-blue-700 active:scale-95 transition-all flex items-center justify-center gap-2"
-             >
+             <button onClick={() => setIsCreating(true)} className="w-full py-4 bg-blue-600 text-white text-[10px] font-black rounded-2xl uppercase tracking-widest shadow-xl shadow-blue-500/20 hover:bg-blue-700 active:scale-95 transition-all flex items-center justify-center gap-2">
                <i className="fas fa-plus"></i> New Artifact
-             </button>
-             <button
-               onClick={() => {
-                 setCreateMode('ai');
-                 setIsCreating(true);
-               }}
-               className="mt-3 w-full py-3 bg-slate-900 text-white text-[10px] font-black rounded-2xl uppercase tracking-widest shadow-xl shadow-slate-900/20 hover:bg-slate-800 active:scale-95 transition-all flex items-center justify-center gap-2"
-             >
-               <i className="fas fa-wand-magic-sparkles"></i> Generate with AI
              </button>
           </div>
         </aside>
@@ -431,19 +415,7 @@ const Wiki: React.FC<WikiProps> = ({
       )}
 
       {isCreating && (
-        <CreateWikiPageForm
-          spaceId={contextualMetadata.spaceId || (spaces[0]?._id || 'default')}
-          initialBundleId={contextualMetadata.bundleId}
-          initialApplicationId={contextualMetadata.applicationId}
-          initialMilestoneId={contextualMetadata.milestoneId}
-          initialMode={createMode}
-          allPages={pages}
-          currentUser={currentUser}
-          onSaveSuccess={(id) => { setIsCreating(false); refreshRegistry(id); }}
-          onCancel={() => setIsCreating(false)}
-          bundles={bundles}
-          applications={applications}
-        />
+        <CreateWikiPageForm spaceId={contextualMetadata.spaceId || (spaces[0]?._id || 'default')} initialBundleId={contextualMetadata.bundleId} initialApplicationId={contextualMetadata.applicationId} initialMilestoneId={contextualMetadata.milestoneId} allPages={pages} currentUser={currentUser} onSaveSuccess={(id) => { setIsCreating(false); refreshRegistry(id); }} onCancel={() => setIsCreating(false)} bundles={bundles} applications={applications} />
       )}
 
       <style dangerouslySetInnerHTML={{ __html: `
