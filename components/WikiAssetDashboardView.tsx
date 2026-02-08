@@ -1,5 +1,17 @@
 import React, { useMemo, useState } from 'react';
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Line,
+  LineChart,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 import { WikiAsset } from '../types';
 
 interface WikiAssetDashboardViewProps {
@@ -134,6 +146,34 @@ const WikiAssetDashboardView: React.FC<WikiAssetDashboardViewProps> = ({ asset }
                 <Tooltip />
                 <Bar dataKey="total" fill="#2563eb" radius={[6, 6, 0, 0]} />
               </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-8 grid gap-6 lg:grid-cols-2">
+        <div className="border border-slate-200 rounded-2xl p-5 bg-white shadow-sm">
+          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-4">Distribution</p>
+          <div className="h-[280px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Tooltip />
+                <Pie data={chartData} dataKey="total" nameKey="label" fill="#6366f1" label />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+        <div className="border border-slate-200 rounded-2xl p-5 bg-white shadow-sm">
+          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-4">Trend</p>
+          <div className="h-[280px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+                <YAxis tick={{ fontSize: 10 }} />
+                <Tooltip />
+                <Line type="monotone" dataKey="total" stroke="#0ea5e9" strokeWidth={2} dot={{ r: 3 }} />
+              </LineChart>
             </ResponsiveContainer>
           </div>
         </div>
