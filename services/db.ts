@@ -35,9 +35,10 @@ export const fetchSystemSettings = async () => {
 
 export const saveSystemSettings = async (settings: any) => {
   const db = await getDb();
+  const { _id, key, ...rest } = settings || {};
   return await db.collection('settings').updateOne(
     { key: 'global_config' },
-    { $set: settings },
+    { $set: { ...rest, key: key || 'global_config' } },
     { upsert: true }
   );
 };
