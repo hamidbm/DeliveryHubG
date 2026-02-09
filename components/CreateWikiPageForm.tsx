@@ -45,8 +45,6 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
   const [editorFormat, setEditorFormat] = useState<'markdown' | 'html'>('html');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [aiPrompt, setAiPrompt] = useState('');
-  const [isAiProcessing, setIsAiProcessing] = useState(false);
-  const [aiError, setAiError] = useState<string | null>(null);
   
   const [themes, setThemes] = useState<WikiTheme[]>([]);
   const [categories, setCategories] = useState<TaxonomyCategory[]>([]);
