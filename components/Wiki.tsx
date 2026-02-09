@@ -372,7 +372,10 @@ const Wiki: React.FC<WikiProps> = ({
           </nav>
           
           <div className="p-6 border-t border-slate-100 bg-white">
-             <button onClick={() => setIsCreating(true)} className="w-full py-4 bg-blue-600 text-white text-[10px] font-black rounded-2xl uppercase tracking-widest shadow-xl shadow-blue-500/20 hover:bg-blue-700 active:scale-95 transition-all flex items-center justify-center gap-2">
+             <button
+               onClick={() => setIsCreating(true)}
+               className="w-full py-4 bg-blue-600 text-white text-[10px] font-black rounded-2xl uppercase tracking-widest shadow-xl shadow-blue-500/20 hover:bg-blue-700 active:scale-95 transition-all flex items-center justify-center gap-2"
+             >
                <i className="fas fa-plus"></i> New Artifact
              </button>
           </div>
@@ -415,7 +418,18 @@ const Wiki: React.FC<WikiProps> = ({
       )}
 
       {isCreating && (
-        <CreateWikiPageForm spaceId={contextualMetadata.spaceId || (spaces[0]?._id || 'default')} initialBundleId={contextualMetadata.bundleId} initialApplicationId={contextualMetadata.applicationId} initialMilestoneId={contextualMetadata.milestoneId} allPages={pages} currentUser={currentUser} onSaveSuccess={(id) => { setIsCreating(false); refreshRegistry(id); }} onCancel={() => setIsCreating(false)} bundles={bundles} applications={applications} />
+        <CreateWikiPageForm
+          spaceId={contextualMetadata.spaceId || (spaces[0]?._id || 'default')}
+          initialBundleId={contextualMetadata.bundleId}
+          initialApplicationId={contextualMetadata.applicationId}
+          initialMilestoneId={contextualMetadata.milestoneId}
+          allPages={pages}
+          currentUser={currentUser}
+          onSaveSuccess={(id) => { setIsCreating(false); refreshRegistry(id); }}
+          onCancel={() => setIsCreating(false)}
+          bundles={bundles}
+          applications={applications}
+        />
       )}
 
       <style dangerouslySetInnerHTML={{ __html: `
