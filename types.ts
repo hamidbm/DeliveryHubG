@@ -260,7 +260,7 @@ export interface WikiAsset {
   };
   preview: {
     status: 'pending' | 'ready' | 'failed';
-    kind: 'pdf' | 'html' | 'images' | 'markdown' | 'none';
+    kind: 'pdf' | 'html' | 'images' | 'markdown' | 'none' | 'sheet';
     objectKey?: string;
     meta?: {
       pageCount?: number;
