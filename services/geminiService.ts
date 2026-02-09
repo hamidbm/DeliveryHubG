@@ -142,9 +142,9 @@ export const suggestReassignment = async (item: any, teamCapacity: any[], model:
   } catch (error) { return "Offline."; }
 };
 
-export type WikiAssistTask = 'improve' | 'expand' | 'diagram' | 'summary';
+type WikiAssistTask = 'improve' | 'expand' | 'diagram' | 'summary';
 
-export const buildWikiPrompt = (task: WikiAssistTask, content: string, format: string, title?: string) => {
+const buildWikiPrompt = (task: WikiAssistTask, content: string, format: string, title?: string) => {
   const header = title ? `Title: ${title}\n\n` : '';
   const formatHint = format === 'html' ? 'HTML' : 'Markdown';
 
