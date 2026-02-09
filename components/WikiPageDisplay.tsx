@@ -13,6 +13,9 @@ const WikiPageDisplay: React.FC<WikiPageDisplayProps> = ({ page, onNavigate, bun
   const [activeTheme, setActiveTheme] = useState<WikiTheme | null>(null);
   const [taxCat, setTaxCat] = useState<TaxonomyCategory | null>(null);
   const [taxType, setTaxType] = useState<TaxonomyDocumentType | null>(null);
+  const [summary, setSummary] = useState<string | null>(null);
+  const [isSummaryLoading, setIsSummaryLoading] = useState(false);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -36,6 +39,12 @@ const WikiPageDisplay: React.FC<WikiPageDisplayProps> = ({ page, onNavigate, bun
     };
     loadMetadata();
   }, [page]);
+
+  useEffect(() => {
+    setSummary(null);
+    setSummaryError(null);
+    setIsSummaryLoading(false);
+  }, [page._id, page.content]);
 
   // Intercept internal links
   const handleContentClick = (e: React.MouseEvent) => {
@@ -69,6 +78,33 @@ const WikiPageDisplay: React.FC<WikiPageDisplayProps> = ({ page, onNavigate, bun
   const bundle = bundles.find(b => b._id === page.bundleId);
   const app = applications.find(a => a._id === page.applicationId || a.id === page.applicationId);
 
+  const handleSummary = async () => {
+    setIsSummaryLoading(true);
+    setSummaryError(null);
+    try {
+      const res = await fetch('/api/wiki/ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          task: 'summary',
+          title: page.title,
+          format: 'markdown',
+          content: page.content
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setSummaryError(data.error || 'Summary generation failed.');
+        return;
+      }
+      setSummary(data.result || null);
+    } catch (err) {
+      setSummaryError('Summary generation failed.');
+    } finally {
+      setIsSummaryLoading(false);
+    }
+  };
+
   return (
     <article className="w-full">
       {activeTheme && <style dangerouslySetInnerHTML={{ __html: activeTheme.css }} />}
@@ -83,8 +119,40 @@ const WikiPageDisplay: React.FC<WikiPageDisplayProps> = ({ page, onNavigate, bun
         </div>
       </section>
       <header className="mb-12">
-        <h1 className="text-6xl font-black text-slate-900 tracking-tighter">{page.title}</h1>
-        {page.slug && <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest mt-2">slug: {page.slug}</p>}
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+          <div>
+            <h1 className="text-6xl font-black text-slate-900 tracking-tighter">{page.title}</h1>
+            {page.slug && <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest mt-2">slug: {page.slug}</p>}
+          </div>
+          <button
+            onClick={handleSummary}
+            disabled={isSummaryLoading}
+            className={`px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${
+              isSummaryLoading
+                ? 'bg-slate-200 text-slate-500 cursor-not-allowed'
+                : 'bg-slate-900 text-white shadow-lg hover:bg-slate-800'
+            }`}
+          >
+            {isSummaryLoading ? 'Summarizing...' : 'Generate Summary'}
+          </button>
+        </div>
+        {summaryError && (
+          <div className="mt-6 p-4 bg-amber-50 border border-amber-100 rounded-2xl text-amber-600 text-[10px] font-black uppercase tracking-widest flex items-center gap-2 animate-fadeIn">
+            <i className="fas fa-circle-exclamation"></i>
+            {summaryError}
+          </div>
+        )}
+        {summary && (
+          <div className="mt-6 p-6 bg-blue-50/70 border border-blue-100 rounded-3xl">
+            <div className="flex items-center gap-2 mb-3 text-blue-700">
+              <i className="fas fa-wand-magic-sparkles text-sm"></i>
+              <span className="text-[9px] font-black uppercase tracking-widest">AI Summary</span>
+            </div>
+            <div className="text-sm text-slate-700">
+              <MarkdownRenderer content={summary} />
+            </div>
+          </div>
+        )}
       </header>
       <div 
         ref={contentRef}

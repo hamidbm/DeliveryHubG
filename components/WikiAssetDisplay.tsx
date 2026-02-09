@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { WikiAsset, Bundle, Application, TaxonomyCategory, TaxonomyDocumentType } from '../types';
+import { WikiAsset, Bundle, Application, TaxonomyCategory, TaxonomyDocumentType, WikiTheme } from '../types';
 import MarkdownRenderer from './MarkdownRenderer';
+import WikiAssetSpreadsheetPreview from './WikiAssetSpreadsheetPreview';
+import WikiAssetDashboardView from './WikiAssetDashboardView';
 
 interface WikiAssetDisplayProps {
   asset: WikiAsset;
@@ -11,23 +13,29 @@ interface WikiAssetDisplayProps {
 const WikiAssetDisplay: React.FC<WikiAssetDisplayProps> = ({ asset, bundles = [], applications = [] }) => {
   const [taxCat, setTaxCat] = useState<TaxonomyCategory | null>(null);
   const [taxType, setTaxType] = useState<TaxonomyDocumentType | null>(null);
+  const [activeTheme, setActiveTheme] = useState<WikiTheme | null>(null);
+  const [showDashboards, setShowDashboards] = useState(false);
 
   useEffect(() => {
     const loadMetadata = async () => {
       try {
-        const [catRes, typRes] = await Promise.all([
+        const [thRes, catRes, typRes] = await Promise.all([
+          fetch('/api/wiki/themes?active=true'),
           fetch('/api/taxonomy/categories?active=true'),
           fetch('/api/taxonomy/document-types?active=true')
         ]);
+        const themes = await thRes.json();
         const categories = await catRes.json();
         const types = await typRes.json();
         const type = types.find((t: any) => t._id === asset.documentTypeId);
         setTaxType(type || null);
         if (type) setTaxCat(categories.find((c: any) => c._id === type.categoryId) || null);
+        setActiveTheme(themes.find((t: any) => t.key === asset.themeKey) || themes.find((t: any) => t.isDefault) || null);
       } catch (err) {}
     };
     loadMetadata();
   }, [asset]);
+
 
   const bundle = bundles.find(b => b._id === asset.bundleId);
   const app = applications.find(a => a._id === asset.applicationId || a.id === asset.applicationId);
@@ -65,9 +73,20 @@ const WikiAssetDisplay: React.FC<WikiAssetDisplayProps> = ({ asset, bundles = []
 
     if (asset.preview.kind === 'markdown' && asset.preview.objectKey) {
       return (
-        <div className="bg-white border border-slate-100 p-12 rounded-[2.5rem] shadow-inner overflow-x-auto">
+        <div
+          className={`wiki-content theme-${activeTheme?.key || 'default'} bg-white border border-slate-100 p-12 rounded-[2.5rem] shadow-inner overflow-x-auto`}
+        >
            <MarkdownRenderer content={asset.preview.objectKey} />
         </div>
+      );
+    }
+
+    if (asset.preview.kind === 'sheet' && asset.preview.objectKey) {
+      if (showDashboards) {
+        return <WikiAssetDashboardView asset={asset} onBack={() => setShowDashboards(false)} />;
+      }
+      return (
+        <WikiAssetSpreadsheetPreview asset={asset} />
       );
     }
 
@@ -102,6 +121,7 @@ const WikiAssetDisplay: React.FC<WikiAssetDisplayProps> = ({ asset, bundles = []
 
   return (
     <article className="w-full animate-fadeIn">
+      {activeTheme && <style dangerouslySetInnerHTML={{ __html: activeTheme.css }} />}
       <section className="mb-12 flex flex-wrap gap-4">
         <MetaChip label="Category" value={taxCat?.name || 'General'} icon={taxCat?.icon || 'fa-tag'} />
         <MetaChip label="Blueprint" value={taxType?.name || 'Artifact'} icon="fa-file-contract" />
@@ -124,9 +144,22 @@ const WikiAssetDisplay: React.FC<WikiAssetDisplayProps> = ({ asset, bundles = []
              <i className="fas fa-fingerprint text-[8px]"></i> SHA-256: {asset.file.checksumSha256 || 'SYSTEM_VERIFIED_REGISTRY_ID'}
            </p>
         </div>
-        <button onClick={handleDownload} className="px-8 py-3 bg-slate-100 text-slate-600 text-[10px] font-black uppercase rounded-xl border border-slate-200 hover:bg-white hover:shadow-xl transition-all flex items-center gap-2">
-           <i className="fas fa-file-download"></i> Get Source
-        </button>
+        <div className="flex items-center gap-3">
+          {asset.preview.kind === 'sheet' && asset.preview.objectKey && (
+            <button
+              onClick={() => setShowDashboards((prev) => !prev)}
+              className="px-8 py-3 bg-slate-900 text-white text-[10px] font-black uppercase rounded-xl border border-slate-900 hover:bg-slate-800 transition-all flex items-center gap-2"
+            >
+              <i className="fas fa-chart-column"></i> {showDashboards ? 'View Data' : 'Dashboards'}
+            </button>
+          )}
+          <button
+            onClick={handleDownload}
+            className="px-8 py-3 bg-slate-100 text-slate-600 text-[10px] font-black uppercase rounded-xl border border-slate-200 hover:bg-white hover:shadow-xl transition-all flex items-center gap-2"
+          >
+            <i className="fas fa-file-download"></i> Get Source
+          </button>
+        </div>
       </header>
 
       <div className="wiki-preview-registry">
