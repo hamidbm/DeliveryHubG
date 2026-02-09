@@ -56,6 +56,8 @@ const WikiForm: React.FC<WikiFormProps> = ({
   const [viewMode, setViewMode] = useState<'edit' | 'preview'>('edit');
   const [editorFormat, setEditorFormat] = useState<'markdown' | 'html'>('html');
   const [themes, setThemes] = useState<WikiTheme[]>([]);
+  const [isAiProcessing, setIsAiProcessing] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
   
   // Taxonomy Data
   const [categories, setCategories] = useState<TaxonomyCategory[]>([]);
@@ -100,6 +102,63 @@ const WikiForm: React.FC<WikiFormProps> = ({
     const replacement = before + textarea.value.substring(start, end) + after;
     setContent(textarea.value.substring(0, start) + replacement + textarea.value.substring(end));
     setTimeout(() => { textarea.focus(); textarea.setSelectionRange(start + before.length, start + before.length + (end - start)); }, 0);
+  };
+
+  const applyAiText = (aiText: string) => {
+    if (!textAreaRef.current) return;
+    const textarea = textAreaRef.current;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const hasSelection = start !== end;
+    const trimmed = aiText.trim();
+    const insertValue = hasSelection ? trimmed : `${trimmed}\n\n`;
+    const updated = hasSelection
+      ? textarea.value.substring(0, start) + insertValue + textarea.value.substring(end)
+      : textarea.value.substring(0, start) + insertValue + textarea.value.substring(start);
+    setContent(updated);
+    setTimeout(() => {
+      textarea.focus();
+      const cursor = start + insertValue.length;
+      textarea.setSelectionRange(cursor, cursor);
+    }, 0);
+  };
+
+  const runAiAssist = async (task: 'improve' | 'expand' | 'diagram') => {
+    if (!textAreaRef.current) return;
+    if (!content.trim()) {
+      setAiError('Add content before requesting AI assistance.');
+      return;
+    }
+    setIsAiProcessing(true);
+    setAiError(null);
+    const textarea = textAreaRef.current;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selectedText = textarea.value.substring(start, end);
+    const payload = {
+      task,
+      title,
+      format: editorFormat,
+      content: selectedText || content
+    };
+
+    try {
+      const res = await fetch('/api/wiki/ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setAiError(data.error || 'AI request failed.');
+        return;
+      }
+      applyAiText(data.result || '');
+    } catch (err) {
+      setAiError('AI request failed.');
+    } finally {
+      setIsAiProcessing(false);
+    }
   };
 
   const handleSave = async () => {
@@ -166,6 +225,10 @@ const WikiForm: React.FC<WikiFormProps> = ({
                 <ToolbarButton icon="fa-triangle-exclamation" onClick={() => insertText('<div class="callout warn">\n  <div class="title"><i class="fas fa-triangle-exclamation"></i> WARNING</div>\n  <p>', '</p>\n</div>')} />
                 <ToolbarButton icon="fa-grip" onClick={() => insertText('<div class="cards">\n  <div class="card accent span-6">\n    <div class="card-title">Card Title</div>\n    <div class="card-meta">META TAG</div>\n    <p>', '</p>\n  </div>\n</div>')} />
                 <ToolbarButton icon="fa-code" onClick={() => insertText(editorFormat === 'html' ? '<pre><code>' : '```\n', editorFormat === 'html' ? '</code></pre>' : '\n```')} />
+                <div className="w-[1px] h-6 bg-slate-200 mx-2"></div>
+                <ToolbarButton icon="fa-wand-magic-sparkles" label="Improve Section" onClick={() => runAiAssist('improve')} disabled={isAiProcessing} />
+                <ToolbarButton icon="fa-expand" label="Expand Outline" onClick={() => runAiAssist('expand')} disabled={isAiProcessing} />
+                <ToolbarButton icon="fa-diagram-project" label="Generate Diagram" onClick={() => runAiAssist('diagram')} disabled={isAiProcessing} />
              </div>
              <button onClick={() => setViewMode(viewMode === 'preview' ? 'edit' : 'preview')} className={`px-4 py-1.5 text-[9px] font-black uppercase rounded-xl transition-all ${viewMode === 'preview' ? 'bg-slate-900 text-white' : 'bg-white border border-slate-200 text-slate-500'}`}>
                 {viewMode === 'preview' ? 'Editor View' : 'Preview Artifact'}
@@ -223,6 +286,12 @@ const WikiForm: React.FC<WikiFormProps> = ({
               {saveError}
             </div>
           )}
+          {aiError && (
+            <div className="p-4 bg-amber-50 border border-amber-100 rounded-2xl text-amber-600 text-[10px] font-black uppercase tracking-widest flex items-center gap-2 animate-fadeIn">
+              <i className="fas fa-circle-exclamation"></i>
+              {aiError}
+            </div>
+          )}
         </aside>
       </div>
       <style dangerouslySetInnerHTML={{ __html: `
@@ -234,8 +303,19 @@ const WikiForm: React.FC<WikiFormProps> = ({
   );
 };
 
-const ToolbarButton = ({ icon, onClick }: any) => (
-  <button onClick={onClick} className="w-9 h-9 flex items-center justify-center text-slate-400 hover:text-blue-600 hover:bg-white hover:shadow-sm rounded-xl transition-all"><i className={`fas ${icon} text-sm`}></i></button>
+const ToolbarButton = ({ icon, onClick, disabled, label }: any) => (
+  <button
+    onClick={onClick}
+    disabled={disabled}
+    title={label}
+    className={`w-9 h-9 flex items-center justify-center rounded-xl transition-all ${
+      disabled
+        ? 'text-slate-300 cursor-not-allowed'
+        : 'text-slate-400 hover:text-blue-600 hover:bg-white hover:shadow-sm'
+    }`}
+  >
+    <i className={`fas ${icon} text-sm`}></i>
+  </button>
 );
 
 const SidebarField = ({ label, value, onChange, options }: any) => (

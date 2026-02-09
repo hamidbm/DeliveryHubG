@@ -245,6 +245,63 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
     setTimeout(() => { textarea.focus(); textarea.setSelectionRange(start + before.length, start + before.length + (end - start)); }, 0);
   };
 
+  const applyAiText = (aiText: string) => {
+    if (!textAreaRef.current) return;
+    const textarea = textAreaRef.current;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const hasSelection = start !== end;
+    const trimmed = aiText.trim();
+    const insertValue = hasSelection ? trimmed : `${trimmed}\n\n`;
+    const updated = hasSelection
+      ? textarea.value.substring(0, start) + insertValue + textarea.value.substring(end)
+      : textarea.value.substring(0, start) + insertValue + textarea.value.substring(start);
+    setContent(updated);
+    setTimeout(() => {
+      textarea.focus();
+      const cursor = start + insertValue.length;
+      textarea.setSelectionRange(cursor, cursor);
+    }, 0);
+  };
+
+  const runAiAssist = async (task: 'improve' | 'expand' | 'diagram') => {
+    if (!textAreaRef.current) return;
+    if (!content.trim()) {
+      setAiError('Add content before requesting AI assistance.');
+      return;
+    }
+    setIsAiProcessing(true);
+    setAiError(null);
+    const textarea = textAreaRef.current;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selectedText = textarea.value.substring(start, end);
+    const payload = {
+      task,
+      title,
+      format: editorFormat,
+      content: selectedText || content
+    };
+
+    try {
+      const res = await fetch('/api/wiki/ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setAiError(data.error || 'AI request failed.');
+        return;
+      }
+      applyAiText(data.result || '');
+    } catch (err) {
+      setAiError('AI request failed.');
+    } finally {
+      setIsAiProcessing(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-[100] bg-slate-50 flex flex-col animate-fadeIn">
       <header className="px-10 py-5 bg-white border-b border-slate-200 flex items-center justify-between shadow-sm shrink-0">
@@ -298,6 +355,10 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
                     <div className="w-[1px] h-6 bg-slate-200 mx-2"></div>
                     <ToolbarButton icon="fa-link" onClick={() => insertText(editorFormat === 'html' ? '<a href="/wiki/TARGET-SLUG">' : '[Link Title](/wiki/TARGET-SLUG', editorFormat === 'html' ? '</a>' : ')')} />
                     <ToolbarButton icon="fa-circle-info" onClick={() => insertText('<div class="callout info">\n  <div class="title"><i class="fas fa-circle-info"></i> INFO</div>\n  <p>', '</p>\n</div>')} />
+                    <div className="w-[1px] h-6 bg-slate-200 mx-2"></div>
+                    <ToolbarButton icon="fa-wand-magic-sparkles" label="Improve Section" onClick={() => runAiAssist('improve')} disabled={isAiProcessing} />
+                    <ToolbarButton icon="fa-expand" label="Expand Outline" onClick={() => runAiAssist('expand')} disabled={isAiProcessing} />
+                    <ToolbarButton icon="fa-diagram-project" label="Generate Diagram" onClick={() => runAiAssist('diagram')} disabled={isAiProcessing} />
                  </div>
                  <div className="flex gap-2">
                     <div className="flex bg-white rounded-lg p-0.5 border border-slate-200 text-[8px] font-black uppercase">
@@ -477,14 +538,30 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
               <i className="fas fa-exclamation-triangle"></i> {saveError}
             </div>
           )}
+          {aiError && (
+            <div className="p-4 bg-amber-50 border border-amber-100 rounded-2xl text-amber-600 text-[10px] font-black uppercase tracking-widest flex items-center gap-2 animate-fadeIn">
+              <i className="fas fa-circle-exclamation"></i> {aiError}
+            </div>
+          )}
         </aside>
       </div>
     </div>
   );
 };
 
-const ToolbarButton = ({ icon, onClick }: any) => (
-  <button onClick={onClick} className="w-9 h-9 flex items-center justify-center text-slate-400 hover:text-blue-600 hover:bg-white hover:shadow-sm rounded-xl transition-all"><i className={`fas ${icon} text-sm`}></i></button>
+const ToolbarButton = ({ icon, onClick, disabled, label }: any) => (
+  <button
+    onClick={onClick}
+    disabled={disabled}
+    title={label}
+    className={`w-9 h-9 flex items-center justify-center rounded-xl transition-all ${
+      disabled
+        ? 'text-slate-300 cursor-not-allowed'
+        : 'text-slate-400 hover:text-blue-600 hover:bg-white hover:shadow-sm'
+    }`}
+  >
+    <i className={`fas ${icon} text-sm`}></i>
+  </button>
 );
 
 const SidebarField = ({ label, value, onChange, options }: any) => (
