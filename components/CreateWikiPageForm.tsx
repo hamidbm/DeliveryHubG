@@ -45,8 +45,6 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
   const [editorFormat, setEditorFormat] = useState<'markdown' | 'html'>('html');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [aiPrompt, setAiPrompt] = useState('');
-  const [aiProcessing, setAiProcessing] = useState(false);
-  const [aiError, setAiError] = useState<string | null>(null);
   
   const [themes, setThemes] = useState<WikiTheme[]>([]);
   const [categories, setCategories] = useState<TaxonomyCategory[]>([]);
@@ -272,7 +270,7 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
       setAiError('Add content before requesting AI assistance.');
       return;
     }
-    setAiProcessing(true);
+    setIsAiProcessing(true);
     setAiError(null);
     const textarea = textAreaRef.current;
     const start = textarea.selectionStart;
@@ -300,7 +298,7 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
     } catch (err) {
       setAiError('AI request failed.');
     } finally {
-      setAiProcessing(false);
+      setIsAiProcessing(false);
     }
   };
 
@@ -358,9 +356,9 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
                     <ToolbarButton icon="fa-link" onClick={() => insertText(editorFormat === 'html' ? '<a href="/wiki/TARGET-SLUG">' : '[Link Title](/wiki/TARGET-SLUG', editorFormat === 'html' ? '</a>' : ')')} />
                     <ToolbarButton icon="fa-circle-info" onClick={() => insertText('<div class="callout info">\n  <div class="title"><i class="fas fa-circle-info"></i> INFO</div>\n  <p>', '</p>\n</div>')} />
                     <div className="w-[1px] h-6 bg-slate-200 mx-2"></div>
-                    <ToolbarButton icon="fa-wand-magic-sparkles" label="Improve Section" onClick={() => runAiAssist('improve')} disabled={aiProcessing} />
-                    <ToolbarButton icon="fa-expand" label="Expand Outline" onClick={() => runAiAssist('expand')} disabled={aiProcessing} />
-                    <ToolbarButton icon="fa-diagram-project" label="Generate Diagram" onClick={() => runAiAssist('diagram')} disabled={aiProcessing} />
+                    <ToolbarButton icon="fa-wand-magic-sparkles" label="Improve Section" onClick={() => runAiAssist('improve')} disabled={isAiProcessing} />
+                    <ToolbarButton icon="fa-expand" label="Expand Outline" onClick={() => runAiAssist('expand')} disabled={isAiProcessing} />
+                    <ToolbarButton icon="fa-diagram-project" label="Generate Diagram" onClick={() => runAiAssist('diagram')} disabled={isAiProcessing} />
                  </div>
                  <div className="flex gap-2">
                     <div className="flex bg-white rounded-lg p-0.5 border border-slate-200 text-[8px] font-black uppercase">

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { WikiAsset } from '../types';
 
 interface WikiAssetSpreadsheetPreviewProps {
@@ -15,7 +15,7 @@ const WikiAssetSpreadsheetPreview: React.FC<WikiAssetSpreadsheetPreviewProps> = 
   const [editedRow, setEditedRow] = useState<Record<string, any>>({});
   const [isSaving, setIsSaving] = useState(false);
 
-  const parsedSheetData = useMemo(() => {
+  const sheetData = useMemo(() => {
     if (asset.preview.kind !== 'sheet' || !asset.preview.objectKey) return null;
     try {
       return JSON.parse(asset.preview.objectKey);
@@ -23,12 +23,6 @@ const WikiAssetSpreadsheetPreview: React.FC<WikiAssetSpreadsheetPreviewProps> = 
       return null;
     }
   }, [asset.preview.kind, asset.preview.objectKey]);
-
-  const [sheetData, setSheetData] = useState<any>(parsedSheetData);
-
-  useEffect(() => {
-    setSheetData(parsedSheetData);
-  }, [parsedSheetData]);
 
   const sheets = sheetData?.sheets || [];
   if (!sheets.length) {
@@ -98,15 +92,11 @@ const WikiAssetSpreadsheetPreview: React.FC<WikiAssetSpreadsheetPreviewProps> = 
     const updatedData = { ...sheetData, sheets: updatedSheets };
 
     try {
-      const res = await fetch('/api/wiki/assets', {
+      await fetch('/api/wiki/assets', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: asset._id || asset.id, sheetData: updatedData }),
       });
-      if (!res.ok) {
-        throw new Error('Failed to save row changes.');
-      }
-      setSheetData(updatedData);
       setEditingRowId(null);
       setEditedRow({});
     } catch (err) {
