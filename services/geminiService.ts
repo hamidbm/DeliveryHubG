@@ -141,3 +141,49 @@ export const suggestReassignment = async (item: any, teamCapacity: any[], model:
     return response.text || "Analysis failed.";
   } catch (error) { return "Offline."; }
 };
+
+export type WikiAssistTask = 'improve' | 'expand' | 'diagram' | 'summary';
+
+export const buildWikiPrompt = (task: WikiAssistTask, content: string, format: string, title?: string) => {
+  const header = title ? `Title: ${title}\n\n` : '';
+  const formatHint = format === 'html' ? 'HTML' : 'Markdown';
+
+  switch (task) {
+    case 'improve':
+      return `${header}Improve the clarity and flow of the following ${formatHint} content. Preserve meaning and structure, avoid adding new sections unless necessary.\n\nContent:\n${content}`;
+    case 'expand':
+      return `${header}Expand the following ${formatHint} outline into a richer, more detailed section. Keep the original headings and structure.\n\nContent:\n${content}`;
+    case 'diagram':
+      return `${header}Generate a Mermaid diagram based on the following content. Return ONLY a Mermaid code block fenced with mermaid syntax. Prefer flowchart or sequence diagrams.\n\nContent:\n${content}`;
+    case 'summary':
+    default:
+      return `${header}Provide a concise summary (3-5 bullet points or a short paragraph) of the following content in ${formatHint}.\n\nContent:\n${content}`;
+  }
+};
+
+export const generateWikiAssistance = async ({
+  task,
+  content,
+  format,
+  title,
+  model
+}: {
+  task: WikiAssistTask;
+  content: string;
+  format: string;
+  title?: string;
+  model: string;
+}) => {
+  const ai = getAI();
+  const prompt = buildWikiPrompt(task, content, format, title);
+  try {
+    const response = await ai.models.generateContent({
+      model,
+      contents: prompt
+    });
+    return response.text || "AI response unavailable.";
+  } catch (error) {
+    console.error("Gemini Wiki Assist Error:", error);
+    throw error;
+  }
+};
