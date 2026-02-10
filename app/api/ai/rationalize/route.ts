@@ -8,7 +8,7 @@ export async function POST(request: Request) {
     if (!app) return NextResponse.json({ error: 'App data required' }, { status: 400 });
     
     const settings = await fetchSystemSettings();
-    const model = settings?.ai?.flashModel || 'gemini-3-flash-preview';
+    const model = settings?.ai?.geminiFlashModel || settings?.ai?.flashModel || 'gemini-3-flash-preview';
 
     const result = await suggestRationalization(app, model);
     return NextResponse.json(result);

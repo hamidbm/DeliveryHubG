@@ -5,7 +5,7 @@ import { fetchSystemSettings, fetchApplications, fetchBundles } from '../../../.
 export async function POST(request: Request) {
   try {
     const settings = await fetchSystemSettings();
-    const model = settings?.ai?.proModel || 'gemini-3-pro-preview';
+    const model = settings?.ai?.geminiProModel || settings?.ai?.proModel || 'gemini-3-pro-preview';
     
     // Fetch real-time registry data to ensure the AI has the latest context
     const [applications, bundles] = await Promise.all([

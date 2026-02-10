@@ -58,7 +58,7 @@ export async function POST(request: Request) {
       const apiKey = envKey || settings.ai?.openaiKey;
       if (!apiKey) {
         // Fallback to Gemini if OpenAI is intended but key is missing
-        const model = settings?.ai?.proModel || 'gemini-3-pro-preview';
+        const model = settings?.ai?.geminiProModel || settings?.ai?.proModel || 'gemini-3-pro-preview';
         const mermaid = await generateDiagramFromTerraform(code, model);
         return NextResponse.json({ mermaid, engine: 'Gemini 3 Pro (OpenAI Key Missing)' });
       }
@@ -68,7 +68,7 @@ export async function POST(request: Request) {
     }
 
     // Default path for Gemini
-    const model = settings?.ai?.proModel || 'gemini-3-pro-preview';
+    const model = settings?.ai?.geminiProModel || settings?.ai?.proModel || 'gemini-3-pro-preview';
     const mermaid = await generateDiagramFromTerraform(code, model);
     return NextResponse.json({ mermaid, engine: 'Gemini 3 Pro' });
 

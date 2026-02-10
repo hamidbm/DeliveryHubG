@@ -56,7 +56,7 @@ export async function POST(request: Request) {
     }
 
     // Default path for Gemini
-    const model = settings?.ai?.flashModel || 'gemini-3-flash-preview';
+    const model = settings?.ai?.geminiFlashModel || settings?.ai?.flashModel || 'gemini-3-flash-preview';
     const analysis = await analyzeTerraform(code, provider || 'Azure', model);
     return NextResponse.json({ analysis, engine: 'Gemini 3 Flash' });
 

@@ -8,6 +8,17 @@ const PROVIDERS = [
   { id: 'COHERE', name: 'Cohere', icon: 'fa-shapes', keyField: 'cohereKey', description: 'Specialized enterprise classification & RAG.' }
 ];
 
+const PROVIDER_MODEL_FIELDS: Record<string, { key: string; label: string; placeholder: string }[]> = {
+  GEMINI: [
+    { key: 'geminiFlashModel', label: 'Flash Model', placeholder: 'gemini-3-flash-preview' },
+    { key: 'geminiProModel', label: 'Pro Model', placeholder: 'gemini-3-pro-preview' }
+  ],
+  OPENAI: [{ key: 'openaiModel', label: 'Default Model', placeholder: 'gpt-4o' }],
+  ANTHROPIC: [{ key: 'anthropicModel', label: 'Default Model', placeholder: 'claude-3-5-sonnet-20240620' }],
+  HUGGINGFACE: [{ key: 'huggingfaceModel', label: 'Default Model', placeholder: 'mistralai/Mistral-7B-Instruct-v0.2' }],
+  COHERE: [{ key: 'cohereModel', label: 'Default Model', placeholder: 'command-r' }]
+};
+
 const AdminAiSettings: React.FC = () => {
   const [settings, setSettings] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -125,6 +136,23 @@ const AdminAiSettings: React.FC = () => {
                     </div>
                   </div>
                 )}
+                {(PROVIDER_MODEL_FIELDS[p.id] || []).map((field) => (
+                  <div key={field.key} className="relative group">
+                    <input
+                      type="text"
+                      placeholder={field.placeholder}
+                      value={settings.ai[field.key] || ''}
+                      onChange={(e) => setSettings({ ...settings, ai: { ...settings.ai, [field.key]: e.target.value } })}
+                      className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-3 text-xs font-bold text-slate-700 focus:border-blue-500 outline-none transition-all shadow-sm"
+                    />
+                    <div className="absolute right-4 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <i className="fas fa-microchip text-[10px] text-slate-300"></i>
+                    </div>
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mt-2 pl-2">
+                      {field.label}
+                    </p>
+                  </div>
+                ))}
                 <p className="text-[10px] font-medium text-slate-400 pl-2">{p.description}</p>
               </div>
 

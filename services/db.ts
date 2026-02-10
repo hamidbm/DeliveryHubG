@@ -21,6 +21,12 @@ export const fetchSystemSettings = async () => {
       key: 'global_config',
       ai: {
         defaultProvider: 'OPENAI',
+        openaiModel: 'gpt-4o',
+        geminiFlashModel: 'gemini-3-flash-preview',
+        geminiProModel: 'gemini-3-pro-preview',
+        anthropicModel: 'claude-3-5-sonnet-20240620',
+        huggingfaceModel: '',
+        cohereModel: '',
         defaultModel: 'gpt-4o',
         flashModel: 'gemini-3-flash-preview',
         proModel: 'gemini-3-pro-preview',
