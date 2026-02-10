@@ -13,7 +13,11 @@ const PROVIDER_MODEL_FIELDS: Record<string, { key: string; label: string; placeh
     { key: 'geminiFlashModel', label: 'Flash Model', placeholder: 'gemini-3-flash-preview' },
     { key: 'geminiProModel', label: 'Pro Model', placeholder: 'gemini-3-pro-preview' }
   ],
-  OPENAI: [{ key: 'openaiModel', label: 'Default Model', placeholder: 'gpt-4o' }],
+  OPENAI: [
+    { key: 'openaiModelDefault', label: 'Default Model', placeholder: 'gpt-5.2' },
+    { key: 'openaiModelHigh', label: 'High Reasoning', placeholder: 'gpt-5.2-pro' },
+    { key: 'openaiModelFast', label: 'Fast Model', placeholder: 'gpt-5.2-chat-latest' }
+  ],
   ANTHROPIC: [{ key: 'anthropicModel', label: 'Default Model', placeholder: 'claude-3-5-sonnet-20240620' }],
   HUGGINGFACE: [{ key: 'huggingfaceModel', label: 'Default Model', placeholder: 'mistralai/Mistral-7B-Instruct-v0.2' }],
   COHERE: [{ key: 'cohereModel', label: 'Default Model', placeholder: 'command-r' }]

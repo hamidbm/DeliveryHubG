@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import { generateDiagramFromTerraform } from '../../../../services/geminiService';
 import { fetchSystemSettings } from '../../../../services/db';
+import { generateOpenAiResponse, pickOpenAiReasoningEffort } from '../../../../services/openaiService';
 
-async function generateOpenAiDiagram(code: string, apiKey: string) {
+async function generateOpenAiDiagram(code: string, apiKey: string, model: string) {
   const prompt = `As a Cloud Architect, convert this Terraform HCL code into a high-quality Mermaid.js flowchart (LR). 
   Guidelines:
   1. Use subgraphs to group tiers.
@@ -15,26 +16,12 @@ async function generateOpenAiDiagram(code: string, apiKey: string) {
   ${code}`;
 
   try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o',
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.2
-      })
+    const text = await generateOpenAiResponse({
+      prompt,
+      model,
+      apiKey,
+      reasoningEffort: pickOpenAiReasoningEffort(model)
     });
-
-    const data = await response.json();
-    
-    if (data.error) {
-       throw new Error(data.error.message || "OpenAI API Error");
-    }
-
-    const text = data.choices[0].message.content || "";
     return text.replace(/```mermaid/g, '').replace(/```/g, '').trim();
   } catch (err: any) {
     console.error("OpenAI Error:", err);
@@ -63,8 +50,9 @@ export async function POST(request: Request) {
         return NextResponse.json({ mermaid, engine: 'Gemini 3 Pro (OpenAI Key Missing)' });
       }
       
-      const mermaid = await generateOpenAiDiagram(code, apiKey);
-      return NextResponse.json({ mermaid, engine: 'OpenAI GPT-4' });
+      const model = settings?.ai?.openaiModelHigh || settings?.ai?.openaiModelDefault || settings?.ai?.openaiModel || settings?.ai?.defaultModel || 'gpt-5.2-pro';
+      const mermaid = await generateOpenAiDiagram(code, apiKey, model);
+      return NextResponse.json({ mermaid, engine: `OpenAI ${model}` });
     }
 
     // Default path for Gemini

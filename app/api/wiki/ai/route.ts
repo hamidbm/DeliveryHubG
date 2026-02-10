@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { fetchSystemSettings } from '../../../../services/db';
 import { generateWikiAssistance } from '../../../../services/geminiService';
+import { generateOpenAiResponse } from '../../../../services/openaiService';
 
 type WikiAssistTask = 'improve' | 'expand' | 'diagram' | 'summary';
 
@@ -27,7 +28,8 @@ const generateOpenAiWikiAssistance = async ({
   format,
   title,
   model,
-  apiKey
+  apiKey,
+  reasoningEffort
 }: {
   task: WikiAssistTask;
   content: string;
@@ -35,28 +37,16 @@ const generateOpenAiWikiAssistance = async ({
   title?: string;
   model: string;
   apiKey: string;
+  reasoningEffort: 'low' | 'medium' | 'high' | 'xhigh';
 }) => {
   const prompt = buildWikiPrompt(task, content, format, title);
   try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-        model,
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.2
-      })
+    return await generateOpenAiResponse({
+      prompt,
+      model,
+      apiKey,
+      reasoningEffort
     });
-
-    const data = await response.json();
-    if (data.error) {
-      throw new Error(data.error.message || "OpenAI API Error");
-    }
-
-    return data.choices?.[0]?.message?.content || "AI response unavailable.";
   } catch (error: any) {
     console.error("OpenAI Wiki Assist Error:", error);
     return "AI response unavailable.";
@@ -85,8 +75,9 @@ export async function POST(request: Request) {
 
     if (isOpenAiDefault) {
       const apiKey = process.env.OPENAI_API_KEY || aiSettings.openaiKey;
-      const configuredModel = aiSettings.openaiModel || aiSettings.defaultModel || 'gpt-4o';
-      const model = configuredModel.startsWith('gpt-') ? configuredModel : 'gpt-4o';
+      const configuredModel = aiSettings.openaiModelDefault || aiSettings.openaiModelHigh || aiSettings.openaiModel || aiSettings.defaultModel || 'gpt-5.2';
+      const model = configuredModel.startsWith('gpt-') ? configuredModel : 'gpt-5.2';
+      const reasoningEffort = model.startsWith('gpt-5.2-pro') ? 'medium' : 'low';
 
       if (apiKey) {
         const result = await generateOpenAiWikiAssistance({
@@ -95,7 +86,8 @@ export async function POST(request: Request) {
           title,
           format: formatValue,
           model,
-          apiKey
+          apiKey,
+          reasoningEffort
         });
         return NextResponse.json({ result, provider: 'OPENAI' });
       }

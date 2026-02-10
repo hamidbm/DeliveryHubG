@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import { analyzeTerraform } from '../../../../services/geminiService';
 import { fetchSystemSettings } from '../../../../services/db';
+import { generateOpenAiResponse, pickOpenAiReasoningEffort } from '../../../../services/openaiService';
 
-async function analyzeOpenAiTerraform(code: string, provider: string, apiKey: string) {
+async function analyzeOpenAiTerraform(code: string, provider: string, apiKey: string, model: string) {
   const prompt = `Act as a Cloud Architect and Security Engineer. Analyze this ${provider} Terraform script for:
   1. Security Risks (Misconfigurations, wide-open rules, missing encryption)
   2. Cost Optimization (Right-sizing, redundant resources)
@@ -14,22 +15,12 @@ async function analyzeOpenAiTerraform(code: string, provider: string, apiKey: st
   ${code}`;
 
   try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o',
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.3
-      })
+    return await generateOpenAiResponse({
+      prompt,
+      model,
+      apiKey,
+      reasoningEffort: pickOpenAiReasoningEffort(model)
     });
-
-    const data = await response.json();
-    if (data.error) throw new Error(data.error.message || "OpenAI API Error");
-    return data.choices[0].message.content || "Analysis failed.";
   } catch (err: any) {
     console.error("OpenAI Audit Error:", err);
     throw new Error(err.message || "OpenAI failed to analyze infrastructure.");
@@ -50,8 +41,9 @@ export async function POST(request: Request) {
     if (isOpenAiDefault) {
       const apiKey = envKey || settings.ai?.openaiKey;
       if (apiKey) {
-        const analysis = await analyzeOpenAiTerraform(code, provider || 'Azure', apiKey);
-        return NextResponse.json({ analysis, engine: 'OpenAI GPT-4' });
+        const model = settings?.ai?.openaiModelHigh || settings?.ai?.openaiModelDefault || settings?.ai?.openaiModel || settings?.ai?.defaultModel || 'gpt-5.2-pro';
+        const analysis = await analyzeOpenAiTerraform(code, provider || 'Azure', apiKey, model);
+        return NextResponse.json({ analysis, engine: `OpenAI ${model}` });
       }
     }
 

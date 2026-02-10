@@ -12,39 +12,135 @@ export const getDb = async () => {
   }
 };
 
+const defaultAiSettings = {
+  defaultProvider: 'OPENAI',
+  openaiModelDefault: 'gpt-5.2',
+  openaiModelHigh: 'gpt-5.2-pro',
+  openaiModelFast: 'gpt-5.2-chat-latest',
+  geminiFlashModel: 'gemini-3-flash-preview',
+  geminiProModel: 'gemini-3-pro-preview',
+  anthropicModel: 'claude-3-5-sonnet-20240620',
+  huggingfaceModel: '',
+  cohereModel: '',
+  openaiKey: '',
+  anthropicKey: '',
+  huggingfaceKey: '',
+  cohereKey: ''
+};
+
+const normalizeAiSettings = (doc: any) => {
+  const providers = doc?.providers || {};
+  const openaiModels = providers.OPENAI?.models || {};
+  const openaiModelDefault = openaiModels.default || doc?.openaiModelDefault || doc?.openaiModel || doc?.defaultModel || defaultAiSettings.openaiModelDefault;
+  const openaiModelHigh = openaiModels.highReasoning || doc?.openaiModelHigh || defaultAiSettings.openaiModelHigh;
+  const openaiModelFast = openaiModels.fast || doc?.openaiModelFast || defaultAiSettings.openaiModelFast;
+  const geminiModels = providers.GEMINI?.models || {};
+  const geminiFlashModel = geminiModels.flash || providers.GEMINI?.flashModel || doc?.geminiFlashModel || doc?.flashModel || defaultAiSettings.geminiFlashModel;
+  const geminiProModel = geminiModels.pro || providers.GEMINI?.proModel || doc?.geminiProModel || doc?.proModel || defaultAiSettings.geminiProModel;
+  const anthropicModels = providers.ANTHROPIC?.models || {};
+  const anthropicModel = anthropicModels.default || providers.ANTHROPIC?.model || doc?.anthropicModel || defaultAiSettings.anthropicModel;
+  const huggingfaceModels = providers.HUGGINGFACE?.models || {};
+  const huggingfaceModel = huggingfaceModels.default || providers.HUGGINGFACE?.model || doc?.huggingfaceModel || defaultAiSettings.huggingfaceModel;
+  const cohereModels = providers.COHERE?.models || {};
+  const cohereModel = cohereModels.default || providers.COHERE?.model || doc?.cohereModel || defaultAiSettings.cohereModel;
+
+  return {
+    key: 'ai_settings',
+    ai: {
+      defaultProvider: doc?.defaultProvider || defaultAiSettings.defaultProvider,
+      openaiKey: providers.OPENAI?.apiKey || doc?.openaiKey || defaultAiSettings.openaiKey,
+      openaiModelDefault,
+      openaiModelHigh,
+      openaiModelFast,
+      geminiFlashModel,
+      geminiProModel,
+      anthropicKey: providers.ANTHROPIC?.apiKey || doc?.anthropicKey || defaultAiSettings.anthropicKey,
+      anthropicModel,
+      huggingfaceKey: providers.HUGGINGFACE?.apiKey || doc?.huggingfaceKey || defaultAiSettings.huggingfaceKey,
+      huggingfaceModel,
+      cohereKey: providers.COHERE?.apiKey || doc?.cohereKey || defaultAiSettings.cohereKey,
+      cohereModel,
+      // Legacy compatibility fields
+      defaultModel: openaiModelDefault,
+      flashModel: geminiFlashModel,
+      proModel: geminiProModel
+    }
+  };
+};
+
 // Global Settings Management
 export const fetchSystemSettings = async () => {
   try {
     const db = await getDb();
-    const settings = await db.collection('settings').findOne({ key: 'global_config' });
-    return settings || {
-      key: 'global_config',
-      ai: {
-        defaultProvider: 'OPENAI',
-        openaiModel: 'gpt-4o',
-        geminiFlashModel: 'gemini-3-flash-preview',
-        geminiProModel: 'gemini-3-pro-preview',
-        anthropicModel: 'claude-3-5-sonnet-20240620',
-        huggingfaceModel: '',
-        cohereModel: '',
-        defaultModel: 'gpt-4o',
-        flashModel: 'gemini-3-flash-preview',
-        proModel: 'gemini-3-pro-preview',
-        openaiKey: '',
-        anthropicKey: '',
-        huggingfaceKey: '',
-        cohereKey: ''
-      }
-    };
+    const aiSettings = await db.collection('ai_settings').findOne({ key: 'ai_settings' });
+    if (aiSettings) {
+      return normalizeAiSettings(aiSettings);
+    }
+
+    const legacy = await db.collection('settings').findOne({ key: 'global_config' });
+    if (legacy?.ai) {
+      const normalized = normalizeAiSettings({
+        ...legacy.ai,
+        defaultProvider: legacy.ai.defaultProvider || legacy.defaultProvider
+      });
+      await db.collection('ai_settings').updateOne(
+        { key: 'ai_settings' },
+        { $set: { ...normalized, key: 'ai_settings' } },
+        { upsert: true }
+      );
+      return normalized;
+    }
+
+    return normalizeAiSettings({});
   } catch { return null; }
 };
 
 export const saveSystemSettings = async (settings: any) => {
   const db = await getDb();
-  const { _id, key, ...rest } = settings || {};
-  return await db.collection('settings').updateOne(
-    { key: 'global_config' },
-    { $set: { ...rest, key: key || 'global_config' } },
+  const ai = settings?.ai || {};
+  const doc = {
+    key: 'ai_settings',
+    defaultProvider: ai.defaultProvider || defaultAiSettings.defaultProvider,
+    providers: {
+      OPENAI: {
+        apiKey: ai.openaiKey || defaultAiSettings.openaiKey,
+        models: {
+          default: ai.openaiModelDefault || ai.openaiModel || ai.defaultModel || defaultAiSettings.openaiModelDefault,
+          highReasoning: ai.openaiModelHigh || defaultAiSettings.openaiModelHigh,
+          fast: ai.openaiModelFast || defaultAiSettings.openaiModelFast
+        }
+      },
+      GEMINI: {
+        apiKey: ai.geminiKey || '',
+        models: {
+          flash: ai.geminiFlashModel || ai.flashModel || defaultAiSettings.geminiFlashModel,
+          pro: ai.geminiProModel || ai.proModel || defaultAiSettings.geminiProModel
+        }
+      },
+      ANTHROPIC: {
+        apiKey: ai.anthropicKey || defaultAiSettings.anthropicKey,
+        models: {
+          default: ai.anthropicModel || defaultAiSettings.anthropicModel
+        }
+      },
+      HUGGINGFACE: {
+        apiKey: ai.huggingfaceKey || defaultAiSettings.huggingfaceKey,
+        models: {
+          default: ai.huggingfaceModel || defaultAiSettings.huggingfaceModel
+        }
+      },
+      COHERE: {
+        apiKey: ai.cohereKey || defaultAiSettings.cohereKey,
+        models: {
+          default: ai.cohereModel || defaultAiSettings.cohereModel
+        }
+      }
+    }
+  };
+
+  return await db.collection('ai_settings').updateOne(
+    { key: 'ai_settings' },
+    { $set: doc },
     { upsert: true }
   );
 };
