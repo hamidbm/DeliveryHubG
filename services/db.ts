@@ -274,19 +274,28 @@ export const fetchWikiSpaces = async () => {
 };
 
 const ensureWikiQaIndexes = async (db: any) => {
-  await db.collection('wiki_qa_history').createIndex({ pageId: 1, createdAt: -1 });
+  await db.collection('wiki_qa_history').createIndex({ targetType: 1, targetId: 1, createdAt: -1 });
+  await db.collection('wiki_qa_history').createIndex({ targetType: 1, targetIdStr: 1, createdAt: -1 });
   await db.collection('wiki_qa_history').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 };
 
+const ensureWikiAssetAiIndexes = async (db: any) => {
+  await db.collection('wiki_asset_ai_history').createIndex({ assetId: 1, createdAt: -1 });
+  await db.collection('wiki_asset_ai_history').createIndex({ assetIdStr: 1, createdAt: -1 });
+  await db.collection('wiki_asset_ai_history').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+};
+
 export const saveWikiQaHistory = async ({
-  pageId,
+  targetId,
+  targetType = 'page',
   question,
   answer,
   provider,
   model,
   userEmail
 }: {
-  pageId: string;
+  targetId: string;
+  targetType?: 'page' | 'asset';
   question: string;
   answer: string;
   provider: string;
@@ -295,11 +304,13 @@ export const saveWikiQaHistory = async ({
 }) => {
   const db = await getDb();
   await ensureWikiQaIndexes(db);
-  if (!ObjectId.isValid(pageId)) return null;
+  const isValidId = ObjectId.isValid(targetId);
   const now = new Date();
   const expiresAt = new Date(now.getTime() + 1000 * 60 * 60 * 24 * 30);
   return await db.collection('wiki_qa_history').insertOne({
-    pageId: new ObjectId(pageId),
+    targetType,
+    targetId: isValidId ? new ObjectId(targetId) : undefined,
+    targetIdStr: isValidId ? undefined : targetId,
     question,
     answer,
     provider,
@@ -310,14 +321,61 @@ export const saveWikiQaHistory = async ({
   });
 };
 
-export const fetchWikiQaHistory = async (pageId: string, limit: number = 10) => {
+export const fetchWikiQaHistory = async (targetId: string, targetType: 'page' | 'asset' = 'page', limit: number = 10) => {
   try {
     const db = await getDb();
     await ensureWikiQaIndexes(db);
-    if (!ObjectId.isValid(pageId)) return [];
+    const isValidId = ObjectId.isValid(targetId);
     return await db
       .collection('wiki_qa_history')
-      .find({ pageId: new ObjectId(pageId) })
+      .find(isValidId ? { targetType, targetId: new ObjectId(targetId) } : { targetType, targetIdStr: targetId })
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .toArray();
+  } catch { return []; }
+};
+
+export const saveWikiAssetAiHistory = async ({
+  assetId,
+  task,
+  result,
+  provider,
+  model,
+  userEmail
+}: {
+  assetId: string;
+  task: string;
+  result: string;
+  provider: string;
+  model?: string;
+  userEmail?: string;
+}) => {
+  const db = await getDb();
+  await ensureWikiAssetAiIndexes(db);
+  const isValidId = ObjectId.isValid(assetId);
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + 1000 * 60 * 60 * 24 * 30);
+  return await db.collection('wiki_asset_ai_history').insertOne({
+    assetId: isValidId ? new ObjectId(assetId) : undefined,
+    assetIdStr: isValidId ? undefined : assetId,
+    task,
+    result,
+    provider,
+    model,
+    userEmail,
+    createdAt: now.toISOString(),
+    expiresAt
+  });
+};
+
+export const fetchWikiAssetAiHistory = async (assetId: string, limit: number = 10) => {
+  try {
+    const db = await getDb();
+    await ensureWikiAssetAiIndexes(db);
+    const isValidId = ObjectId.isValid(assetId);
+    return await db
+      .collection('wiki_asset_ai_history')
+      .find(isValidId ? { assetId: new ObjectId(assetId) } : { assetIdStr: assetId })
       .sort({ createdAt: -1 })
       .limit(limit)
       .toArray();

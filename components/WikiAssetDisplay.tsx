@@ -15,6 +15,17 @@ const WikiAssetDisplay: React.FC<WikiAssetDisplayProps> = ({ asset, bundles = []
   const [taxType, setTaxType] = useState<TaxonomyDocumentType | null>(null);
   const [activeTheme, setActiveTheme] = useState<WikiTheme | null>(null);
   const [showDashboards, setShowDashboards] = useState(false);
+  const [assetAiError, setAssetAiError] = useState<string | null>(null);
+  const [assetAiResults, setAssetAiResults] = useState<Record<string, string>>({});
+  const [assetAiLoading, setAssetAiLoading] = useState<Record<string, boolean>>({});
+  const [assetAiVisible, setAssetAiVisible] = useState<Record<string, boolean>>({});
+  const [assetQaQuestion, setAssetQaQuestion] = useState('');
+  const [assetQaError, setAssetQaError] = useState<string | null>(null);
+  const [assetQaLoading, setAssetQaLoading] = useState(false);
+  const [assetQaItems, setAssetQaItems] = useState<{ question: string; answer: string }[]>([]);
+  const [assetQaHistoryOpen, setAssetQaHistoryOpen] = useState(false);
+  const [assetQaHistoryLoading, setAssetQaHistoryLoading] = useState(false);
+  const [assetQaHistoryItems, setAssetQaHistoryItems] = useState<{ question: string; answer: string; createdAt?: string }[]>([]);
 
   useEffect(() => {
     const loadMetadata = async () => {
@@ -36,6 +47,21 @@ const WikiAssetDisplay: React.FC<WikiAssetDisplayProps> = ({ asset, bundles = []
     loadMetadata();
   }, [asset]);
 
+  useEffect(() => {
+    setAssetAiError(null);
+    setAssetAiResults({});
+    setAssetAiLoading({});
+    setAssetAiVisible({});
+    setAssetQaQuestion('');
+    setAssetQaError(null);
+    setAssetQaLoading(false);
+    setAssetQaItems([]);
+    setAssetQaHistoryOpen(false);
+    setAssetQaHistoryLoading(false);
+    setAssetQaHistoryItems([]);
+    loadAssetAiHistory(true);
+  }, [asset._id, asset.id, asset.content, asset.preview?.objectKey]);
+
 
   const bundle = bundles.find(b => b._id === asset.bundleId);
   const app = applications.find(a => a._id === asset.applicationId || a.id === asset.applicationId);
@@ -45,6 +71,129 @@ const WikiAssetDisplay: React.FC<WikiAssetDisplayProps> = ({ asset, bundles = []
     link.href = `data:${asset.file.mimeType};base64,${asset.storage.objectKey}`;
     link.download = asset.file.originalName;
     link.click();
+  };
+
+  const getAssetAiContent = () => {
+    if (asset.content && asset.content.trim()) return asset.content;
+    if (asset.preview?.kind === 'markdown' && asset.preview.objectKey) return asset.preview.objectKey;
+    return '';
+  };
+
+  const handleAssetAi = async (task: 'summary' | 'key_decisions' | 'assumptions') => {
+    if (assetAiResults[task]) {
+      setAssetAiVisible((prev) => ({ ...prev, [task]: !prev[task] }));
+      return;
+    }
+    const content = getAssetAiContent();
+    if (!content) {
+      setAssetAiError('AI actions require text-based content.');
+      return;
+    }
+    setAssetAiError(null);
+    setAssetAiLoading((prev) => ({ ...prev, [task]: true }));
+    try {
+      const res = await fetch('/api/wiki/assets/ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          task,
+          title: asset.title,
+          content,
+          assetId: asset._id || asset.id
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setAssetAiError(data.error || 'AI request failed.');
+        return;
+      }
+      setAssetAiResults((prev) => ({ ...prev, [task]: data.result || '' }));
+      setAssetAiVisible((prev) => ({ ...prev, [task]: true }));
+    } catch (err) {
+      setAssetAiError('AI request failed.');
+    } finally {
+      setAssetAiLoading((prev) => ({ ...prev, [task]: false }));
+    }
+  };
+
+  const handleAssetQa = async () => {
+    if (!assetQaQuestion.trim()) return;
+    const content = getAssetAiContent();
+    if (!content) {
+      setAssetQaError('Q&A requires text-based content.');
+      return;
+    }
+    setAssetQaError(null);
+    setAssetQaLoading(true);
+    try {
+      const res = await fetch('/api/wiki/qa', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          targetType: 'asset',
+          targetId: asset._id || asset.id,
+          question: assetQaQuestion.trim(),
+          title: asset.title,
+          content
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setAssetQaError(data.error || 'Q&A failed.');
+        return;
+      }
+      const answer = data.result || 'AI response unavailable.';
+      setAssetQaItems((items) => [{ question: assetQaQuestion.trim(), answer }, ...items]);
+      setAssetQaQuestion('');
+    } catch (err) {
+      setAssetQaError('Q&A failed.');
+    } finally {
+      setAssetQaLoading(false);
+    }
+  };
+
+  const loadAssetQaHistory = async () => {
+    const assetId = asset._id || asset.id;
+    if (!assetId) return;
+    setAssetQaHistoryLoading(true);
+    try {
+      const res = await fetch(`/api/wiki/qa?targetType=asset&targetId=${encodeURIComponent(assetId)}&limit=10`);
+      const data = await res.json();
+      setAssetQaHistoryItems((data.history || []).map((item: any) => ({
+        question: item.question,
+        answer: item.answer,
+        createdAt: item.createdAt
+      })));
+    } catch (err) {
+      setAssetQaHistoryItems([]);
+    } finally {
+      setAssetQaHistoryLoading(false);
+    }
+  };
+
+  const loadAssetAiHistory = async (seedLatest: boolean = false) => {
+    const assetId = asset._id || asset.id;
+    if (!assetId) return;
+    try {
+      const res = await fetch(`/api/wiki/assets/ai?assetId=${encodeURIComponent(assetId)}&limit=10`);
+      const data = await res.json();
+      const historyItems = (data.history || []).map((item: any) => ({
+        task: item.task,
+        result: item.result,
+        createdAt: item.createdAt
+      }));
+      if (seedLatest && historyItems.length > 0) {
+        const latestByTask: Record<string, string> = {};
+        for (const item of historyItems) {
+          if (!latestByTask[item.task]) {
+            latestByTask[item.task] = item.result;
+          }
+        }
+        setAssetAiResults(latestByTask);
+      }
+    } catch (err) {
+    } finally {
+    }
   };
 
   const renderPreview = () => {
@@ -161,6 +310,147 @@ const WikiAssetDisplay: React.FC<WikiAssetDisplayProps> = ({ asset, bundles = []
           </button>
         </div>
       </header>
+
+      <section className="mb-10">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 rounded-xl bg-slate-900 text-white flex items-center justify-center shadow-lg"><i className="fas fa-wand-magic-sparkles"></i></div>
+          <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">AI Actions</h4>
+        </div>
+        <div className="flex flex-wrap gap-3">
+          <button
+            onClick={() => handleAssetAi('summary')}
+            disabled={assetAiLoading.summary}
+            className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+              assetAiLoading.summary
+                ? 'bg-slate-200 text-slate-500 cursor-not-allowed'
+                : 'bg-slate-900 text-white hover:bg-slate-800'
+            }`}
+          >
+            {assetAiLoading.summary ? 'Summarizing...' : assetAiResults.summary ? (assetAiVisible.summary ? 'Hide Summary' : 'Show Summary') : 'Summarize'}
+          </button>
+          <button
+            onClick={() => handleAssetAi('key_decisions')}
+            disabled={assetAiLoading.key_decisions}
+            className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+              assetAiLoading.key_decisions
+                ? 'bg-slate-200 text-slate-500 cursor-not-allowed'
+                : 'bg-slate-900 text-white hover:bg-slate-800'
+            }`}
+          >
+            {assetAiLoading.key_decisions ? 'Extracting...' : assetAiResults.key_decisions ? (assetAiVisible.key_decisions ? 'Hide Key Decisions' : 'Show Key Decisions') : 'Key Decisions'}
+          </button>
+          <button
+            onClick={() => handleAssetAi('assumptions')}
+            disabled={assetAiLoading.assumptions}
+            className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+              assetAiLoading.assumptions
+                ? 'bg-slate-200 text-slate-500 cursor-not-allowed'
+                : 'bg-slate-900 text-white hover:bg-slate-800'
+            }`}
+          >
+            {assetAiLoading.assumptions ? 'Extracting...' : assetAiResults.assumptions ? (assetAiVisible.assumptions ? 'Hide Assumptions' : 'Show Assumptions') : 'Assumptions'}
+          </button>
+        </div>
+        {assetAiError && (
+          <div className="mt-4 p-4 bg-amber-50 border border-amber-100 rounded-2xl text-amber-600 text-[10px] font-black uppercase tracking-widest flex items-center gap-2 animate-fadeIn">
+            <i className="fas fa-circle-exclamation"></i>
+            {assetAiError}
+          </div>
+        )}
+        {Object.keys(assetAiResults).some((task) => assetAiVisible[task]) && (
+          <div className="mt-6 space-y-4">
+            {Object.entries(assetAiResults)
+              .filter(([task]) => assetAiVisible[task])
+              .map(([task, result]) => (
+                <div key={task} className="bg-white border border-slate-100 rounded-2xl p-5">
+                  <div className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-3">
+                    {task.replace('_', ' ')}
+                  </div>
+                  <MarkdownRenderer content={result} />
+                </div>
+              ))}
+          </div>
+        )}
+      </section>
+
+      <section className="mb-10">
+        <div className="flex items-center gap-2 mb-4 text-slate-600">
+          <i className="fas fa-comments text-sm"></i>
+          <span className="text-[9px] font-black uppercase tracking-widest">Ask This Asset</span>
+          <button
+            onClick={() => {
+              const next = !assetQaHistoryOpen;
+              setAssetQaHistoryOpen(next);
+              if (next) loadAssetQaHistory();
+            }}
+            className="ml-auto text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-colors"
+          >
+            {assetQaHistoryOpen ? 'Hide History' : 'Show History'}
+          </button>
+        </div>
+        <div className="flex flex-col sm:flex-row gap-3">
+          <input
+            value={assetQaQuestion}
+            onChange={(e) => setAssetQaQuestion(e.target.value)}
+            placeholder="Ask a question about this asset..."
+            className="flex-1 px-4 py-3 rounded-2xl border border-slate-200 text-sm font-medium text-slate-700 outline-none focus:border-slate-400"
+          />
+          <button
+            onClick={handleAssetQa}
+            disabled={assetQaLoading || !assetQaQuestion.trim()}
+            className={`px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${
+              assetQaLoading || !assetQaQuestion.trim()
+                ? 'bg-slate-200 text-slate-500 cursor-not-allowed'
+                : 'bg-slate-900 text-white shadow-lg hover:bg-slate-800'
+            }`}
+          >
+            {assetQaLoading ? 'Answering...' : 'Ask'}
+          </button>
+        </div>
+        {assetQaError && (
+          <div className="mt-4 p-3 bg-amber-50 border border-amber-100 rounded-2xl text-amber-600 text-[10px] font-black uppercase tracking-widest flex items-center gap-2 animate-fadeIn">
+            <i className="fas fa-circle-exclamation"></i>
+            {assetQaError}
+          </div>
+        )}
+        {assetQaItems.length > 0 && (
+          <div className="mt-6 space-y-4">
+            {assetQaItems.map((item, idx) => (
+              <div key={`${item.question}-${idx}`} className="bg-white border border-slate-100 rounded-2xl p-4">
+                <div className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">Q</div>
+                <div className="text-sm font-semibold text-slate-800">{item.question}</div>
+                <div className="mt-3 text-[9px] font-black uppercase tracking-widest text-slate-400">A</div>
+                <div className="text-sm text-slate-700 mt-1">
+                  <MarkdownRenderer content={item.answer} />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        {assetQaHistoryOpen && (
+          <div className="mt-6 border-t border-slate-200 pt-4">
+            <div className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-3">Recent History</div>
+            {assetQaHistoryLoading ? (
+              <div className="text-[10px] text-slate-400 font-medium">Loading...</div>
+            ) : assetQaHistoryItems.length > 0 ? (
+              <div className="space-y-4">
+                {assetQaHistoryItems.map((item, idx) => (
+                  <div key={`${item.question}-${idx}`} className="bg-white border border-slate-100 rounded-2xl p-4">
+                    <div className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">Q</div>
+                    <div className="text-sm font-semibold text-slate-800">{item.question}</div>
+                    <div className="mt-3 text-[9px] font-black uppercase tracking-widest text-slate-400">A</div>
+                    <div className="text-sm text-slate-700 mt-1">
+                      <MarkdownRenderer content={item.answer} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-[10px] text-slate-400 font-medium">No history yet.</div>
+            )}
+          </div>
+        )}
+      </section>
 
       <div className="wiki-preview-registry">
          {renderPreview()}

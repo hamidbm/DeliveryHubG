@@ -1,30 +1,40 @@
 import { NextResponse } from 'next/server';
-import { fetchSystemSettings, fetchWikiQaHistory, saveWikiQaHistory } from '../../../../services/db';
-import { generateGeminiText } from '../../../../services/geminiService';
-import { generateOpenAiResponse } from '../../../../services/openaiService';
+import { fetchSystemSettings, fetchWikiAssetAiHistory, saveWikiAssetAiHistory } from '../../../../../services/db';
+import { generateGeminiText } from '../../../../../services/geminiService';
+import { generateOpenAiResponse } from '../../../../../services/openaiService';
 
-const buildQaPrompt = (question: string, content: string, title?: string) => {
+const VALID_TASKS = new Set(['summary', 'key_decisions', 'assumptions']);
+
+const buildAssetPrompt = (task: string, content: string, title?: string) => {
   const header = title ? `Title: ${title}\n\n` : '';
-  return `${header}Answer the question using ONLY the content below. If the answer is not present, say "Not found in this page." Answer in Markdown.\n\nQuestion:\n${question}\n\nContent:\n${content}`;
+  switch (task) {
+    case 'key_decisions':
+      return `${header}Extract the key decisions from the following content. Return bullet points in Markdown.\n\nContent:\n${content}`;
+    case 'assumptions':
+      return `${header}List the assumptions found in the following content. Return bullet points in Markdown.\n\nContent:\n${content}`;
+    case 'summary':
+    default:
+      return `${header}Provide a concise summary (3-5 bullet points or a short paragraph) of the following content in Markdown.\n\nContent:\n${content}`;
+  }
 };
 
 export async function POST(request: Request) {
   try {
-    const { question, content, title, pageId, targetId, targetType } = await request.json();
+    const { task, content, title, assetId } = await request.json();
 
-    if (!question || !question.trim()) {
-      return NextResponse.json({ error: 'Question is required.' }, { status: 400 });
+    if (!VALID_TASKS.has(task)) {
+      return NextResponse.json({ error: 'Invalid AI task requested.' }, { status: 400 });
     }
 
     if (!content || !content.trim()) {
-      return NextResponse.json({ error: 'Content is required for Q&A.' }, { status: 400 });
+      return NextResponse.json({ error: 'Content is required for AI assistance.' }, { status: 400 });
     }
 
     const settings = await fetchSystemSettings();
     const aiSettings = settings?.ai || {};
     const provider = aiSettings.defaultProvider || 'GEMINI';
     const isOpenAiDefault = provider === 'OPENAI' || Boolean(process.env.OPENAI_API_KEY);
-    const prompt = buildQaPrompt(question, content, title);
+    const prompt = buildAssetPrompt(task, content, title);
 
     if (isOpenAiDefault) {
       const apiKey = process.env.OPENAI_API_KEY || aiSettings.openaiKey;
@@ -39,14 +49,11 @@ export async function POST(request: Request) {
           apiKey,
           reasoningEffort
         });
-        const resolvedTargetId = targetId || pageId;
-        const resolvedTargetType = targetType || (pageId ? 'page' : 'asset');
-        if (resolvedTargetId) {
-          await saveWikiQaHistory({
-            targetId: resolvedTargetId,
-            targetType: resolvedTargetType,
-            question,
-            answer: result,
+        if (assetId) {
+          await saveWikiAssetAiHistory({
+            assetId,
+            task,
+            result,
             provider: 'OPENAI',
             model
           });
@@ -61,14 +68,11 @@ export async function POST(request: Request) {
 
     const geminiModel = aiSettings.geminiFlashModel || aiSettings.flashModel || 'gemini-3-flash-preview';
     const result = await generateGeminiText(prompt, geminiModel);
-    const resolvedTargetId = targetId || pageId;
-    const resolvedTargetType = targetType || (pageId ? 'page' : 'asset');
-    if (resolvedTargetId) {
-      await saveWikiQaHistory({
-        targetId: resolvedTargetId,
-        targetType: resolvedTargetType,
-        question,
-        answer: result,
+    if (assetId) {
+      await saveWikiAssetAiHistory({
+        assetId,
+        task,
+        result,
         provider: isOpenAiDefault ? 'GEMINI_FALLBACK' : 'GEMINI',
         model: geminiModel
       });
@@ -81,14 +85,11 @@ export async function POST(request: Request) {
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const pageId = searchParams.get('pageId');
-  const targetId = searchParams.get('targetId');
-  const targetType = (searchParams.get('targetType') || (pageId ? 'page' : 'asset')) as 'page' | 'asset';
+  const assetId = searchParams.get('assetId');
   const limit = Number(searchParams.get('limit') || 10);
-  const resolvedTargetId = targetId || pageId;
-  if (!resolvedTargetId) {
-    return NextResponse.json({ error: 'targetId is required.' }, { status: 400 });
+  if (!assetId) {
+    return NextResponse.json({ error: 'assetId is required.' }, { status: 400 });
   }
-  const history = await fetchWikiQaHistory(resolvedTargetId, targetType, Number.isNaN(limit) ? 10 : limit);
+  const history = await fetchWikiAssetAiHistory(assetId, Number.isNaN(limit) ? 10 : limit);
   return NextResponse.json({ history });
 }
