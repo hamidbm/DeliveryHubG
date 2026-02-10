@@ -273,6 +273,57 @@ export const fetchWikiSpaces = async () => {
   } catch { return []; }
 };
 
+const ensureWikiQaIndexes = async (db: any) => {
+  await db.collection('wiki_qa_history').createIndex({ pageId: 1, createdAt: -1 });
+  await db.collection('wiki_qa_history').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+};
+
+export const saveWikiQaHistory = async ({
+  pageId,
+  question,
+  answer,
+  provider,
+  model,
+  userEmail
+}: {
+  pageId: string;
+  question: string;
+  answer: string;
+  provider: string;
+  model?: string;
+  userEmail?: string;
+}) => {
+  const db = await getDb();
+  await ensureWikiQaIndexes(db);
+  if (!ObjectId.isValid(pageId)) return null;
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + 1000 * 60 * 60 * 24 * 30);
+  return await db.collection('wiki_qa_history').insertOne({
+    pageId: new ObjectId(pageId),
+    question,
+    answer,
+    provider,
+    model,
+    userEmail,
+    createdAt: now.toISOString(),
+    expiresAt
+  });
+};
+
+export const fetchWikiQaHistory = async (pageId: string, limit: number = 10) => {
+  try {
+    const db = await getDb();
+    await ensureWikiQaIndexes(db);
+    if (!ObjectId.isValid(pageId)) return [];
+    return await db
+      .collection('wiki_qa_history')
+      .find({ pageId: new ObjectId(pageId) })
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .toArray();
+  } catch { return []; }
+};
+
 export const saveWikiSpace = async (space: Partial<WikiSpace>) => {
   const db = await getDb();
   const { _id, ...data } = space;

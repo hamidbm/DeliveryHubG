@@ -20,6 +20,9 @@ const WikiPageDisplay: React.FC<WikiPageDisplayProps> = ({ page, onNavigate, bun
   const [qaError, setQaError] = useState<string | null>(null);
   const [isQaLoading, setIsQaLoading] = useState(false);
   const [qaItems, setQaItems] = useState<{ question: string; answer: string }[]>([]);
+  const [qaHistoryItems, setQaHistoryItems] = useState<{ question: string; answer: string; createdAt?: string }[]>([]);
+  const [isQaHistoryOpen, setIsQaHistoryOpen] = useState(false);
+  const [isQaHistoryLoading, setIsQaHistoryLoading] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -52,6 +55,9 @@ const WikiPageDisplay: React.FC<WikiPageDisplayProps> = ({ page, onNavigate, bun
     setQaError(null);
     setIsQaLoading(false);
     setQaItems([]);
+    setQaHistoryItems([]);
+    setIsQaHistoryOpen(false);
+    setIsQaHistoryLoading(false);
   }, [page._id, page.content, page.summary]);
 
   // Intercept internal links
@@ -134,6 +140,7 @@ const WikiPageDisplay: React.FC<WikiPageDisplayProps> = ({ page, onNavigate, bun
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          pageId: page._id || page.id,
           question: qaQuestion.trim(),
           title: page.title,
           content: page.content
@@ -151,6 +158,25 @@ const WikiPageDisplay: React.FC<WikiPageDisplayProps> = ({ page, onNavigate, bun
       setQaError('Q&A failed.');
     } finally {
       setIsQaLoading(false);
+    }
+  };
+
+  const loadQaHistory = async () => {
+    const pageId = page._id || page.id;
+    if (!pageId) return;
+    setIsQaHistoryLoading(true);
+    try {
+      const res = await fetch(`/api/wiki/qa?pageId=${encodeURIComponent(pageId)}&limit=10`);
+      const data = await res.json();
+      setQaHistoryItems((data.history || []).map((item: any) => ({
+        question: item.question,
+        answer: item.answer,
+        createdAt: item.createdAt
+      })));
+    } catch (err) {
+      setQaHistoryItems([]);
+    } finally {
+      setIsQaHistoryLoading(false);
     }
   };
 
@@ -206,6 +232,16 @@ const WikiPageDisplay: React.FC<WikiPageDisplayProps> = ({ page, onNavigate, bun
           <div className="flex items-center gap-2 mb-4 text-slate-600">
             <i className="fas fa-comments text-sm"></i>
             <span className="text-[9px] font-black uppercase tracking-widest">Ask This Page</span>
+            <button
+              onClick={() => {
+                const next = !isQaHistoryOpen;
+                setIsQaHistoryOpen(next);
+                if (next) loadQaHistory();
+              }}
+              className="ml-auto text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-colors"
+            >
+              {isQaHistoryOpen ? 'Hide History' : 'Show History'}
+            </button>
           </div>
           <div className="flex flex-col sm:flex-row gap-3">
             <input
@@ -244,6 +280,29 @@ const WikiPageDisplay: React.FC<WikiPageDisplayProps> = ({ page, onNavigate, bun
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+          {isQaHistoryOpen && (
+            <div className="mt-6 border-t border-slate-200 pt-4">
+              <div className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-3">Recent History</div>
+              {isQaHistoryLoading ? (
+                <div className="text-[10px] text-slate-400 font-medium">Loading...</div>
+              ) : qaHistoryItems.length > 0 ? (
+                <div className="space-y-4">
+                  {qaHistoryItems.map((item, idx) => (
+                    <div key={`${item.question}-${idx}`} className="bg-white border border-slate-100 rounded-2xl p-4">
+                      <div className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">Q</div>
+                      <div className="text-sm font-semibold text-slate-800">{item.question}</div>
+                      <div className="mt-3 text-[9px] font-black uppercase tracking-widest text-slate-400">A</div>
+                      <div className="text-sm text-slate-700 mt-1">
+                        <MarkdownRenderer content={item.answer} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-[10px] text-slate-400 font-medium">No history yet.</div>
+              )}
             </div>
           )}
         </div>

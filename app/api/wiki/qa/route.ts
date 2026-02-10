@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { fetchSystemSettings } from '../../../../services/db';
+import { fetchSystemSettings, fetchWikiQaHistory, saveWikiQaHistory } from '../../../../services/db';
 import { generateGeminiText } from '../../../../services/geminiService';
 import { generateOpenAiResponse } from '../../../../services/openaiService';
 
@@ -10,7 +10,7 @@ const buildQaPrompt = (question: string, content: string, title?: string) => {
 
 export async function POST(request: Request) {
   try {
-    const { question, content, title } = await request.json();
+    const { question, content, title, pageId } = await request.json();
 
     if (!question || !question.trim()) {
       return NextResponse.json({ error: 'Question is required.' }, { status: 400 });
@@ -39,6 +39,15 @@ export async function POST(request: Request) {
           apiKey,
           reasoningEffort
         });
+        if (pageId) {
+          await saveWikiQaHistory({
+            pageId,
+            question,
+            answer: result,
+            provider: 'OPENAI',
+            model
+          });
+        }
         return NextResponse.json({ result, provider: 'OPENAI' });
       }
     }
@@ -49,8 +58,28 @@ export async function POST(request: Request) {
 
     const geminiModel = aiSettings.geminiFlashModel || aiSettings.flashModel || 'gemini-3-flash-preview';
     const result = await generateGeminiText(prompt, geminiModel);
+    if (pageId) {
+      await saveWikiQaHistory({
+        pageId,
+        question,
+        answer: result,
+        provider: isOpenAiDefault ? 'GEMINI_FALLBACK' : 'GEMINI',
+        model: geminiModel
+      });
+    }
     return NextResponse.json({ result, provider: isOpenAiDefault ? 'GEMINI_FALLBACK' : 'GEMINI' });
   } catch (error) {
     return NextResponse.json({ error: 'AI request failed.' }, { status: 500 });
   }
+}
+
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const pageId = searchParams.get('pageId');
+  const limit = Number(searchParams.get('limit') || 10);
+  if (!pageId) {
+    return NextResponse.json({ error: 'pageId is required.' }, { status: 400 });
+  }
+  const history = await fetchWikiQaHistory(pageId, Number.isNaN(limit) ? 10 : limit);
+  return NextResponse.json({ history });
 }
