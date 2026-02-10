@@ -187,3 +187,17 @@ export const generateWikiAssistance = async ({
     return "AI response unavailable.";
   }
 };
+
+export const generateGeminiText = async (prompt: string, model: string = 'gemini-3-flash-preview') => {
+  const ai = getAI();
+  try {
+    const response = await ai.models.generateContent({
+      model,
+      contents: prompt
+    });
+    return response.text || "AI response unavailable.";
+  } catch (error) {
+    console.error("Gemini Text Error:", error);
+    return "AI response unavailable.";
+  }
+};

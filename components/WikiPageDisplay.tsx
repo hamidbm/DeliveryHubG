@@ -16,6 +16,10 @@ const WikiPageDisplay: React.FC<WikiPageDisplayProps> = ({ page, onNavigate, bun
   const [summary, setSummary] = useState<string | null>(page.summary || null);
   const [isSummaryLoading, setIsSummaryLoading] = useState(false);
   const [summaryError, setSummaryError] = useState<string | null>(null);
+  const [qaQuestion, setQaQuestion] = useState('');
+  const [qaError, setQaError] = useState<string | null>(null);
+  const [isQaLoading, setIsQaLoading] = useState(false);
+  const [qaItems, setQaItems] = useState<{ question: string; answer: string }[]>([]);
   const contentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -44,6 +48,10 @@ const WikiPageDisplay: React.FC<WikiPageDisplayProps> = ({ page, onNavigate, bun
     setSummary(page.summary || null);
     setSummaryError(null);
     setIsSummaryLoading(false);
+    setQaQuestion('');
+    setQaError(null);
+    setIsQaLoading(false);
+    setQaItems([]);
   }, [page._id, page.content, page.summary]);
 
   // Intercept internal links
@@ -117,6 +125,35 @@ const WikiPageDisplay: React.FC<WikiPageDisplayProps> = ({ page, onNavigate, bun
     }
   };
 
+  const handleQaSubmit = async () => {
+    if (!qaQuestion.trim()) return;
+    setIsQaLoading(true);
+    setQaError(null);
+    try {
+      const res = await fetch('/api/wiki/qa', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question: qaQuestion.trim(),
+          title: page.title,
+          content: page.content
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setQaError(data.error || 'Q&A failed.');
+        return;
+      }
+      const answer = data.result || 'AI response unavailable.';
+      setQaItems((items) => [{ question: qaQuestion.trim(), answer }, ...items]);
+      setQaQuestion('');
+    } catch (err) {
+      setQaError('Q&A failed.');
+    } finally {
+      setIsQaLoading(false);
+    }
+  };
+
   return (
     <article className="w-full">
       {activeTheme && <style dangerouslySetInnerHTML={{ __html: activeTheme.css }} />}
@@ -165,6 +202,51 @@ const WikiPageDisplay: React.FC<WikiPageDisplayProps> = ({ page, onNavigate, bun
             </div>
           </div>
         )}
+        <div className="mt-8 p-6 bg-slate-50 border border-slate-100 rounded-3xl">
+          <div className="flex items-center gap-2 mb-4 text-slate-600">
+            <i className="fas fa-comments text-sm"></i>
+            <span className="text-[9px] font-black uppercase tracking-widest">Ask This Page</span>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <input
+              value={qaQuestion}
+              onChange={(e) => setQaQuestion(e.target.value)}
+              placeholder="Ask a question about this page..."
+              className="flex-1 px-4 py-3 rounded-2xl border border-slate-200 text-sm font-medium text-slate-700 outline-none focus:border-slate-400"
+            />
+            <button
+              onClick={handleQaSubmit}
+              disabled={isQaLoading || !qaQuestion.trim()}
+              className={`px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                isQaLoading || !qaQuestion.trim()
+                  ? 'bg-slate-200 text-slate-500 cursor-not-allowed'
+                  : 'bg-slate-900 text-white shadow-lg hover:bg-slate-800'
+              }`}
+            >
+              {isQaLoading ? 'Answering...' : 'Ask'}
+            </button>
+          </div>
+          {qaError && (
+            <div className="mt-4 p-3 bg-amber-50 border border-amber-100 rounded-2xl text-amber-600 text-[10px] font-black uppercase tracking-widest flex items-center gap-2 animate-fadeIn">
+              <i className="fas fa-circle-exclamation"></i>
+              {qaError}
+            </div>
+          )}
+          {qaItems.length > 0 && (
+            <div className="mt-6 space-y-4">
+              {qaItems.map((item, idx) => (
+                <div key={`${item.question}-${idx}`} className="bg-white border border-slate-100 rounded-2xl p-4">
+                  <div className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">Q</div>
+                  <div className="text-sm font-semibold text-slate-800">{item.question}</div>
+                  <div className="mt-3 text-[9px] font-black uppercase tracking-widest text-slate-400">A</div>
+                  <div className="text-sm text-slate-700 mt-1">
+                    <MarkdownRenderer content={item.answer} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </header>
       <div 
         ref={contentRef}
