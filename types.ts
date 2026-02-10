@@ -226,7 +226,7 @@ export interface Milestone {
   updatedAt?: string;
 }
 
-export interface WikiPage { id?: string; _id?: string; slug?: string; title: string; content: string; parentId?: string; spaceId: string; bundleId?: string; applicationId?: string; milestoneId?: string; documentTypeId?: string; createdAt?: string; updatedAt?: string; author?: string; lastModifiedBy?: string; version?: number; status?: 'Draft' | 'Published' | 'Archived'; themeKey?: string; }
+export interface WikiPage { id?: string; _id?: string; slug?: string; title: string; content: string; summary?: string; parentId?: string; spaceId: string; bundleId?: string; applicationId?: string; milestoneId?: string; documentTypeId?: string; createdAt?: string; updatedAt?: string; author?: string; lastModifiedBy?: string; version?: number; status?: 'Draft' | 'Published' | 'Archived'; themeKey?: string; }
 
 export interface WikiAsset {
   _id?: string;

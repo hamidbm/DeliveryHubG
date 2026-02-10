@@ -13,7 +13,7 @@ const WikiPageDisplay: React.FC<WikiPageDisplayProps> = ({ page, onNavigate, bun
   const [activeTheme, setActiveTheme] = useState<WikiTheme | null>(null);
   const [taxCat, setTaxCat] = useState<TaxonomyCategory | null>(null);
   const [taxType, setTaxType] = useState<TaxonomyDocumentType | null>(null);
-  const [summary, setSummary] = useState<string | null>(null);
+  const [summary, setSummary] = useState<string | null>(page.summary || null);
   const [isSummaryLoading, setIsSummaryLoading] = useState(false);
   const [summaryError, setSummaryError] = useState<string | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -41,10 +41,10 @@ const WikiPageDisplay: React.FC<WikiPageDisplayProps> = ({ page, onNavigate, bun
   }, [page]);
 
   useEffect(() => {
-    setSummary(null);
+    setSummary(page.summary || null);
     setSummaryError(null);
     setIsSummaryLoading(false);
-  }, [page._id, page.content]);
+  }, [page._id, page.content, page.summary]);
 
   // Intercept internal links
   const handleContentClick = (e: React.MouseEvent) => {
@@ -97,7 +97,19 @@ const WikiPageDisplay: React.FC<WikiPageDisplayProps> = ({ page, onNavigate, bun
         setSummaryError(data.error || 'Summary generation failed.');
         return;
       }
-      setSummary(data.result || null);
+      const nextSummary = data.result || null;
+      setSummary(nextSummary);
+      const pageId = page._id || page.id;
+      if (pageId && nextSummary) {
+        await fetch('/api/wiki', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            _id: pageId,
+            summary: nextSummary
+          })
+        });
+      }
     } catch (err) {
       setSummaryError('Summary generation failed.');
     } finally {
