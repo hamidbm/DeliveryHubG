@@ -23,6 +23,31 @@ const PROVIDER_MODEL_FIELDS: Record<string, { key: string; label: string; placeh
   COHERE: [{ key: 'cohereModel', label: 'Default Model', placeholder: 'command-r' }]
 };
 
+const TASK_ROUTING_FIELDS = [
+  { key: 'wikiSummary', label: 'Wiki Summary' },
+  { key: 'wikiImprove', label: 'Wiki Improve' },
+  { key: 'wikiExpand', label: 'Wiki Expand' },
+  { key: 'wikiDiagram', label: 'Wiki Diagram' },
+  { key: 'wikiQa', label: 'Wiki Q&A' },
+  { key: 'assetSummary', label: 'Asset Summary' },
+  { key: 'assetKeyDecisions', label: 'Asset Key Decisions' },
+  { key: 'assetAssumptions', label: 'Asset Assumptions' },
+  { key: 'assetQa', label: 'Asset Q&A' },
+  { key: 'terraformAnalysis', label: 'Terraform Analysis' },
+  { key: 'terraformDiagram', label: 'Terraform Diagram' }
+];
+
+const MODEL_KEYS = [
+  { id: 'openaiModelDefault', label: 'OpenAI Default' },
+  { id: 'openaiModelHigh', label: 'OpenAI High' },
+  { id: 'openaiModelFast', label: 'OpenAI Fast' },
+  { id: 'geminiFlashModel', label: 'Gemini Flash' },
+  { id: 'geminiProModel', label: 'Gemini Pro' },
+  { id: 'anthropicModel', label: 'Anthropic Default' },
+  { id: 'huggingfaceModel', label: 'Hugging Face Default' },
+  { id: 'cohereModel', label: 'Cohere Default' }
+];
+
 const AdminAiSettings: React.FC = () => {
   const [settings, setSettings] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -174,6 +199,158 @@ const AdminAiSettings: React.FC = () => {
               </div>
             </div>
           ))}
+        </div>
+      </section>
+
+      <section className="space-y-8">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-slate-900 text-white flex items-center justify-center shadow-lg"><i className="fas fa-toggle-on"></i></div>
+          <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Provider Toggles</h4>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {PROVIDERS.map((p) => (
+            <label key={p.id} className="flex items-center justify-between bg-white border border-slate-100 rounded-2xl px-5 py-4">
+              <div className="flex items-center gap-3">
+                <i className={`fas ${p.icon} text-slate-400`}></i>
+                <span className="text-sm font-semibold text-slate-700">{p.name}</span>
+              </div>
+              <input
+                type="checkbox"
+                checked={settings.ai.providerToggles?.[p.id] ?? (p.id === 'OPENAI' || p.id === 'GEMINI')}
+                onChange={(e) =>
+                  setSettings({
+                    ...settings,
+                    ai: {
+                      ...settings.ai,
+                      providerToggles: { ...(settings.ai.providerToggles || {}), [p.id]: e.target.checked }
+                    }
+                  })
+                }
+                className="h-4 w-4"
+              />
+            </label>
+          ))}
+        </div>
+      </section>
+
+      <section className="space-y-8">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-slate-900 text-white flex items-center justify-center shadow-lg"><i className="fas fa-route"></i></div>
+          <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Task Routing</h4>
+        </div>
+        <div className="space-y-4">
+          {TASK_ROUTING_FIELDS.map((task) => (
+            <div key={task.key} className="grid grid-cols-1 md:grid-cols-3 gap-3 bg-white border border-slate-100 rounded-2xl p-4">
+              <div className="text-xs font-black text-slate-600 uppercase tracking-widest flex items-center">{task.label}</div>
+              <select
+                value={settings.ai.taskRouting?.[task.key]?.provider || settings.ai.defaultProvider}
+                onChange={(e) =>
+                  setSettings({
+                    ...settings,
+                    ai: {
+                      ...settings.ai,
+                      taskRouting: {
+                        ...(settings.ai.taskRouting || {}),
+                        [task.key]: {
+                          ...(settings.ai.taskRouting?.[task.key] || {}),
+                          provider: e.target.value
+                        }
+                      }
+                    }
+                  })
+                }
+                className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 outline-none"
+              >
+                {PROVIDERS.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+              <select
+                value={settings.ai.taskRouting?.[task.key]?.model || 'openaiModelDefault'}
+                onChange={(e) =>
+                  setSettings({
+                    ...settings,
+                    ai: {
+                      ...settings.ai,
+                      taskRouting: {
+                        ...(settings.ai.taskRouting || {}),
+                        [task.key]: {
+                          ...(settings.ai.taskRouting?.[task.key] || {}),
+                          model: e.target.value
+                        }
+                      }
+                    }
+                  })
+                }
+                className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 outline-none"
+              >
+                {MODEL_KEYS.map((m) => (
+                  <option key={m.id} value={m.id}>{m.label}</option>
+                ))}
+              </select>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="space-y-8">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-slate-900 text-white flex items-center justify-center shadow-lg"><i className="fas fa-hourglass"></i></div>
+          <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Retention (Days)</h4>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {[
+            { key: 'wikiQa', label: 'Wiki Q&A' },
+            { key: 'assetQa', label: 'Asset Q&A' },
+            { key: 'assetAi', label: 'Asset AI' },
+            { key: 'auditLogs', label: 'Audit Logs' }
+          ].map((item) => (
+            <label key={item.key} className="flex items-center justify-between bg-white border border-slate-100 rounded-2xl px-5 py-4">
+              <span className="text-xs font-bold text-slate-600 uppercase tracking-widest">{item.label}</span>
+              <input
+                type="number"
+                min={1}
+                value={settings.ai.retentionDays?.[item.key] ?? 30}
+                onChange={(e) =>
+                  setSettings({
+                    ...settings,
+                    ai: {
+                      ...settings.ai,
+                      retentionDays: { ...(settings.ai.retentionDays || {}), [item.key]: Number(e.target.value || 1) }
+                    }
+                  })
+                }
+                className="w-24 bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 outline-none text-right"
+              />
+            </label>
+          ))}
+        </div>
+      </section>
+
+      <section className="space-y-8">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-slate-900 text-white flex items-center justify-center shadow-lg"><i className="fas fa-gauge-high"></i></div>
+          <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Rate Limits</h4>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <label className="flex items-center justify-between bg-white border border-slate-100 rounded-2xl px-5 py-4">
+            <span className="text-xs font-bold text-slate-600 uppercase tracking-widest">Requests per User / Hour</span>
+            <input
+              type="number"
+              min={1}
+              value={settings.ai.rateLimits?.perUserPerHour ?? 30}
+              onChange={(e) =>
+                setSettings({
+                  ...settings,
+                  ai: {
+                    ...settings.ai,
+                    rateLimits: { ...(settings.ai.rateLimits || {}), perUserPerHour: Number(e.target.value || 1) }
+                  }
+                })
+              }
+              className="w-24 bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 outline-none text-right"
+            />
+          </label>
         </div>
       </section>
 

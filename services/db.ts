@@ -25,7 +25,36 @@ const defaultAiSettings = {
   openaiKey: '',
   anthropicKey: '',
   huggingfaceKey: '',
-  cohereKey: ''
+  cohereKey: '',
+  providerToggles: {
+    OPENAI: true,
+    GEMINI: true,
+    ANTHROPIC: false,
+    HUGGINGFACE: false,
+    COHERE: false
+  },
+  taskRouting: {
+    wikiSummary: { provider: 'OPENAI', model: 'openaiModelDefault' },
+    wikiImprove: { provider: 'OPENAI', model: 'openaiModelDefault' },
+    wikiExpand: { provider: 'OPENAI', model: 'openaiModelDefault' },
+    wikiDiagram: { provider: 'OPENAI', model: 'openaiModelDefault' },
+    wikiQa: { provider: 'OPENAI', model: 'openaiModelDefault' },
+    assetSummary: { provider: 'OPENAI', model: 'openaiModelDefault' },
+    assetKeyDecisions: { provider: 'OPENAI', model: 'openaiModelDefault' },
+    assetAssumptions: { provider: 'OPENAI', model: 'openaiModelDefault' },
+    assetQa: { provider: 'OPENAI', model: 'openaiModelDefault' },
+    terraformAnalysis: { provider: 'OPENAI', model: 'openaiModelHigh' },
+    terraformDiagram: { provider: 'OPENAI', model: 'openaiModelHigh' }
+  },
+  retentionDays: {
+    wikiQa: 30,
+    assetQa: 30,
+    assetAi: 30,
+    auditLogs: 30
+  },
+  rateLimits: {
+    perUserPerHour: 30
+  }
 };
 
 const normalizeAiSettings = (doc: any) => {
@@ -44,6 +73,11 @@ const normalizeAiSettings = (doc: any) => {
   const cohereModels = providers.COHERE?.models || {};
   const cohereModel = cohereModels.default || providers.COHERE?.model || doc?.cohereModel || defaultAiSettings.cohereModel;
 
+  const providerToggles = doc?.providerToggles || defaultAiSettings.providerToggles;
+  const taskRouting = doc?.taskRouting || defaultAiSettings.taskRouting;
+  const retentionDays = doc?.retentionDays || defaultAiSettings.retentionDays;
+  const rateLimits = doc?.rateLimits || defaultAiSettings.rateLimits;
+
   return {
     key: 'ai_settings',
     ai: {
@@ -60,6 +94,10 @@ const normalizeAiSettings = (doc: any) => {
       huggingfaceModel,
       cohereKey: providers.COHERE?.apiKey || doc?.cohereKey || defaultAiSettings.cohereKey,
       cohereModel,
+      providerToggles,
+      taskRouting,
+      retentionDays,
+      rateLimits,
       // Legacy compatibility fields
       defaultModel: openaiModelDefault,
       flashModel: geminiFlashModel,
@@ -101,6 +139,10 @@ export const saveSystemSettings = async (settings: any) => {
   const doc = {
     key: 'ai_settings',
     defaultProvider: ai.defaultProvider || defaultAiSettings.defaultProvider,
+    providerToggles: ai.providerToggles || defaultAiSettings.providerToggles,
+    taskRouting: ai.taskRouting || defaultAiSettings.taskRouting,
+    retentionDays: ai.retentionDays || defaultAiSettings.retentionDays,
+    rateLimits: ai.rateLimits || defaultAiSettings.rateLimits,
     providers: {
       OPENAI: {
         apiKey: ai.openaiKey || defaultAiSettings.openaiKey,
@@ -288,6 +330,7 @@ const ensureWikiAssetAiIndexes = async (db: any) => {
 export const saveWikiQaHistory = async ({
   targetId,
   targetType = 'page',
+  ttlDays = 30,
   question,
   answer,
   provider,
@@ -296,6 +339,7 @@ export const saveWikiQaHistory = async ({
 }: {
   targetId: string;
   targetType?: 'page' | 'asset';
+  ttlDays?: number;
   question: string;
   answer: string;
   provider: string;
@@ -306,7 +350,7 @@ export const saveWikiQaHistory = async ({
   await ensureWikiQaIndexes(db);
   const isValidId = ObjectId.isValid(targetId);
   const now = new Date();
-  const expiresAt = new Date(now.getTime() + 1000 * 60 * 60 * 24 * 30);
+  const expiresAt = new Date(now.getTime() + 1000 * 60 * 60 * 24 * Math.max(ttlDays, 1));
   return await db.collection('wiki_qa_history').insertOne({
     targetType,
     targetId: isValidId ? new ObjectId(targetId) : undefined,
@@ -341,7 +385,8 @@ export const saveWikiAssetAiHistory = async ({
   result,
   provider,
   model,
-  userEmail
+  userEmail,
+  ttlDays = 30
 }: {
   assetId: string;
   task: string;
@@ -349,12 +394,13 @@ export const saveWikiAssetAiHistory = async ({
   provider: string;
   model?: string;
   userEmail?: string;
+  ttlDays?: number;
 }) => {
   const db = await getDb();
   await ensureWikiAssetAiIndexes(db);
   const isValidId = ObjectId.isValid(assetId);
   const now = new Date();
-  const expiresAt = new Date(now.getTime() + 1000 * 60 * 60 * 24 * 30);
+  const expiresAt = new Date(now.getTime() + 1000 * 60 * 60 * 24 * Math.max(ttlDays, 1));
   return await db.collection('wiki_asset_ai_history').insertOne({
     assetId: isValidId ? new ObjectId(assetId) : undefined,
     assetIdStr: isValidId ? undefined : assetId,
@@ -380,6 +426,80 @@ export const fetchWikiAssetAiHistory = async (assetId: string, limit: number = 1
       .limit(limit)
       .toArray();
   } catch { return []; }
+};
+
+const ensureAiAuditIndexes = async (db: any) => {
+  await db.collection('ai_audit_logs').createIndex({ createdAt: -1 });
+  await db.collection('ai_audit_logs').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+};
+
+export const saveAiAuditLog = async ({
+  task,
+  provider,
+  model,
+  targetType,
+  targetId,
+  success,
+  error,
+  latencyMs,
+  identity,
+  ttlDays = 30
+}: {
+  task: string;
+  provider: string;
+  model?: string;
+  targetType?: string;
+  targetId?: string;
+  success: boolean;
+  error?: string;
+  latencyMs?: number;
+  identity?: string;
+  ttlDays?: number;
+}) => {
+  const db = await getDb();
+  await ensureAiAuditIndexes(db);
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + 1000 * 60 * 60 * 24 * Math.max(ttlDays, 1));
+  return await db.collection('ai_audit_logs').insertOne({
+    task,
+    provider,
+    model,
+    targetType,
+    targetId,
+    success,
+    error,
+    latencyMs,
+    identity,
+    createdAt: now.toISOString(),
+    expiresAt
+  });
+};
+
+const ensureAiRateLimitIndexes = async (db: any) => {
+  await db.collection('ai_rate_limits').createIndex({ identity: 1, windowStart: 1 }, { unique: true });
+  await db.collection('ai_rate_limits').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+};
+
+export const checkAndIncrementAiRateLimit = async (identity: string, limit: number) => {
+  const db = await getDb();
+  await ensureAiRateLimitIndexes(db);
+  const now = new Date();
+  const windowStart = new Date(now);
+  windowStart.setMinutes(0, 0, 0);
+  const expiresAt = new Date(windowStart.getTime() + 1000 * 60 * 60 * 2);
+  const key = { identity, windowStart: windowStart.toISOString() };
+
+  const result = await db.collection('ai_rate_limits').findOneAndUpdate(
+    key,
+    {
+      $inc: { count: 1 },
+      $setOnInsert: { createdAt: now.toISOString(), expiresAt }
+    },
+    { upsert: true, returnDocument: 'after' }
+  );
+
+  const count = result?.value?.count || 1;
+  return count <= limit;
 };
 
 export const saveWikiSpace = async (space: Partial<WikiSpace>) => {

@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
-import { fetchSystemSettings } from '../../../../services/db';
+import { checkAndIncrementAiRateLimit, fetchSystemSettings, saveAiAuditLog } from '../../../../services/db';
 import { generateWikiAssistance } from '../../../../services/geminiService';
 import { generateOpenAiResponse } from '../../../../services/openaiService';
+import { getRateLimitPerHour, getRequestIdentity, getRetentionDays, resolveTaskRouting } from '../../../../services/aiPolicy';
 
 type WikiAssistTask = 'improve' | 'expand' | 'diagram' | 'summary';
 
@@ -56,6 +57,7 @@ const generateOpenAiWikiAssistance = async ({
 const VALID_TASKS = new Set(['improve', 'expand', 'diagram', 'summary']);
 
 export async function POST(request: Request) {
+  const startedAt = Date.now();
   try {
     const { task, content, title, format } = await request.json();
 
@@ -70,12 +72,27 @@ export async function POST(request: Request) {
     const settings = await fetchSystemSettings();
     const aiSettings = settings?.ai || {};
     const provider = aiSettings.defaultProvider || 'GEMINI';
-    const isOpenAiDefault = provider === 'OPENAI' || Boolean(process.env.OPENAI_API_KEY);
+    const identity = getRequestIdentity(request);
+    const allowed = await checkAndIncrementAiRateLimit(identity, getRateLimitPerHour(aiSettings, 30));
+    if (!allowed) {
+      return NextResponse.json({ error: 'Rate limit exceeded.' }, { status: 429 });
+    }
+    const taskKey =
+      task === 'summary'
+        ? 'wikiSummary'
+        : task === 'diagram'
+          ? 'wikiDiagram'
+          : task === 'expand'
+            ? 'wikiExpand'
+            : 'wikiImprove';
+    const { provider: routedProvider, model: routedModel } = resolveTaskRouting(aiSettings, taskKey, provider);
+    const openAiIntended = routedProvider === 'OPENAI';
+    const geminiProviderLabel = routedProvider === 'GEMINI' ? 'GEMINI' : 'GEMINI_FALLBACK';
     const formatValue = format || 'markdown';
 
-    if (isOpenAiDefault) {
+    if (openAiIntended) {
       const apiKey = process.env.OPENAI_API_KEY || aiSettings.openaiKey;
-      const configuredModel = aiSettings.openaiModelDefault || aiSettings.openaiModelHigh || aiSettings.openaiModel || aiSettings.defaultModel || 'gpt-5.2';
+      const configuredModel = routedModel || aiSettings.openaiModelDefault || aiSettings.openaiModelHigh || aiSettings.openaiModel || aiSettings.defaultModel || 'gpt-5.2';
       const model = configuredModel.startsWith('gpt-') ? configuredModel : 'gpt-5.2';
       const reasoningEffort = model.startsWith('gpt-5.2-pro') ? 'medium' : 'low';
 
@@ -89,6 +106,15 @@ export async function POST(request: Request) {
           apiKey,
           reasoningEffort
         });
+        await saveAiAuditLog({
+          task: taskKey,
+          provider: 'OPENAI',
+          model,
+          success: true,
+          latencyMs: Date.now() - startedAt,
+          identity,
+          ttlDays: getRetentionDays(aiSettings, 'auditLogs', 30)
+        });
         return NextResponse.json({ result, provider: 'OPENAI' });
       }
     }
@@ -98,9 +124,11 @@ export async function POST(request: Request) {
     }
 
     const geminiModel =
-      task === 'diagram' || task === 'summary'
-        ? aiSettings.geminiProModel || aiSettings.proModel || 'gemini-3-pro-preview'
-        : aiSettings.geminiFlashModel || aiSettings.flashModel || 'gemini-3-flash-preview';
+      routedProvider === 'GEMINI' && routedModel
+        ? routedModel
+        : task === 'diagram' || task === 'summary'
+          ? aiSettings.geminiProModel || aiSettings.proModel || 'gemini-3-pro-preview'
+          : aiSettings.geminiFlashModel || aiSettings.flashModel || 'gemini-3-flash-preview';
 
     const result = await generateWikiAssistance({
       task,
@@ -110,8 +138,28 @@ export async function POST(request: Request) {
       model: geminiModel
     });
 
-    return NextResponse.json({ result, provider: isOpenAiDefault ? 'GEMINI_FALLBACK' : 'GEMINI' });
+    await saveAiAuditLog({
+      task: taskKey,
+      provider: geminiProviderLabel,
+      model: geminiModel,
+      success: true,
+      latencyMs: Date.now() - startedAt,
+      identity,
+      ttlDays: getRetentionDays(aiSettings, 'auditLogs', 30)
+    });
+    return NextResponse.json({ result, provider: geminiProviderLabel });
   } catch (error) {
+    const settings = await fetchSystemSettings();
+    const aiSettings = settings?.ai || {};
+    await saveAiAuditLog({
+      task: 'wikiAi',
+      provider: 'UNKNOWN',
+      success: false,
+      error: (error as Error)?.message,
+      latencyMs: Date.now() - startedAt,
+      identity: getRequestIdentity(request),
+      ttlDays: getRetentionDays(aiSettings, 'auditLogs', 30)
+    });
     return NextResponse.json({ error: 'AI request failed.' }, { status: 500 });
   }
 }

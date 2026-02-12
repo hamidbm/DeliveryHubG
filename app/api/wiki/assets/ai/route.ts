@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
-import { fetchSystemSettings, fetchWikiAssetAiHistory, saveWikiAssetAiHistory } from '../../../../../services/db';
+import { checkAndIncrementAiRateLimit, fetchSystemSettings, fetchWikiAssetAiHistory, saveAiAuditLog, saveWikiAssetAiHistory } from '../../../../../services/db';
 import { generateGeminiText } from '../../../../../services/geminiService';
 import { generateOpenAiResponse } from '../../../../../services/openaiService';
+import { getRateLimitPerHour, getRequestIdentity, getRetentionDays, resolveTaskRouting } from '../../../../../services/aiPolicy';
 
 const VALID_TASKS = new Set(['summary', 'key_decisions', 'assumptions']);
 
@@ -19,6 +20,7 @@ const buildAssetPrompt = (task: string, content: string, title?: string) => {
 };
 
 export async function POST(request: Request) {
+  const startedAt = Date.now();
   try {
     const { task, content, title, assetId } = await request.json();
 
@@ -33,12 +35,25 @@ export async function POST(request: Request) {
     const settings = await fetchSystemSettings();
     const aiSettings = settings?.ai || {};
     const provider = aiSettings.defaultProvider || 'GEMINI';
-    const isOpenAiDefault = provider === 'OPENAI' || Boolean(process.env.OPENAI_API_KEY);
+    const identity = getRequestIdentity(request);
+    const allowed = await checkAndIncrementAiRateLimit(identity, getRateLimitPerHour(aiSettings, 30));
+    if (!allowed) {
+      return NextResponse.json({ error: 'Rate limit exceeded.' }, { status: 429 });
+    }
+    const taskKey =
+      task === 'summary'
+        ? 'assetSummary'
+        : task === 'key_decisions'
+          ? 'assetKeyDecisions'
+          : 'assetAssumptions';
+    const { provider: routedProvider, model: routedModel } = resolveTaskRouting(aiSettings, taskKey, provider);
+    const openAiIntended = routedProvider === 'OPENAI';
+    const geminiProviderLabel = routedProvider === 'GEMINI' ? 'GEMINI' : 'GEMINI_FALLBACK';
     const prompt = buildAssetPrompt(task, content, title);
 
-    if (isOpenAiDefault) {
+    if (openAiIntended) {
       const apiKey = process.env.OPENAI_API_KEY || aiSettings.openaiKey;
-      const configuredModel = aiSettings.openaiModelDefault || aiSettings.openaiModelHigh || aiSettings.openaiModel || aiSettings.defaultModel || 'gpt-5.2';
+      const configuredModel = routedModel || aiSettings.openaiModelDefault || aiSettings.openaiModelHigh || aiSettings.openaiModel || aiSettings.defaultModel || 'gpt-5.2';
       const model = configuredModel.startsWith('gpt-') ? configuredModel : 'gpt-5.2';
       const reasoningEffort = model.startsWith('gpt-5.2-pro') ? 'medium' : 'low';
 
@@ -55,9 +70,19 @@ export async function POST(request: Request) {
             task,
             result,
             provider: 'OPENAI',
-            model
+            model,
+            ttlDays: getRetentionDays(aiSettings, 'assetAi', 30)
           });
         }
+        await saveAiAuditLog({
+          task: taskKey,
+          provider: 'OPENAI',
+          model,
+          success: true,
+          latencyMs: Date.now() - startedAt,
+          identity,
+          ttlDays: getRetentionDays(aiSettings, 'auditLogs', 30)
+        });
         return NextResponse.json({ result, provider: 'OPENAI' });
       }
     }
@@ -66,19 +91,43 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Gemini API key is missing.' }, { status: 400 });
     }
 
-    const geminiModel = aiSettings.geminiFlashModel || aiSettings.flashModel || 'gemini-3-flash-preview';
+    const geminiModel =
+      routedProvider === 'GEMINI' && routedModel
+        ? routedModel
+        : aiSettings.geminiFlashModel || aiSettings.flashModel || 'gemini-3-flash-preview';
     const result = await generateGeminiText(prompt, geminiModel);
     if (assetId) {
       await saveWikiAssetAiHistory({
         assetId,
         task,
         result,
-        provider: isOpenAiDefault ? 'GEMINI_FALLBACK' : 'GEMINI',
-        model: geminiModel
+        provider: geminiProviderLabel,
+        model: geminiModel,
+        ttlDays: getRetentionDays(aiSettings, 'assetAi', 30)
       });
     }
-    return NextResponse.json({ result, provider: isOpenAiDefault ? 'GEMINI_FALLBACK' : 'GEMINI' });
+    await saveAiAuditLog({
+      task: taskKey,
+      provider: geminiProviderLabel,
+      model: geminiModel,
+      success: true,
+      latencyMs: Date.now() - startedAt,
+      identity,
+      ttlDays: getRetentionDays(aiSettings, 'auditLogs', 30)
+    });
+    return NextResponse.json({ result, provider: geminiProviderLabel });
   } catch (error) {
+    const settings = await fetchSystemSettings();
+    const aiSettings = settings?.ai || {};
+    await saveAiAuditLog({
+      task: 'assetAi',
+      provider: 'UNKNOWN',
+      success: false,
+      error: (error as Error)?.message,
+      latencyMs: Date.now() - startedAt,
+      identity: getRequestIdentity(request),
+      ttlDays: getRetentionDays(aiSettings, 'auditLogs', 30)
+    });
     return NextResponse.json({ error: 'AI request failed.' }, { status: 500 });
   }
 }

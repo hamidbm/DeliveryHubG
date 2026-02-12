@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { WikiAsset } from '../types';
 
 interface WikiAssetSpreadsheetPreviewProps {
@@ -7,6 +7,7 @@ interface WikiAssetSpreadsheetPreviewProps {
 
 const WikiAssetSpreadsheetPreview: React.FC<WikiAssetSpreadsheetPreviewProps> = ({ asset }) => {
   const [activeSheetIndex, setActiveSheetIndex] = useState(0);
+  const [viewMode, setViewMode] = useState<'tiles' | 'table'>('tiles');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterColumn, setFilterColumn] = useState('all');
   const [filterValue, setFilterValue] = useState('');
@@ -14,6 +15,8 @@ const WikiAssetSpreadsheetPreview: React.FC<WikiAssetSpreadsheetPreviewProps> = 
   const [editingRowId, setEditingRowId] = useState<number | null>(null);
   const [editedRow, setEditedRow] = useState<Record<string, any>>({});
   const [isSaving, setIsSaving] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
 
   const sheetData = useMemo(() => {
     if (asset.preview.kind !== 'sheet' || !asset.preview.objectKey) return null;
@@ -53,6 +56,13 @@ const WikiAssetSpreadsheetPreview: React.FC<WikiAssetSpreadsheetPreviewProps> = 
       : true;
     return matchesSearch && (filterColumn === 'all' ? true : matchesFilter);
   });
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const pagedRows = filteredRows.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+  useEffect(() => {
+    setPage(1);
+  }, [activeSheetIndex, searchTerm, filterColumn, filterValue, visibleColumns, pageSize]);
 
   const handleEditRow = (row: Record<string, any>) => {
     setEditingRowId(row._rowId);
@@ -123,6 +133,29 @@ const WikiAssetSpreadsheetPreview: React.FC<WikiAssetSpreadsheetPreviewProps> = 
           </select>
         </div>
         <div className="flex items-center gap-2">
+          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">View</label>
+          <div className="inline-flex rounded-lg border border-slate-200 bg-white overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setViewMode('tiles')}
+              className={`px-3 py-2 text-[10px] font-black uppercase tracking-widest transition ${
+                viewMode === 'tiles' ? 'bg-slate-900 text-white' : 'text-slate-500'
+              }`}
+            >
+              Tile
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('table')}
+              className={`px-3 py-2 text-[10px] font-black uppercase tracking-widest transition ${
+                viewMode === 'table' ? 'bg-slate-900 text-white' : 'text-slate-500'
+              }`}
+            >
+              Table
+            </button>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
           <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Search</label>
           <input
             value={searchTerm}
@@ -182,70 +215,147 @@ const WikiAssetSpreadsheetPreview: React.FC<WikiAssetSpreadsheetPreviewProps> = 
             </button>
           </div>
         </div>
-      <div className="grid gap-6">
-        {filteredRows.map((row) => (
-          <div
-            key={row._rowId}
-            className="border border-slate-200 rounded-2xl p-5 shadow-sm bg-slate-50"
+      <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+        <div className="text-xs font-semibold text-slate-500">
+          {filteredRows.length.toLocaleString()} rows
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Rows</label>
+          <select
+            className="border border-slate-200 rounded-lg px-3 py-2 text-xs font-semibold"
+            value={pageSize}
+            onChange={(e) => setPageSize(Number(e.target.value))}
           >
-            <div className="flex items-center justify-between mb-4">
-              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                Row {row._rowId}
-              </span>
-              {editingRowId === row._rowId ? (
-                <div className="flex gap-2">
-                  <button
-                    className="px-3 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg bg-blue-600 text-white"
-                    onClick={handleSaveRow}
-                    disabled={isSaving}
-                  >
-                    {isSaving ? 'Saving...' : 'Save'}
-                  </button>
-                  <button
-                    className="px-3 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg bg-slate-200 text-slate-600"
-                    onClick={() => {
-                      setEditingRowId(null);
-                      setEditedRow({});
-                    }}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              ) : (
-                <button
-                  className="px-3 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg bg-slate-900 text-white"
-                  onClick={() => handleEditRow(row)}
-                >
-                  Edit Row
-                </button>
-              )}
-            </div>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {activeVisibleColumns.map((column) => (
-                <div key={column} className="flex flex-col gap-1">
-                  <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">
-                    {column}
-                  </span>
-                  {editingRowId === row._rowId ? (
-                    <input
-                      className="border border-slate-200 rounded-lg px-3 py-2 text-xs font-semibold bg-white"
-                      value={editedRow[column] ?? ''}
-                      onChange={(e) => handleRowChange(column, e.target.value)}
-                    />
-                  ) : (
-                    <span className="text-sm font-medium text-slate-700">
-                      {String(row[column] ?? '')}
-                    </span>
-                  )}
-                </div>
-              ))}
-            </div>
+            {[10, 20, 50, 100].map((size) => (
+              <option key={size} value={size}>
+                {size} / page
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+            disabled={currentPage === 1}
+            className="px-3 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg bg-slate-100 text-slate-600 border border-slate-200 disabled:opacity-50"
+          >
+            Prev
+          </button>
+          <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+            Page {currentPage} / {totalPages}
           </div>
-        ))}
-        {!filteredRows.length && (
-          <div className="text-sm text-slate-500">No rows match your search.</div>
-        )}
+          <button
+            type="button"
+            onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
+            disabled={currentPage === totalPages}
+            className="px-3 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg bg-slate-100 text-slate-600 border border-slate-200 disabled:opacity-50"
+          >
+            Next
+          </button>
+        </div>
       </div>
+
+      {viewMode === 'tiles' ? (
+        <div className="grid gap-6">
+          {pagedRows.map((row) => (
+            <div
+              key={row._rowId}
+              className="border border-slate-200 rounded-2xl p-5 shadow-sm bg-slate-50"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                  Row {row._rowId}
+                </span>
+                {editingRowId === row._rowId ? (
+                  <div className="flex gap-2">
+                    <button
+                      className="px-3 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg bg-blue-600 text-white"
+                      onClick={handleSaveRow}
+                      disabled={isSaving}
+                    >
+                      {isSaving ? 'Saving...' : 'Save'}
+                    </button>
+                    <button
+                      className="px-3 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg bg-slate-200 text-slate-600"
+                      onClick={() => {
+                        setEditingRowId(null);
+                        setEditedRow({});
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    className="px-3 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg bg-slate-900 text-white"
+                    onClick={() => handleEditRow(row)}
+                  >
+                    Edit Row
+                  </button>
+                )}
+              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                {activeVisibleColumns.map((column) => (
+                  <div key={column} className="flex flex-col gap-1">
+                    <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+                      {column}
+                    </span>
+                    {editingRowId === row._rowId ? (
+                      <input
+                        className="border border-slate-200 rounded-lg px-3 py-2 text-xs font-semibold bg-white"
+                        value={editedRow[column] ?? ''}
+                        onChange={(e) => handleRowChange(column, e.target.value)}
+                      />
+                    ) : (
+                      <span className="text-sm font-medium text-slate-700">
+                        {String(row[column] ?? '')}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+          {!filteredRows.length && (
+            <div className="text-sm text-slate-500">No rows match your search.</div>
+          )}
+        </div>
+      ) : (
+        <div className="overflow-x-auto border border-slate-200 rounded-2xl bg-white shadow-sm">
+          <table className="min-w-full text-left text-xs text-slate-700">
+            <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-500 sticky top-0">
+              <tr>
+                <th className="px-4 py-3 border-b border-slate-200">Row</th>
+                {activeVisibleColumns.map((column) => (
+                  <th key={column} className="px-4 py-3 border-b border-slate-200">
+                    {column}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {pagedRows.map((row) => (
+                <tr key={row._rowId} className="odd:bg-white even:bg-slate-50">
+                  <td className="px-4 py-3 border-b border-slate-100 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                    {row._rowId}
+                  </td>
+                  {activeVisibleColumns.map((column) => (
+                    <td key={column} className="px-4 py-3 border-b border-slate-100 text-sm">
+                      {String(row[column] ?? '')}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+              {!filteredRows.length && (
+                <tr>
+                  <td colSpan={activeVisibleColumns.length + 1} className="px-4 py-6 text-sm text-slate-500">
+                    No rows match your search.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 };

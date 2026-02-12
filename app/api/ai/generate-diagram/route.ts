@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { generateDiagramFromTerraform } from '../../../../services/geminiService';
-import { fetchSystemSettings } from '../../../../services/db';
+import { checkAndIncrementAiRateLimit, fetchSystemSettings, saveAiAuditLog } from '../../../../services/db';
 import { generateOpenAiResponse, pickOpenAiReasoningEffort } from '../../../../services/openaiService';
+import { getRateLimitPerHour, getRequestIdentity, getRetentionDays, resolveTaskRouting } from '../../../../services/aiPolicy';
 
 async function generateOpenAiDiagram(code: string, apiKey: string, model: string) {
   const prompt = `As a Cloud Architect, convert this Terraform HCL code into a high-quality Mermaid.js flowchart (LR). 
@@ -30,37 +31,87 @@ async function generateOpenAiDiagram(code: string, apiKey: string, model: string
 }
 
 export async function POST(request: Request) {
+  const startedAt = Date.now();
   try {
     const { code } = await request.json();
     if (!code) return NextResponse.json({ error: 'Terraform code required' }, { status: 400 });
     
     const settings = await fetchSystemSettings();
     const envKey = process.env.OPENAI_API_KEY;
+    const aiSettings = settings?.ai || {};
+    const identity = getRequestIdentity(request);
+    const allowed = await checkAndIncrementAiRateLimit(identity, getRateLimitPerHour(aiSettings, 30));
+    if (!allowed) {
+      return NextResponse.json({ error: 'Rate limit exceeded.' }, { status: 429 });
+    }
     
     // Auto-detect and prioritize OpenAI if env var is present, 
     // or if DB explicitly says OpenAI.
-    const isOpenAiDefault = envKey || (settings?.ai?.defaultProvider === 'OPENAI');
+    const { provider: routedProvider, model: routedModel } = resolveTaskRouting(aiSettings, 'terraformDiagram', aiSettings.defaultProvider || 'GEMINI');
+    const openAiIntended = routedProvider === 'OPENAI';
+    const geminiProviderLabel = routedProvider === 'GEMINI' ? 'GEMINI' : 'GEMINI_FALLBACK';
     
-    if (isOpenAiDefault) {
-      const apiKey = envKey || settings.ai?.openaiKey;
+    if (openAiIntended) {
+      const apiKey = envKey || aiSettings.openaiKey;
       if (!apiKey) {
         // Fallback to Gemini if OpenAI is intended but key is missing
-        const model = settings?.ai?.geminiProModel || settings?.ai?.proModel || 'gemini-3-pro-preview';
+        const model = aiSettings.geminiProModel || aiSettings.proModel || 'gemini-3-pro-preview';
         const mermaid = await generateDiagramFromTerraform(code, model);
+        await saveAiAuditLog({
+          task: 'terraformDiagram',
+          provider: geminiProviderLabel,
+          model,
+          success: true,
+          latencyMs: Date.now() - startedAt,
+          identity,
+          ttlDays: getRetentionDays(aiSettings, 'auditLogs', 30)
+        });
         return NextResponse.json({ mermaid, engine: 'Gemini 3 Pro (OpenAI Key Missing)' });
       }
       
-      const model = settings?.ai?.openaiModelHigh || settings?.ai?.openaiModelDefault || settings?.ai?.openaiModel || settings?.ai?.defaultModel || 'gpt-5.2-pro';
+      const model = routedModel || aiSettings.openaiModelHigh || aiSettings.openaiModelDefault || aiSettings.openaiModel || aiSettings.defaultModel || 'gpt-5.2-pro';
       const mermaid = await generateOpenAiDiagram(code, apiKey, model);
+      await saveAiAuditLog({
+        task: 'terraformDiagram',
+        provider: 'OPENAI',
+        model,
+        success: true,
+        latencyMs: Date.now() - startedAt,
+        identity,
+        ttlDays: getRetentionDays(aiSettings, 'auditLogs', 30)
+      });
       return NextResponse.json({ mermaid, engine: `OpenAI ${model}` });
     }
 
     // Default path for Gemini
-    const model = settings?.ai?.geminiProModel || settings?.ai?.proModel || 'gemini-3-pro-preview';
+    const model =
+      routedProvider === 'GEMINI' && routedModel
+        ? routedModel
+        : aiSettings.geminiProModel || aiSettings.proModel || 'gemini-3-pro-preview';
     const mermaid = await generateDiagramFromTerraform(code, model);
+    await saveAiAuditLog({
+      task: 'terraformDiagram',
+      provider: geminiProviderLabel,
+      model,
+      success: true,
+      latencyMs: Date.now() - startedAt,
+      identity,
+      ttlDays: getRetentionDays(aiSettings, 'auditLogs', 30)
+    });
     return NextResponse.json({ mermaid, engine: 'Gemini 3 Pro' });
 
   } catch (error: any) {
+    const settings = await fetchSystemSettings();
+    const aiSettings = settings?.ai || {};
+    await saveAiAuditLog({
+      task: 'terraformDiagram',
+      provider: 'UNKNOWN',
+      success: false,
+      error: error?.message,
+      latencyMs: Date.now() - startedAt,
+      identity: getRequestIdentity(request),
+      ttlDays: getRetentionDays(aiSettings, 'auditLogs', 30)
+    });
     console.error("AI Dispatch Error:", error);
     return NextResponse.json({ error: error.message || 'AI processing failed' }, { status: 500 });
   }
