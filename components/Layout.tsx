@@ -25,6 +25,7 @@ interface LayoutProps {
   applications: Application[];
   epics?: WorkItem[];
   onCreateSpace?: () => void;
+  onCreateWikiArtifact?: () => void;
   onCreateWorkItem?: () => void;
   userName?: string;
   userRole?: string;
@@ -34,7 +35,7 @@ interface LayoutProps {
 const Layout: React.FC<LayoutProps> = ({ 
   children, activeTab, setActiveTab, selSpaceId = 'all', setSelSpaceId, activeBundle, setActiveBundle, activeApp = 'all', setActiveApp,
   activeVendor = 'all', setActiveVendor, selMilestone = 'all', setSelMilestone, activeEpic = 'all', setActiveEpic, searchQuery = '',
-  setSearchQuery, bundles = [], applications = [], epics = [], onCreateSpace, onCreateWorkItem, userName = 'Alex Architect',
+  setSearchQuery, bundles = [], applications = [], epics = [], onCreateSpace, onCreateWikiArtifact, onCreateWorkItem, userName = 'Alex Architect',
   userRole = 'Enterprise Architect', onLogout
 }) => {
   const router = useRouter();
@@ -218,13 +219,22 @@ const Layout: React.FC<LayoutProps> = ({
             </div>
             
             {activeTab === 'wiki' ? (
-              <button 
-                onClick={onCreateSpace}
-                className="px-4 py-1.5 bg-slate-900 text-white text-[9px] font-black rounded-lg hover:bg-slate-800 transition-all uppercase tracking-widest flex items-center gap-2 shadow-lg shadow-black/10"
-              >
-                <i className="fas fa-plus"></i>
-                Create Space
-              </button>
+              <>
+                <button 
+                  onClick={onCreateSpace}
+                  className="px-4 py-1.5 bg-slate-900 text-white text-[9px] font-black rounded-lg hover:bg-slate-800 transition-all uppercase tracking-widest flex items-center gap-2 shadow-lg shadow-black/10"
+                >
+                  <i className="fas fa-plus"></i>
+                  Create Space
+                </button>
+                <button 
+                  onClick={onCreateWikiArtifact}
+                  className="px-4 py-1.5 bg-blue-600 text-white text-[9px] font-black rounded-lg hover:bg-blue-700 transition-all uppercase tracking-widest flex items-center gap-2 shadow-lg shadow-blue-500/10"
+                >
+                  <i className="fas fa-file-circle-plus"></i>
+                  New Artifact
+                </button>
+              </>
             ) : activeTab === 'work-items' ? (
               <button 
                 onClick={onCreateWorkItem}

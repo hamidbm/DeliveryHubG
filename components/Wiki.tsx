@@ -372,12 +372,9 @@ const Wiki: React.FC<WikiProps> = ({
           </nav>
           
           <div className="p-6 border-t border-slate-100 bg-white">
-             <button
-               onClick={() => setIsCreating(true)}
-               className="w-full py-4 bg-blue-600 text-white text-[10px] font-black rounded-2xl uppercase tracking-widest shadow-xl shadow-blue-500/20 hover:bg-blue-700 active:scale-95 transition-all flex items-center justify-center gap-2"
-             >
-               <i className="fas fa-plus"></i> New Artifact
-             </button>
+            <div className="text-[9px] font-black uppercase tracking-widest text-slate-300 text-center">
+              Use the top bar to create artifacts
+            </div>
           </div>
         </aside>
       )}

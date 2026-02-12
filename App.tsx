@@ -299,6 +299,7 @@ function HomeContent() {
       userName={user?.name}
       userRole={user?.role}
       onLogout={handleLogout}
+      onCreateWikiArtifact={() => { handleSetActiveTab('wiki'); setExternalTrigger('create-wiki-artifact'); }}
       onCreateWorkItem={() => { handleSetActiveTab('work-items'); setExternalTrigger('create-item'); }}
     >
       {renderActiveView()}
