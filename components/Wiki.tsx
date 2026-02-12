@@ -291,6 +291,24 @@ const Wiki: React.FC<WikiProps> = ({
     return tree;
   }, [pages, assets, spaces, bundles, applications, docTypes, selSpaceId, selBundleId, selAppId, selMilestone, searchQuery, primaryGrouping, showBundle, showDocType, showMilestone]);
 
+  const expandAllNodes = () => {
+    const allIds = new Set<string>();
+    const walk = (nodes: any[]) => {
+      nodes.forEach((node) => {
+        if (node.type === 'folder') {
+          allIds.add(node.id);
+          if (node.children?.length) walk(node.children);
+        }
+      });
+    };
+    walk(treeData);
+    setExpandedNodes(allIds);
+  };
+
+  const collapseAllNodes = () => {
+    setExpandedNodes(new Set());
+  };
+
   const renderTreeNode = (node: any, depth = 0) => {
     const isArtifact = node.type === 'page' || node.type === 'asset';
     const isExpanded = expandedNodes.has(node.id);
@@ -347,8 +365,7 @@ const Wiki: React.FC<WikiProps> = ({
     <div className="flex h-[800px] bg-white rounded-[3rem] border border-slate-200 shadow-2xl overflow-hidden animate-fadeIn">
       {isSidebarVisible && (
         <aside className="w-80 border-r border-slate-100 flex flex-col bg-slate-50/30 shrink-0">
-          <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-white/50 backdrop-blur">
-            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Nexus Registry</h3>
+          <div className="p-6 border-b border-slate-100 flex items-center justify-end bg-white/50 backdrop-blur">
             <button onClick={() => setIsSidebarVisible(false)} className="text-slate-300 hover:text-slate-500 transition-colors"><i className="fas fa-chevron-left"></i></button>
           </div>
 
@@ -365,6 +382,23 @@ const Wiki: React.FC<WikiProps> = ({
                 <HierarchyToggle label="Show Doc Types" active={showDocType} onToggle={setShowDocType} />
                 <HierarchyToggle label="Show Milestones" active={showMilestone} onToggle={setShowMilestone} />
              </div>
+          </div>
+
+          <div className="px-6 py-3 bg-white border-b border-slate-100 flex items-center justify-center gap-3">
+            <button
+              onClick={expandAllNodes}
+              className="text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-blue-600 transition-colors"
+              title="Expand all"
+            >
+              Expand
+            </button>
+            <button
+              onClick={collapseAllNodes}
+              className="text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-blue-600 transition-colors"
+              title="Collapse all"
+            >
+              Collapse
+            </button>
           </div>
 
           <nav className="flex-1 overflow-y-auto p-4 custom-scrollbar">

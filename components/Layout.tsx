@@ -90,7 +90,7 @@ const Layout: React.FC<LayoutProps> = ({
           <div className="w-8 h-8 bg-blue-500 rounded flex items-center justify-center">
             <i className="fas fa-bolt text-white"></i>
           </div>
-          <span className="font-bold text-xl tracking-tight">NexusDelivery</span>
+          <span className="font-bold text-xl tracking-tight">DeliveryHub</span>
         </a>
 
         <div className="flex space-x-1 h-full overflow-x-auto no-scrollbar">
