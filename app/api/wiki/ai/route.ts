@@ -4,7 +4,7 @@ import { generateWikiAssistance } from '../../../../services/geminiService';
 import { generateOpenAiResponse } from '../../../../services/openaiService';
 import { getRateLimitPerHour, getRequestIdentity, getRetentionDays, resolveTaskRouting } from '../../../../services/aiPolicy';
 
-type WikiAssistTask = 'improve' | 'expand' | 'diagram' | 'summary';
+type WikiAssistTask = 'improve' | 'expand' | 'diagram' | 'summary' | 'template';
 
 const buildWikiPrompt = (task: WikiAssistTask, content: string, format: string, title?: string) => {
   const header = title ? `Title: ${title}\n\n` : '';
@@ -20,6 +20,8 @@ const buildWikiPrompt = (task: WikiAssistTask, content: string, format: string, 
     case 'summary':
     default:
       return `${header}Provide a concise summary (3-5 bullet points or a short paragraph) of the following content in ${formatHint}.\n\nContent:\n${content}`;
+    case 'template':
+      return `${header}Create a Markdown template document using the guidance below. Include section headings, and add brief sample placeholders where helpful. Return Markdown only.\n\nGuidance:\n${content}`;
   }
 };
 
@@ -41,20 +43,15 @@ const generateOpenAiWikiAssistance = async ({
   reasoningEffort: 'low' | 'medium' | 'high' | 'xhigh';
 }) => {
   const prompt = buildWikiPrompt(task, content, format, title);
-  try {
-    return await generateOpenAiResponse({
-      prompt,
-      model,
-      apiKey,
-      reasoningEffort
-    });
-  } catch (error: any) {
-    console.error("OpenAI Wiki Assist Error:", error);
-    return "AI response unavailable.";
-  }
+  return await generateOpenAiResponse({
+    prompt,
+    model,
+    apiKey,
+    reasoningEffort
+  });
 };
 
-const VALID_TASKS = new Set(['improve', 'expand', 'diagram', 'summary']);
+const VALID_TASKS = new Set(['improve', 'expand', 'diagram', 'summary', 'template']);
 
 export async function POST(request: Request) {
   const startedAt = Date.now();
@@ -84,7 +81,9 @@ export async function POST(request: Request) {
           ? 'wikiDiagram'
           : task === 'expand'
             ? 'wikiExpand'
-            : 'wikiImprove';
+            : task === 'template'
+              ? 'wikiTemplate'
+              : 'wikiImprove';
     const { provider: routedProvider, model: routedModel } = resolveTaskRouting(aiSettings, taskKey, provider);
     const openAiIntended = routedProvider === 'OPENAI';
     const geminiProviderLabel = routedProvider === 'GEMINI' ? 'GEMINI' : 'GEMINI_FALLBACK';
@@ -97,25 +96,39 @@ export async function POST(request: Request) {
       const reasoningEffort = model.startsWith('gpt-5.2-pro') ? 'medium' : 'low';
 
       if (apiKey) {
-        const result = await generateOpenAiWikiAssistance({
-          task,
-          content,
-          title,
-          format: formatValue,
-          model,
-          apiKey,
-          reasoningEffort
-        });
-        await saveAiAuditLog({
-          task: taskKey,
-          provider: 'OPENAI',
-          model,
-          success: true,
-          latencyMs: Date.now() - startedAt,
-          identity,
-          ttlDays: getRetentionDays(aiSettings, 'auditLogs', 30)
-        });
-        return NextResponse.json({ result, provider: 'OPENAI' });
+        try {
+          const result = await generateOpenAiWikiAssistance({
+            task,
+            content,
+            title,
+            format: formatValue,
+            model,
+            apiKey,
+            reasoningEffort
+          });
+          await saveAiAuditLog({
+            task: taskKey,
+            provider: 'OPENAI',
+            model,
+            success: true,
+            latencyMs: Date.now() - startedAt,
+            identity,
+            ttlDays: getRetentionDays(aiSettings, 'auditLogs', 30)
+          });
+          return NextResponse.json({ result, provider: 'OPENAI' });
+        } catch (error: any) {
+          console.error("OpenAI Wiki Assist Error:", error);
+          await saveAiAuditLog({
+            task: taskKey,
+            provider: 'OPENAI',
+            model,
+            success: false,
+            error: error?.message,
+            latencyMs: Date.now() - startedAt,
+            identity,
+            ttlDays: getRetentionDays(aiSettings, 'auditLogs', 30)
+          });
+        }
       }
     }
 
@@ -126,7 +139,7 @@ export async function POST(request: Request) {
     const geminiModel =
       routedProvider === 'GEMINI' && routedModel
         ? routedModel
-        : task === 'diagram' || task === 'summary'
+        : task === 'diagram' || task === 'summary' || task === 'template'
           ? aiSettings.geminiProModel || aiSettings.proModel || 'gemini-3-pro-preview'
           : aiSettings.geminiFlashModel || aiSettings.flashModel || 'gemini-3-flash-preview';
 

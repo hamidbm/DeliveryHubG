@@ -5,6 +5,7 @@ import WikiForm from './WikiForm';
 import CreateWikiPageForm from './CreateWikiPageForm';
 import WikiPageDisplay from './WikiPageDisplay';
 import WikiAssetDisplay from './WikiAssetDisplay';
+import WikiAssetMarkdownEditor from './WikiAssetMarkdownEditor';
 
 interface WikiProps {
   currentUser?: { name: string; role: string; email: string; };
@@ -41,6 +42,7 @@ const Wiki: React.FC<WikiProps> = ({
   
   const [activeArtifact, setActiveArtifact] = useState<WikiPage | WikiAsset | null>(null);
   const [isEditing, setIsEditing] = useState(false);
+  const [isEditingAsset, setIsEditingAsset] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [loading, setLoading] = useState(true);
   const [isSidebarVisible, setIsSidebarVisible] = useState(true);
@@ -138,6 +140,8 @@ const Wiki: React.FC<WikiProps> = ({
 
   const handleArtifactSelect = (art: WikiPage | WikiAsset) => {
     setActiveArtifact(art);
+    setIsEditing(false);
+    setIsEditingAsset(false);
     const prefix = ('file' in art) ? 'asset-' : 'page-';
     setSelectedNodeId(`${prefix}${art._id || art.id}`);
     setContextualMetadata({
@@ -361,6 +365,9 @@ const Wiki: React.FC<WikiProps> = ({
     </div>
   );
 
+  const canEditAssetMarkdown = (asset: WikiAsset) =>
+    asset.preview?.kind === 'markdown' && Boolean(asset.preview.objectKey || asset.content);
+
   return (
     <div className="flex h-[800px] bg-white rounded-[3rem] border border-slate-200 shadow-2xl overflow-hidden animate-fadeIn">
       {isSidebarVisible && (
@@ -423,9 +430,14 @@ const Wiki: React.FC<WikiProps> = ({
                    <i className={`fas ${copyFeedback ? 'fa-check text-emerald-500' : 'fa-link'}`}></i>
                    {copyFeedback ? 'Link Ready' : 'Share Artifact'}
                 </button>
-                {('content' in activeArtifact) && (
+                {('content' in activeArtifact) && !('file' in activeArtifact) && (
                   <button onClick={() => setIsEditing(true)} className="px-8 py-2.5 bg-slate-900 text-white text-[10px] font-black rounded-xl uppercase tracking-widest hover:bg-slate-800 transition-all shadow-lg shadow-black/10 flex items-center gap-2">
                      <i className="fas fa-edit"></i> Refine Artifact
+                  </button>
+                )}
+                {('file' in activeArtifact) && canEditAssetMarkdown(activeArtifact as WikiAsset) && (
+                  <button onClick={() => setIsEditingAsset(true)} className="px-8 py-2.5 bg-slate-900 text-white text-[10px] font-black rounded-xl uppercase tracking-widest hover:bg-slate-800 transition-all shadow-lg shadow-black/10 flex items-center gap-2">
+                     <i className="fas fa-pen-nib"></i> Refine Artifact
                   </button>
                 )}
              </div>
@@ -446,6 +458,15 @@ const Wiki: React.FC<WikiProps> = ({
 
       {isEditing && activeArtifact && ('content' in activeArtifact) && (
         <WikiForm id={activeArtifact._id} initialTitle={activeArtifact.title} initialContent={activeArtifact.content} initialSlug={activeArtifact.slug} spaceId={activeArtifact.spaceId} initialBundleId={activeArtifact.bundleId} initialApplicationId={activeArtifact.applicationId} initialDocumentTypeId={activeArtifact.documentTypeId} initialThemeKey={activeArtifact.themeKey} onSaveSuccess={(id) => { setIsEditing(false); refreshRegistry(id); }} onCancel={() => setIsEditing(false)} currentUser={currentUser} bundles={bundles} applications={applications} />
+      )}
+
+      {isEditingAsset && activeArtifact && ('file' in activeArtifact) && canEditAssetMarkdown(activeArtifact as WikiAsset) && (
+        <WikiAssetMarkdownEditor
+          asset={activeArtifact as WikiAsset}
+          onSaveSuccess={(id) => { setIsEditingAsset(false); refreshRegistry(id); }}
+          onCancel={() => setIsEditingAsset(false)}
+          currentUser={currentUser}
+        />
       )}
 
       {isCreating && (

@@ -304,6 +304,46 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
     }
   };
 
+  const generateTemplateFromPrompt = async (promptText: string) => {
+    if (!promptText.trim()) {
+      setAiError('Add a prompt before generating a template.');
+      return;
+    }
+    setIsAiProcessing(true);
+    setAiError(null);
+    try {
+      const res = await fetch('/api/wiki/ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          task: 'template',
+          title,
+          format: 'markdown',
+          content: promptText
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setAiError(data.error || 'AI request failed.');
+        return;
+      }
+      const result = data.result || '';
+      const selectedType = docTypes.find((type) => type._id === documentTypeId);
+      const fallback = buildTemplate(selectedType?.name || 'Document', promptText);
+      setContent(result.trim() ? result : fallback);
+      setEditorFormat('markdown');
+      setMode('author');
+    } catch (err) {
+      const selectedType = docTypes.find((type) => type._id === documentTypeId);
+      setContent(buildTemplate(selectedType?.name || 'Document', promptText));
+      setEditorFormat('markdown');
+      setMode('author');
+      setAiError('AI request failed. Loaded a default template.');
+    } finally {
+      setIsAiProcessing(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-[100] bg-slate-50 flex flex-col animate-fadeIn">
       <header className="px-10 py-5 bg-white border-b border-slate-200 flex items-center justify-between shadow-sm shrink-0">
@@ -355,7 +395,7 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
                     <ToolbarButton icon="fa-italic" onClick={() => insertText(editorFormat === 'html' ? '<i>' : '*', editorFormat === 'html' ? '</i>' : '*')} />
                     <ToolbarButton icon="fa-heading" onClick={() => insertText(editorFormat === 'html' ? '<h2>' : '## ', editorFormat === 'html' ? '</h2>' : '')} />
                     <div className="w-[1px] h-6 bg-slate-200 mx-2"></div>
-                    <ToolbarButton icon="fa-link" onClick={() => insertText(editorFormat === 'html' ? '<a href="/wiki/TARGET-SLUG">' : '[Link Title](/wiki/TARGET-SLUG', editorFormat === 'html' ? '</a>' : ')')} />
+                    <ToolbarButton icon="fa-link" onClick={() => insertText(editorFormat === 'html' ? '<a href="/?tab=wiki&pageId=TARGET-ID-OR-SLUG">' : '[Link Title](/?tab=wiki&pageId=TARGET-ID-OR-SLUG', editorFormat === 'html' ? '</a>' : ')')} />
                     <ToolbarButton icon="fa-circle-info" onClick={() => insertText('<div class="callout info">\n  <div class="title"><i class="fas fa-circle-info"></i> INFO</div>\n  <p>', '</p>\n</div>')} />
                     <div className="w-[1px] h-6 bg-slate-200 mx-2"></div>
                     <ToolbarButton icon="fa-wand-magic-sparkles" label="Improve Section" onClick={() => runAiAssist('improve')} disabled={isAiProcessing} />
@@ -395,15 +435,12 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
                   <button
                     type="button"
                     onClick={() => {
-                      const selectedType = docTypes.find((type) => type._id === documentTypeId);
-                      const template = buildTemplate(selectedType?.name || 'Document', aiPrompt);
-                      setContent(template);
-                      setEditorFormat('markdown');
-                      setMode('author');
+                      generateTemplateFromPrompt(aiPrompt);
                     }}
                     className="px-8 py-3 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest rounded-2xl shadow-xl hover:bg-slate-800 transition-all"
+                    disabled={isAiProcessing || !aiPrompt.trim()}
                   >
-                    Start with Template
+                    {isAiProcessing ? 'Generating...' : 'Start with Template'}
                   </button>
                   <button
                     type="button"
@@ -507,16 +544,12 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
                       <button
                         type="button"
                         onClick={() => {
-                          const selectedType = docTypes.find((type) => type._id === documentTypeId);
-                          const template = buildTemplate(selectedType?.name || 'Document', aiPrompt);
-                          setContent(template);
-                          setEditorFormat('markdown');
-                          setMode('author');
+                          generateTemplateFromPrompt(aiPrompt);
                         }}
                         className="px-4 py-2 text-[9px] font-black uppercase tracking-widest rounded-xl bg-slate-900 text-white hover:bg-slate-800 transition-all"
-                        disabled={!aiPrompt.trim()}
+                        disabled={!aiPrompt.trim() || isAiProcessing}
                       >
-                        Generate Template
+                        {isAiProcessing ? 'Generating...' : 'Generate Template'}
                       </button>
                       <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">
                         Generates a fresh template from the latest prompt.

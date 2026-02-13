@@ -6,6 +6,7 @@ import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 import { visit } from 'unist-util-visit';
+import { useRouter } from '../App';
 
 interface MarkdownRendererProps {
   content: string;
@@ -117,6 +118,7 @@ const urlTransform = (url: string, key: string, node: any) => {
 };
 
 export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
+  const router = useRouter();
   const normalizedContent = useMemo(() => {
     if (!content) return '';
 
@@ -135,6 +137,28 @@ export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
         ]}
         urlTransform={urlTransform}
         components={{
+          a({ href = '', children, ...props }) {
+            return (
+              <a
+                {...props}
+                href={href}
+                onClick={(e) => {
+                  if (!href) return;
+                  try {
+                    const targetUrl = new URL(href, window.location.origin);
+                    if (targetUrl.origin === window.location.origin) {
+                      e.preventDefault();
+                      router.push(`${targetUrl.pathname}${targetUrl.search}${targetUrl.hash}`);
+                    }
+                  } catch {
+                    // fall back to default navigation
+                  }
+                }}
+              >
+                {children}
+              </a>
+            );
+          },
           img({ src, alt, ...props }) {
             // 👇 prevent <img src="">
             if (!src) return null;

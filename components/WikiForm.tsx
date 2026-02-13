@@ -219,7 +219,7 @@ const WikiForm: React.FC<WikiFormProps> = ({
                 <ToolbarButton icon="fa-list-ul" onClick={() => insertText(editorFormat === 'html' ? '<ul>\n  <li>' : '- ', editorFormat === 'html' ? '</li>\n</ul>' : '')} />
                 <ToolbarButton icon="fa-table" onClick={() => insertText(editorFormat === 'html' ? '\n<table>\n  <tr><th>Header</th></tr>\n  <tr><td>Cell</td></tr>\n</table>\n' : '\n| Header |\n| --- |\n| Cell |\n')} />
                 <div className="w-[1px] h-6 bg-slate-200 mx-2"></div>
-                <ToolbarButton icon="fa-link" onClick={() => insertText(editorFormat === 'html' ? '<a href="/wiki/TARGET-SLUG">Link Title' : '[Link Title](/wiki/TARGET-SLUG', editorFormat === 'html' ? '</a>' : ')')} />
+                <ToolbarButton icon="fa-link" onClick={() => insertText(editorFormat === 'html' ? '<a href="/?tab=wiki&pageId=TARGET-ID-OR-SLUG">Link Title' : '[Link Title](/?tab=wiki&pageId=TARGET-ID-OR-SLUG', editorFormat === 'html' ? '</a>' : ')')} />
                 <div className="w-[1px] h-6 bg-slate-200 mx-2"></div>
                 <ToolbarButton icon="fa-circle-info" onClick={() => insertText('<div class="callout info">\n  <div class="title"><i class="fas fa-circle-info"></i> INFO</div>\n  <p>', '</p>\n</div>')} />
                 <ToolbarButton icon="fa-triangle-exclamation" onClick={() => insertText('<div class="callout warn">\n  <div class="title"><i class="fas fa-triangle-exclamation"></i> WARNING</div>\n  <p>', '</p>\n</div>')} />

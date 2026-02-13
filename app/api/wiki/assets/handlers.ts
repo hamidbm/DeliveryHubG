@@ -219,22 +219,36 @@ export async function PATCH(request: Request) {
     const cookieStore = await cookies();
     const token = cookieStore.get('nexus_auth_token')?.value;
     if (!token) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
-    await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token, JWT_SECRET);
 
-    const { id, sheetData } = await request.json();
-    if (!id || !sheetData) {
-      return NextResponse.json({ error: 'Missing asset id or sheet data' }, { status: 400 });
+    const { id, sheetData, content } = await request.json();
+    if (!id || (!sheetData && typeof content !== 'string')) {
+      return NextResponse.json({ error: 'Missing asset id or update payload' }, { status: 400 });
     }
 
-    const result = await saveWikiAsset({
-      _id: id,
-      preview: {
-        status: 'ready',
-        kind: 'sheet',
-        objectKey: JSON.stringify(sheetData),
-        meta: { sheetNames: sheetData?.sheets?.map((sheet: any) => sheet.name) || [] },
-      },
-    } as any);
+    let result;
+    if (sheetData) {
+      result = await saveWikiAsset({
+        _id: id,
+        preview: {
+          status: 'ready',
+          kind: 'sheet',
+          objectKey: JSON.stringify(sheetData),
+          meta: { sheetNames: sheetData?.sheets?.map((sheet: any) => sheet.name) || [] },
+        },
+      } as any);
+    } else {
+      result = await saveWikiAsset({
+        _id: id,
+        content,
+        lastModifiedBy: payload?.name as string,
+        preview: {
+          status: 'ready',
+          kind: 'markdown',
+          objectKey: content,
+        },
+      } as any);
+    }
 
     return NextResponse.json({ success: true, result });
   } catch (error: any) {

@@ -85,6 +85,16 @@ export default function Home() {
 
   const searchParams = useMemo(() => new URLSearchParams(queryString), [queryString]);
 
+  useEffect(() => {
+    const syncFromLocation = () => {
+      setCurrentPath(window.location.pathname || '/');
+      setQueryString(window.location.search ? window.location.search.slice(1) : '');
+    };
+    syncFromLocation();
+    window.addEventListener('popstate', syncFromLocation);
+    return () => window.removeEventListener('popstate', syncFromLocation);
+  }, []);
+
   const navigationValue = {
     push: (url: string) => {
       const [path, query] = url.split('?');

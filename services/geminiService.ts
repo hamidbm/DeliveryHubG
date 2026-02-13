@@ -142,7 +142,7 @@ export const suggestReassignment = async (item: any, teamCapacity: any[], model:
   } catch (error) { return "Offline."; }
 };
 
-type WikiAssistTask = 'improve' | 'expand' | 'diagram' | 'summary';
+type WikiAssistTask = 'improve' | 'expand' | 'diagram' | 'summary' | 'template';
 
 const buildWikiPrompt = (task: WikiAssistTask, content: string, format: string, title?: string) => {
   const header = title ? `Title: ${title}\n\n` : '';
@@ -158,6 +158,8 @@ const buildWikiPrompt = (task: WikiAssistTask, content: string, format: string, 
     case 'summary':
     default:
       return `${header}Provide a concise summary (3-5 bullet points or a short paragraph) of the following content in ${formatHint}.\n\nContent:\n${content}`;
+    case 'template':
+      return `${header}Create a Markdown template document using the guidance below. Include section headings, and add brief sample placeholders where helpful. Return Markdown only.\n\nGuidance:\n${content}`;
   }
 };
 
