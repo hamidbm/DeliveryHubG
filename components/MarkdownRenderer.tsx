@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useEffect, useState } from 'react';
+import React, { useMemo, useEffect, useState, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
@@ -15,6 +15,7 @@ import 'prismjs/components/prism-python';
 import 'prismjs/components/prism-java';
 import 'prismjs/components/prism-yaml';
 import 'prismjs/components/prism-markdown';
+import 'prismjs/components/prism-sql';
 
 interface MarkdownRendererProps {
   content: string;
@@ -153,12 +154,24 @@ export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
         ]}
         urlTransform={urlTransform}
         components={{
+          pre({ children }) {
+            if (React.isValidElement(children)) {
+              const className = (children.props as any)?.className || '';
+              if (className.includes('language-mermaid') || className.includes('language-mindmap') || className.includes('language-markmap')) {
+                return <div className="not-prose">{children}</div>;
+              }
+            }
+            return <pre>{children}</pre>;
+          },
           code({ className, children }) {
             let language = (className || '').replace('language-', '');
             if (language === 'shell' || language === 'sh' || language === 'console') language = 'bash';
             if (language === 'yml') language = 'yaml';
             if (language === 'mermaid') {
               return <MermaidBlock code={String(children || '')} />;
+            }
+            if (language === 'mindmap' || language === 'markmap') {
+              return <MindmapBlock markdown={String(children || '')} />;
             }
             if (language) {
               const grammar = (Prism.languages as any)[language];
@@ -270,4 +283,118 @@ const MermaidBlock: React.FC<{ code: string }> = ({ code }) => {
     return <div className="text-xs text-slate-400">Rendering diagram...</div>;
   }
   return <div className="mermaid-render" dangerouslySetInnerHTML={{ __html: svg }} />;
+};
+
+const MindmapBlock: React.FC<{ markdown: string }> = ({ markdown }) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [hasMap, setHasMap] = useState(false);
+  const mmRef = useRef<any>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cleanup: (() => void) | null = null;
+    const render = async () => {
+      if (!containerRef.current) return;
+      try {
+        const { Transformer } = await import('markmap-lib');
+        const { Markmap } = await import('markmap-view');
+        const transformer = new Transformer();
+        const { root } = transformer.transform(markdown);
+        containerRef.current.innerHTML = '';
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('style', 'width: 100%; height: auto; font-size: 14px; background: transparent;');
+        containerRef.current.appendChild(svg);
+        const mm = Markmap.create(svg, { autoFit: true, fitRatio: 0.95, pan: true, scrollForPan: true, zoom: true }, root);
+        mmRef.current = mm;
+        svg.setAttribute('width', '100%');
+        svg.setAttribute('preserveAspectRatio', 'xMinYMin meet');
+        const rect = (mm as any).state?.rect;
+        if (rect) {
+          requestAnimationFrame(() => {
+            const naturalHeight = rect.y2 - rect.y1;
+            const height = Math.max(560, Math.ceil(naturalHeight * 1.4));
+            svg.setAttribute('height', String(height));
+            mm.fit?.();
+            setHasMap(true);
+          });
+        }
+        cleanup = () => {
+          mmRef.current = null;
+          mm?.destroy?.();
+        };
+        setError(null);
+      } catch (e: any) {
+        setError(e?.message || 'Mindmap render failed.');
+      }
+    };
+    if (markdown.trim()) {
+      render();
+    }
+    return () => {
+      if (cleanup) cleanup();
+    };
+  }, [markdown]);
+
+  // Custom pan/zoom handling is wired inside render effect.
+
+  if (error) {
+    return (
+      <div className="text-xs text-amber-600 border border-amber-100 bg-amber-50 rounded-xl p-3">
+        Mindmap render error: {error}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="mindmap-render border border-slate-200 rounded-2xl p-4 overflow-hidden relative"
+      ref={containerRef}
+      style={{
+        backgroundColor: '#ffffff',
+        backgroundImage:
+          'radial-gradient(rgba(15, 23, 42, 0.08) 1px, transparent 1px)',
+        backgroundSize: '18px 18px',
+        boxShadow: 'none',
+      }}
+    >
+      {hasMap && (
+        <div className="absolute top-3 right-3 z-10 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              const zoom = mmRef.current?.zoom;
+              if (!zoom) return;
+              mmRef.current?.svg?.call?.(zoom.scaleBy, 1.1);
+            }}
+            className="w-8 h-8 rounded-full border border-slate-200 bg-white text-slate-500 hover:text-slate-700 hover:shadow-sm transition-all flex items-center justify-center"
+            title="Zoom in"
+          >
+            <i className="fas fa-plus text-xs"></i>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              const zoom = mmRef.current?.zoom;
+              if (!zoom) return;
+              mmRef.current?.svg?.call?.(zoom.scaleBy, 0.9);
+            }}
+            className="w-8 h-8 rounded-full border border-slate-200 bg-white text-slate-500 hover:text-slate-700 hover:shadow-sm transition-all flex items-center justify-center"
+            title="Zoom out"
+          >
+            <i className="fas fa-minus text-xs"></i>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              mmRef.current?.fit?.();
+            }}
+            className="w-8 h-8 rounded-full border border-slate-200 bg-white text-slate-500 hover:text-slate-700 hover:shadow-sm transition-all flex items-center justify-center"
+            title="Center diagram"
+          >
+            <i className="fas fa-crosshairs text-xs"></i>
+          </button>
+        </div>
+      )}
+    </div>
+  );
 };

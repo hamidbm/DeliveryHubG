@@ -25,7 +25,7 @@
     "markmap-common": "0.18.9",
     "markmap-lib": "0.18.12",
     "markmap-view": "0.18.12",
-    "mermaid": "^10.9.5",
+    "mermaid": "^11.12.2",
     "mongodb": "^6.3.0",
     "next": "^16.1.6",
     "prismjs": "^1.29.0",
