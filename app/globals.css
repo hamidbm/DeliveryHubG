@@ -2,6 +2,54 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Prism syntax highlighting (minimal theme) */
+.wiki-content pre[class*="language-"] {
+  background: #0b1220;
+  color: #e2e8f0;
+  padding: 1rem 1.1rem;
+  border-radius: 14px;
+  overflow: auto;
+  border: 1px solid #0f172a;
+}
+
+.wiki-content code[class*="language-"] {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.wiki-content .token.comment,
+.wiki-content .token.prolog,
+.wiki-content .token.doctype,
+.wiki-content .token.cdata {
+  color: #94a3b8;
+}
+.wiki-content .token.punctuation { color: #cbd5f5; }
+.wiki-content .token.property,
+.wiki-content .token.tag,
+.wiki-content .token.constant,
+.wiki-content .token.symbol,
+.wiki-content .token.deleted { color: #f472b6; }
+.wiki-content .token.boolean,
+.wiki-content .token.number { color: #fbbf24; }
+.wiki-content .token.selector,
+.wiki-content .token.attr-name,
+.wiki-content .token.string,
+.wiki-content .token.char,
+.wiki-content .token.builtin,
+.wiki-content .token.inserted { color: #34d399; }
+.wiki-content .token.operator,
+.wiki-content .token.entity,
+.wiki-content .token.url,
+.wiki-content .token.variable { color: #93c5fd; }
+.wiki-content .token.atrule,
+.wiki-content .token.attr-value,
+.wiki-content .token.function,
+.wiki-content .token.class-name { color: #38bdf8; }
+.wiki-content .token.keyword { color: #a78bfa; }
+.wiki-content .token.regex,
+.wiki-content .token.important { color: #f97316; }
+
 :root {
   --foreground-rgb: 15, 23, 42;
   --background-start-rgb: 248, 250, 252;

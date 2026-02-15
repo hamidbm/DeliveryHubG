@@ -1,10 +1,26 @@
-import * as XLSX from 'xlsx';
+import type { Worksheet } from 'exceljs';
 
-export const buildSheetData = (sheet: XLSX.WorkSheet) => {
-  const grid = XLSX.utils.sheet_to_json<any[]>(sheet, {
-    header: 1,
-    defval: '',
-    raw: false,
+function columnToLetter(colIndex: number): string {
+  let letter = '';
+  let num = colIndex + 1;
+  while (num > 0) {
+    const remainder = (num - 1) % 26;
+    letter = String.fromCharCode(65 + remainder) + letter;
+    num = Math.floor((num - 1) / 26);
+  }
+  return letter;
+}
+
+export const buildSheetData = (worksheet: Worksheet) => {
+  const grid: any[][] = [];
+  
+  // Convert worksheet to 2D array
+  worksheet.eachRow({ includeEmpty: true }, (row, rowNumber) => {
+    const rowData: any[] = [];
+    row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+      rowData[colNumber - 1] = cell.text || cell.value || '';
+    });
+    grid.push(rowData);
   });
 
   if (!grid.length) {
@@ -30,7 +46,7 @@ export const buildSheetData = (sheet: XLSX.WorkSheet) => {
   const rawColumns = headerRow.map((cell, colIndex) => {
     const label = String(cell ?? '').trim();
     if (label && !/^__EMPTY/i.test(label)) return label;
-    const colLetter = XLSX.utils.encode_col(colIndex);
+    const colLetter = columnToLetter(colIndex);
     return `Column ${colLetter}`;
   });
 

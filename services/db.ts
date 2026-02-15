@@ -245,6 +245,60 @@ export const fetchWikiAssets = async () => {
   } catch { return []; }
 };
 
+const ensureWikiAiInsightIndexes = async (db: any) => {
+  await db.collection('wiki_ai_insights').createIndex({ targetType: 1, targetId: 1, type: 1, createdAt: -1 });
+};
+
+export const saveWikiAiInsight = async ({
+  targetId,
+  targetType,
+  type,
+  content
+}: {
+  targetId: string;
+  targetType: 'page' | 'asset';
+  type: string;
+  content: string;
+}) => {
+  const db = await getDb();
+  await ensureWikiAiInsightIndexes(db);
+  const now = new Date().toISOString();
+  return await db.collection('wiki_ai_insights').insertOne({
+    targetId: String(targetId),
+    targetType,
+    type,
+    content,
+    createdAt: now
+  });
+};
+
+export const fetchWikiAiInsights = async (targetId: string, targetType: 'page' | 'asset') => {
+  try {
+    const db = await getDb();
+    await ensureWikiAiInsightIndexes(db);
+    const items = await db
+      .collection('wiki_ai_insights')
+      .find({ targetId: String(targetId), targetType })
+      .sort({ createdAt: -1 })
+      .toArray();
+    const latest: Record<string, { content: string; generatedAt: string }> = {};
+    for (const item of items) {
+      if (!latest[item.type]) {
+        latest[item.type] = { content: item.content, generatedAt: item.createdAt };
+      }
+    }
+    return latest;
+  } catch {
+    return {};
+  }
+};
+
+export const clearWikiAiInsights = async (targetId: string, targetType: 'page' | 'asset') => {
+  const db = await getDb();
+  await ensureWikiAiInsightIndexes(db);
+  return await db.collection('wiki_ai_insights').deleteMany({ targetId: String(targetId), targetType });
+};
+
 export const saveWikiAsset = async (asset: Partial<WikiAsset>) => {
   const db = await getDb();
   const { _id, ...data } = asset;
@@ -559,11 +613,20 @@ export const fetchWikiThemes = async (activeOnly: boolean = false) => {
 export const saveWikiTheme = async (theme: Partial<WikiTheme>) => {
   const db = await getDb();
   const { _id, ...data } = theme;
-  if (_id && ObjectId.isValid(_id as string)) {
-    return await db.collection('wiki_themes').updateOne({ _id: new ObjectId(_id) }, { $set: data });
-  } else {
-    return await db.collection('wiki_themes').insertOne(data);
+  if (_id) {
+    const idValue = typeof _id === 'string' ? _id : String(_id);
+    if (ObjectId.isValid(idValue)) {
+      return await db.collection('wiki_themes').updateOne({ _id: new ObjectId(idValue) }, { $set: data });
+    }
   }
+  if (data.key) {
+    return await db.collection('wiki_themes').updateOne(
+      { key: data.key },
+      { $set: data },
+      { upsert: true }
+    );
+  }
+  return await db.collection('wiki_themes').insertOne(data);
 };
 
 export const deleteWikiTheme = async (id: string) => {

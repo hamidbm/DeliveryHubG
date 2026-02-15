@@ -7,7 +7,7 @@ import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import { buildSheetData } from '../../../../lib/wikiSpreadsheet';
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
@@ -150,18 +150,23 @@ export async function POST(request: Request) {
       }
     } else if (['xlsx', 'xls', 'csv'].includes(ext)) {
       try {
-        const workbook = XLSX.read(buffer, { type: 'buffer' });
-        const sheetNames = workbook.SheetNames || [];
-        const sheets = sheetNames.map((name) => {
-          const sheet = workbook.Sheets[name];
-          const { columns, rows } = buildSheetData(sheet);
-          return { name, columns, rows };
+        const workbook = new ExcelJS.Workbook();
+        if (ext === 'csv') {
+          await workbook.csv.read(buffer);
+        } else {
+          await workbook.xlsx.load(buffer);
+        }
+        
+        const sheetNames = workbook.worksheets.map(ws => ws.name);
+        const sheets = workbook.worksheets.map((worksheet) => {
+          const { columns, rows } = buildSheetData(worksheet);
+          return { name: worksheet.name, columns, rows };
         });
         previewKind = 'sheet';
         previewData = JSON.stringify({ sheets });
         previewMeta = { sheetNames };
       } catch (err: any) {
-        console.error("[XLSX] Conversion failed:", err.message);
+        console.error("[ExcelJS] Conversion failed:", err.message);
         previewStatus = 'failed';
       }
     } else if (ext === 'pdf') {

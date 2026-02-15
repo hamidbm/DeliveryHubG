@@ -1,11 +1,12 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { useRouter, useSearchParams, usePathname } from '../App';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useRouter, useSearchParams } from '../App';
 import { WikiPage, WikiAsset, WikiTheme, HierarchyMode, Application, WikiSpace, Bundle, TaxonomyCategory, TaxonomyDocumentType } from '../types';
 import WikiForm from './WikiForm';
 import CreateWikiPageForm from './CreateWikiPageForm';
 import WikiPageDisplay from './WikiPageDisplay';
 import WikiAssetDisplay from './WikiAssetDisplay';
 import WikiAssetMarkdownEditor from './WikiAssetMarkdownEditor';
+import MarkdownRenderer from './MarkdownRenderer';
 
 interface WikiProps {
   currentUser?: { name: string; role: string; email: string; };
@@ -25,6 +26,7 @@ interface TreeContext {
   bundleId?: string;
   applicationId?: string;
   milestoneId?: string;
+  documentTypeId?: string;
 }
 
 const Wiki: React.FC<WikiProps> = ({ 
@@ -56,6 +58,37 @@ const Wiki: React.FC<WikiProps> = ({
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [contextualMetadata, setContextualMetadata] = useState<TreeContext>({});
+  const [isAiMenuOpen, setIsAiMenuOpen] = useState(false);
+  const aiMenuRef = useRef<HTMLDivElement>(null);
+  const aiSectionRef = useRef<HTMLDivElement>(null);
+
+  type InsightType = 'summary' | 'decisions' | 'assumptions';
+  type InsightState =
+    | { status: 'idle' }
+    | { status: 'loading' }
+    | { status: 'ready'; content: string; generatedAt: string }
+    | { status: 'error'; message: string };
+
+  type AIState = {
+    isExpanded: boolean;
+    isCollapsed: boolean;
+    activeType: InsightType;
+    insights: Record<InsightType, InsightState>;
+  };
+
+  const createEmptyAiState = (): AIState => ({
+    isExpanded: false,
+    isCollapsed: false,
+    activeType: 'summary',
+    insights: {
+      summary: { status: 'idle' },
+      decisions: { status: 'idle' },
+      assumptions: { status: 'idle' },
+    },
+  });
+
+  const [aiState, setAiState] = useState<AIState>(createEmptyAiState());
+  const aiCacheRef = useRef<Record<string, AIState>>({});
 
   useEffect(() => {
     if (externalTrigger === 'create-wiki-artifact') {
@@ -111,6 +144,16 @@ const Wiki: React.FC<WikiProps> = ({
     loadAllWikiData();
   }, []);
 
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (aiMenuRef.current && !aiMenuRef.current.contains(e.target as Node)) {
+        setIsAiMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   const resolveArtifact = useCallback((target: string, pageList: WikiPage[], assetList: WikiAsset[]): (WikiPage | WikiAsset | null) => {
     if (!target) return null;
     const page = pageList.find(p => String(p._id) === target || String(p.id) === target || p.slug === target);
@@ -132,7 +175,8 @@ const Wiki: React.FC<WikiProps> = ({
           spaceId: art.spaceId,
           bundleId: art.bundleId,
           applicationId: art.applicationId,
-          milestoneId: art.milestoneId
+          milestoneId: art.milestoneId,
+          documentTypeId: art.documentTypeId
         });
       }
     }
@@ -142,18 +186,56 @@ const Wiki: React.FC<WikiProps> = ({
     setActiveArtifact(art);
     setIsEditing(false);
     setIsEditingAsset(false);
+    setIsAiMenuOpen(false);
     const prefix = ('file' in art) ? 'asset-' : 'page-';
     setSelectedNodeId(`${prefix}${art._id || art.id}`);
     setContextualMetadata({
       spaceId: art.spaceId,
       bundleId: art.bundleId,
       applicationId: art.applicationId,
-      milestoneId: art.milestoneId
+      milestoneId: art.milestoneId,
+      documentTypeId: art.documentTypeId
     });
     const params = new URLSearchParams(searchParams.toString());
     params.set('pageId', (('slug' in art && art.slug) || art._id || art.id || '') as string);
     router.push(`?${params.toString()}`);
   };
+
+  useEffect(() => {
+    if (!activeArtifact) return;
+    const key = `${'file' in activeArtifact ? 'asset' : 'page'}:${activeArtifact._id || activeArtifact.id || ''}`;
+    const cached = aiCacheRef.current[key];
+    setAiState(cached ? { ...cached } : createEmptyAiState());
+    const targetId = activeArtifact._id || activeArtifact.id;
+    if (!targetId) return;
+    fetch(`/api/wiki/insights?targetType=${'file' in activeArtifact ? 'asset' : 'page'}&targetId=${encodeURIComponent(String(targetId))}`)
+      .then((res) => res.json())
+      .then((data) => {
+        const insights = data?.insights || {};
+        const next = createEmptyAiState();
+        const types: InsightType[] = ['summary', 'decisions', 'assumptions'];
+        let hasAny = false;
+        types.forEach((type) => {
+          if (insights[type]) {
+            hasAny = true;
+            next.insights[type] = {
+              status: 'ready',
+              content: insights[type].content || '',
+              generatedAt: insights[type].generatedAt || new Date().toISOString(),
+            };
+          }
+        });
+        next.isExpanded = hasAny;
+        setAiState(next);
+      })
+      .catch(() => {});
+  }, [activeArtifact?._id, activeArtifact?.id, activeArtifact?.title]);
+
+  useEffect(() => {
+    if (!activeArtifact) return;
+    const key = `${'file' in activeArtifact ? 'asset' : 'page'}:${activeArtifact._id || activeArtifact.id || ''}`;
+    aiCacheRef.current[key] = aiState;
+  }, [aiState, activeArtifact]);
 
   const handleFolderSelect = (nodeId: string, context: TreeContext) => {
     setSelectedNodeId(nodeId);
@@ -163,6 +245,205 @@ const Wiki: React.FC<WikiProps> = ({
       n.has(nodeId) ? n.delete(nodeId) : n.add(nodeId); 
       return n; 
     });
+  };
+
+  const selectAndExpandNode = (nodeId: string, context: TreeContext, ancestorIds: string[] = []) => {
+    setSelectedNodeId(nodeId);
+    setContextualMetadata(context);
+    setExpandedNodes((prev) => {
+      const next = new Set(prev);
+      ancestorIds.forEach((id) => next.add(id));
+      next.add(nodeId);
+      return next;
+    });
+  };
+
+  const buildBreadcrumbIds = (context: TreeContext) => {
+    const spaceId = context.spaceId || 'unassigned';
+    const bundleId = context.bundleId || 'general';
+    const appId = context.applicationId || 'no_app';
+    const typeId = context.documentTypeId || 'artifact';
+    const msId = context.milestoneId || 'no_milestone';
+
+    const ids: string[] = [];
+    let path = `space-${spaceId}`;
+    ids.push(path);
+
+    if (showBundle) {
+      path += `:bundle-${bundleId}`;
+      ids.push(path);
+    }
+
+    const addApp = () => {
+      path += `:app-${appId}`;
+      ids.push(path);
+    };
+
+    const addType = () => {
+      path += `:type-${typeId}`;
+      ids.push(path);
+    };
+
+    if (primaryGrouping === 'app') {
+      addApp();
+      if (showDocType) addType();
+    } else {
+      if (showDocType) addType();
+      addApp();
+    }
+
+    if (showMilestone) {
+      path += `:ms-${msId}`;
+      ids.push(path);
+    }
+
+    return ids;
+  };
+
+  const handleBreadcrumbSelect = (level: 'space' | 'bundle' | 'app' | 'type', context: TreeContext) => {
+    const ids = buildBreadcrumbIds(context);
+    const spaceId = ids[0];
+    const bundleId = ids.find((id) => id.includes(':bundle-')) || spaceId;
+    const appId = ids.find((id) => id.includes(':app-')) || bundleId;
+    const typeId = ids.find((id) => id.includes(':type-')) || appId;
+
+    const lookup = {
+      space: spaceId,
+      bundle: showBundle ? bundleId : spaceId,
+      app: appId,
+      type: showDocType ? typeId : appId,
+    } as const;
+
+    const targetId = lookup[level];
+    const ancestorIds = ids.slice(0, ids.indexOf(targetId) + 1);
+    selectAndExpandNode(targetId, context, ancestorIds);
+  };
+
+  const getAiContent = (artifact: WikiPage | WikiAsset) => {
+    if ('file' in artifact) {
+      if (artifact.content && artifact.content.trim()) return artifact.content;
+      if (artifact.preview?.kind === 'markdown' && artifact.preview.objectKey) return artifact.preview.objectKey;
+      return '';
+    }
+    return artifact.content;
+  };
+
+  const runAiInsight = async (type: InsightType) => {
+    if (!activeArtifact) return;
+    const content = getAiContent(activeArtifact);
+    if (!content.trim()) {
+      setAiState((prev) => ({
+        ...prev,
+        isExpanded: true,
+        activeType: type,
+        insights: {
+          ...prev.insights,
+          [type]: { status: 'error', message: 'AI actions require text-based content.' },
+        },
+      }));
+      return;
+    }
+
+    setAiState((prev) => ({
+      ...prev,
+      isExpanded: true,
+      activeType: type,
+      insights: {
+        ...prev.insights,
+        [type]: { status: 'loading' },
+      },
+    }));
+
+    try {
+      if ('file' in activeArtifact) {
+        const res = await fetch('/api/wiki/assets/ai', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            task: type === 'summary' ? 'summary' : type === 'decisions' ? 'key_decisions' : 'assumptions',
+            title: activeArtifact.title,
+            content,
+            assetId: activeArtifact._id || activeArtifact.id,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'AI request failed.');
+        const resultContent = data.result || '';
+        setAiState((prev) => ({
+          ...prev,
+          insights: {
+            ...prev.insights,
+            [type]: {
+              status: 'ready',
+              content: resultContent,
+              generatedAt: new Date().toISOString(),
+            },
+          },
+        }));
+        const targetId = activeArtifact._id || activeArtifact.id;
+        if (targetId && resultContent) {
+          await fetch('/api/wiki/insights', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              targetType: 'asset',
+              targetId,
+              type,
+              content: resultContent,
+            }),
+          });
+        }
+      } else {
+        const res = await fetch('/api/wiki/ai', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            task: type === 'summary' ? 'summary' : type === 'decisions' ? 'key_decisions' : 'assumptions',
+            title: activeArtifact.title,
+            format: 'markdown',
+            content,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'AI request failed.');
+        const resultContent = data.result || '';
+        setAiState((prev) => ({
+          ...prev,
+          insights: {
+            ...prev.insights,
+            [type]: {
+              status: 'ready',
+              content: resultContent,
+              generatedAt: new Date().toISOString(),
+            },
+          },
+        }));
+        const targetId = activeArtifact._id || activeArtifact.id;
+        if (targetId && resultContent) {
+          await fetch('/api/wiki/insights', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              targetType: 'page',
+              targetId,
+              type,
+              content: resultContent,
+            }),
+          });
+        }
+      }
+      requestAnimationFrame(() => {
+        aiSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    } catch (err: any) {
+      setAiState((prev) => ({
+        ...prev,
+        insights: {
+          ...prev.insights,
+          [type]: { status: 'error', message: err?.message || 'AI request failed.' },
+        },
+      }));
+    }
   };
 
   const handleCopyLink = () => {
@@ -229,7 +510,7 @@ const Wiki: React.FC<WikiProps> = ({
 
       let currentLevel = tree;
       let path = "";
-      const currentContext: TreeContext = { spaceId: sId };
+      const currentContext: TreeContext = { spaceId: sId, documentTypeId: dtId };
 
       path += `space-${sId}`;
       const spaceNode = findOrCreateNode(currentLevel, path, spaceName, 'space', { ...currentContext });
@@ -250,12 +531,14 @@ const Wiki: React.FC<WikiProps> = ({
           currentLevel = appNode.children;
           if (showDocType) {
             path += `:type-${dtId}`;
+            currentContext.documentTypeId = dtId;
             const typeNode = findOrCreateNode(currentLevel, path, typeName, 'type', { ...currentContext });
             currentLevel = typeNode.children;
           }
         } else {
           if (showDocType) {
             path += `:type-${dtId}`;
+            currentContext.documentTypeId = dtId;
             const typeNode = findOrCreateNode(currentLevel, path, typeName, 'type', { ...currentContext });
             currentLevel = typeNode.children;
           }
@@ -425,22 +708,220 @@ const Wiki: React.FC<WikiProps> = ({
 
         {activeArtifact ? (
           <div className="p-16 max-w-5xl mx-auto animate-fadeIn">
-             <div className="flex justify-end gap-3 mb-10">
-                <button onClick={handleCopyLink} className="px-6 py-2.5 bg-white border border-slate-200 text-slate-600 text-[10px] font-black rounded-xl uppercase tracking-widest hover:bg-slate-50 transition-all flex items-center gap-2">
-                   <i className={`fas ${copyFeedback ? 'fa-check text-emerald-500' : 'fa-link'}`}></i>
-                   {copyFeedback ? 'Link Ready' : 'Share Artifact'}
-                </button>
-                {('content' in activeArtifact) && !('file' in activeArtifact) && (
-                  <button onClick={() => setIsEditing(true)} className="px-8 py-2.5 bg-slate-900 text-white text-[10px] font-black rounded-xl uppercase tracking-widest hover:bg-slate-800 transition-all shadow-lg shadow-black/10 flex items-center gap-2">
-                     <i className="fas fa-edit"></i> Refine Artifact
-                  </button>
-                )}
-                {('file' in activeArtifact) && canEditAssetMarkdown(activeArtifact as WikiAsset) && (
-                  <button onClick={() => setIsEditingAsset(true)} className="px-8 py-2.5 bg-slate-900 text-white text-[10px] font-black rounded-xl uppercase tracking-widest hover:bg-slate-800 transition-all shadow-lg shadow-black/10 flex items-center gap-2">
-                     <i className="fas fa-pen-nib"></i> Refine Artifact
-                  </button>
-                )}
+             <div className="sticky top-0 z-20 bg-white/90 backdrop-blur border-b border-slate-100 pt-4 pb-6 mb-8">
+               <div className="flex flex-col gap-4">
+                 <nav className="flex flex-wrap items-center gap-2 text-[11px] font-semibold text-slate-500">
+                     <button
+                       onClick={() => handleBreadcrumbSelect('space', {
+                         spaceId: activeArtifact.spaceId,
+                         bundleId: activeArtifact.bundleId,
+                         applicationId: activeArtifact.applicationId,
+                         milestoneId: activeArtifact.milestoneId,
+                         documentTypeId: activeArtifact.documentTypeId,
+                       })}
+                       className="hover:text-blue-600 transition-colors"
+                     >
+                       {spaces.find((s) => String(s._id || s.id) === String(activeArtifact.spaceId))?.name || 'Shared Space'}
+                     </button>
+                     <span>→</span>
+                     <button
+                       onClick={() => handleBreadcrumbSelect('bundle', {
+                         spaceId: activeArtifact.spaceId,
+                         bundleId: activeArtifact.bundleId,
+                         applicationId: activeArtifact.applicationId,
+                         milestoneId: activeArtifact.milestoneId,
+                         documentTypeId: activeArtifact.documentTypeId,
+                       })}
+                       className="hover:text-blue-600 transition-colors"
+                     >
+                       {bundles.find((b) => String(b._id || b.id) === String(activeArtifact.bundleId))?.name || 'General'}
+                     </button>
+                     <span>→</span>
+                     <button
+                       onClick={() => handleBreadcrumbSelect('app', {
+                         spaceId: activeArtifact.spaceId,
+                         bundleId: activeArtifact.bundleId,
+                         applicationId: activeArtifact.applicationId,
+                         milestoneId: activeArtifact.milestoneId,
+                         documentTypeId: activeArtifact.documentTypeId,
+                       })}
+                       className="hover:text-blue-600 transition-colors"
+                     >
+                       {applications.find((a) => String(a._id || a.id) === String(activeArtifact.applicationId))?.name || 'Shared'}
+                     </button>
+                     <span>→</span>
+                     <button
+                       onClick={() => handleBreadcrumbSelect('type', {
+                         spaceId: activeArtifact.spaceId,
+                         bundleId: activeArtifact.bundleId,
+                         applicationId: activeArtifact.applicationId,
+                         milestoneId: activeArtifact.milestoneId,
+                         documentTypeId: activeArtifact.documentTypeId,
+                       })}
+                       className="hover:text-blue-600 transition-colors"
+                     >
+                       {docTypes.find((t) => String(t._id || t.id) === String(activeArtifact.documentTypeId))?.name || 'Artifact'}
+                     </button>
+                     <span>→</span>
+                     <span className="text-slate-700">{activeArtifact.title}</span>
+                   </nav>
+                 <h1 className="text-4xl font-black text-slate-900 tracking-tighter">
+                   {activeArtifact.title}
+                 </h1>
+                 <div className="flex flex-wrap items-center gap-3">
+                   {('content' in activeArtifact) && !('file' in activeArtifact) && (
+                     <button onClick={() => setIsEditing(true)} className="px-4 py-2 bg-white border border-slate-200 text-slate-600 text-[9px] font-black uppercase tracking-widest rounded-lg hover:bg-slate-50 transition-all flex items-center gap-2">
+                       <i className="fas fa-edit"></i> Edit
+                     </button>
+                   )}
+                   {('file' in activeArtifact) && canEditAssetMarkdown(activeArtifact as WikiAsset) && (
+                     <button onClick={() => setIsEditingAsset(true)} className="px-4 py-2 bg-white border border-slate-200 text-slate-600 text-[9px] font-black uppercase tracking-widest rounded-lg hover:bg-slate-50 transition-all flex items-center gap-2">
+                       <i className="fas fa-pen-nib"></i> Edit
+                     </button>
+                   )}
+                   {('file' in activeArtifact) && (
+                     <button
+                       onClick={() => {
+                         const link = document.createElement('a');
+                         link.href = `data:${activeArtifact.file.mimeType};base64,${activeArtifact.storage.objectKey}`;
+                         link.download = activeArtifact.file.originalName;
+                         link.click();
+                       }}
+                       className="px-4 py-2 bg-white border border-slate-200 text-slate-600 text-[9px] font-black uppercase tracking-widest rounded-lg hover:bg-slate-50 transition-all flex items-center gap-2"
+                     >
+                       <i className="fas fa-download"></i> Download
+                     </button>
+                   )}
+                   <button
+                     onClick={handleCopyLink}
+                     title="Share"
+                     className="px-4 py-2 bg-white border border-slate-200 text-slate-600 text-[9px] font-black uppercase tracking-widest rounded-lg hover:bg-slate-50 transition-all flex items-center gap-2"
+                   >
+                     <i className={`fas ${copyFeedback ? 'fa-check text-emerald-500' : 'fa-link'}`}></i>
+                     {copyFeedback ? 'Link Ready' : 'Share'}
+                   </button>
+                   <div className="relative" ref={aiMenuRef}>
+                     <button
+                       onClick={() => setIsAiMenuOpen((prev) => !prev)}
+                       className="px-4 py-2 bg-white border border-slate-200 text-slate-600 text-[9px] font-black uppercase tracking-widest rounded-lg hover:bg-slate-50 transition-all flex items-center gap-2"
+                     >
+                       <i className="fas fa-robot"></i> AI
+                     </button>
+                     {isAiMenuOpen && (
+                       <div className="absolute right-0 mt-2 w-48 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden z-30">
+                         {[
+                           { id: 'summary', label: 'Generate Summary' },
+                           { id: 'decisions', label: 'Key Decisions' },
+                           { id: 'assumptions', label: 'Assumptions' },
+                         ].map((item) => (
+                           <button
+                             key={item.id}
+                             onClick={() => {
+                               setIsAiMenuOpen(false);
+                               runAiInsight(item.id as InsightType);
+                             }}
+                             className="w-full text-left px-4 py-3 text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50"
+                           >
+                             {item.label}
+                           </button>
+                         ))}
+                       </div>
+                     )}
+                   </div>
+                 </div>
+               </div>
              </div>
+
+             <section ref={aiSectionRef} className="mb-8">
+               {(() => {
+                 const tabs = (['summary', 'decisions', 'assumptions'] as InsightType[]).filter((key) => {
+                   const state = aiState.insights[key];
+                   return state.status !== 'idle';
+                 });
+                 if (!aiState.isExpanded && tabs.length === 0) return null;
+                 return (
+                   <div className="bg-slate-50 border border-slate-100 rounded-[2rem] p-6">
+                     <div className="flex items-center justify-between">
+                       <div className="flex items-center gap-2 text-slate-600">
+                         <i className="fas fa-wand-magic-sparkles text-sm"></i>
+                         <span className="text-[9px] font-black uppercase tracking-widest">AI Insights</span>
+                       </div>
+                       <div className="flex items-center gap-3">
+                         <button
+                           onClick={() => setAiState((prev) => ({ ...prev, isCollapsed: !prev.isCollapsed }))}
+                           className="text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600"
+                         >
+                           {aiState.isCollapsed ? 'Expand' : 'Collapse'}
+                         </button>
+                         <button
+                           onClick={async () => {
+                             if (!activeArtifact) return;
+                             const targetId = activeArtifact._id || activeArtifact.id;
+                             if (!targetId) return;
+                             await fetch('/api/wiki/insights', {
+                               method: 'DELETE',
+                               headers: { 'Content-Type': 'application/json' },
+                               body: JSON.stringify({
+                                 targetType: 'file' in activeArtifact ? 'asset' : 'page',
+                                 targetId,
+                               }),
+                             });
+                             setAiState(createEmptyAiState());
+                           }}
+                           className="text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600"
+                         >
+                           Clear
+                         </button>
+                       </div>
+                     </div>
+                     {!aiState.isCollapsed && (
+                       <>
+                         <div className="mt-4 flex flex-wrap gap-2">
+                           {tabs.map((key) => (
+                             <button
+                               key={key}
+                               onClick={() => setAiState((prev) => ({ ...prev, activeType: key }))}
+                               className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest border ${
+                                 aiState.activeType === key
+                                   ? 'bg-slate-900 text-white border-slate-900'
+                                   : 'bg-white text-slate-500 border-slate-200'
+                               }`}
+                             >
+                               {key === 'summary' ? 'Summary' : key === 'decisions' ? 'Key Decisions' : 'Assumptions'}
+                             </button>
+                           ))}
+                         </div>
+                         <div className="mt-4 bg-white border border-slate-100 rounded-2xl p-5">
+                           {(() => {
+                             const state = aiState.insights[aiState.activeType];
+                             if (state.status === 'loading') {
+                               return <div className="text-sm text-slate-400">Generating insights...</div>;
+                             }
+                             if (state.status === 'error') {
+                               return (
+                                 <div className="text-sm text-amber-600 flex items-center justify-between gap-4">
+                                   <span>{state.message}</span>
+                                   <button
+                                     onClick={() => runAiInsight(aiState.activeType)}
+                                     className="px-3 py-1.5 text-[9px] font-black uppercase tracking-widest rounded-lg bg-slate-900 text-white"
+                                   >
+                                     Retry
+                                   </button>
+                                 </div>
+                               );
+                             }
+                             if (state.status === 'ready') {
+                               return <MarkdownRenderer content={state.content} />;
+                             }
+                             return <div className="text-sm text-slate-400">Select an AI action to populate insights.</div>;
+                           })()}
+                         </div>
+                       </>
+                     )}
+                   </div>
+                 );
+               })()}
+             </section>
              {('file' in activeArtifact) ? (
                <WikiAssetDisplay asset={activeArtifact as WikiAsset} bundles={bundles} applications={applications} />
              ) : (

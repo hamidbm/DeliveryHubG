@@ -4,7 +4,7 @@ import { generateWikiAssistance } from '../../../../services/geminiService';
 import { generateOpenAiResponse } from '../../../../services/openaiService';
 import { getRateLimitPerHour, getRequestIdentity, getRetentionDays, resolveTaskRouting } from '../../../../services/aiPolicy';
 
-type WikiAssistTask = 'improve' | 'expand' | 'diagram' | 'summary' | 'template';
+type WikiAssistTask = 'improve' | 'expand' | 'diagram' | 'summary' | 'template' | 'key_decisions' | 'assumptions';
 
 const buildWikiPrompt = (task: WikiAssistTask, content: string, format: string, title?: string) => {
   const header = title ? `Title: ${title}\n\n` : '';
@@ -22,6 +22,10 @@ const buildWikiPrompt = (task: WikiAssistTask, content: string, format: string, 
       return `${header}Provide a concise summary (3-5 bullet points or a short paragraph) of the following content in ${formatHint}.\n\nContent:\n${content}`;
     case 'template':
       return `${header}Create a Markdown template document using the guidance below. Include section headings, and add brief sample placeholders where helpful. Return Markdown only.\n\nGuidance:\n${content}`;
+    case 'key_decisions':
+      return `${header}Extract the key decisions from the following content. Return bullet points in ${formatHint}.\n\nContent:\n${content}`;
+    case 'assumptions':
+      return `${header}List the assumptions found in the following content. Return bullet points in ${formatHint}.\n\nContent:\n${content}`;
   }
 };
 
@@ -51,7 +55,7 @@ const generateOpenAiWikiAssistance = async ({
   });
 };
 
-const VALID_TASKS = new Set(['improve', 'expand', 'diagram', 'summary', 'template']);
+const VALID_TASKS = new Set(['improve', 'expand', 'diagram', 'summary', 'template', 'key_decisions', 'assumptions']);
 
 export async function POST(request: Request) {
   const startedAt = Date.now();
@@ -75,15 +79,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Rate limit exceeded.' }, { status: 429 });
     }
     const taskKey =
-      task === 'summary'
+      task === 'summary' || task === 'template' || task === 'key_decisions' || task === 'assumptions'
         ? 'wikiSummary'
         : task === 'diagram'
           ? 'wikiDiagram'
           : task === 'expand'
             ? 'wikiExpand'
-            : task === 'template'
-              ? 'wikiTemplate'
-              : 'wikiImprove';
+            : 'wikiImprove';
     const { provider: routedProvider, model: routedModel } = resolveTaskRouting(aiSettings, taskKey, provider);
     const openAiIntended = routedProvider === 'OPENAI';
     const geminiProviderLabel = routedProvider === 'GEMINI' ? 'GEMINI' : 'GEMINI_FALLBACK';
@@ -139,7 +141,7 @@ export async function POST(request: Request) {
     const geminiModel =
       routedProvider === 'GEMINI' && routedModel
         ? routedModel
-        : task === 'diagram' || task === 'summary' || task === 'template'
+        : task === 'diagram' || task === 'summary' || task === 'template' || task === 'key_decisions' || task === 'assumptions'
           ? aiSettings.geminiProModel || aiSettings.proModel || 'gemini-3-pro-preview'
           : aiSettings.geminiFlashModel || aiSettings.flashModel || 'gemini-3-flash-preview';
 

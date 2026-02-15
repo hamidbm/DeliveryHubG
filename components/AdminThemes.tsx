@@ -23,7 +23,7 @@ const AdminThemes: React.FC = () => {
     setLoading(true);
     setError('');
     try {
-      const url = editingTheme?._id ? `/api/wiki/themes/${editingTheme._id}` : '/api/wiki/themes';
+      const url = editingTheme?._id ? `/api/wiki/themes/${String(editingTheme._id)}` : '/api/wiki/themes';
       const method = editingTheme?._id ? 'PUT' : 'POST';
       const res = await fetch(url, {
         method,

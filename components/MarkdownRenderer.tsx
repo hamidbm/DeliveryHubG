@@ -1,12 +1,20 @@
 'use client';
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 import { visit } from 'unist-util-visit';
 import { useRouter } from '../App';
+import Prism from 'prismjs';
+import 'prismjs/components/prism-json';
+import 'prismjs/components/prism-bash';
+import 'prismjs/components/prism-shell-session';
+import 'prismjs/components/prism-python';
+import 'prismjs/components/prism-java';
+import 'prismjs/components/prism-yaml';
+import 'prismjs/components/prism-markdown';
 
 interface MarkdownRendererProps {
   content: string;
@@ -71,18 +79,26 @@ const sanitizeSchema: any = {
       'width',
       'height',
       'style',
+      'className',
     ],
 
-    table: ['class', 'style'],
-    thead: ['class', 'style'],
-    tbody: ['class', 'style'],
-    tr: ['class', 'style'],
-    th: ['class', 'style', 'colspan', 'rowspan'],
-    td: ['class', 'style', 'colspan', 'rowspan'],
-    col: ['span', 'width'],
-    colgroup: ['span', 'width'],
-    div: ['class', 'style'],
-    span: ['class', 'style'],
+    table: ['class', 'className', 'style'],
+    thead: ['class', 'className', 'style'],
+    tbody: ['class', 'className', 'style'],
+    tr: ['class', 'className', 'style'],
+    th: ['class', 'className', 'style', 'colspan', 'rowspan'],
+    td: ['class', 'className', 'style', 'colspan', 'rowspan'],
+    col: ['span', 'width', 'className'],
+    colgroup: ['span', 'width', 'className'],
+    div: ['class', 'className', 'style'],
+    span: ['class', 'className', 'style'],
+    h1: ['class', 'className', 'style'],
+    h2: ['class', 'className', 'style'],
+    h3: ['class', 'className', 'style'],
+    h4: ['class', 'className', 'style'],
+    h5: ['class', 'className', 'style'],
+    h6: ['class', 'className', 'style'],
+    p: ['class', 'className', 'style'],
   },
 
   protocols: {
@@ -137,6 +153,42 @@ export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
         ]}
         urlTransform={urlTransform}
         components={{
+          code({ className, children }) {
+            let language = (className || '').replace('language-', '');
+            if (language === 'shell' || language === 'sh' || language === 'console') language = 'bash';
+            if (language === 'yml') language = 'yaml';
+            if (language === 'mermaid') {
+              return <MermaidBlock code={String(children || '')} />;
+            }
+            if (language) {
+              const grammar = (Prism.languages as any)[language];
+              let raw = String(children || '');
+              if (language === 'json') {
+                try {
+                  const parsed = JSON.parse(raw);
+                  raw = JSON.stringify(parsed, null, 2);
+                } catch {
+                  // keep original if it's not valid JSON
+                }
+              }
+              if (grammar) {
+                const html = Prism.highlight(raw, grammar, language);
+                return (
+                  <pre className={`language-${language}`}>
+                    <code
+                      className={`language-${language}`}
+                      dangerouslySetInnerHTML={{ __html: html }}
+                    />
+                  </pre>
+                );
+              }
+            }
+            return (
+              <code className={className}>
+                {children}
+              </code>
+            );
+          },
           a({ href = '', children, ...props }) {
             return (
               <a
@@ -178,3 +230,44 @@ export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
     </div>
   );  
 }
+
+const MermaidBlock: React.FC<{ code: string }> = ({ code }) => {
+  const [svg, setSvg] = useState<string>('');
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const render = async () => {
+      try {
+        const mermaid = (await import('mermaid')).default;
+        mermaid.initialize({ startOnLoad: false, theme: 'neutral' });
+        const id = `mermaid-${Math.random().toString(36).slice(2)}`;
+        const { svg } = await mermaid.render(id, code);
+        if (!cancelled) {
+          setSvg(svg);
+          setError(null);
+        }
+      } catch (e: any) {
+        if (!cancelled) {
+          setError(e?.message || 'Mermaid render failed.');
+        }
+      }
+    };
+    if (code.trim()) render();
+    return () => {
+      cancelled = true;
+    };
+  }, [code]);
+
+  if (error) {
+    return (
+      <div className="text-xs text-amber-600 border border-amber-100 bg-amber-50 rounded-xl p-3">
+        Mermaid render error: {error}
+      </div>
+    );
+  }
+  if (!svg) {
+    return <div className="text-xs text-slate-400">Rendering diagram...</div>;
+  }
+  return <div className="mermaid-render" dangerouslySetInnerHTML={{ __html: svg }} />;
+};
