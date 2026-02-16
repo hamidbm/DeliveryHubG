@@ -652,7 +652,7 @@ const Wiki: React.FC<WikiProps> = ({
     asset.preview?.kind === 'markdown' && Boolean(asset.preview.objectKey || asset.content);
 
   return (
-    <div className="flex h-[800px] bg-white rounded-[3rem] border border-slate-200 shadow-2xl overflow-hidden animate-fadeIn">
+    <div className="sticky top-0 flex h-[calc(100vh-10.5rem)] bg-white rounded-[3rem] border border-slate-200 shadow-2xl overflow-hidden animate-fadeIn">
       {isSidebarVisible && (
         <aside className="w-80 border-r border-slate-100 flex flex-col bg-slate-50/30 shrink-0">
           <div className="p-6 border-b border-slate-100 flex items-center justify-end bg-white/50 backdrop-blur">
@@ -708,7 +708,7 @@ const Wiki: React.FC<WikiProps> = ({
 
         {activeArtifact ? (
           <div className="p-16 max-w-5xl mx-auto animate-fadeIn">
-             <div className="sticky top-0 z-20 bg-white/90 backdrop-blur border-b border-slate-100 pt-4 pb-6 mb-8">
+             <div className="sticky top-0 z-20 bg-white border-b border-slate-100 pt-6 pb-5 mb-8">
                <div className="flex flex-col gap-4">
                  <nav className="flex flex-wrap items-center gap-2 text-[11px] font-semibold text-slate-500">
                      <button
