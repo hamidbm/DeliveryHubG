@@ -16,3 +16,5 @@ DeliveryHub is organized into functional modules that map to delivery governance
 - Auditability and history tracking
 - Notifications for key lifecycle events
 - AI assistance with explicit user approval
+- Sticky, structured headers and consistent action placement
+- Markdown rendering with rich diagrams and syntax highlighting

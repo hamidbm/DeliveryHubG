@@ -7,8 +7,24 @@
 DeliveryHub is an internal Software Delivery + Application Portfolio Management portal that consolidates program governance, execution, architecture, and documentation in one place. It is designed for large migration programs with hundreds of applications moving to cloud platforms.
 
 Documentation
-- Product wiki: `docs/wiki/Home.md`
-- GitHub Wiki publishing: copy `docs/wiki/*` into the GitHub Wiki repository for this project
+- Entry point: `docs/wiki/Home.md`
+- Full docs index: `docs/wiki/Modules-Overview.md`
+
+## Documentation Table of Contents
+1. `docs/wiki/Home.md`
+2. `docs/wiki/Architecture.md`
+3. `docs/wiki/Modules-Overview.md`
+4. `docs/wiki/Modules-Wiki.md`
+5. `docs/wiki/Modules-WorkItems.md`
+6. `docs/wiki/Modules-Applications.md`
+7. `docs/wiki/Modules-Architecture.md`
+8. `docs/wiki/Modules-Dashboards.md`
+9. `docs/wiki/Admin.md`
+10. `docs/wiki/AI.md`
+11. `docs/wiki/Data-Model.md`
+12. `docs/wiki/Operations.md`
+13. `docs/wiki/Development.md`
+14. `docs/wiki/Roadmap.md`
 
 ## What It Does
 - Work Items management with hierarchy, kanban, and analytics
