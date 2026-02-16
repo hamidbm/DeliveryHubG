@@ -182,7 +182,7 @@ const WikiForm: React.FC<WikiFormProps> = ({
   const currentCategory = categories.find(c => c._id === currentType?.categoryId);
 
   return (
-    <div className="fixed inset-0 z-[100] bg-slate-50 flex flex-col animate-fadeIn">
+    <div className="fixed inset-0 z-[100] bg-slate-50 flex flex-col animate-fadeIn pt-[7.5rem]">
       <header className="px-10 py-5 bg-white border-b border-slate-200 flex items-center justify-between shadow-sm shrink-0">
         <div className="flex items-center gap-6">
           <button onClick={onCancel} className="w-10 h-10 rounded-full bg-slate-50 hover:bg-slate-100 flex items-center justify-center text-slate-400 border border-slate-100"><i className="fas fa-times"></i></button>

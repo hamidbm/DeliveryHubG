@@ -52,7 +52,7 @@ const WikiAssetMarkdownEditor: React.FC<WikiAssetMarkdownEditorProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[100] bg-slate-50 flex flex-col animate-fadeIn">
+    <div className="fixed inset-0 z-[100] bg-slate-50 flex flex-col animate-fadeIn pt-[7.5rem]">
       <header className="px-10 py-5 bg-white border-b border-slate-200 flex items-center justify-between shadow-sm shrink-0">
         <div className="flex items-center gap-6">
           <button
