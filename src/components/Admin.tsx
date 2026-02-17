@@ -5,8 +5,9 @@ import AdminBundles from './AdminBundles';
 import AdminApplications from './AdminApplications';
 import AdminTaxonomy from './AdminTaxonomy';
 import AdminAiSettings from './AdminAiSettings';
+import AdminWikiTemplates from './AdminWikiTemplates';
 
-type AdminModuleId = 'home' | 'wiki-themes' | 'vendors' | 'roles' | 'bundles' | 'applications' | 'taxonomy' | 'artifact-rules' | 'milestone-templates' | 'users' | 'sharepoint' | 'ai-settings';
+type AdminModuleId = 'home' | 'wiki-themes' | 'wiki-templates' | 'vendors' | 'roles' | 'bundles' | 'applications' | 'taxonomy' | 'artifact-rules' | 'milestone-templates' | 'users' | 'sharepoint' | 'ai-settings';
 
 interface AdminModule {
   id: AdminModuleId;
@@ -41,6 +42,7 @@ const Admin: React.FC = () => {
         { id: 'artifact-rules', label: 'Artifact Rules', icon: 'fa-clipboard-check', description: 'Define required artifacts per milestone for each app.', color: 'amber' },
         { id: 'milestone-templates', label: 'Milestone Plans', icon: 'fa-route', description: 'Standardize M1-M10 sequence and requirements.', color: 'orange' },
         { id: 'wiki-themes', label: 'Wiki Themes', icon: 'fa-palette', description: 'Enterprise CSS templates for documentation rendering.', color: 'purple' },
+        { id: 'wiki-templates', label: 'Wiki Templates', icon: 'fa-file-lines', description: 'Reusable Markdown templates for wiki documents.', color: 'indigo' },
       ]
     },
     {
@@ -120,6 +122,8 @@ const Admin: React.FC = () => {
         return <AdminTaxonomy />;
       case 'wiki-themes':
         return <AdminThemes />;
+      case 'wiki-templates':
+        return <AdminWikiTemplates />;
       case 'bundles':
         return <AdminBundles />;
       case 'applications':

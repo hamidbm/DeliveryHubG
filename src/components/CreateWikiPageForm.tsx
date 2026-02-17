@@ -1,5 +1,5 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
-import { WikiPage, WikiTheme, Bundle, Application, TaxonomyCategory, TaxonomyDocumentType } from '../types';
+import { WikiPage, WikiTheme, WikiTemplate, Bundle, Application, TaxonomyCategory, TaxonomyDocumentType } from '../types';
 import WikiPageDisplay from './WikiPageDisplay';
 
 interface CreateWikiPageFormProps {
@@ -51,6 +51,12 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
   const [themes, setThemes] = useState<WikiTheme[]>([]);
   const [categories, setCategories] = useState<TaxonomyCategory[]>([]);
   const [docTypes, setDocTypes] = useState<TaxonomyDocumentType[]>([]);
+  const [templates, setTemplates] = useState<WikiTemplate[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+  const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
+  const [templateName, setTemplateName] = useState('');
+  const [templateIsDefault, setTemplateIsDefault] = useState(false);
+  const [templateError, setTemplateError] = useState<string | null>(null);
 
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -68,6 +74,28 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
     };
     loadData();
   }, []);
+
+  useEffect(() => {
+    const loadTemplates = async () => {
+      if (!documentTypeId) {
+        setTemplates([]);
+        setSelectedTemplateId(null);
+        return;
+      }
+      try {
+        const res = await fetch(`/api/wiki/templates?documentTypeId=${encodeURIComponent(documentTypeId)}&active=true`);
+        const data = await res.json();
+        const list = Array.isArray(data) ? data : [];
+        setTemplates(list);
+        const defaultTemplate = list.find((t: WikiTemplate) => t.isDefault);
+        setSelectedTemplateId(defaultTemplate?._id || null);
+      } catch {
+        setTemplates([]);
+        setSelectedTemplateId(null);
+      }
+    };
+    loadTemplates();
+  }, [documentTypeId]);
 
   const promptSuggestions = useMemo(() => {
     const selectedType = docTypes.find((type) => type._id === documentTypeId);
@@ -311,6 +339,18 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
     }
     setIsAiProcessing(true);
     setAiError(null);
+    const selectedType = docTypes.find((type) => type._id === documentTypeId);
+    const fallback = buildTemplate(selectedType?.name || 'Document', promptText);
+    const applyTemplateFallback = () => {
+      if (templates.length > 0) {
+        const defaultTemplate = templates.find((t) => t.isDefault) || templates[0];
+        if (defaultTemplate?.content) {
+          setContent(defaultTemplate.content);
+          return;
+        }
+      }
+      setContent(fallback);
+    };
     try {
       const res = await fetch('/api/wiki/ai', {
         method: 'POST',
@@ -324,28 +364,79 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
       });
       const data = await res.json();
       if (!res.ok) {
-        setAiError(data.error || 'AI request failed.');
+        applyTemplateFallback();
+        setEditorFormat('markdown');
+        setMode('author');
         return;
       }
       const result = data.result || '';
-      const selectedType = docTypes.find((type) => type._id === documentTypeId);
-      const fallback = buildTemplate(selectedType?.name || 'Document', promptText);
-      setContent(result.trim() ? result : fallback);
+      if (result.trim()) {
+        setContent(result);
+      } else {
+        applyTemplateFallback();
+      }
       setEditorFormat('markdown');
       setMode('author');
     } catch (err) {
-      const selectedType = docTypes.find((type) => type._id === documentTypeId);
-      setContent(buildTemplate(selectedType?.name || 'Document', promptText));
+      applyTemplateFallback();
       setEditorFormat('markdown');
       setMode('author');
-      setAiError('AI request failed. Loaded a default template.');
     } finally {
       setIsAiProcessing(false);
     }
   };
 
+  const applyTemplate = (template: WikiTemplate) => {
+    setSelectedTemplateId(template._id || null);
+    setContent(template.content);
+    setEditorFormat('markdown');
+    setMode('author');
+  };
+
+  const handleCreateTemplate = async () => {
+    if (!documentTypeId) {
+      setTemplateError('Select a document type before saving a template.');
+      return;
+    }
+    if (!templateName.trim()) {
+      setTemplateError('Template name is required.');
+      return;
+    }
+    if (!content.trim()) {
+      setTemplateError('Template content is empty.');
+      return;
+    }
+    setTemplateError(null);
+    try {
+      const res = await fetch('/api/wiki/templates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: templateName.trim(),
+          documentTypeId,
+          content,
+          isActive: true,
+          isDefault: templateIsDefault
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setTemplateError(data.error || 'Failed to save template.');
+        return;
+      }
+      setIsTemplateModalOpen(false);
+      setTemplateName('');
+      setTemplateIsDefault(false);
+      const refresh = await fetch(`/api/wiki/templates?documentTypeId=${encodeURIComponent(documentTypeId)}&active=true`);
+      const list = await refresh.json();
+      setTemplates(Array.isArray(list) ? list : []);
+    } catch {
+      setTemplateError('Failed to save template.');
+    }
+  };
+
   return (
-    <div className="fixed inset-0 z-[100] bg-slate-50 flex flex-col animate-fadeIn">
+    <div className="fixed inset-0 z-[100] bg-slate-50 flex flex-col animate-fadeIn pt-[7.5rem]">
       <header className="px-10 py-5 bg-white border-b border-slate-200 flex items-center justify-between shadow-sm shrink-0">
         <div className="flex items-center gap-6">
           <button onClick={onCancel} className="w-10 h-10 rounded-full bg-slate-50 hover:bg-slate-100 flex items-center justify-center text-slate-400 border border-slate-100"><i className="fas fa-times"></i></button>
@@ -381,6 +472,13 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
             {isSaving
               ? (mode === 'upload' ? 'Uploading...' : 'Saving...')
               : (mode === 'upload' ? 'Upload Asset' : mode === 'ai' ? 'Switch to Editor' : 'Commit Artifact')}
+          </button>
+          <button
+            type="button"
+            onClick={() => { setTemplateError(null); setIsTemplateModalOpen(true); }}
+            className="px-6 py-3 bg-white border border-slate-200 text-slate-600 text-[10px] font-black uppercase tracking-widest rounded-2xl hover:bg-slate-50 transition-all"
+          >
+            Save as Template
           </button>
         </div>
       </header>
@@ -428,28 +526,9 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
                 </div>
                 <h3 className="text-2xl font-black text-slate-800 tracking-tight">Generate with AI</h3>
                 <p className="text-slate-400 font-medium leading-relaxed">
-                  Select a document type on the right to get AI prompt suggestions. Customize a prompt,
-                  then switch to Editor Mode to start drafting with that template.
+                  Select a document type on the right to see AI prompt suggestions. Choose a prompt, customize it if needed,
+                  then click “Generate Template”.
                 </p>
-                <div className="flex items-center justify-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      generateTemplateFromPrompt(aiPrompt);
-                    }}
-                    className="px-8 py-3 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest rounded-2xl shadow-xl hover:bg-slate-800 transition-all"
-                    disabled={isAiProcessing || !aiPrompt.trim()}
-                  >
-                    {isAiProcessing ? 'Generating...' : 'Start with Template'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setMode('author')}
-                    className="px-8 py-3 bg-white text-slate-600 text-[10px] font-black uppercase tracking-widest rounded-2xl border border-slate-200 hover:bg-slate-50 transition-all"
-                  >
-                    Skip AI
-                  </button>
-                </div>
               </div>
             </div>
           ) : (
@@ -514,6 +593,36 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
             </div>
 
             {mode !== 'upload' && (
+              <div className="space-y-2">
+                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Templates</label>
+                {!documentTypeId && (
+                  <div className="text-xs text-slate-400 font-medium">Select a document type to see templates.</div>
+                )}
+                {documentTypeId && templates.length === 0 && (
+                  <div className="text-xs text-slate-400 font-medium">No templates available for this type.</div>
+                )}
+                {documentTypeId && templates.length > 0 && (
+                  <div className="space-y-2">
+                    {templates.map((tpl) => (
+                      <button
+                        key={tpl._id}
+                        onClick={() => applyTemplate(tpl)}
+                        className={`w-full text-left px-4 py-3 rounded-2xl border transition-all ${
+                          selectedTemplateId === tpl._id ? 'border-blue-500 bg-blue-50/60' : 'border-slate-200 bg-white hover:bg-slate-50'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-slate-700">{tpl.name}</span>
+                          {tpl.isDefault && <span className="text-[9px] font-black uppercase tracking-widest text-amber-500">Default</span>}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {mode === 'ai' && (
               <div className="space-y-3">
                 <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">AI Prompt Suggestions</label>
                 {promptSuggestions.length ? (
@@ -580,6 +689,42 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
           )}
         </aside>
       </div>
+
+      {isTemplateModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[200] flex items-center justify-center p-6">
+          <div className="bg-white rounded-[3rem] w-full max-w-xl p-10 shadow-2xl animate-fadeIn border border-slate-100">
+            <h3 className="text-2xl font-black text-slate-900 mb-2">Save as Template</h3>
+            <p className="text-sm text-slate-500 mb-6 font-medium">Create a reusable template for this document type.</p>
+
+            {templateError && <div className="mb-4 p-3 bg-red-50 text-red-600 text-xs font-bold rounded-2xl border border-red-100">{templateError}</div>}
+
+            <div className="space-y-5">
+              <div className="space-y-2">
+                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Template Name</label>
+                <input
+                  value={templateName}
+                  onChange={(e) => setTemplateName(e.target.value)}
+                  className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-slate-700 focus:border-blue-500 transition-all font-bold"
+                  placeholder="e.g., Standard ADR Template"
+                />
+              </div>
+              <label className="flex items-center gap-3 cursor-pointer group">
+                <input type="checkbox" className="sr-only" checked={templateIsDefault} onChange={(e) => setTemplateIsDefault(e.target.checked)} />
+                <div className={`w-10 h-5 rounded-full relative transition-all ${templateIsDefault ? 'bg-amber-400' : 'bg-slate-200'}`}>
+                  <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${templateIsDefault ? 'left-5.5' : 'left-0.5'}`}></div>
+                </div>
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Set as Default</span>
+              </label>
+              <div className="flex items-center gap-4 pt-4 border-t border-slate-50">
+                <button type="button" onClick={() => setIsTemplateModalOpen(false)} className="flex-1 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-800 transition-all">Cancel</button>
+                <button type="button" onClick={handleCreateTemplate} className="flex-1 py-3 bg-slate-900 text-white text-[10px] font-black rounded-2xl shadow-2xl hover:bg-slate-800 transition-all uppercase tracking-widest">
+                  Save Template
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

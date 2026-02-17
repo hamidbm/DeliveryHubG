@@ -177,6 +177,17 @@ Top-level fields:
 Observed indexes:
 - `{ _id: 1 }`
 
+### `wiki_templates`
+Top-level fields:
+- `_id`, `name`, `documentTypeId`, `content`, `isActive`, `isDefault`, `createdAt`, `updatedAt`, `createdBy`, `updatedBy`
+
+Observed indexes:
+- `{ _id: 1 }`
+
+Recommended indexes:
+- `{ documentTypeId: 1, isActive: 1 }`
+- `{ documentTypeId: 1, isDefault: 1 }` unique with partial filter `isDefault: true`
+
 ### `wikipages` (legacy)
 Top-level fields:
 - `_id`, `author`, `bundleId`, `content`, `createdAt`, `documentTypeId`, `lastModifiedBy`, `slug`, `spaceId`, `status`, `title`, `updatedAt`, `version`
@@ -426,5 +437,21 @@ run().catch(err => {
   "version": 1,
   "status": "Published",
   "versionedAt": "2026-01-11T12:23:29.692Z"
+}
+```
+
+### `wiki_templates`
+```json
+{
+  "_id": "709a1b2c0c1a4c6fb0a9b123",
+  "name": "Standard ADR Template",
+  "documentTypeId": "6966687c4400ba02c336a3e8",
+  "content": "# Architecture Decision Record\\n\\n## Context\\n\\n## Decision\\n\\n## Consequences\\n",
+  "isActive": true,
+  "isDefault": true,
+  "createdAt": "2026-02-16T10:00:00.000Z",
+  "updatedAt": "2026-02-16T10:00:00.000Z",
+  "createdBy": "Hamid Ben Malek",
+  "updatedBy": "Hamid Ben Malek"
 }
 ```

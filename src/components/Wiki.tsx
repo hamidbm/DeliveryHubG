@@ -710,7 +710,8 @@ const Wiki: React.FC<WikiProps> = ({
           <div className="p-16 max-w-5xl mx-auto animate-fadeIn">
              <div className="sticky top-0 z-20 bg-white border-b border-slate-100 pt-6 pb-5 mb-8">
                <div className="flex flex-col gap-4">
-                 <nav className="flex flex-wrap items-center gap-2 text-[11px] font-semibold text-slate-500">
+                 <div className="flex flex-wrap items-center justify-between gap-4">
+                   <nav className="flex flex-wrap items-center gap-2 text-[11px] font-semibold text-slate-500">
                      <button
                        onClick={() => handleBreadcrumbSelect('space', {
                          spaceId: activeArtifact.spaceId,
@@ -765,6 +766,15 @@ const Wiki: React.FC<WikiProps> = ({
                      <span>→</span>
                      <span className="text-slate-700">{activeArtifact.title}</span>
                    </nav>
+                   <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                     <span className="px-2.5 py-1 rounded-full border border-slate-200 bg-slate-50 text-slate-500">
+                       Milestone {activeArtifact.milestoneId ? String(activeArtifact.milestoneId) : 'None'}
+                     </span>
+                     <span className="px-2.5 py-1 rounded-full border border-slate-200 bg-white text-slate-500">
+                       {activeArtifact.status ? String(activeArtifact.status) : 'Draft'}
+                     </span>
+                   </div>
+                 </div>
                  <h1 className="text-4xl font-black text-slate-900 tracking-tighter">
                    {activeArtifact.title}
                  </h1>

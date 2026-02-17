@@ -1,6 +1,6 @@
 import clientPromise from '../lib/mongodb';
 import { ObjectId } from 'mongodb';
-import { WikiPage, WikiSpace, WikiTheme, Bundle, Application, TaxonomyCategory, TaxonomyDocumentType, WorkItem, WorkItemType, WorkItemStatus, WorkItemActivity, Sprint, Milestone, Notification, ArchitectureDiagram, BusinessCapability, AppInterface, WikiAsset } from '../types';
+import { WikiPage, WikiSpace, WikiTheme, WikiTemplate, Bundle, Application, TaxonomyCategory, TaxonomyDocumentType, WorkItem, WorkItemType, WorkItemStatus, WorkItemActivity, Sprint, Milestone, Notification, ArchitectureDiagram, BusinessCapability, AppInterface, WikiAsset } from '../types';
 
 export const getDb = async () => {
   try {
@@ -632,6 +632,79 @@ export const saveWikiTheme = async (theme: Partial<WikiTheme>) => {
 export const deleteWikiTheme = async (id: string) => {
   const db = await getDb();
   return await db.collection('wiki_themes').deleteOne({ _id: new ObjectId(id) });
+};
+
+const ensureWikiTemplateIndexes = async (db: any) => {
+  await db.collection('wiki_templates').createIndex({ documentTypeId: 1, isActive: 1 });
+  await db.collection('wiki_templates').createIndex(
+    { documentTypeId: 1, isDefault: 1 },
+    { unique: true, partialFilterExpression: { isDefault: true } }
+  );
+};
+
+export const fetchWikiTemplates = async ({
+  documentTypeId,
+  activeOnly = false
+}: {
+  documentTypeId?: string;
+  activeOnly?: boolean;
+}) => {
+  try {
+    const db = await getDb();
+    await ensureWikiTemplateIndexes(db);
+    const query: any = {};
+    if (documentTypeId) query.documentTypeId = String(documentTypeId);
+    if (activeOnly) query.isActive = true;
+    return await db.collection('wiki_templates').find(query).sort({ isDefault: -1, updatedAt: -1, name: 1 }).toArray();
+  } catch {
+    return [];
+  }
+};
+
+export const saveWikiTemplate = async (template: Partial<WikiTemplate>, user?: any) => {
+  const db = await getDb();
+  await ensureWikiTemplateIndexes(db);
+  const { _id, ...data } = template;
+  const now = new Date().toISOString();
+  const docTypeId = data.documentTypeId ? String(data.documentTypeId) : undefined;
+  const payload = {
+    ...data,
+    documentTypeId: docTypeId,
+    updatedAt: now,
+    updatedBy: user?.name || data.updatedBy
+  };
+
+  if (payload.isDefault && docTypeId) {
+    const excludeId = _id && ObjectId.isValid(String(_id)) ? new ObjectId(String(_id)) : null;
+    await db.collection('wiki_templates').updateMany(
+      { documentTypeId: docTypeId, isDefault: true, ...(excludeId ? { _id: { $ne: excludeId } } : {}) },
+      { $set: { isDefault: false, updatedAt: now } }
+    );
+  }
+
+  if (_id && ObjectId.isValid(String(_id))) {
+    return await db.collection('wiki_templates').updateOne(
+      { _id: new ObjectId(String(_id)) },
+      { $set: payload }
+    );
+  }
+
+  return await db.collection('wiki_templates').insertOne({
+    ...payload,
+    isActive: payload.isActive ?? true,
+    isDefault: payload.isDefault ?? false,
+    createdAt: now,
+    createdBy: user?.name || data.createdBy
+  });
+};
+
+export const deactivateWikiTemplate = async (id: string, user?: any) => {
+  const db = await getDb();
+  await ensureWikiTemplateIndexes(db);
+  return await db.collection('wiki_templates').updateOne(
+    { _id: new ObjectId(id) },
+    { $set: { isActive: false, updatedAt: new Date().toISOString(), updatedBy: user?.name } }
+  );
 };
 
 export const fetchApplications = async (bundleId?: string, activeOnly: boolean = false) => {

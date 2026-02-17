@@ -277,3 +277,16 @@ export interface WikiTheme { _id?: string; key: string; name: string; descriptio
 export interface WikiComment { author: string; body: string; createdAt: string; }
 export interface TaxonomyCategory { _id?: string; id?: string; key: string; name: string; description?: string; icon?: string; isActive: boolean; sortOrder: number; }
 export interface TaxonomyDocumentType { _id?: string; id?: string; key: string; name: string; categoryId: string; description?: string; icon?: string; isActive: boolean; sortOrder: number; audience?: string[]; lifecyclePhases?: string[]; defaultTemplate?: string; requiredMetadata?: { requiresBundle: boolean; requiresApplication: boolean; requiresMilestone: boolean; }; }
+
+export interface WikiTemplate {
+  _id?: string;
+  name: string;
+  documentTypeId: string;
+  content: string;
+  isActive: boolean;
+  isDefault: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+  createdBy?: string;
+  updatedBy?: string;
+}
