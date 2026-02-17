@@ -49,6 +49,8 @@ const Wiki: React.FC<WikiProps> = ({
   const [loading, setLoading] = useState(true);
   const [isSidebarVisible, setIsSidebarVisible] = useState(true);
   const [copyFeedback, setCopyFeedback] = useState(false);
+  const [sheetViewMode, setSheetViewMode] = useState<'tiles' | 'table'>('tiles');
+  const [showSheetDashboards, setShowSheetDashboards] = useState(false);
   
   const [primaryGrouping, setPrimaryGrouping] = useState<'app' | 'type'>('app');
   const [showBundle, setShowBundle] = useState(true);
@@ -96,6 +98,11 @@ const Wiki: React.FC<WikiProps> = ({
       if (onTriggerProcessed) onTriggerProcessed();
     }
   }, [externalTrigger, onTriggerProcessed]);
+
+  useEffect(() => {
+    setSheetViewMode('tiles');
+    setShowSheetDashboards(false);
+  }, [activeArtifact?._id, activeArtifact?.id]);
 
   const loadAllWikiData = useCallback(async () => {
     setLoading(true);
@@ -779,6 +786,34 @@ const Wiki: React.FC<WikiProps> = ({
                    {activeArtifact.title}
                  </h1>
                  <div className="flex flex-wrap items-center gap-3">
+                   {('file' in activeArtifact) && (activeArtifact as WikiAsset).preview?.kind === 'sheet' && (
+                     <div className="inline-flex rounded-lg border border-slate-200 bg-white overflow-hidden">
+                       <button
+                         type="button"
+                         onClick={() => {
+                           setShowSheetDashboards(false);
+                           setSheetViewMode('tiles');
+                         }}
+                         className={`px-3 py-2 text-[9px] font-black uppercase tracking-widest transition ${
+                           sheetViewMode === 'tiles' && !showSheetDashboards ? 'bg-slate-900 text-white' : 'text-slate-500'
+                         }`}
+                       >
+                         Tiles
+                       </button>
+                       <button
+                         type="button"
+                         onClick={() => {
+                           setShowSheetDashboards(false);
+                           setSheetViewMode('table');
+                         }}
+                         className={`px-3 py-2 text-[9px] font-black uppercase tracking-widest transition ${
+                           sheetViewMode === 'table' && !showSheetDashboards ? 'bg-slate-900 text-white' : 'text-slate-500'
+                         }`}
+                       >
+                         Table
+                       </button>
+                     </div>
+                   )}
                    {('content' in activeArtifact) && !('file' in activeArtifact) && (
                      <button onClick={() => setIsEditing(true)} className="px-4 py-2 bg-white border border-slate-200 text-slate-600 text-[9px] font-black uppercase tracking-widest rounded-lg hover:bg-slate-50 transition-all flex items-center gap-2">
                        <i className="fas fa-edit"></i> Edit
@@ -800,6 +835,16 @@ const Wiki: React.FC<WikiProps> = ({
                        className="px-4 py-2 bg-white border border-slate-200 text-slate-600 text-[9px] font-black uppercase tracking-widest rounded-lg hover:bg-slate-50 transition-all flex items-center gap-2"
                      >
                        <i className="fas fa-download"></i> Download
+                     </button>
+                   )}
+                   {('file' in activeArtifact) && (activeArtifact as WikiAsset).preview?.kind === 'sheet' && (
+                     <button
+                       onClick={() => setShowSheetDashboards((prev) => !prev)}
+                       className={`px-4 py-2 border text-slate-600 text-[9px] font-black uppercase tracking-widest rounded-lg transition-all flex items-center gap-2 ${
+                         showSheetDashboards ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-200 hover:bg-slate-50'
+                       }`}
+                     >
+                       <i className="fas fa-chart-column"></i> Dashboards
                      </button>
                    )}
                    <button
@@ -933,7 +978,15 @@ const Wiki: React.FC<WikiProps> = ({
                })()}
              </section>
              {('file' in activeArtifact) ? (
-               <WikiAssetDisplay asset={activeArtifact as WikiAsset} bundles={bundles} applications={applications} />
+               <WikiAssetDisplay
+                 asset={activeArtifact as WikiAsset}
+                 bundles={bundles}
+                 applications={applications}
+                 sheetViewMode={sheetViewMode}
+                 onSheetViewModeChange={setSheetViewMode}
+                 showSheetDashboards={showSheetDashboards}
+                 onSheetDashboardsChange={setShowSheetDashboards}
+               />
              ) : (
                <WikiPageDisplay page={activeArtifact as WikiPage} bundles={bundles} applications={applications} />
              )}

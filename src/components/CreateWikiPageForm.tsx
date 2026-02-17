@@ -57,6 +57,8 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
   const [templateName, setTemplateName] = useState('');
   const [templateIsDefault, setTemplateIsDefault] = useState(false);
   const [templateError, setTemplateError] = useState<string | null>(null);
+  const [isDiagramPromptOpen, setIsDiagramPromptOpen] = useState(false);
+  const [diagramPrompt, setDiagramPrompt] = useState('');
 
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -296,6 +298,10 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
 
   const runAiAssist = async (task: 'improve' | 'expand' | 'diagram') => {
     if (!textAreaRef.current) return;
+    if (task === 'diagram') {
+      setIsDiagramPromptOpen(true);
+      return;
+    }
     if (!content.trim()) {
       setAiError('Add content before requesting AI assistance.');
       return;
@@ -325,6 +331,36 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
         return;
       }
       applyAiText(data.result || '');
+    } catch (err) {
+      setAiError('AI request failed.');
+    } finally {
+      setIsAiProcessing(false);
+    }
+  };
+
+  const runDiagramPrompt = async () => {
+    if (!diagramPrompt.trim()) return;
+    setIsAiProcessing(true);
+    setAiError(null);
+    try {
+      const res = await fetch('/api/wiki/ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          task: 'diagram',
+          title,
+          format: editorFormat,
+          content: diagramPrompt.trim()
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setAiError(data.error || 'AI request failed.');
+        return;
+      }
+      applyAiText(data.result || '');
+      setIsDiagramPromptOpen(false);
+      setDiagramPrompt('');
     } catch (err) {
       setAiError('AI request failed.');
     } finally {
@@ -721,6 +757,29 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
                   Save Template
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isDiagramPromptOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[200] flex items-center justify-center p-6">
+          <div className="bg-white rounded-[2.5rem] w-full max-w-2xl p-10 shadow-2xl animate-fadeIn border border-slate-100">
+            <h3 className="text-2xl font-black text-slate-900 mb-2">Describe the Diagram</h3>
+            <p className="text-sm text-slate-500 mb-6 font-medium">Provide a clear description of the diagram you want Mermaid to generate.</p>
+
+            <textarea
+              value={diagramPrompt}
+              onChange={(e) => setDiagramPrompt(e.target.value)}
+              className="w-full min-h-[140px] bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-slate-700 focus:border-blue-500 transition-all font-medium"
+              placeholder="Example: Create a sequence diagram for user login flow with API gateway, auth service, and database."
+            />
+
+            <div className="flex items-center gap-4 pt-6 border-t border-slate-50">
+              <button type="button" onClick={() => { setIsDiagramPromptOpen(false); setDiagramPrompt(''); }} className="flex-1 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-800 transition-all">Cancel</button>
+              <button type="button" onClick={runDiagramPrompt} disabled={isAiProcessing || !diagramPrompt.trim()} className="flex-1 py-3 bg-slate-900 text-white text-[10px] font-black rounded-2xl shadow-2xl hover:bg-slate-800 transition-all uppercase tracking-widest disabled:opacity-50">
+                {isAiProcessing ? 'Generating...' : 'Generate Diagram'}
+              </button>
             </div>
           </div>
         </div>

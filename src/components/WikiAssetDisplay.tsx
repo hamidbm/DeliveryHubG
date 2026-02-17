@@ -8,11 +8,22 @@ interface WikiAssetDisplayProps {
   asset: WikiAsset;
   bundles: Bundle[];
   applications: Application[];
+  sheetViewMode?: 'tiles' | 'table';
+  onSheetViewModeChange?: (mode: 'tiles' | 'table') => void;
+  showSheetDashboards?: boolean;
+  onSheetDashboardsChange?: (value: boolean) => void;
 }
 
-const WikiAssetDisplay: React.FC<WikiAssetDisplayProps> = ({ asset, bundles = [], applications = [] }) => {
+const WikiAssetDisplay: React.FC<WikiAssetDisplayProps> = ({
+  asset,
+  bundles = [],
+  applications = [],
+  sheetViewMode,
+  onSheetViewModeChange,
+  showSheetDashboards,
+  onSheetDashboardsChange
+}) => {
   const [activeTheme, setActiveTheme] = useState<WikiTheme | null>(null);
-  const [showDashboards, setShowDashboards] = useState(false);
   const [assetQaQuestion, setAssetQaQuestion] = useState('');
   const [assetQaError, setAssetQaError] = useState<string | null>(null);
   const [assetQaLoading, setAssetQaLoading] = useState(false);
@@ -148,11 +159,11 @@ const WikiAssetDisplay: React.FC<WikiAssetDisplayProps> = ({ asset, bundles = []
     }
 
     if (asset.preview.kind === 'sheet' && asset.preview.objectKey) {
-      if (showDashboards) {
-        return <WikiAssetDashboardView asset={asset} onBack={() => setShowDashboards(false)} />;
+      if (showSheetDashboards) {
+        return <WikiAssetDashboardView asset={asset} onBack={() => onSheetDashboardsChange?.(false)} />;
       }
       return (
-        <WikiAssetSpreadsheetPreview asset={asset} />
+        <WikiAssetSpreadsheetPreview asset={asset} viewMode={sheetViewMode} onViewModeChange={onSheetViewModeChange} />
       );
     }
 
@@ -188,17 +199,6 @@ const WikiAssetDisplay: React.FC<WikiAssetDisplayProps> = ({ asset, bundles = []
   return (
     <article className="w-full animate-fadeIn">
       {activeTheme && <style dangerouslySetInnerHTML={{ __html: activeTheme.css }} />}
-      {asset.preview.kind === 'sheet' && asset.preview.objectKey && (
-        <div className="mb-6 flex justify-end">
-          <button
-            onClick={() => setShowDashboards((prev) => !prev)}
-            className="px-4 py-2 bg-white border border-slate-200 text-slate-600 text-[9px] font-black uppercase rounded-lg hover:bg-slate-50 transition-all flex items-center gap-2"
-          >
-            <i className="fas fa-chart-column"></i> {showDashboards ? 'View Data' : 'Dashboards'}
-          </button>
-        </div>
-      )}
-
       <section className="mb-10">
         <div className="flex items-center gap-2 mb-4 text-slate-600">
           <i className="fas fa-comments text-sm"></i>

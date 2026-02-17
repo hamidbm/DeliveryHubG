@@ -3,15 +3,19 @@ import { WikiAsset } from '../types';
 
 interface WikiAssetSpreadsheetPreviewProps {
   asset: WikiAsset;
+  viewMode?: 'tiles' | 'table';
+  onViewModeChange?: (mode: 'tiles' | 'table') => void;
 }
 
-const WikiAssetSpreadsheetPreview: React.FC<WikiAssetSpreadsheetPreviewProps> = ({ asset }) => {
+const WikiAssetSpreadsheetPreview: React.FC<WikiAssetSpreadsheetPreviewProps> = ({ asset, viewMode, onViewModeChange }) => {
   const [activeSheetIndex, setActiveSheetIndex] = useState(0);
-  const [viewMode, setViewMode] = useState<'tiles' | 'table'>('tiles');
+  const [localViewMode, setLocalViewMode] = useState<'tiles' | 'table'>('tiles');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterColumn, setFilterColumn] = useState('all');
   const [filterValue, setFilterValue] = useState('');
   const [visibleColumns, setVisibleColumns] = useState<string[]>([]);
+  const [isColumnsOpen, setIsColumnsOpen] = useState(false);
+  const [columnSearch, setColumnSearch] = useState('');
   const [editingRowId, setEditingRowId] = useState<number | null>(null);
   const [editedRow, setEditedRow] = useState<Record<string, any>>({});
   const [isSaving, setIsSaving] = useState(false);
@@ -39,6 +43,11 @@ const WikiAssetSpreadsheetPreview: React.FC<WikiAssetSpreadsheetPreviewProps> = 
   const activeSheet = sheets[activeSheetIndex] || sheets[0];
   const columns: string[] = activeSheet?.columns || [];
   const activeVisibleColumns = visibleColumns.length ? visibleColumns : columns;
+  const currentViewMode = viewMode || localViewMode;
+  const setViewMode = (mode: 'tiles' | 'table') => {
+    if (onViewModeChange) onViewModeChange(mode);
+    else setLocalViewMode(mode);
+  };
   const rows: Record<string, any>[] = activeSheet?.rows || [];
 
   const filteredRows = rows.filter((row) => {
@@ -86,6 +95,10 @@ const WikiAssetSpreadsheetPreview: React.FC<WikiAssetSpreadsheetPreviewProps> = 
     setVisibleColumns([]);
   };
 
+  const filteredColumns = columns.filter((column) =>
+    column.toLowerCase().includes(columnSearch.toLowerCase())
+  );
+
   const handleRowChange = (column: string, value: string) => {
     setEditedRow((prev) => ({ ...prev, [column]: value }));
   };
@@ -116,54 +129,32 @@ const WikiAssetSpreadsheetPreview: React.FC<WikiAssetSpreadsheetPreviewProps> = 
   };
 
   return (
-    <div className="bg-white border border-slate-100 p-8 rounded-[2.5rem] shadow-inner overflow-x-auto">
-      <div className="mb-6 flex flex-wrap gap-4 items-center">
-        <div className="flex items-center gap-2">
-          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Sheet</label>
-          <select
-            className="border border-slate-200 rounded-lg px-3 py-2 text-xs font-semibold"
-            value={activeSheetIndex}
-            onChange={(e) => setActiveSheetIndex(Number(e.target.value))}
-          >
-            {sheets.map((sheet: any, index: number) => (
-              <option value={index} key={sheet.name || index}>
-                {sheet.name || `Sheet ${index + 1}`}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="flex items-center gap-2">
-          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">View</label>
-          <div className="inline-flex rounded-lg border border-slate-200 bg-white overflow-hidden">
-            <button
-              type="button"
-              onClick={() => setViewMode('tiles')}
-              className={`px-3 py-2 text-[10px] font-black uppercase tracking-widest transition ${
-                viewMode === 'tiles' ? 'bg-slate-900 text-white' : 'text-slate-500'
-              }`}
+    <div className="bg-white border border-slate-100 p-8 rounded-[2.5rem] shadow-inner">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-4 border border-slate-100 bg-slate-50/60 rounded-2xl p-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2">
+            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Sheet</label>
+            <select
+              className="border border-slate-200 rounded-lg px-3 py-2 text-xs font-semibold"
+              value={activeSheetIndex}
+              onChange={(e) => setActiveSheetIndex(Number(e.target.value))}
             >
-              Tile
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode('table')}
-              className={`px-3 py-2 text-[10px] font-black uppercase tracking-widest transition ${
-                viewMode === 'table' ? 'bg-slate-900 text-white' : 'text-slate-500'
-              }`}
-            >
-              Table
-            </button>
+              {sheets.map((sheet: any, index: number) => (
+                <option value={index} key={sheet.name || index}>
+                  {sheet.name || `Sheet ${index + 1}`}
+                </option>
+              ))}
+            </select>
           </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Search</label>
-          <input
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="border border-slate-200 rounded-lg px-3 py-2 text-xs font-semibold"
-            placeholder="Search rows"
-          />
-        </div>
+          <div className="flex items-center gap-2">
+            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Search</label>
+            <input
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="border border-slate-200 rounded-lg px-3 py-2 text-xs font-semibold"
+              placeholder="Search rows"
+            />
+          </div>
           <div className="flex items-center gap-2">
             <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Filter</label>
             <select
@@ -185,41 +176,62 @@ const WikiAssetSpreadsheetPreview: React.FC<WikiAssetSpreadsheetPreviewProps> = 
               placeholder="Filter value"
             />
           </div>
-          <div className="flex items-center gap-2">
+          <div className="relative flex items-center gap-2">
             <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Columns</label>
-            <div className="flex flex-wrap gap-2 max-w-[520px]">
-              {columns.map((column) => {
-                const isVisible = activeVisibleColumns.includes(column);
-                return (
-                  <button
-                    key={column}
-                    type="button"
-                    onClick={() => toggleVisibleColumn(column)}
-                    className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest border transition ${
-                      isVisible
-                        ? 'bg-slate-900 text-white border-slate-900'
-                        : 'bg-white text-slate-500 border-slate-200'
-                    }`}
-                  >
-                    {column}
-                  </button>
-                );
-              })}
-            </div>
             <button
               type="button"
-              onClick={showAllColumns}
-              className="px-3 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg bg-slate-100 text-slate-500 border border-slate-200"
+              onClick={() => setIsColumnsOpen((prev) => !prev)}
+              className="px-3 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg bg-white text-slate-600 border border-slate-200"
             >
-              Show All
+              Columns
             </button>
+            {isColumnsOpen && (
+              <div className="absolute top-10 left-0 z-20 w-72 bg-white border border-slate-200 rounded-2xl shadow-xl p-4">
+                <input
+                  value={columnSearch}
+                  onChange={(e) => setColumnSearch(e.target.value)}
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs font-semibold mb-3"
+                  placeholder="Search columns"
+                />
+                <div className="max-h-56 overflow-y-auto custom-scrollbar space-y-2">
+                  {filteredColumns.map((column) => {
+                    const isVisible = activeVisibleColumns.includes(column);
+                    return (
+                      <label key={column} className="flex items-center gap-2 text-xs font-semibold text-slate-700">
+                        <input
+                          type="checkbox"
+                          checked={isVisible}
+                          onChange={() => toggleVisibleColumn(column)}
+                        />
+                        <span>{column}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+                <div className="mt-3 flex items-center justify-between">
+                  <button
+                    type="button"
+                    onClick={showAllColumns}
+                    className="text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-700"
+                  >
+                    Show All
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsColumnsOpen(false)}
+                    className="text-[10px] font-black uppercase tracking-widest text-blue-600 hover:text-blue-700"
+                  >
+                    Done
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
-      <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
-        <div className="text-xs font-semibold text-slate-500">
-          {filteredRows.length.toLocaleString()} rows
-        </div>
         <div className="flex flex-wrap items-center gap-3">
+          <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+            {filteredRows.length.toLocaleString()} rows
+          </div>
           <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Rows</label>
           <select
             className="border border-slate-200 rounded-lg px-3 py-2 text-xs font-semibold"
@@ -254,7 +266,7 @@ const WikiAssetSpreadsheetPreview: React.FC<WikiAssetSpreadsheetPreviewProps> = 
         </div>
       </div>
 
-      {viewMode === 'tiles' ? (
+      {currentViewMode === 'tiles' ? (
         <div className="grid gap-6">
           {pagedRows.map((row) => (
             <div
