@@ -171,7 +171,8 @@ const Layout: React.FC<LayoutProps> = ({
             <div className="w-10 h-10 rounded-full bg-slate-700 border-2 border-slate-600 flex items-center justify-center overflow-hidden cursor-pointer shadow-lg shadow-black/20">
                <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(userName || '')}&background=0D8ABC&color=fff`} alt="avatar" />
             </div>
-            <div className="absolute right-0 top-12 w-48 bg-white rounded-xl shadow-2xl border border-slate-100 py-2 hidden group-hover:block animate-fadeIn">
+            <div className="absolute right-0 top-10 pt-3 w-48 hidden group-hover:block">
+              <div className="bg-white rounded-xl shadow-2xl border border-slate-100 py-2 animate-fadeIn">
                <div className="px-4 py-2 border-b border-slate-50 mb-1">
                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Account</p>
                </div>
@@ -186,6 +187,7 @@ const Layout: React.FC<LayoutProps> = ({
                  <i className="fas fa-sign-out-alt"></i>
                  <span>Sign Out</span>
                </button>
+              </div>
             </div>
           </div>
         </div>

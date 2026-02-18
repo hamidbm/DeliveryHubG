@@ -84,9 +84,6 @@ export default function ProfilePage() {
     }
   };
 
-  const promoteToArchitect = () => {
-    handleUpdate(undefined, Role.ARCHITECT);
-  };
 
   const handleLogout = async () => {
     await fetch('/api/auth/logout', { method: 'POST' });
@@ -147,16 +144,10 @@ export default function ProfilePage() {
                       className="w-full h-full object-cover"
                     />
                   </div>
-                  {user.role === Role.ARCHITECT && (
-                    <div className="absolute top-0 right-4 w-8 h-8 bg-amber-400 rounded-2xl border-4 border-white flex items-center justify-center shadow-lg rotate-12">
-                      <i className="fas fa-crown text-[12px] text-white"></i>
-                    </div>
-                  )}
                 </div>
                 <h2 className="text-2xl font-black text-slate-800 tracking-tight">{user.name}</h2>
                 <div className="inline-flex items-center gap-2 bg-slate-50 px-4 py-1.5 rounded-full mt-2 border border-slate-100">
                   <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest">{user.role}</span>
-                  {user.role === Role.ARCHITECT && <i className="fas fa-certificate text-blue-500 text-[10px]"></i>}
                 </div>
               </div>
 
@@ -224,17 +215,6 @@ export default function ProfilePage() {
                       <h4 className="font-black text-slate-800 uppercase tracking-widest text-sm">Access Node Level</h4>
                     </div>
                     
-                    {user.role !== Role.ARCHITECT && (
-                      <button 
-                        type="button"
-                        onClick={promoteToArchitect}
-                        disabled={updating}
-                        className="text-[10px] font-black text-amber-600 bg-amber-50 border border-amber-200 px-4 py-2 rounded-xl uppercase tracking-[0.1em] hover:bg-amber-100 transition-all flex items-center gap-2 group/promote active:scale-95"
-                      >
-                        <i className="fas fa-crown group-hover/promote:rotate-12 transition-transform"></i>
-                        Elevate to Architect
-                      </button>
-                    )}
                   </div>
                   
                   <div className="relative group">

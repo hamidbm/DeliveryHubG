@@ -1,8 +1,7 @@
-
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { jwtVerify } from 'jose';
-import { fetchSystemSettings, isAdmin, saveSystemSettings } from '../../../../services/db';
+import { isAdmin, removeAdmin } from '../../../../../services/db';
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
 
@@ -16,27 +15,20 @@ const getUserId = async () => {
 
 const requireAdmin = async () => {
   const userId = await getUserId();
-  if (!userId) return { ok: false, status: 401 };
+  if (!userId) return { ok: false, status: 401, userId: null };
   const allowed = await isAdmin(userId);
-  if (!allowed) return { ok: false, status: 403 };
-  return { ok: true, status: 200 };
+  if (!allowed) return { ok: false, status: 403, userId };
+  return { ok: true, status: 200, userId };
 };
 
-export async function GET() {
-  const auth = await requireAdmin();
-  if (!auth.ok) return NextResponse.json({ error: 'Unauthorized' }, { status: auth.status });
-  const settings = await fetchSystemSettings();
-  return NextResponse.json(settings);
-}
-
-export async function POST(request: Request) {
+export async function DELETE(_request: Request, { params }: { params: Promise<{ userId: string }> }) {
   try {
     const auth = await requireAdmin();
     if (!auth.ok) return NextResponse.json({ error: 'Unauthorized' }, { status: auth.status });
-    const settings = await request.json();
-    await saveSystemSettings(settings);
+    const { userId } = await params;
+    await removeAdmin(String(userId));
     return NextResponse.json({ success: true });
-  } catch (error) {
-    return NextResponse.json({ error: 'Failed to update system settings' }, { status: 500 });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message || 'Failed to remove admin' }, { status: 500 });
   }
 }

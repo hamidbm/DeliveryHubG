@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Bundle, WorkItemStatus } from '../types';
 
 const AdminBundles: React.FC = () => {
@@ -8,15 +8,40 @@ const AdminBundles: React.FC = () => {
   const [editingBundle, setEditingBundle] = useState<Partial<Bundle> | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [assignmentMap, setAssignmentMap] = useState<Record<string, Record<string, number>>>({});
 
   useEffect(() => {
     fetchBundles();
+    fetchAssignments();
   }, []);
 
   const fetchBundles = async () => {
     const res = await fetch('/api/bundles');
     setBundles(await res.json());
   };
+
+  const fetchAssignments = async () => {
+    try {
+      const res = await fetch('/api/admin/bundle-assignments?active=true');
+      const data = await res.json();
+      if (!Array.isArray(data)) {
+        setAssignmentMap({});
+        return;
+      }
+      const grouped: Record<string, Record<string, number>> = {};
+      data.forEach((a: any) => {
+        const bundleId = String(a.bundleId);
+        if (!grouped[bundleId]) grouped[bundleId] = {};
+        const key = String(a.assignmentType || 'unknown');
+        grouped[bundleId][key] = (grouped[bundleId][key] || 0) + 1;
+      });
+      setAssignmentMap(grouped);
+    } catch {
+      setAssignmentMap({});
+    }
+  };
+
+  const assignmentSummary = useMemo(() => assignmentMap, [assignmentMap]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -73,6 +98,7 @@ const AdminBundles: React.FC = () => {
               <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Key</th>
               <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Name</th>
               <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">WIP Control</th>
+              <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Assignments</th>
               <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Status</th>
               <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Actions</th>
             </tr>
@@ -96,6 +122,19 @@ const AdminBundles: React.FC = () => {
                         <span className="text-[10px] font-bold text-slate-600">{Object.keys(b.wipLimits).length} Active Limits</span>
                      </div>
                    ) : <span className="text-[9px] text-slate-300 uppercase">None</span>}
+                </td>
+                <td className="px-8 py-6 text-center">
+                  {assignmentSummary[String(b._id || b.id || b.key)] ? (
+                    <div className="flex flex-wrap items-center justify-center gap-2">
+                      {Object.entries(assignmentSummary[String(b._id || b.id || b.key)]).map(([type, count]) => (
+                        <span key={type} className="px-2 py-1 rounded-full text-[9px] font-black uppercase tracking-widest bg-slate-100 text-slate-500">
+                          {type.replace(/_/g, ' ')} {count}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-[9px] text-slate-300 uppercase">None</span>
+                  )}
                 </td>
                 <td className="px-8 py-6 text-center">
                   <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${b.isActive ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}>

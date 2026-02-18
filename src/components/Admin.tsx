@@ -6,8 +6,10 @@ import AdminApplications from './AdminApplications';
 import AdminTaxonomy from './AdminTaxonomy';
 import AdminAiSettings from './AdminAiSettings';
 import AdminWikiTemplates from './AdminWikiTemplates';
+import AdminBundleAssignments from './AdminBundleAssignments';
+import AdminAdmins from './AdminAdmins';
 
-type AdminModuleId = 'home' | 'wiki-themes' | 'wiki-templates' | 'vendors' | 'roles' | 'bundles' | 'applications' | 'taxonomy' | 'artifact-rules' | 'milestone-templates' | 'users' | 'sharepoint' | 'ai-settings';
+type AdminModuleId = 'home' | 'wiki-themes' | 'wiki-templates' | 'vendors' | 'roles' | 'bundles' | 'applications' | 'taxonomy' | 'artifact-rules' | 'milestone-templates' | 'users' | 'sharepoint' | 'ai-settings' | 'bundle-assignments' | 'admins';
 
 interface AdminModule {
   id: AdminModuleId;
@@ -24,6 +26,43 @@ interface AdminSection {
 
 const Admin: React.FC = () => {
   const [activeModule, setActiveModule] = useState<AdminModuleId>('home');
+  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
+
+  React.useEffect(() => {
+    const check = async () => {
+      try {
+        const res = await fetch('/api/admin/check');
+        if (!res.ok) {
+          setIsAdmin(false);
+          return;
+        }
+        const data = await res.json();
+        setIsAdmin(Boolean(data?.isAdmin));
+      } catch {
+        setIsAdmin(false);
+      }
+    };
+    check();
+  }, []);
+
+  if (isAdmin === false) {
+    return (
+      <div className="flex items-center justify-center min-h-[600px] bg-white border border-slate-200 rounded-[3rem] shadow-2xl">
+        <div className="text-center p-12 text-slate-500">
+          <div className="text-sm font-black uppercase tracking-widest text-slate-400 mb-3">Access Restricted</div>
+          <div className="text-lg font-semibold">You do not have admin access.</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (isAdmin === null) {
+    return (
+      <div className="flex items-center justify-center min-h-[600px] bg-white border border-slate-200 rounded-[3rem] shadow-2xl">
+        <div className="text-slate-400 text-sm font-semibold">Verifying admin access...</div>
+      </div>
+    );
+  }
 
   const sections: AdminSection[] = [
     {
@@ -49,6 +88,8 @@ const Admin: React.FC = () => {
       title: 'Users & Access',
       modules: [
         { id: 'users', label: 'Users', icon: 'fa-users-gear', description: 'Manage accounts, roles, and vendor associations.', color: 'cyan' },
+        { id: 'admins', label: 'Admins', icon: 'fa-user-shield', description: 'Manage admin access registry.', color: 'slate' },
+        { id: 'bundle-assignments', label: 'Bundle Assignments', icon: 'fa-diagram-project', description: 'Map bundles to CMO, SVP, and engineering owners.', color: 'indigo' },
       ]
     },
     {
@@ -130,6 +171,10 @@ const Admin: React.FC = () => {
         return <AdminApplications />;
       case 'ai-settings':
         return <AdminAiSettings />;
+      case 'admins':
+        return <AdminAdmins />;
+      case 'bundle-assignments':
+        return <AdminBundleAssignments />;
       default:
         return (
           <div className="flex flex-col h-full bg-white relative">

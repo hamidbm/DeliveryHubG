@@ -25,9 +25,9 @@ const AdminApplications: React.FC = () => {
     setLoading(true);
     setError('');
     
-    // Pattern validation for AID: ^[A-Z]{3,4}\d+$
-    if (editingApp?.aid && !/^[A-Z]{3,4}\d+$/.test(editingApp.aid)) {
-      setError('AID must follow pattern: 3-4 letters + digits (e.g. APP1234)');
+    // Pattern validation for AID: ^[A-Z]{0,5}\d*[-_]\d+$
+    if (editingApp?.aid && !/^[A-Z]{0,5}\d*[-_]\d+$/i.test(editingApp.aid)) {
+      setError('AID must follow pattern: 0-5 letters + optional digits + "-" or "_" + digits (e.g. AIDE-0080632, APP110-013948, 110_42)');
       setLoading(false);
       return;
     }

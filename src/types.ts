@@ -1,13 +1,55 @@
 
-export enum Role {
-  ARCHITECT = 'Enterprise Architect',
-  INTERNAL_ENGINEER = 'Internal Engineer',
-  VENDOR_ENGINEER = 'Vendor Engineer',
-  VENDOR_MANAGER = 'Vendor Manager',
-  PM = 'Program Manager',
-  EXECUTIVE = 'Leadership / Executive',
-  ADMIN = 'Admin'
+export enum Team {
+  ENGINEERING = 'Engineering',
+  SVP = 'SVP',
+  CMO = 'CMO',
+  MANAGEMENT = 'Management',
+  BUSINESS = 'Business'
 }
+
+export enum Role {
+  SVP_DELIVERY_LEAD = 'SVP Delivery Lead',
+  SVP_PROJECT_MANAGER = 'SVP Project Manager',
+  SVP_TECH_LEAD = 'SVP Tech Lead',
+  SVP_ARCHITECT = 'SVP Architect',
+  SVP_INFRA_LEAD = 'SVP Infra Lead',
+  SVP_SME = 'SVP SME',
+  ENGG_LEADER = 'Engg Leader',
+  APP_LEADER = 'App Leader',
+  OT_PM = 'OT PM',
+  APP_SME = 'App SME',
+  EA_LEADER = 'EA Leader',
+  ENGINEERING_EA = 'Engineering EA',
+  ENGINEERING_DBA = 'Engineering DBA',
+  ENGINEERING_IT_OPS = 'Engineering IT OPs',
+  CMO_MEMBER = 'CMO Member',
+  MANAGEMENT = 'Management',
+  BUSINESS = 'Business'
+}
+
+export const TEAM_ROLE_OPTIONS: Record<Team, Role[]> = {
+  [Team.ENGINEERING]: [
+    Role.ENGG_LEADER,
+    Role.APP_LEADER,
+    Role.OT_PM,
+    Role.APP_SME,
+    Role.EA_LEADER,
+    Role.ENGINEERING_EA,
+    Role.ENGINEERING_DBA,
+    Role.ENGINEERING_IT_OPS
+  ],
+  [Team.SVP]: [
+    Role.SVP_DELIVERY_LEAD,
+    Role.SVP_PROJECT_MANAGER,
+    Role.SVP_TECH_LEAD,
+    Role.SVP_ARCHITECT,
+    Role.SVP_INFRA_LEAD,
+    Role.SVP_SME
+  ],
+  [Team.CMO]: [Role.CMO_MEMBER],
+  [Team.MANAGEMENT]: [Role.MANAGEMENT],
+  [Team.BUSINESS]: [Role.BUSINESS]
+};
 
 export enum MilestoneStatus {
   PLANNED = 'Planned',
@@ -53,6 +95,40 @@ export enum TimeModelStatus {
   INVEST = 'INVEST',
   MIGRATE = 'MIGRATE',
   ELIMINATE = 'ELIMINATE'
+}
+
+export interface User {
+  _id?: string;
+  id?: string;
+  name: string;
+  username: string;
+  email: string;
+  role: Role;
+  team: Team;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export type AssignmentType =
+  | 'cmo_reviewer'
+  | 'assigned_cmo'
+  | 'bundle_owner'
+  | 'svp'
+  | 'observer';
+
+export interface BundleAssignment {
+  _id?: string;
+  bundleId: string;
+  userId: string;
+  assignmentType: AssignmentType;
+  active: boolean;
+  isPrimary?: boolean;
+  startAt?: string;
+  endAt?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  createdBy?: string;
+  notes?: string;
 }
 
 export interface BusinessCapability {

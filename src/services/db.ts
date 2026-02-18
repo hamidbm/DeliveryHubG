@@ -1,6 +1,6 @@
 import clientPromise from '../lib/mongodb';
 import { ObjectId } from 'mongodb';
-import { WikiPage, WikiSpace, WikiTheme, WikiTemplate, CommentThread, CommentMessage, EventRecord, ReviewRecord, UserEventState, Bundle, Application, TaxonomyCategory, TaxonomyDocumentType, WorkItem, WorkItemType, WorkItemStatus, WorkItemActivity, Sprint, Milestone, Notification, ArchitectureDiagram, BusinessCapability, AppInterface, WikiAsset } from '../types';
+import { WikiPage, WikiSpace, WikiTheme, WikiTemplate, CommentThread, CommentMessage, EventRecord, ReviewRecord, ReviewCycle, ReviewReviewer, UserEventState, Bundle, Application, TaxonomyCategory, TaxonomyDocumentType, WorkItem, WorkItemType, WorkItemStatus, WorkItemActivity, Sprint, Milestone, Notification, ArchitectureDiagram, BusinessCapability, AppInterface, WikiAsset, BundleAssignment, AssignmentType } from '../types';
 
 export const getDb = async () => {
   try {
@@ -198,6 +198,211 @@ const safeIdMatch = (id: string) => {
 };
 
 const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const ensureAdminIndexes = async (db: any) => {
+  await db.collection('admins').createIndex({ userId: 1 }, { unique: true });
+};
+
+export const ensureUserIndexes = async (db: any) => {
+  await db.collection('users').createIndex({ email: 1 }, { unique: true });
+};
+
+export const getAdminBootstrapEmails = () => {
+  return new Set(
+    (process.env.ADMIN_BOOTSTRAP_EMAILS || '')
+      .split(',')
+      .map((v) => v.trim().toLowerCase())
+      .filter(Boolean)
+  );
+};
+
+export const upsertAdmin = async (userId: string, createdBy: string = 'system') => {
+  const db = await getDb();
+  await ensureAdminIndexes(db);
+  return await db.collection('admins').updateOne(
+    { userId },
+    { $setOnInsert: { userId, createdAt: new Date().toISOString(), createdBy } },
+    { upsert: true }
+  );
+};
+
+export const removeAdmin = async (userId: string) => {
+  const db = await getDb();
+  await ensureAdminIndexes(db);
+  return await db.collection('admins').deleteOne({ userId });
+};
+
+export const isAdmin = async (userId: string) => {
+  try {
+    const db = await getDb();
+    await ensureAdminIndexes(db);
+    const record = await db.collection('admins').findOne({ userId });
+    return Boolean(record);
+  } catch {
+    return false;
+  }
+};
+
+const ensureBundleAssignmentIndexes = async (db: any) => {
+  await db.collection('bundle_assignments').createIndex({ bundleId: 1, active: 1, assignmentType: 1 });
+  await db.collection('bundle_assignments').createIndex({ userId: 1, active: 1, assignmentType: 1 });
+  await db.collection('bundle_assignments').createIndex({ bundleId: 1, userId: 1, assignmentType: 1 }, { unique: true });
+};
+
+export const fetchBundleAssignments = async (filters: {
+  bundleId?: string;
+  userId?: string;
+  assignmentType?: AssignmentType;
+  active?: boolean;
+}) => {
+  try {
+    const db = await getDb();
+    await ensureBundleAssignmentIndexes(db);
+    const query: any = {};
+    if (filters.bundleId) query.bundleId = filters.bundleId;
+    if (filters.userId) query.userId = filters.userId;
+    if (filters.assignmentType) query.assignmentType = filters.assignmentType;
+    if (typeof filters.active === 'boolean') query.active = filters.active;
+    return await db.collection('bundle_assignments').find(query).sort({ updatedAt: -1 }).toArray();
+  } catch {
+    return [];
+  }
+};
+
+export const upsertBundleAssignment = async (assignment: Partial<BundleAssignment>, userId?: string) => {
+  const db = await getDb();
+  await ensureBundleAssignmentIndexes(db);
+  const now = new Date().toISOString();
+  const bundleId = String(assignment.bundleId || '');
+  const targetUserId = String(assignment.userId || '');
+  const assignmentType = assignment.assignmentType as AssignmentType;
+  if (!bundleId || !targetUserId || !assignmentType) {
+    throw new Error('bundleId, userId, and assignmentType are required.');
+  }
+  return await db.collection('bundle_assignments').updateOne(
+    { bundleId, userId: targetUserId, assignmentType },
+    {
+      $set: {
+        bundleId,
+        userId: targetUserId,
+        assignmentType,
+        active: assignment.active !== false,
+        isPrimary: assignment.isPrimary || false,
+        startAt: assignment.startAt || undefined,
+        endAt: assignment.endAt || undefined,
+        notes: assignment.notes || undefined,
+        updatedAt: now
+      },
+      $setOnInsert: {
+        createdAt: now,
+        createdBy: userId || assignment.createdBy
+      }
+    },
+    { upsert: true }
+  );
+};
+
+export const updateBundleAssignment = async (id: string, updates: Partial<BundleAssignment>, userId?: string) => {
+  const db = await getDb();
+  await ensureBundleAssignmentIndexes(db);
+  const now = new Date().toISOString();
+  const setData: any = { updatedAt: now, updatedBy: userId };
+  if (typeof updates.active === 'boolean') setData.active = updates.active;
+  if (typeof updates.isPrimary === 'boolean') setData.isPrimary = updates.isPrimary;
+  if (typeof updates.startAt !== 'undefined') setData.startAt = updates.startAt || undefined;
+  if (typeof updates.endAt !== 'undefined') setData.endAt = updates.endAt || undefined;
+  if (typeof updates.notes !== 'undefined') setData.notes = updates.notes || undefined;
+  return await db.collection('bundle_assignments').updateOne(
+    { _id: new ObjectId(id) },
+    { $set: setData }
+  );
+};
+
+export const fetchAssignedCmoReviewers = async (bundleId: string): Promise<ReviewReviewer[]> => {
+  try {
+    const db = await getDb();
+    await ensureBundleAssignmentIndexes(db);
+    const assignments = await db.collection('bundle_assignments').find({
+      bundleId,
+      active: true,
+      assignmentType: 'assigned_cmo'
+    }).toArray();
+    const userIds = assignments.map((a: any) => String(a.userId));
+    const users = await fetchUsersByIds(userIds);
+    const userMap = new Map(users.map((u: any) => [String(u._id || u.id), u]));
+    return userIds
+      .map((id) => userMap.get(id))
+      .filter(Boolean)
+      .map((user: any) => ({ userId: String(user._id || user.id), role: user.role }));
+  } catch {
+    return [];
+  }
+};
+
+export const buildReviewCycle = async ({
+  bundleId,
+  cycleNumber,
+  requestedBy,
+  reviewers,
+  status = 'requested',
+  notes,
+  dueAt
+}: {
+  bundleId: string;
+  cycleNumber: number;
+  requestedBy: { userId: string; displayName: string; email?: string };
+  reviewers?: ReviewReviewer[];
+  status?: ReviewCycle['status'];
+  notes?: string;
+  dueAt?: string;
+}): Promise<ReviewCycle> => {
+  const autoReviewers = reviewers && reviewers.length ? reviewers : await fetchAssignedCmoReviewers(bundleId);
+  const cycleId = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : new ObjectId().toHexString();
+  const now = new Date().toISOString();
+  return {
+    cycleId,
+    number: cycleNumber,
+    status,
+    requestedBy,
+    requestedAt: now,
+    reviewers: autoReviewers,
+    dueAt,
+    notes,
+    correlationId: cycleId
+  };
+};
+
+export const appendReviewCycle = async ({
+  review,
+  bundleId,
+  requestedBy,
+  notes,
+  dueAt
+}: {
+  review: ReviewRecord;
+  bundleId: string;
+  requestedBy: { userId: string; displayName: string; email?: string };
+  notes?: string;
+  dueAt?: string;
+}) => {
+  const nextNumber = (review.cycles?.length || 0) + 1;
+  const cycle = await buildReviewCycle({
+    bundleId,
+    cycleNumber: nextNumber,
+    requestedBy,
+    notes,
+    dueAt
+  });
+  const updated: ReviewRecord = {
+    ...review,
+    status: review.status || 'active',
+    currentCycleId: cycle.cycleId,
+    cycles: [...(review.cycles || []), cycle],
+    updatedAt: new Date().toISOString()
+  };
+  await saveReview(updated);
+  return { review: updated, cycle };
+};
 
 export const fetchNotifications = async (userEmail: string) => {
   try {
@@ -1335,13 +1540,36 @@ export const deleteMilestone = async (id: string) => {
 export const searchUsers = async (query: string) => {
   try {
     const db = await getDb();
+    await ensureUserIndexes(db);
     return await db.collection('users').find({
       $or: [
         { name: { $regex: query, $options: 'i' } },
-        { email: { $regex: query, $options: 'i' } }
+        { email: { $regex: query, $options: 'i' } },
+        { username: { $regex: query, $options: 'i' } }
       ]
     }).limit(10).project({ password: 0 }).toArray();
   } catch { return []; }
+};
+
+export const fetchAdmins = async () => {
+  try {
+    const db = await getDb();
+    await ensureAdminIndexes(db);
+    return await db.collection('admins').find({}).sort({ createdAt: -1 }).toArray();
+  } catch {
+    return [];
+  }
+};
+
+export const fetchUsersByIds = async (ids: string[]) => {
+  try {
+    const db = await getDb();
+    const objectIds = ids.filter((id) => ObjectId.isValid(id)).map((id) => new ObjectId(id));
+    const users = await db.collection('users').find({ _id: { $in: objectIds } }).project({ password: 0 }).toArray();
+    return users;
+  } catch {
+    return [];
+  }
 };
 
 export const resolveMentionUsers = async (tokens: string[]) => {
@@ -1358,6 +1586,7 @@ export const resolveMentionUsers = async (tokens: string[]) => {
       orClauses.push(...emailTokens.map((t) => ({ email: { $regex: `^${escapeRegExp(t)}$`, $options: 'i' } })));
     }
     if (nameTokens.length) {
+      orClauses.push(...nameTokens.map((t) => ({ username: { $regex: `^${escapeRegExp(t)}$`, $options: 'i' } })));
       orClauses.push(...nameTokens.map((t) => ({ name: { $regex: `^${escapeRegExp(t)}$`, $options: 'i' } })));
       orClauses.push(...nameTokens.map((t) => ({ email: { $regex: `^${escapeRegExp(t)}@`, $options: 'i' } })));
     }

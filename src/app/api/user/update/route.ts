@@ -61,7 +61,9 @@ export async function POST(request: Request) {
       id: userId, 
       email: result.email, 
       name: result.name, 
-      role: result.role 
+      username: result.username,
+      role: result.role,
+      team: result.team
     })
       .setProtectedHeader({ alg: 'HS256' })
       .setIssuedAt()
@@ -70,7 +72,7 @@ export async function POST(request: Request) {
 
     const response = NextResponse.json({ 
       message: 'Profile updated successfully',
-      user: { name: result.name, email: result.email, role: result.role }
+      user: { name: result.name, email: result.email, role: result.role, team: result.team, username: result.username }
     });
 
     response.cookies.set('nexus_auth_token', newToken, {

@@ -25,6 +25,7 @@ services:
       MONGODB_URI: mongodb://admin:secretpassword@mongodb:27017/deliveryhub?authSource=admin
       API_KEY: ${API_KEY}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
+      ADMIN_BOOTSTRAP_EMAILS: hamid@benmalek.net
     depends_on:
       - mongodb
     networks:

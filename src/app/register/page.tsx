@@ -3,16 +3,19 @@
 
 import React, { useState } from 'react';
 import { useRouter } from '../../App';
-import { Role } from '../../types';
+import { Role, Team, TEAM_ROLE_OPTIONS } from '../../types';
 
 export default function RegisterPage() {
   const [formData, setFormData] = useState({
     name: '',
+    username: '',
     email: '',
     password: '',
-    role: Role.ARCHITECT // Updated default role
+    team: Team.ENGINEERING,
+    role: TEAM_ROLE_OPTIONS[Team.ENGINEERING][0]
   });
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
@@ -20,6 +23,7 @@ export default function RegisterPage() {
     e.preventDefault();
     setLoading(true);
     setError('');
+    setSuccess('');
 
     try {
       const res = await fetch('/api/auth/register', {
@@ -31,7 +35,28 @@ export default function RegisterPage() {
       const data = await res.json();
 
       if (res.ok) {
-        router.push('/login?registered=true');
+        const loginRes = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: formData.email, password: formData.password, rememberMe: true })
+        });
+        if (loginRes.ok) {
+          try {
+            router.push('/');
+          } catch {
+            window.location.href = '/';
+          }
+          return;
+        }
+        setFormData({
+          name: '',
+          username: '',
+          email: '',
+          password: '',
+          team: Team.ENGINEERING,
+          role: TEAM_ROLE_OPTIONS[Team.ENGINEERING][0]
+        });
+        setSuccess('Account provisioned successfully. Please sign in.');
       } else {
         setError(data.error || 'Registration failed. Please contact your system administrator.');
       }
@@ -64,6 +89,12 @@ export default function RegisterPage() {
               <span>{error}</span>
             </div>
           )}
+          {success && (
+            <div className="mb-6 p-4 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm rounded-2xl flex items-center gap-3">
+              <i className="fas fa-circle-check"></i>
+              <span>{success}</span>
+            </div>
+          )}
 
           <form onSubmit={handleRegister} className="space-y-6">
             <div className="space-y-2">
@@ -75,6 +106,18 @@ export default function RegisterPage() {
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 className="w-full bg-slate-950/50 border border-slate-800 rounded-2xl px-5 py-4 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all placeholder:text-slate-700"
                 placeholder="Engineer Name"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest ml-1">Username</label>
+              <input
+                type="text"
+                required
+                value={formData.username}
+                onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                className="w-full bg-slate-950/50 border border-slate-800 rounded-2xl px-5 py-4 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all placeholder:text-slate-700"
+                placeholder="first.last"
               />
             </div>
 
@@ -91,14 +134,41 @@ export default function RegisterPage() {
             </div>
 
             <div className="space-y-2">
-              <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest ml-1">Portal Role</label>
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest ml-1">Team</label>
+              <div className="relative">
+                <select
+                  value={formData.team}
+                  onChange={(e) => {
+                    const nextTeam = e.target.value as Team;
+                    setFormData({
+                      ...formData,
+                      team: nextTeam,
+                      role: TEAM_ROLE_OPTIONS[nextTeam][0]
+                    });
+                  }}
+                  className="w-full bg-slate-950/50 border border-slate-800 rounded-2xl px-5 py-4 text-white appearance-none focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all cursor-pointer"
+                >
+                  {Object.values(Team).map((teamValue) => (
+                    <option key={teamValue} value={teamValue} className="bg-slate-900 text-white">
+                      {teamValue}
+                    </option>
+                  ))}
+                </select>
+                <div className="absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500">
+                  <i className="fas fa-chevron-down text-xs"></i>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest ml-1">Role</label>
               <div className="relative">
                 <select
                   value={formData.role}
                   onChange={(e) => setFormData({ ...formData, role: e.target.value as Role })}
                   className="w-full bg-slate-950/50 border border-slate-800 rounded-2xl px-5 py-4 text-white appearance-none focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all cursor-pointer"
                 >
-                  {Object.values(Role).map((roleValue) => (
+                  {TEAM_ROLE_OPTIONS[formData.team].map((roleValue) => (
                     <option key={roleValue} value={roleValue} className="bg-slate-900 text-white">
                       {roleValue}
                     </option>
@@ -142,7 +212,18 @@ export default function RegisterPage() {
           <div className="mt-8 pt-8 border-t border-slate-800/50 text-center">
             <p className="text-slate-500 text-sm">
               Already have credentials?{' '}
-              <a onClick={() => router.push('/login')} className="text-blue-500 font-bold hover:text-blue-400 transition cursor-pointer">
+              <a
+                href="/login"
+                onClick={(e) => {
+                  e.preventDefault();
+                  try {
+                    router.push('/login');
+                  } catch {
+                    window.location.href = '/login';
+                  }
+                }}
+                className="text-blue-500 font-bold hover:text-blue-400 transition cursor-pointer"
+              >
                 Sign In
               </a>
             </p>

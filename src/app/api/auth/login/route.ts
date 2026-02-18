@@ -1,16 +1,18 @@
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { SignJWT } from 'jose';
-import { getDb } from '../../../../services/db';
+import { ensureUserIndexes, getAdminBootstrapEmails, getDb, upsertAdmin } from '../../../../services/db';
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
 
 export async function POST(request: Request) {
   try {
     const { email, password, rememberMe } = await request.json();
+    const normalizedEmail = String(email || '').trim().toLowerCase();
 
     const db = await getDb();
-    const user = await db.collection('users').findOne({ email });
+    await ensureUserIndexes(db);
+    const user = await db.collection('users').findOne({ email: normalizedEmail });
 
     if (!user || !(await bcrypt.compare(password, user.password))) {
       return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 });
@@ -24,16 +26,24 @@ export async function POST(request: Request) {
       id: user._id.toString(), 
       email: user.email, 
       name: user.name, 
-      role: user.role 
+      username: user.username,
+      role: user.role,
+      team: user.team
     })
       .setProtectedHeader({ alg: 'HS256' })
       .setIssuedAt()
       .setExpirationTime(expirationTime)
       .sign(JWT_SECRET);
 
+    const bootstrapEmails = getAdminBootstrapEmails();
+    const isBootstrapAdmin = bootstrapEmails.has(String(user.email || '').toLowerCase());
+    if (isBootstrapAdmin) {
+      await upsertAdmin(String(user._id), 'system');
+    }
+
     const response = NextResponse.json({ 
       message: 'Logged in successfully',
-      user: { name: user.name, role: user.role, email: user.email }
+      user: { name: user.name, role: user.role, team: user.team, username: user.username, email: user.email }
     });
 
     response.cookies.set('nexus_auth_token', token, {

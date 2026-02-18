@@ -160,7 +160,18 @@ export default function LoginPage() {
           <div className="mt-8 pt-8 border-t border-slate-800/50 text-center">
             <p className="text-slate-500 text-sm">
               New to the platform?{' '}
-              <a onClick={() => router.push('/register')} className="text-blue-500 font-bold hover:text-blue-400 transition cursor-pointer">
+              <a
+                href="/register"
+                onClick={(e) => {
+                  e.preventDefault();
+                  try {
+                    router.push('/register');
+                  } catch {
+                    window.location.href = '/register';
+                  }
+                }}
+                className="text-blue-500 font-bold hover:text-blue-400 transition cursor-pointer"
+              >
                 Request Provisioning
               </a>
             </p>
