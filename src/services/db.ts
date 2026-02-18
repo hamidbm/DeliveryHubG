@@ -712,6 +712,7 @@ export const deactivateWikiTemplate = async (id: string, user?: any) => {
 const ensureCommentIndexes = async (db: any) => {
   await db.collection('comment_threads').createIndex({ 'resource.type': 1, 'resource.id': 1, lastActivityAt: -1 });
   await db.collection('comment_threads').createIndex({ reviewId: 1, status: 1 });
+  await db.collection('comment_threads').createIndex({ reviewId: 1, reviewCycleId: 1, lastActivityAt: -1 });
   await db.collection('comment_messages').createIndex({ threadId: 1, createdAt: 1 });
   await db.collection('comment_messages').createIndex({ body: 'text' });
 };
@@ -877,13 +878,17 @@ export const createCommentThread = async ({
   anchor,
   body,
   author,
-  mentions = []
+  mentions = [],
+  reviewId,
+  reviewCycleId
 }: {
   resource: { type: string; id: string; title?: string };
   anchor?: { kind: string; data: any };
   body: string;
   author: { userId: string; displayName: string; email?: string };
   mentions?: string[];
+  reviewId?: string;
+  reviewCycleId?: string;
 }) => {
   const db = await getDb();
   await ensureCommentIndexes(db);
@@ -896,7 +901,9 @@ export const createCommentThread = async ({
     createdAt: now,
     lastActivityAt: now,
     messageCount: 1,
-    participants: [author.userId]
+    participants: [author.userId],
+    reviewId,
+    reviewCycleId
   };
   const threadResult = await db.collection('comment_threads').insertOne(thread);
   const message: Partial<CommentMessage> = {
@@ -988,14 +995,46 @@ export const saveReview = async (review: Partial<ReviewRecord>) => {
     {
       $set: {
         resource: review.resource,
-        status: review.status || 'draft',
-        reviewers: review.reviewers || [],
+        status: review.status || 'active',
+        createdBy: review.createdBy,
+        currentCycleId: review.currentCycleId,
+        cycles: review.cycles || [],
+        resourceVersion: review.resourceVersion,
         updatedAt: now
       },
       $setOnInsert: { createdAt: now }
     },
     { upsert: true }
   );
+};
+
+export const emitReviewCycleEvent = async ({
+  type,
+  actor,
+  resource,
+  cycle
+}: {
+  type:
+    | 'review.cycle.requested'
+    | 'review.cycle.feedback_sent'
+    | 'review.cycle.resubmitted'
+    | 'review.cycle.closed';
+  actor: { userId: string; displayName: string; email?: string };
+  resource: { type: string; id: string; title?: string };
+  cycle: { cycleId: string; number: number; status: string };
+}) => {
+  return await emitEvent({
+    ts: new Date().toISOString(),
+    type,
+    actor,
+    resource,
+    payload: {
+      reviewCycleId: cycle.cycleId,
+      cycleNumber: cycle.number,
+      cycleStatus: cycle.status
+    },
+    correlationId: cycle.cycleId
+  });
 };
 
 export const fetchApplications = async (bundleId?: string, activeOnly: boolean = false) => {

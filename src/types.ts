@@ -291,6 +291,7 @@ export interface CommentThread {
   messageCount: number;
   participants: string[];
   reviewId?: string;
+  reviewCycleId?: string;
 }
 export interface CommentMessage {
   _id?: string;
@@ -318,13 +319,38 @@ export interface ReviewReviewer {
   userId: string;
   role?: string;
 }
+export interface ReviewCycleDecision {
+  outcome: 'acknowledged' | 'partially_accepted' | 'declined';
+  decidedBy: CommentAuthor;
+  decidedAt: string;
+  rationale?: string;
+}
+export interface ReviewCycle {
+  cycleId: string;
+  number: number;
+  status: 'requested' | 'in_review' | 'feedback_sent' | 'vendor_addressing' | 'resubmitted' | 'closed';
+  requestedBy: CommentAuthor;
+  requestedAt: string;
+  reviewers: ReviewReviewer[];
+  dueAt?: string;
+  completedAt?: string;
+  notes?: string;
+  evidence?: {
+    attachments?: any[];
+  };
+  decision?: ReviewCycleDecision;
+  correlationId: string;
+}
 export interface ReviewRecord {
   _id?: string;
   resource: { type: string; id: string; title?: string };
-  status: 'draft' | 'in_review' | 'approved' | 'changes_requested';
-  reviewers: ReviewReviewer[];
+  status: 'active' | 'closed';
+  createdBy: CommentAuthor;
   createdAt: string;
   updatedAt?: string;
+  currentCycleId: string;
+  cycles: ReviewCycle[];
+  resourceVersion?: { versionId?: string; contentHash?: string };
 }
 export interface UserEventState {
   userId: string;
