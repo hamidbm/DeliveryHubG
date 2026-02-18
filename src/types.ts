@@ -275,6 +275,62 @@ export interface WikiVersion extends WikiPage { versionedAt: string; pageId: str
 export interface WikiSpace { _id?: string; id?: string; key: string; name: string; description?: string; icon?: string; color?: string; visibility: 'internal' | 'vendors' | 'specific'; createdAt?: string; defaultThemeKey?: string; }
 export interface WikiTheme { _id?: string; key: string; name: string; description?: string; css: string; isActive: boolean; isDefault: boolean; createdAt?: string; updatedAt?: string; }
 export interface WikiComment { author: string; body: string; createdAt: string; }
+export interface CommentAuthor {
+  userId: string;
+  displayName: string;
+  email?: string;
+}
+export interface CommentThread {
+  _id?: string;
+  resource: { type: string; id: string };
+  anchor?: { kind: string; data: any };
+  status: 'open' | 'resolved';
+  createdBy: CommentAuthor;
+  createdAt: string;
+  lastActivityAt: string;
+  messageCount: number;
+  participants: string[];
+  reviewId?: string;
+}
+export interface CommentMessage {
+  _id?: string;
+  threadId: string;
+  author: CommentAuthor;
+  body: string;
+  createdAt: string;
+  editedAt?: string;
+  deletedAt?: string;
+  mentions?: string[];
+  attachments?: any[];
+}
+export interface EventRecord {
+  _id?: string;
+  ts: string;
+  type: string;
+  actor: CommentAuthor;
+  resource: { type: string; id: string; title?: string };
+  context?: { bundleId?: string; appId?: string; docType?: string };
+  payload?: any;
+  visibility?: { scope: string; teamIds?: string[] };
+  correlationId?: string;
+}
+export interface ReviewReviewer {
+  userId: string;
+  role?: string;
+}
+export interface ReviewRecord {
+  _id?: string;
+  resource: { type: string; id: string; title?: string };
+  status: 'draft' | 'in_review' | 'approved' | 'changes_requested';
+  reviewers: ReviewReviewer[];
+  createdAt: string;
+  updatedAt?: string;
+}
+export interface UserEventState {
+  userId: string;
+  lastSeenAt: string;
+  commentLastSeen?: Record<string, string>;
+}
 export interface TaxonomyCategory { _id?: string; id?: string; key: string; name: string; description?: string; icon?: string; isActive: boolean; sortOrder: number; }
 export interface TaxonomyDocumentType { _id?: string; id?: string; key: string; name: string; categoryId: string; description?: string; icon?: string; isActive: boolean; sortOrder: number; audience?: string[]; lifecyclePhases?: string[]; defaultTemplate?: string; requiredMetadata?: { requiresBundle: boolean; requiresApplication: boolean; requiresMilestone: boolean; }; }
 

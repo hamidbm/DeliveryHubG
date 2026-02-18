@@ -20,6 +20,7 @@ export const NAV_ITEMS = [
   { id: 'work-items', label: 'Work Items', icon: 'fa-tasks' },
   { id: 'architecture', label: 'Architecture', icon: 'fa-sitemap' },
   { id: 'wiki', label: 'Wiki', icon: 'fa-book' },
+  { id: 'activities', label: 'Activities', icon: 'fa-bolt' },
   { id: 'ai-insights', label: 'AI Insights', icon: 'fa-robot' },
   { id: 'admin', label: 'Admin', icon: 'fa-user-shield' },
 ];

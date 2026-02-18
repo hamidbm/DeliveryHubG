@@ -275,6 +275,27 @@ A notification document must contain all required context:
 In-app notifications should render at top navigation and update on refresh; real-time push is optional for MVP.
 Email/Teams notifications are “nice to have”, not required.
 
+You should never change the following anymore unless discussed:
+✅ Event system
+events as append-only log
+TTL applied
+Strict <module>.<entity>.<verb> naming
+correlationId consistently present
+Event emission centralized in emitEvent()
+This is textbook-clean.
+✅ Comments → Events relationship
+Comments stored as domain data
+Events reference comments
+ThreadId used as correlationId
+Thread lifecycle emits events
+This is exactly how Figma / Linear / Notion do it internally.
+✅ Unread tracking
+user_event_state in MongoDB
+Timestamp-based logic
+Resource-scoped last seen
+No client-side hacks
+This is production-grade.
+
 ## 10) Folder structure & project hygiene
 
 ### 10.1 Prefer /src

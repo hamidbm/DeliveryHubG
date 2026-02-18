@@ -1,6 +1,6 @@
 import clientPromise from '../lib/mongodb';
 import { ObjectId } from 'mongodb';
-import { WikiPage, WikiSpace, WikiTheme, WikiTemplate, Bundle, Application, TaxonomyCategory, TaxonomyDocumentType, WorkItem, WorkItemType, WorkItemStatus, WorkItemActivity, Sprint, Milestone, Notification, ArchitectureDiagram, BusinessCapability, AppInterface, WikiAsset } from '../types';
+import { WikiPage, WikiSpace, WikiTheme, WikiTemplate, CommentThread, CommentMessage, EventRecord, ReviewRecord, UserEventState, Bundle, Application, TaxonomyCategory, TaxonomyDocumentType, WorkItem, WorkItemType, WorkItemStatus, WorkItemActivity, Sprint, Milestone, Notification, ArchitectureDiagram, BusinessCapability, AppInterface, WikiAsset } from '../types';
 
 export const getDb = async () => {
   try {
@@ -196,6 +196,8 @@ const safeIdMatch = (id: string) => {
   }
   return { $in: conditions };
 };
+
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 export const fetchNotifications = async (userEmail: string) => {
   try {
@@ -707,6 +709,295 @@ export const deactivateWikiTemplate = async (id: string, user?: any) => {
   );
 };
 
+const ensureCommentIndexes = async (db: any) => {
+  await db.collection('comment_threads').createIndex({ 'resource.type': 1, 'resource.id': 1, lastActivityAt: -1 });
+  await db.collection('comment_threads').createIndex({ reviewId: 1, status: 1 });
+  await db.collection('comment_messages').createIndex({ threadId: 1, createdAt: 1 });
+  await db.collection('comment_messages').createIndex({ body: 'text' });
+};
+
+const ensureReviewIndexes = async (db: any) => {
+  await db.collection('reviews').createIndex({ 'resource.type': 1, 'resource.id': 1 }, { unique: true });
+  await db.collection('reviews').createIndex({ status: 1, createdAt: -1 });
+  await db.collection('reviews').createIndex({ 'reviewers.userId': 1 });
+};
+
+const ensureEventIndexes = async (db: any) => {
+  await db.collection('events').createIndex({ ts: -1 });
+  await db.collection('events').createIndex({ type: 1, ts: -1 });
+  await db.collection('events').createIndex({ 'actor.userId': 1, ts: -1 });
+  await db.collection('events').createIndex({ 'resource.type': 1, 'resource.id': 1, ts: -1 });
+  await db.collection('events').createIndex({ ts: 1 }, { expireAfterSeconds: 60 * 60 * 24 * 60 });
+};
+
+const ensureUserEventStateIndexes = async (db: any) => {
+  await db.collection('user_event_state').createIndex({ userId: 1 }, { unique: true });
+};
+
+export const emitEvent = async (event: Omit<EventRecord, '_id'>) => {
+  const db = await getDb();
+  await ensureEventIndexes(db);
+  const typePattern = /^[a-z0-9]+\.[a-z0-9]+\.[a-z0-9]+$/;
+  if (!typePattern.test(event.type)) {
+    throw new Error(`Invalid event type "${event.type}". Expected <module>.<entity>.<verb>.`);
+  }
+  const tsValue = event.ts ? new Date(event.ts) : new Date();
+  return await db.collection('events').insertOne({
+    ...event,
+    ts: tsValue
+  });
+};
+
+export const fetchEvents = async ({
+  limit = 200,
+  type,
+  resourceType,
+  resourceId,
+  actorId,
+  since,
+  mentionUserId
+}: {
+  limit?: number;
+  type?: string;
+  resourceType?: string;
+  resourceId?: string;
+  actorId?: string;
+  since?: string;
+  mentionUserId?: string;
+}) => {
+  try {
+    const db = await getDb();
+    await ensureEventIndexes(db);
+    const query: any = {};
+    if (type) query.type = type;
+    if (resourceType) query['resource.type'] = resourceType;
+    if (resourceId) query['resource.id'] = resourceId;
+    if (actorId) query['actor.userId'] = actorId;
+    if (mentionUserId) query['payload.mentionedUserId'] = mentionUserId;
+    if (since) query.ts = { $gt: new Date(since) };
+    return await db.collection('events').find(query).sort({ ts: -1 }).limit(limit).toArray();
+  } catch {
+    return [];
+  }
+};
+
+export const getUserEventState = async (userId: string) => {
+  try {
+    const db = await getDb();
+    await ensureUserEventStateIndexes(db);
+    return await db.collection('user_event_state').findOne({ userId });
+  } catch {
+    return null;
+  }
+};
+
+const makeCommentStateKey = (resourceType: string, resourceId: string) => {
+  return Buffer.from(`${resourceType}::${resourceId}`).toString('base64url');
+};
+
+export const setUserEventState = async (userId: string, lastSeenAt: string) => {
+  const db = await getDb();
+  await ensureUserEventStateIndexes(db);
+  return await db.collection('user_event_state').updateOne(
+    { userId },
+    { $set: { userId, lastSeenAt } },
+    { upsert: true }
+  );
+};
+
+export const getCommentLastSeen = async (userId: string, resourceType: string, resourceId: string) => {
+  try {
+    const state = await getUserEventState(userId);
+    if (!state?.commentLastSeen) return null;
+    const key = makeCommentStateKey(resourceType, resourceId);
+    return state.commentLastSeen[key] || null;
+  } catch {
+    return null;
+  }
+};
+
+export const setCommentLastSeen = async (
+  userId: string,
+  resourceType: string,
+  resourceId: string,
+  lastSeenAt: string
+) => {
+  const db = await getDb();
+  await ensureUserEventStateIndexes(db);
+  const key = makeCommentStateKey(resourceType, resourceId);
+  return await db.collection('user_event_state').updateOne(
+    { userId },
+    { $set: { userId, [`commentLastSeen.${key}`]: lastSeenAt } },
+    { upsert: true }
+  );
+};
+
+export const fetchCommentUnreadCount = async (userId: string, resourceType: string, resourceId: string) => {
+  try {
+    const db = await getDb();
+    await ensureCommentIndexes(db);
+    const lastSeenAt = await getCommentLastSeen(userId, resourceType, resourceId);
+    const query: any = { 'resource.type': resourceType, 'resource.id': resourceId };
+    if (lastSeenAt) query.lastActivityAt = { $gt: lastSeenAt };
+    return await db.collection('comment_threads').countDocuments(query);
+  } catch {
+    return 0;
+  }
+};
+
+export const fetchUnreadEventsCount = async (userId: string) => {
+  try {
+    const db = await getDb();
+    await ensureEventIndexes(db);
+    const state = await getUserEventState(userId);
+    const since = state?.lastSeenAt;
+    const query: any = since ? { ts: { $gt: new Date(since) } } : {};
+    return await db.collection('events').countDocuments(query);
+  } catch {
+    return 0;
+  }
+};
+
+export const fetchCommentThreads = async (resourceType: string, resourceId: string) => {
+  try {
+    const db = await getDb();
+    await ensureCommentIndexes(db);
+    return await db
+      .collection('comment_threads')
+      .find({ 'resource.type': resourceType, 'resource.id': resourceId })
+      .sort({ lastActivityAt: -1 })
+      .toArray();
+  } catch {
+    return [];
+  }
+};
+
+export const createCommentThread = async ({
+  resource,
+  anchor,
+  body,
+  author,
+  mentions = []
+}: {
+  resource: { type: string; id: string; title?: string };
+  anchor?: { kind: string; data: any };
+  body: string;
+  author: { userId: string; displayName: string; email?: string };
+  mentions?: string[];
+}) => {
+  const db = await getDb();
+  await ensureCommentIndexes(db);
+  const now = new Date().toISOString();
+  const thread: Partial<CommentThread> = {
+    resource: { type: resource.type, id: resource.id },
+    anchor,
+    status: 'open',
+    createdBy: author,
+    createdAt: now,
+    lastActivityAt: now,
+    messageCount: 1,
+    participants: [author.userId]
+  };
+  const threadResult = await db.collection('comment_threads').insertOne(thread);
+  const message: Partial<CommentMessage> = {
+    threadId: String(threadResult.insertedId),
+    author,
+    body,
+    createdAt: now,
+    mentions
+  };
+  await db.collection('comment_messages').insertOne(message);
+  return { threadId: String(threadResult.insertedId), thread, message };
+};
+
+export const fetchCommentMessages = async (threadId: string) => {
+  try {
+    const db = await getDb();
+    await ensureCommentIndexes(db);
+    return await db.collection('comment_messages').find({ threadId: String(threadId) }).sort({ createdAt: 1 }).toArray();
+  } catch {
+    return [];
+  }
+};
+
+export const addCommentMessage = async ({
+  threadId,
+  body,
+  author,
+  mentions = []
+}: {
+  threadId: string;
+  body: string;
+  author: { userId: string; displayName: string; email?: string };
+  mentions?: string[];
+}) => {
+  const db = await getDb();
+  await ensureCommentIndexes(db);
+  const now = new Date().toISOString();
+  const message: Partial<CommentMessage> = {
+    threadId: String(threadId),
+    author,
+    body,
+    createdAt: now,
+    mentions
+  };
+  await db.collection('comment_messages').insertOne(message);
+  await db.collection('comment_threads').updateOne(
+    { _id: new ObjectId(threadId) },
+    {
+      $set: { lastActivityAt: now },
+      $inc: { messageCount: 1 },
+      $addToSet: { participants: author.userId }
+    }
+  );
+  return message;
+};
+
+export const updateCommentThreadStatus = async (threadId: string, status: 'open' | 'resolved') => {
+  const db = await getDb();
+  await ensureCommentIndexes(db);
+  return await db.collection('comment_threads').updateOne(
+    { _id: new ObjectId(threadId) },
+    { $set: { status, lastActivityAt: new Date().toISOString() } }
+  );
+};
+
+export const fetchReview = async (resourceType: string, resourceId: string) => {
+  try {
+    const db = await getDb();
+    await ensureReviewIndexes(db);
+    return await db.collection('reviews').findOne({ 'resource.type': resourceType, 'resource.id': resourceId });
+  } catch {
+    return null;
+  }
+};
+
+export const saveReview = async (review: Partial<ReviewRecord>) => {
+  const db = await getDb();
+  await ensureReviewIndexes(db);
+  const now = new Date().toISOString();
+  if (review._id && ObjectId.isValid(review._id as string)) {
+    const { _id, ...data } = review;
+    return await db.collection('reviews').updateOne(
+      { _id: new ObjectId(_id) },
+      { $set: { ...data, updatedAt: now } }
+    );
+  }
+  return await db.collection('reviews').updateOne(
+    { 'resource.type': review.resource?.type, 'resource.id': review.resource?.id },
+    {
+      $set: {
+        resource: review.resource,
+        status: review.status || 'draft',
+        reviewers: review.reviewers || [],
+        updatedAt: now
+      },
+      $setOnInsert: { createdAt: now }
+    },
+    { upsert: true }
+  );
+};
+
 export const fetchApplications = async (bundleId?: string, activeOnly: boolean = false) => {
   try {
     const db = await getDb();
@@ -1012,6 +1303,41 @@ export const searchUsers = async (query: string) => {
       ]
     }).limit(10).project({ password: 0 }).toArray();
   } catch { return []; }
+};
+
+export const resolveMentionUsers = async (tokens: string[]) => {
+  try {
+    const db = await getDb();
+    const uniqueTokens = Array.from(new Set(tokens.map((t) => t.trim()).filter(Boolean)));
+    if (uniqueTokens.length === 0) return [];
+
+    const emailTokens = uniqueTokens.filter((t) => t.includes('@') && t.includes('.'));
+    const nameTokens = uniqueTokens.filter((t) => !t.includes('@'));
+
+    const orClauses: any[] = [];
+    if (emailTokens.length) {
+      orClauses.push(...emailTokens.map((t) => ({ email: { $regex: `^${escapeRegExp(t)}$`, $options: 'i' } })));
+    }
+    if (nameTokens.length) {
+      orClauses.push(...nameTokens.map((t) => ({ name: { $regex: `^${escapeRegExp(t)}$`, $options: 'i' } })));
+      orClauses.push(...nameTokens.map((t) => ({ email: { $regex: `^${escapeRegExp(t)}@`, $options: 'i' } })));
+    }
+    if (!orClauses.length) return [];
+
+    const users = await db.collection('users')
+      .find({ $or: orClauses })
+      .limit(20)
+      .project({ password: 0 })
+      .toArray();
+
+    return users.map((user: any) => ({
+      userId: String(user._id || user.id || ''),
+      displayName: String(user.name || user.displayName || 'Unknown'),
+      email: user.email ? String(user.email) : undefined
+    }));
+  } catch {
+    return [];
+  }
 };
 
 export const fetchWorkItemsBoard = async (filters: any) => {

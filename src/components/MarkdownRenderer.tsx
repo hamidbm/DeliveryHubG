@@ -21,6 +21,45 @@ interface MarkdownRendererProps {
   content: string;
 }
 
+const mentionRegex = /@([a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}|[a-zA-Z0-9._-]+)/g;
+
+const remarkMentions = () => {
+  return (tree: any) => {
+    visit(tree, 'text', (node: any, index: number | null, parent: any) => {
+      if (!parent || typeof node.value !== 'string') return;
+      if (parent.type === 'code' || parent.type === 'inlineCode') return;
+      if (!node.value.includes('@')) return;
+
+      const value = node.value;
+      let match: RegExpExecArray | null;
+      let lastIndex = 0;
+      const children: any[] = [];
+
+      while ((match = mentionRegex.exec(value)) !== null) {
+        const start = match.index;
+        const end = start + match[0].length;
+        if (start > lastIndex) {
+          children.push({ type: 'text', value: value.slice(lastIndex, start) });
+        }
+        children.push({
+          type: 'html',
+          value: `<span class="mention-chip text-blue-700 font-semibold bg-blue-50 px-1.5 py-0.5 rounded-md">@${match[1]}</span>`
+        });
+        lastIndex = end;
+      }
+
+      if (children.length === 0) return;
+      if (lastIndex < value.length) {
+        children.push({ type: 'text', value: value.slice(lastIndex) });
+      }
+
+      if (typeof index === 'number' && parent.children) {
+        parent.children.splice(index, 1, ...children);
+      }
+    });
+  };
+};
+
 /**
  * Removes whitespace-only text nodes inside <colgroup>.
  * Pandoc emits pretty-printed HTML tables which cause
@@ -146,7 +185,7 @@ export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
   return (
     <div className="prose prose-slate dark:prose-invert max-w-none">
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
+        remarkPlugins={[remarkGfm, remarkMentions]}
         rehypePlugins={[
           rehypeRaw,
           rehypeFixColgroupWhitespace,

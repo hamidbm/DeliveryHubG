@@ -7,6 +7,7 @@ import WikiPageDisplay from './WikiPageDisplay';
 import WikiAssetDisplay from './WikiAssetDisplay';
 import WikiAssetMarkdownEditor from './WikiAssetMarkdownEditor';
 import MarkdownRenderer from './MarkdownRenderer';
+import CommentsDrawer from './CommentsDrawer';
 
 interface WikiProps {
   currentUser?: { name: string; role: string; email: string; };
@@ -51,6 +52,9 @@ const Wiki: React.FC<WikiProps> = ({
   const [copyFeedback, setCopyFeedback] = useState(false);
   const [sheetViewMode, setSheetViewMode] = useState<'tiles' | 'table'>('tiles');
   const [showSheetDashboards, setShowSheetDashboards] = useState(false);
+  const [isCommentsOpen, setIsCommentsOpen] = useState(false);
+  const [wasSidebarVisible, setWasSidebarVisible] = useState<boolean | null>(null);
+  const [commentUnreadCount, setCommentUnreadCount] = useState(0);
   
   const [primaryGrouping, setPrimaryGrouping] = useState<'app' | 'type'>('app');
   const [showBundle, setShowBundle] = useState(true);
@@ -714,7 +718,9 @@ const Wiki: React.FC<WikiProps> = ({
         {!isSidebarVisible && <button onClick={() => setIsSidebarVisible(true)} className="absolute left-6 top-6 w-10 h-10 rounded-xl bg-white border border-slate-100 flex items-center justify-center text-slate-400 hover:text-blue-600 shadow-sm z-10 transition-all"><i className="fas fa-bars"></i></button>}
 
         {activeArtifact ? (
-          <div className="p-16 max-w-5xl mx-auto animate-fadeIn">
+          <div
+            className={`p-16 mx-auto animate-fadeIn ${isSidebarVisible ? 'max-w-5xl' : 'max-w-none w-full'}`}
+          >
              <div className="sticky top-0 z-20 bg-white border-b border-slate-100 pt-6 pb-5 mb-8">
                <div className="flex flex-col gap-4">
                  <div className="flex flex-wrap items-center justify-between gap-4">
@@ -837,21 +843,36 @@ const Wiki: React.FC<WikiProps> = ({
                        <i className="fas fa-download"></i> Download
                      </button>
                    )}
-                   {('file' in activeArtifact) && (activeArtifact as WikiAsset).preview?.kind === 'sheet' && (
-                     <button
-                       onClick={() => setShowSheetDashboards((prev) => !prev)}
-                       className={`px-4 py-2 border text-slate-600 text-[9px] font-black uppercase tracking-widest rounded-lg transition-all flex items-center gap-2 ${
-                         showSheetDashboards ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-200 hover:bg-slate-50'
-                       }`}
-                     >
-                       <i className="fas fa-chart-column"></i> Dashboards
-                     </button>
-                   )}
-                   <button
-                     onClick={handleCopyLink}
-                     title="Share"
-                     className="px-4 py-2 bg-white border border-slate-200 text-slate-600 text-[9px] font-black uppercase tracking-widest rounded-lg hover:bg-slate-50 transition-all flex items-center gap-2"
-                   >
+                  {('file' in activeArtifact) && (activeArtifact as WikiAsset).preview?.kind === 'sheet' && (
+                    <button
+                      onClick={() => setShowSheetDashboards((prev) => !prev)}
+                      className={`px-4 py-2 border text-slate-600 text-[9px] font-black uppercase tracking-widest rounded-lg transition-all flex items-center gap-2 ${
+                        showSheetDashboards ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-200 hover:bg-slate-50'
+                      }`}
+                    >
+                      <i className="fas fa-chart-column"></i> Dashboards
+                    </button>
+                  )}
+                  <button
+                    onClick={() => {
+                      setWasSidebarVisible(isSidebarVisible);
+                      if (isSidebarVisible) setIsSidebarVisible(false);
+                      setIsCommentsOpen(true);
+                    }}
+                    className="px-4 py-2 bg-white border border-slate-200 text-slate-600 text-[9px] font-black uppercase tracking-widest rounded-lg hover:bg-slate-50 transition-all flex items-center gap-2 relative"
+                  >
+                    <i className="fas fa-comment-dots"></i> Comments
+                    {commentUnreadCount > 0 && (
+                      <span className="absolute -top-2 -right-2 bg-blue-600 text-white text-[9px] font-black rounded-full px-1.5 py-0.5">
+                        {commentUnreadCount}
+                      </span>
+                    )}
+                  </button>
+                  <button
+                    onClick={handleCopyLink}
+                    title="Share"
+                    className="px-4 py-2 bg-white border border-slate-200 text-slate-600 text-[9px] font-black uppercase tracking-widest rounded-lg hover:bg-slate-50 transition-all flex items-center gap-2"
+                  >
                      <i className={`fas ${copyFeedback ? 'fa-check text-emerald-500' : 'fa-link'}`}></i>
                      {copyFeedback ? 'Link Ready' : 'Share'}
                    </button>
@@ -1025,6 +1046,24 @@ const Wiki: React.FC<WikiProps> = ({
           onCancel={() => setIsCreating(false)}
           bundles={bundles}
           applications={applications}
+        />
+      )}
+
+      {activeArtifact && (
+        <CommentsDrawer
+          isOpen={isCommentsOpen}
+          onClose={() => {
+            setIsCommentsOpen(false);
+            if (wasSidebarVisible) setIsSidebarVisible(true);
+            setWasSidebarVisible(null);
+          }}
+          resource={{
+            type: ('file' in activeArtifact) ? 'wiki.asset' : 'wiki.page',
+            id: String(activeArtifact._id || activeArtifact.id),
+            title: activeArtifact.title
+          }}
+          currentUser={currentUser as any}
+          onUnreadCountChange={setCommentUnreadCount}
         />
       )}
 

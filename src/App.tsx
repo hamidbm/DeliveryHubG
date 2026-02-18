@@ -7,6 +7,7 @@ import Applications from './components/Applications';
 import AIInsights from './components/AIInsights';
 import WorkItems from './components/WorkItems';
 import Wiki from './components/Wiki';
+import Activities from './components/Activities';
 // Fix: Corrected import path for Milestones component as it is located in the components directory
 import Milestones from './components/Milestones';
 import Admin from './components/Admin';
@@ -268,6 +269,8 @@ function HomeContent() {
             onTriggerProcessed={() => setExternalTrigger(null)}
           />
         );
+      case 'activities':
+        return <Activities />;
       case 'ai-insights':
         return <AIInsights applications={applications} bundles={bundles} />;
       case 'admin':
