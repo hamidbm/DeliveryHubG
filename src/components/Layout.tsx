@@ -21,6 +21,8 @@ interface LayoutProps {
   setActiveEpic?: (id: string) => void;
   searchQuery?: string;
   setSearchQuery?: (q: string) => void;
+  includeFeedbackAssets?: boolean;
+  setIncludeFeedbackAssets?: (v: boolean) => void;
   bundles: Bundle[];
   applications: Application[];
   epics?: WorkItem[];
@@ -35,7 +37,7 @@ interface LayoutProps {
 const Layout: React.FC<LayoutProps> = ({ 
   children, activeTab, setActiveTab, selSpaceId = 'all', setSelSpaceId, activeBundle, setActiveBundle, activeApp = 'all', setActiveApp,
   activeVendor = 'all', setActiveVendor, selMilestone = 'all', setSelMilestone, activeEpic = 'all', setActiveEpic, searchQuery = '',
-  setSearchQuery, bundles = [], applications = [], epics = [], onCreateSpace, onCreateWikiArtifact, onCreateWorkItem, userName = 'Alex Architect',
+  setSearchQuery, includeFeedbackAssets = false, setIncludeFeedbackAssets, bundles = [], applications = [], epics = [], onCreateSpace, onCreateWikiArtifact, onCreateWorkItem, userName = 'Alex Architect',
   userRole = 'Enterprise Architect', onLogout
 }) => {
   const router = useRouter();
@@ -219,6 +221,18 @@ const Layout: React.FC<LayoutProps> = ({
                 className="bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-1.5 text-[11px] font-bold focus:border-blue-500 outline-none w-44 transition-all"
               />
             </div>
+            {activeTab === 'wiki' && (
+              <button
+                onClick={() => setIncludeFeedbackAssets?.(!includeFeedbackAssets)}
+                className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest border transition-all ${
+                  includeFeedbackAssets
+                    ? 'bg-slate-900 text-white border-slate-900'
+                    : 'bg-white text-slate-500 border-slate-200'
+                }`}
+              >
+                {includeFeedbackAssets ? 'Include Feedback' : 'Hide Feedback'}
+              </button>
+            )}
             
             {activeTab === 'wiki' ? (
               <>

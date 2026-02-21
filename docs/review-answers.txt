@@ -1,0 +1,12 @@
+in_review step: Keep it in the lifecycle, but do not require a manual “Start review” action. Auto-transition requested → in_review when a reviewer first opens the Review panel OR uploads feedback OR creates a review-linked comment. If status is requested and reviewer uploads/marks feedback sent, backend should auto-set in_review first (same request) and optionally store inReviewAt/inReviewBy.
+Add review comment: Clicking it should open the Comments drawer filtered to Review Feedback (current cycle) and focus the composer. Do not create an empty thread upfront; create the thread only when the user submits the first message, with reviewId + reviewCycleId.
+Vendor actions gating: Yes, enforce strictly in UI + API. Allow:
+Resubmit if status ∈ { feedback_sent, vendor_addressing }
+Close if status ∈ { feedback_sent, vendor_addressing }
+Feedback documents metadata: Implement now. Feedback uploads must set:
+artifactKind="feedback"
+documentType="Feedback Document"
+reviewContext { reviewId, cycleId, reviewedResourceType, reviewedResourceId, reviewedDocumentType? }
+Also hide feedback assets from tree by default and add a filter toggle “Include feedback”.
+Comments drawer segmentation: Use top tabs/segmented control: All / Discussion / Review Feedback (current cycle) / Past Reviews. “Past Reviews” = threads with reviewCycleId != currentCycleId and not null.
+Reviews dashboard: Defer until after Review panel + Comments integration + feedback metadata are complete.

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import MarkdownRenderer from './MarkdownRenderer';
 import { CommentThread, CommentMessage } from '../types';
 
@@ -8,6 +8,11 @@ interface CommentsDrawerProps {
   resource: { type: string; id: string; title?: string } | null;
   currentUser?: { id?: string; userId?: string; name?: string; email?: string } | null;
   onUnreadCountChange?: (count: number) => void;
+  initialFilter?: 'all' | 'discussion' | 'current' | 'past';
+  initialCycleId?: string | null;
+  currentReviewCycleId?: string | null;
+  reviewId?: string | null;
+  suppressNewThread?: boolean;
 }
 
 const CommentsDrawer: React.FC<CommentsDrawerProps> = ({
@@ -15,7 +20,12 @@ const CommentsDrawer: React.FC<CommentsDrawerProps> = ({
   onClose,
   resource,
   currentUser,
-  onUnreadCountChange
+  onUnreadCountChange,
+  initialFilter = 'all',
+  initialCycleId = null,
+  currentReviewCycleId = null,
+  reviewId = null,
+  suppressNewThread = false
 }) => {
   const [threads, setThreads] = useState<CommentThread[]>([]);
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
@@ -27,6 +37,9 @@ const CommentsDrawer: React.FC<CommentsDrawerProps> = ({
   const [filterStatus, setFilterStatus] = useState<'all' | 'open' | 'resolved'>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [lastSeenAt, setLastSeenAt] = useState<string | null>(null);
+  const [reviewCycleMap, setReviewCycleMap] = useState<Record<string, number>>({});
+  const newThreadRef = useRef<HTMLTextAreaElement | null>(null);
+  const [reviewFilter, setReviewFilter] = useState<'all' | 'discussion' | 'current' | 'past'>('all');
 
   const userId = String(currentUser?.id || currentUser?.userId || '');
 
@@ -56,6 +69,25 @@ const CommentsDrawer: React.FC<CommentsDrawerProps> = ({
     } catch {}
   };
 
+  const loadReviewCycles = async () => {
+    if (!resource?.type || !resource?.id) return;
+    try {
+      const res = await fetch(`/api/reviews/by-resource?resourceType=${encodeURIComponent(resource.type)}&resourceId=${encodeURIComponent(resource.id)}`);
+      const data = await res.json();
+      if (data?.cycles) {
+        const map: Record<string, number> = {};
+        data.cycles.forEach((cycle: any) => {
+          if (cycle?.cycleId) map[cycle.cycleId] = cycle.number;
+        });
+        setReviewCycleMap(map);
+      } else {
+        setReviewCycleMap({});
+      }
+    } catch {
+      setReviewCycleMap({});
+    }
+  };
+
   useEffect(() => {
     if (resource?.id) {
       loadThreads();
@@ -63,8 +95,33 @@ const CommentsDrawer: React.FC<CommentsDrawerProps> = ({
   }, [resource?.id, resource?.type, isOpen]);
 
   useEffect(() => {
+    if (isOpen) {
+      setReviewFilter(initialFilter);
+      if (initialFilter !== 'all') {
+        setSelectedThreadId(null);
+      }
+      setTimeout(() => {
+        newThreadRef.current?.focus();
+      }, 50);
+    }
+  }, [isOpen, initialFilter]);
+
+  useEffect(() => {
+    if (isOpen && initialCycleId && reviewFilter === 'current') {
+      setSelectedThreadId(null);
+      setMessages([]);
+    }
+  }, [isOpen, initialCycleId, reviewFilter]);
+
+  useEffect(() => {
+    setSelectedThreadId(null);
+    setMessages([]);
+  }, [reviewFilter]);
+
+  useEffect(() => {
     if (resource?.id) {
       loadCommentState();
+      loadReviewCycles();
     }
   }, [resource?.id, resource?.type, userId]);
 
@@ -114,6 +171,12 @@ const CommentsDrawer: React.FC<CommentsDrawerProps> = ({
 
   const filteredThreads = threads.filter((t) => {
     if (filterStatus !== 'all' && t.status !== filterStatus) return false;
+    if (reviewFilter === 'discussion' && t.reviewCycleId) return false;
+    if (reviewFilter === 'current') {
+      const targetCycle = initialCycleId || currentReviewCycleId;
+      if (!t.reviewCycleId || t.reviewCycleId !== targetCycle) return false;
+    }
+    if (reviewFilter === 'past' && (!t.reviewCycleId || t.reviewCycleId === currentReviewCycleId)) return false;
     if (searchTerm.trim()) {
       const name = t.createdBy?.displayName || '';
       return name.toLowerCase().includes(searchTerm.toLowerCase());
@@ -129,7 +192,12 @@ const CommentsDrawer: React.FC<CommentsDrawerProps> = ({
       const res = await fetch(`/api/resources/${encodeURIComponent(resource.type)}/${encodeURIComponent(resource.id)}/comment-threads`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: newThreadText.trim(), resourceTitle: resource.title })
+        body: JSON.stringify({
+          message: newThreadText.trim(),
+          resourceTitle: resource.title,
+          reviewId: reviewFilter === 'current' ? reviewId : undefined,
+          reviewCycleId: reviewFilter === 'current' ? currentReviewCycleId : undefined
+        })
       });
       if (!res.ok) return;
       const data = await res.json();
@@ -185,12 +253,15 @@ const CommentsDrawer: React.FC<CommentsDrawerProps> = ({
           <div className="flex items-center gap-2">
             <button
               onClick={() => {
+                if (suppressNewThread) {
+                  setReviewFilter('current');
+                }
                 setSelectedThreadId(null);
                 setComposerText('');
               }}
               className="px-3 py-2 text-[10px] font-black uppercase tracking-widest rounded-xl border border-slate-200 text-slate-500 hover:text-blue-600 hover:border-blue-200 transition-all"
             >
-              New Thread
+              {suppressNewThread ? 'New Review Thread' : 'New Thread'}
             </button>
             <button onClick={onClose} className="w-9 h-9 rounded-xl bg-slate-50 border border-slate-100 text-slate-500 hover:text-slate-700">
               <i className="fas fa-times"></i>
@@ -198,7 +269,30 @@ const CommentsDrawer: React.FC<CommentsDrawerProps> = ({
           </div>
         </header>
 
-        <div className="p-4 border-b border-slate-100 bg-slate-50 flex items-center gap-3">
+        <div className="px-4 pt-4 pb-3 border-b border-slate-100 bg-slate-50">
+          <div className="flex flex-wrap gap-2">
+            {[
+              { key: 'all', label: 'All' },
+              { key: 'discussion', label: 'Discussion' },
+              { key: 'current', label: `Review Feedback${
+                (initialCycleId || currentReviewCycleId)
+                  ? ` (Cycle #${reviewCycleMap[initialCycleId || currentReviewCycleId] || '?'})`
+                  : ''
+              }` },
+              { key: 'past', label: 'Past Reviews' }
+            ].map((tab) => (
+              <button
+                key={tab.key}
+                onClick={() => setReviewFilter(tab.key as any)}
+                className={`px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest border ${
+                  reviewFilter === tab.key ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-500 border-slate-200'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+          <div className="mt-3 flex items-center gap-3">
           <input
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
@@ -214,6 +308,7 @@ const CommentsDrawer: React.FC<CommentsDrawerProps> = ({
             <option value="open">Open</option>
             <option value="resolved">Resolved</option>
           </select>
+          </div>
         </div>
 
         <div className="flex flex-1 overflow-hidden">
@@ -223,29 +318,82 @@ const CommentsDrawer: React.FC<CommentsDrawerProps> = ({
             ) : filteredThreads.length === 0 ? (
               <div className="p-4 text-xs text-slate-400">No threads yet.</div>
             ) : (
-              filteredThreads.map((thread) => (
-                <button
-                  key={String(thread._id)}
-                  onClick={() => setSelectedThreadId(String(thread._id))}
-                  className={`w-full text-left px-4 py-3 border-b border-slate-50 transition ${
-                    String(thread._id) === String(selectedThreadId) ? 'bg-slate-100' : 'hover:bg-slate-50'
-                  }`}
-                >
-                  <div className="text-xs font-bold text-slate-700">{thread.createdBy?.displayName || 'User'}</div>
-                  <div className="text-[10px] text-slate-400">{thread.messageCount} messages</div>
-                  <div className={`text-[9px] font-black uppercase tracking-widest ${thread.status === 'resolved' ? 'text-emerald-500' : 'text-amber-500'}`}>
-                    {thread.status}
-                  </div>
-                </button>
-              ))
+              (reviewFilter === 'past'
+                ? Object.entries(
+                    filteredThreads.reduce<Record<string, CommentThread[]>>((acc, thread) => {
+                      const key = thread.reviewCycleId || 'unknown';
+                      acc[key] = acc[key] || [];
+                      acc[key].push(thread);
+                      return acc;
+                    }, {})
+                  ).map(([cycleId, items]) => {
+                    const cycleNumber = reviewCycleMap[cycleId] || '?';
+                    return (
+                      <div key={cycleId} className="border-b border-slate-100">
+                        <div className="px-4 py-2 text-[9px] font-black uppercase tracking-widest text-slate-400 bg-slate-50">
+                          Cycle #{cycleNumber} (Closed)
+                        </div>
+                        {items.map((thread) => (
+                          <button
+                            key={String(thread._id)}
+                            onClick={() => setSelectedThreadId(String(thread._id))}
+                            className={`w-full text-left px-4 py-3 border-b border-slate-50 transition ${
+                              String(thread._id) === String(selectedThreadId) ? 'bg-slate-100' : 'hover:bg-slate-50'
+                            }`}
+                          >
+                            <div className="text-xs font-bold text-slate-700">{thread.createdBy?.displayName || 'User'}</div>
+                            <div className="text-[10px] text-slate-400">{thread.messageCount} messages</div>
+                            <div className="mt-1">
+                              <span className="text-[9px] font-black uppercase tracking-widest bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">
+                                Review Cycle #{cycleNumber}
+                              </span>
+                            </div>
+                            <div className={`text-[9px] font-black uppercase tracking-widest ${thread.status === 'resolved' ? 'text-emerald-500' : 'text-amber-500'}`}>
+                              {thread.status}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    );
+                  })
+                : filteredThreads.map((thread) => (
+                    <button
+                      key={String(thread._id)}
+                      onClick={() => setSelectedThreadId(String(thread._id))}
+                      className={`w-full text-left px-4 py-3 border-b border-slate-50 transition ${
+                        String(thread._id) === String(selectedThreadId) ? 'bg-slate-100' : 'hover:bg-slate-50'
+                      }`}
+                    >
+                      <div className="text-xs font-bold text-slate-700">{thread.createdBy?.displayName || 'User'}</div>
+                      <div className="text-[10px] text-slate-400">{thread.messageCount} messages</div>
+                      {thread.reviewCycleId && (
+                        <div className="mt-1">
+                          <span className="text-[9px] font-black uppercase tracking-widest bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">
+                            Review Cycle #{reviewCycleMap[thread.reviewCycleId] || '?'}
+                          </span>
+                        </div>
+                      )}
+                      {!thread.reviewCycleId && (
+                        <div className="mt-1">
+                          <span className="text-[9px] font-black uppercase tracking-widest bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">
+                            Discussion
+                          </span>
+                        </div>
+                      )}
+                      <div className={`text-[9px] font-black uppercase tracking-widest ${thread.status === 'resolved' ? 'text-emerald-500' : 'text-amber-500'}`}>
+                        {thread.status}
+                      </div>
+                    </button>
+                  )))
             )}
           </div>
 
           <div className="flex-1 flex flex-col">
-            {!selectedThread && (
+            {!selectedThread && !suppressNewThread && (
               <div className="p-6">
                 <div className="text-sm font-semibold text-slate-700 mb-3">Start a new thread</div>
                 <textarea
+                  ref={newThreadRef}
                   value={newThreadText}
                   onChange={(e) => setNewThreadText(e.target.value)}
                   className="w-full min-h-[120px] border border-slate-200 rounded-xl p-3 text-sm"
@@ -260,6 +408,25 @@ const CommentsDrawer: React.FC<CommentsDrawerProps> = ({
                 </button>
               </div>
             )}
+            {!selectedThread && suppressNewThread && (
+              <div className="p-6">
+                <div className="text-sm font-semibold text-slate-700 mb-3">Start a review thread</div>
+                <textarea
+                  ref={newThreadRef}
+                  value={newThreadText}
+                  onChange={(e) => setNewThreadText(e.target.value)}
+                  className="w-full min-h-[120px] border border-slate-200 rounded-xl p-3 text-sm"
+                  placeholder="Write your review comment..."
+                />
+                <button
+                  onClick={handleCreateThread}
+                  disabled={!newThreadText.trim()}
+                  className="mt-3 px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-xl bg-slate-900 text-white disabled:opacity-50"
+                >
+                  Create Review Thread
+                </button>
+              </div>
+            )}
 
             {selectedThread && (
               <>
@@ -267,6 +434,16 @@ const CommentsDrawer: React.FC<CommentsDrawerProps> = ({
                   <div className="text-xs font-bold text-slate-600">
                     {selectedThread.messageCount} messages
                   </div>
+                  {selectedThread.reviewCycleId && (
+                    <span className="text-[9px] font-black uppercase tracking-widest bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">
+                      Review Cycle #{reviewCycleMap[selectedThread.reviewCycleId] || '?'}
+                    </span>
+                  )}
+                  {!selectedThread.reviewCycleId && (
+                    <span className="text-[9px] font-black uppercase tracking-widest bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">
+                      Discussion
+                    </span>
+                  )}
                   <button
                     onClick={handleToggleResolve}
                     className={`px-3 py-2 text-[10px] font-black uppercase tracking-widest rounded-xl border ${

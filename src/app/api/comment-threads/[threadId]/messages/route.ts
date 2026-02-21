@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { jwtVerify } from 'jose';
-import { addCommentMessage, fetchCommentMessages, emitEvent, resolveMentionUsers } from '../../../../../services/db';
+import { addCommentMessage, fetchCommentMessages, emitEvent, fetchCommentThreadById, resolveMentionUsers } from '../../../../../services/db';
 import { extractMentionTokens } from '../../../../../lib/mentions';
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
@@ -51,12 +51,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ thr
       mentions: mentionUserIds
     });
 
+    const thread = await fetchCommentThreadById(threadId);
+    const reviewId = thread?.reviewId;
+    const reviewCycleId = thread?.reviewCycleId;
+
     await emitEvent({
       ts: new Date().toISOString(),
       type: 'comments.message.created',
       actor: user,
       resource: { type: body.resourceType || 'wiki.unknown', id: body.resourceId || '' },
-      payload: { threadId },
+      payload: { threadId, reviewId, reviewCycleId },
       correlationId: threadId
     });
 
@@ -66,7 +70,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ thr
         type: 'comments.message.mentioned',
         actor: user,
         resource: { type: body.resourceType || 'wiki.unknown', id: body.resourceId || '' },
-        payload: { threadId, mentionedUserId },
+        payload: { threadId, mentionedUserId, reviewId, reviewCycleId },
         correlationId: threadId
       });
     }

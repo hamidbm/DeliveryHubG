@@ -1,6 +1,6 @@
 import clientPromise from '../lib/mongodb';
 import { ObjectId } from 'mongodb';
-import { WikiPage, WikiSpace, WikiTheme, WikiTemplate, CommentThread, CommentMessage, EventRecord, ReviewRecord, ReviewCycle, ReviewReviewer, UserEventState, Bundle, Application, TaxonomyCategory, TaxonomyDocumentType, WorkItem, WorkItemType, WorkItemStatus, WorkItemActivity, Sprint, Milestone, Notification, ArchitectureDiagram, BusinessCapability, AppInterface, WikiAsset, BundleAssignment, AssignmentType } from '../types';
+import { WikiPage, WikiSpace, WikiTheme, WikiTemplate, CommentThread, CommentMessage, EventRecord, ReviewRecord, ReviewCycle, ReviewReviewer, FeedbackPackage, UserEventState, Bundle, Application, TaxonomyCategory, TaxonomyDocumentType, WorkItem, WorkItemType, WorkItemStatus, WorkItemActivity, Sprint, Milestone, Notification, ArchitectureDiagram, BusinessCapability, AppInterface, WikiAsset, BundleAssignment, AssignmentType } from '../types';
 
 export const getDb = async () => {
   try {
@@ -333,7 +333,11 @@ export const fetchAssignedCmoReviewers = async (bundleId: string): Promise<Revie
     return userIds
       .map((id) => userMap.get(id))
       .filter(Boolean)
-      .map((user: any) => ({ userId: String(user._id || user.id), role: user.role }));
+      .map((user: any) => ({
+        userId: String(user._id || user.id),
+        displayName: user.name || user.email || 'Reviewer',
+        email: user.email
+      }));
   } catch {
     return [];
   }
@@ -356,9 +360,12 @@ export const buildReviewCycle = async ({
   notes?: string;
   dueAt?: string;
 }): Promise<ReviewCycle> => {
-  const autoReviewers = reviewers && reviewers.length ? reviewers : await fetchAssignedCmoReviewers(bundleId);
+  const autoReviewers = reviewers && reviewers.length
+    ? reviewers
+    : (bundleId ? await fetchAssignedCmoReviewers(bundleId) : []);
   const cycleId = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : new ObjectId().toHexString();
   const now = new Date().toISOString();
+  const defaultDueAt = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString();
   return {
     cycleId,
     number: cycleNumber,
@@ -366,10 +373,37 @@ export const buildReviewCycle = async ({
     requestedBy,
     requestedAt: now,
     reviewers: autoReviewers,
-    dueAt,
+    reviewerUserIds: autoReviewers.map((r) => r.userId),
+    dueAt: dueAt || defaultDueAt,
     notes,
     correlationId: cycleId
   };
+};
+
+export const addReviewCycleAttachments = async ({
+  review,
+  cycleId,
+  attachments
+}: {
+  review: ReviewRecord;
+  cycleId: string;
+  attachments: AttachmentRef[];
+}) => {
+  const cycles = (review.cycles || []).map((cycle) => {
+    if (cycle.cycleId !== cycleId) return cycle;
+    const existing = cycle.feedbackAttachments || [];
+    return {
+      ...cycle,
+      feedbackAttachments: [...existing, ...attachments]
+    };
+  });
+  const updated: ReviewRecord = {
+    ...review,
+    cycles,
+    updatedAt: new Date().toISOString()
+  };
+  await saveReview(updated);
+  return updated;
 };
 
 export const appendReviewCycle = async ({
@@ -377,13 +411,15 @@ export const appendReviewCycle = async ({
   bundleId,
   requestedBy,
   notes,
-  dueAt
+  dueAt,
+  reviewers
 }: {
   review: ReviewRecord;
   bundleId: string;
   requestedBy: { userId: string; displayName: string; email?: string };
   notes?: string;
   dueAt?: string;
+  reviewers?: ReviewReviewer[];
 }) => {
   const nextNumber = (review.cycles?.length || 0) + 1;
   const cycle = await buildReviewCycle({
@@ -391,17 +427,133 @@ export const appendReviewCycle = async ({
     cycleNumber: nextNumber,
     requestedBy,
     notes,
-    dueAt
+    dueAt,
+    reviewers
   });
   const updated: ReviewRecord = {
     ...review,
-    status: review.status || 'active',
+    status: 'active',
     currentCycleId: cycle.cycleId,
+    currentCycleStatus: cycle.status,
+    currentDueAt: cycle.dueAt,
+    currentReviewerUserIds: cycle.reviewerUserIds,
+    currentRequestedAt: cycle.requestedAt,
+    currentRequestedByUserId: cycle.requestedBy?.userId,
     cycles: [...(review.cycles || []), cycle],
     updatedAt: new Date().toISOString()
   };
   await saveReview(updated);
   return { review: updated, cycle };
+};
+
+export const updateReviewCycleStatus = async ({
+  review,
+  cycleId,
+  status,
+  notes,
+  dueAt,
+  actor
+}: {
+  review: ReviewRecord;
+  cycleId: string;
+  status: ReviewCycle['status'];
+  notes?: string;
+  dueAt?: string;
+  actor?: { userId: string; displayName: string; email?: string };
+}) => {
+  const now = new Date().toISOString();
+  const cycles = (review.cycles || []).map((cycle) => {
+    if (cycle.cycleId !== cycleId) return cycle;
+    const updated: ReviewCycle = {
+      ...cycle,
+      status,
+      notes: notes ?? cycle.notes,
+      dueAt: dueAt ?? cycle.dueAt,
+      completedAt: status === 'feedback_sent' ? now : cycle.completedAt,
+      inReviewAt: status === 'in_review' ? cycle.inReviewAt || now : cycle.inReviewAt,
+      inReviewBy: status === 'in_review' ? cycle.inReviewBy || actor : cycle.inReviewBy,
+      feedbackSentAt: status === 'feedback_sent' ? now : cycle.feedbackSentAt,
+      feedbackSentBy: status === 'feedback_sent' ? actor : cycle.feedbackSentBy,
+      closedAt: status === 'closed' ? now : cycle.closedAt,
+      closedBy: status === 'closed' ? actor : cycle.closedBy
+    };
+    return updated;
+  });
+  const currentCycle = cycles.find((cycle) => cycle.cycleId === review.currentCycleId);
+  const hasOpenCycle = cycles.some((cycle) => cycle.status !== 'closed');
+  const updated: ReviewRecord = {
+    ...review,
+    status: status === 'closed' ? (hasOpenCycle ? 'active' : 'closed') : review.status,
+    currentCycleStatus: currentCycle?.status || review.currentCycleStatus,
+    currentDueAt: currentCycle?.dueAt || review.currentDueAt,
+    currentReviewerUserIds: currentCycle?.reviewerUserIds || review.currentReviewerUserIds,
+    currentRequestedAt: currentCycle?.requestedAt || review.currentRequestedAt,
+    currentRequestedByUserId: currentCycle?.requestedBy?.userId || review.currentRequestedByUserId,
+    cycles,
+    updatedAt: now
+  };
+  await saveReview(updated);
+  return updated;
+};
+
+export const updateReviewCycleNote = async ({
+  review,
+  cycleId,
+  reviewerNote,
+  vendorResponse
+}: {
+  review: ReviewRecord;
+  cycleId: string;
+  reviewerNote?: { body: string; createdAt: string; createdBy: CommentAuthor };
+  vendorResponse?: { body: string; submittedAt: string; submittedBy: CommentAuthor };
+}) => {
+  const now = new Date().toISOString();
+  const cycles = (review.cycles || []).map((cycle) => {
+    if (cycle.cycleId !== cycleId) return cycle;
+    return {
+      ...cycle,
+      reviewerNote: reviewerNote ?? cycle.reviewerNote,
+      vendorResponse: vendorResponse ?? cycle.vendorResponse
+    };
+  });
+  const currentCycle = cycles.find((cycle) => cycle.cycleId === review.currentCycleId);
+  const updated: ReviewRecord = {
+    ...review,
+    currentCycleStatus: currentCycle?.status || review.currentCycleStatus,
+    currentDueAt: currentCycle?.dueAt || review.currentDueAt,
+    currentReviewerUserIds: currentCycle?.reviewerUserIds || review.currentReviewerUserIds,
+    currentRequestedAt: currentCycle?.requestedAt || review.currentRequestedAt,
+    currentRequestedByUserId: currentCycle?.requestedBy?.userId || review.currentRequestedByUserId,
+    cycles,
+    updatedAt: now
+  };
+  await saveReview(updated);
+  return updated;
+};
+
+export const fetchFeedbackPackages = async (resourceType: string, resourceId: string) => {
+  try {
+    const db = await getDb();
+    await ensureFeedbackPackageIndexes(db);
+    return await db.collection('feedback_packages').find({ 'resource.type': resourceType, 'resource.id': resourceId }).sort({ createdAt: -1 }).toArray();
+  } catch {
+    return [];
+  }
+};
+
+export const createFeedbackPackage = async (pkg: Omit<FeedbackPackage, '_id'>) => {
+  const db = await getDb();
+  await ensureFeedbackPackageIndexes(db);
+  return await db.collection('feedback_packages').insertOne(pkg);
+};
+
+export const closeFeedbackPackage = async (id: string, userId: string) => {
+  const db = await getDb();
+  await ensureFeedbackPackageIndexes(db);
+  return await db.collection('feedback_packages').updateOne(
+    { _id: new ObjectId(id) },
+    { $set: { status: 'closed', updatedAt: new Date().toISOString(), updatedBy: userId } }
+  );
 };
 
 export const fetchNotifications = async (userEmail: string) => {
@@ -445,11 +597,33 @@ export const fetchWikiPages = async () => {
   } catch { return []; }
 };
 
+export const fetchWikiPageById = async (id: string) => {
+  try {
+    const db = await getDb();
+    if (!ObjectId.isValid(id)) return await db.collection('wiki_pages').findOne({ id });
+    return await db.collection('wiki_pages').findOne({ _id: new ObjectId(id) });
+  } catch {
+    return null;
+  }
+};
+
 export const fetchWikiAssets = async () => {
   try {
     const db = await getDb();
+    await ensureWikiAssetIndexes(db);
     return await db.collection('wiki_assets').find({}).toArray();
   } catch { return []; }
+};
+
+export const fetchWikiAssetById = async (id: string) => {
+  try {
+    const db = await getDb();
+    await ensureWikiAssetIndexes(db);
+    if (!ObjectId.isValid(id)) return await db.collection('wiki_assets').findOne({ id });
+    return await db.collection('wiki_assets').findOne({ _id: new ObjectId(id) });
+  } catch {
+    return null;
+  }
 };
 
 const ensureWikiAiInsightIndexes = async (db: any) => {
@@ -506,8 +680,13 @@ export const clearWikiAiInsights = async (targetId: string, targetType: 'page' |
   return await db.collection('wiki_ai_insights').deleteMany({ targetId: String(targetId), targetType });
 };
 
+const ensureWikiAssetIndexes = async (db: any) => {
+  await db.collection('wiki_assets').createIndex({ artifactKind: 1, bundleId: 1, applicationId: 1, documentTypeId: 1 });
+};
+
 export const saveWikiAsset = async (asset: Partial<WikiAsset>) => {
   const db = await getDb();
+  await ensureWikiAssetIndexes(db);
   const { _id, ...data } = asset;
   const now = new Date().toISOString();
   if (_id && ObjectId.isValid(_id as string)) {
@@ -518,6 +697,7 @@ export const saveWikiAsset = async (asset: Partial<WikiAsset>) => {
   } else {
     return await db.collection('wiki_assets').insertOne({
       ...data,
+      artifactKind: data.artifactKind || 'primary',
       createdAt: now,
       updatedAt: now,
       version: 1
@@ -918,6 +1098,7 @@ const ensureCommentIndexes = async (db: any) => {
   await db.collection('comment_threads').createIndex({ 'resource.type': 1, 'resource.id': 1, lastActivityAt: -1 });
   await db.collection('comment_threads').createIndex({ reviewId: 1, status: 1 });
   await db.collection('comment_threads').createIndex({ reviewId: 1, reviewCycleId: 1, lastActivityAt: -1 });
+  await db.collection('comment_threads').createIndex({ 'resource.type': 1, 'resource.id': 1, reviewCycleId: 1, createdAt: -1 });
   await db.collection('comment_messages').createIndex({ threadId: 1, createdAt: 1 });
   await db.collection('comment_messages').createIndex({ body: 'text' });
 };
@@ -925,7 +1106,12 @@ const ensureCommentIndexes = async (db: any) => {
 const ensureReviewIndexes = async (db: any) => {
   await db.collection('reviews').createIndex({ 'resource.type': 1, 'resource.id': 1 }, { unique: true });
   await db.collection('reviews').createIndex({ status: 1, createdAt: -1 });
-  await db.collection('reviews').createIndex({ 'reviewers.userId': 1 });
+  await db.collection('reviews').createIndex({ currentReviewerUserIds: 1, currentCycleStatus: 1, currentDueAt: 1 });
+};
+
+const ensureFeedbackPackageIndexes = async (db: any) => {
+  await db.collection('feedback_packages').createIndex({ 'resource.type': 1, 'resource.id': 1, createdAt: -1 });
+  await db.collection('feedback_packages').createIndex({ status: 1, createdAt: -1 });
 };
 
 const ensureEventIndexes = async (db: any) => {
@@ -1132,6 +1318,16 @@ export const fetchCommentMessages = async (threadId: string) => {
   }
 };
 
+export const fetchCommentThreadById = async (threadId: string) => {
+  try {
+    const db = await getDb();
+    await ensureCommentIndexes(db);
+    return await db.collection('comment_threads').findOne({ _id: new ObjectId(threadId) });
+  } catch {
+    return null;
+  }
+};
+
 export const addCommentMessage = async ({
   threadId,
   body,
@@ -1184,6 +1380,17 @@ export const fetchReview = async (resourceType: string, resourceId: string) => {
   }
 };
 
+export const fetchReviewById = async (reviewId: string) => {
+  try {
+    const db = await getDb();
+    await ensureReviewIndexes(db);
+    if (!ObjectId.isValid(reviewId)) return null;
+    return await db.collection('reviews').findOne({ _id: new ObjectId(reviewId) });
+  } catch {
+    return null;
+  }
+};
+
 export const saveReview = async (review: Partial<ReviewRecord>) => {
   const db = await getDb();
   await ensureReviewIndexes(db);
@@ -1203,6 +1410,11 @@ export const saveReview = async (review: Partial<ReviewRecord>) => {
         status: review.status || 'active',
         createdBy: review.createdBy,
         currentCycleId: review.currentCycleId,
+        currentCycleStatus: review.currentCycleStatus,
+        currentDueAt: review.currentDueAt,
+        currentReviewerUserIds: review.currentReviewerUserIds,
+        currentRequestedAt: review.currentRequestedAt,
+        currentRequestedByUserId: review.currentRequestedByUserId,
         cycles: review.cycles || [],
         resourceVersion: review.resourceVersion,
         updatedAt: now
@@ -1221,8 +1433,10 @@ export const emitReviewCycleEvent = async ({
 }: {
   type:
     | 'review.cycle.requested'
-    | 'review.cycle.feedback_sent'
+    | 'review.cycle.inreview'
+    | 'review.cycle.feedbacksent'
     | 'review.cycle.resubmitted'
+    | 'review.cycle.vendoraddressing'
     | 'review.cycle.closed';
   actor: { userId: string; displayName: string; email?: string };
   resource: { type: string; id: string; title?: string };
@@ -1240,6 +1454,34 @@ export const emitReviewCycleEvent = async ({
     },
     correlationId: cycle.cycleId
   });
+};
+
+export const ensureInReview = async ({
+  reviewId,
+  cycleId,
+  actor
+}: {
+  reviewId: string;
+  cycleId: string;
+  actor: { userId: string; displayName: string; email?: string };
+}) => {
+  const review = await fetchReviewById(reviewId);
+  if (!review) return null;
+  const cycle = (review.cycles || []).find((c) => c.cycleId === cycleId);
+  if (!cycle || cycle.status !== 'requested') return review;
+  const updated = await updateReviewCycleStatus({
+    review,
+    cycleId,
+    status: 'in_review',
+    actor
+  });
+  await emitReviewCycleEvent({
+    type: 'review.cycle.inreview',
+    actor,
+    resource: { type: review.resource.type, id: review.resource.id, title: review.resource.title },
+    cycle: { cycleId: cycle.cycleId, number: cycle.number, status: 'in_review' }
+  });
+  return updated;
 };
 
 export const fetchApplications = async (bundleId?: string, activeOnly: boolean = false) => {

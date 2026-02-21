@@ -183,6 +183,7 @@ function HomeContent() {
   const [selMilestone, setSelMilestone] = useState('all');
   const [activeEpic, setActiveEpic] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [includeFeedbackAssets, setIncludeFeedbackAssets] = useState(false);
   const [selSpaceId, setSelSpaceId] = useState('all');
   const [user, setUser] = useState<any>(null);
   const [externalTrigger, setExternalTrigger] = useState<string | null>(null);
@@ -263,6 +264,8 @@ function HomeContent() {
             selAppId={activeApp}
             selMilestone={selMilestone}
             searchQuery={searchQuery}
+            includeFeedbackAssets={includeFeedbackAssets}
+            onIncludeFeedbackAssetsChange={setIncludeFeedbackAssets}
             bundles={bundles}
             applications={applications}
             externalTrigger={externalTrigger}
@@ -306,6 +309,8 @@ function HomeContent() {
       setActiveEpic={setActiveEpic}
       searchQuery={searchQuery}
       setSearchQuery={setSearchQuery}
+      includeFeedbackAssets={includeFeedbackAssets}
+      setIncludeFeedbackAssets={setIncludeFeedbackAssets}
       bundles={bundles}
       applications={applications}
       epics={epics}

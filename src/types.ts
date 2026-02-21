@@ -109,6 +109,13 @@ export interface User {
   updatedAt?: string;
 }
 
+export interface AttachmentRef {
+  assetId: string;
+  filename: string;
+  mimeType: string;
+  sizeBytes: number;
+}
+
 export type AssignmentType =
   | 'cmo_reviewer'
   | 'assigned_cmo'
@@ -323,6 +330,15 @@ export interface WikiAsset {
   bundleId?: string;
   milestoneId?: string;
   documentTypeId?: string;
+  documentType?: string;
+  artifactKind?: 'primary' | 'feedback';
+  reviewContext?: {
+    reviewId: string;
+    cycleId: string;
+    reviewedResourceType: string;
+    reviewedResourceId: string;
+    reviewedDocumentType?: string;
+  };
   file: {
     originalName: string;
     ext: string;
@@ -393,7 +409,8 @@ export interface EventRecord {
 }
 export interface ReviewReviewer {
   userId: string;
-  role?: string;
+  displayName: string;
+  email?: string;
 }
 export interface ReviewCycleDecision {
   outcome: 'acknowledged' | 'partially_accepted' | 'declined';
@@ -404,29 +421,64 @@ export interface ReviewCycleDecision {
 export interface ReviewCycle {
   cycleId: string;
   number: number;
-  status: 'requested' | 'in_review' | 'feedback_sent' | 'vendor_addressing' | 'resubmitted' | 'closed';
+  status: 'requested' | 'in_review' | 'feedback_sent' | 'vendor_addressing' | 'closed';
   requestedBy: CommentAuthor;
   requestedAt: string;
   reviewers: ReviewReviewer[];
+  reviewerUserIds?: string[];
   dueAt?: string;
+  inReviewAt?: string;
+  inReviewBy?: CommentAuthor;
+  feedbackSentAt?: string;
+  feedbackSentBy?: CommentAuthor;
+  closedAt?: string;
+  closedBy?: CommentAuthor;
+  reviewerNote?: {
+    body: string;
+    createdAt: string;
+    createdBy: CommentAuthor;
+  };
+  vendorResponse?: {
+    body: string;
+    submittedAt: string;
+    submittedBy: CommentAuthor;
+  };
   completedAt?: string;
   notes?: string;
   evidence?: {
-    attachments?: any[];
+    attachments?: AttachmentRef[];
   };
+  feedbackAttachments?: AttachmentRef[];
   decision?: ReviewCycleDecision;
   correlationId: string;
 }
 export interface ReviewRecord {
   _id?: string;
-  resource: { type: string; id: string; title?: string };
+  resource: { type: string; id: string; title?: string; bundleId?: string; applicationId?: string };
   status: 'active' | 'closed';
   createdBy: CommentAuthor;
   createdAt: string;
   updatedAt?: string;
   currentCycleId: string;
+  currentCycleStatus?: ReviewCycle['status'];
+  currentDueAt?: string;
+  currentReviewerUserIds?: string[];
+  currentRequestedAt?: string;
+  currentRequestedByUserId?: string;
   cycles: ReviewCycle[];
-  resourceVersion?: { versionId?: string; contentHash?: string };
+  resourceVersion?: { versionId?: string; contentHash?: string; resourceUpdatedAtAtSubmission?: string };
+}
+
+export interface FeedbackPackage {
+  _id?: string;
+  resource: { type: string; id: string; title?: string };
+  createdAt: string;
+  importedBy: CommentAuthor;
+  source: 'historical_import';
+  effectiveAt?: string;
+  summary?: string;
+  attachments: AttachmentRef[];
+  status: 'feedback_sent' | 'closed';
 }
 export interface UserEventState {
   userId: string;

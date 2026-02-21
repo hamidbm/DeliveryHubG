@@ -101,9 +101,12 @@ async function convertDocxToMarkdown(buffer: Buffer): Promise<string> {
   }
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const db = await getDb();
-  const assets = await db.collection('wiki_assets').find({}).toArray();
+  const { searchParams } = new URL(request.url);
+  const includeFeedback = searchParams.get('includeFeedback') === 'true';
+  const query = includeFeedback ? {} : { artifactKind: { $ne: 'feedback' } };
+  const assets = await db.collection('wiki_assets').find(query).toArray();
   return NextResponse.json(assets);
 }
 
@@ -122,7 +125,11 @@ export async function POST(request: Request) {
     const applicationId = formData.get('applicationId') as string;
     const milestoneId = formData.get('milestoneId') as string;
     const documentTypeId = formData.get('documentTypeId') as string;
+    const documentType = formData.get('documentType') as string;
     const themeKey = formData.get('themeKey') as string;
+    const artifactKind = formData.get('artifactKind') as string;
+    const reviewContextRaw = formData.get('reviewContext') as string;
+    const reviewContext = reviewContextRaw ? JSON.parse(reviewContextRaw) : undefined;
 
     if (!file) {
       return NextResponse.json({ error: 'No file uploaded' }, { status: 400 });
@@ -192,6 +199,9 @@ export async function POST(request: Request) {
       applicationId: applicationId || undefined,
       milestoneId: milestoneId || undefined,
       documentTypeId: documentTypeId || undefined,
+      documentType: documentType || undefined,
+      artifactKind: artifactKind || 'primary',
+      reviewContext: reviewContext || undefined,
       themeKey: themeKey || undefined,
       file: {
         originalName: file.name,
