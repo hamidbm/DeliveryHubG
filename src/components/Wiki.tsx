@@ -112,7 +112,9 @@ const Wiki: React.FC<WikiProps> = ({
   const [primaryGrouping, setPrimaryGrouping] = useState<'app' | 'type'>('app');
   const [showBundle, setShowBundle] = useState(true);
   const [showDocType, setShowDocType] = useState(true);
-  const [showMilestone, setShowMilestone] = useState(true);
+  const [showMilestone, setShowMilestone] = useState(false);
+  const [showApp, setShowApp] = useState(false);
+  const [showSpace, setShowSpace] = useState(true);
 
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
@@ -120,6 +122,8 @@ const Wiki: React.FC<WikiProps> = ({
   const [isAiMenuOpen, setIsAiMenuOpen] = useState(false);
   const aiMenuRef = useRef<HTMLDivElement>(null);
   const aiSectionRef = useRef<HTMLDivElement>(null);
+  const viewOptionsRef = useRef<HTMLDivElement>(null);
+  const [isViewOptionsOpen, setIsViewOptionsOpen] = useState(false);
 
   type InsightType = 'summary' | 'decisions' | 'assumptions';
   type InsightState =
@@ -179,7 +183,7 @@ const Wiki: React.FC<WikiProps> = ({
       const [rawSpaces, rawPages, rawAssets, rawThemes, rawCats, rawTypes] = await Promise.all([
         safeFetch('/api/wiki/spaces'),
         safeFetch('/api/wiki'),
-        safeFetch(`/api/wiki/assets?includeFeedback=${includeFeedbackAssets ? 'true' : 'false'}`),
+        safeFetch(`/api/wiki/assets?includeFeedback=true`),
         safeFetch('/api/wiki/themes?active=true'),
         safeFetch('/api/taxonomy/categories?active=true'),
         safeFetch('/api/taxonomy/document-types?active=true')
@@ -202,20 +206,27 @@ const Wiki: React.FC<WikiProps> = ({
     } finally { 
       setLoading(false); 
     }
-  }, [searchParams, includeFeedbackAssets]);
+  }, [searchParams]);
+
 
   useEffect(() => {
     loadAllWikiData();
   }, []);
 
   useEffect(() => {
-    loadAllWikiData();
-  }, [includeFeedbackAssets]);
-
-  useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (aiMenuRef.current && !aiMenuRef.current.contains(e.target as Node)) {
         setIsAiMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (viewOptionsRef.current && !viewOptionsRef.current.contains(e.target as Node)) {
+        setIsViewOptionsOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -366,7 +377,7 @@ const Wiki: React.FC<WikiProps> = ({
     const msId = context.milestoneId || 'no_milestone';
 
     const ids: string[] = [];
-    let path = `space-${spaceId}`;
+    let path = `space-${showSpace ? spaceId : 'all'}`;
     ids.push(path);
 
     if (showBundle) {
@@ -375,6 +386,7 @@ const Wiki: React.FC<WikiProps> = ({
     }
 
     const addApp = () => {
+      if (!showApp) return;
       path += `:app-${appId}`;
       ids.push(path);
     };
@@ -408,10 +420,10 @@ const Wiki: React.FC<WikiProps> = ({
     const typeId = ids.find((id) => id.includes(':type-')) || appId;
 
     const lookup = {
-      space: spaceId,
-      bundle: showBundle ? bundleId : spaceId,
-      app: appId,
-      type: showDocType ? typeId : appId,
+      space: showSpace ? spaceId : `space-all`,
+      bundle: showBundle ? bundleId : (showSpace ? spaceId : `space-all`),
+      app: showApp ? appId : (showDocType ? typeId : bundleId),
+      type: showDocType ? typeId : (showApp ? appId : bundleId),
     } as const;
 
     const targetId = lookup[level];
@@ -557,7 +569,7 @@ const Wiki: React.FC<WikiProps> = ({
     try {
       const [pRes, aRes] = await Promise.all([
         fetch('/api/wiki'),
-        fetch(`/api/wiki/assets?includeFeedback=${includeFeedbackAssets ? 'true' : 'false'}`)
+        fetch(`/api/wiki/assets?includeFeedback=true`)
       ]);
       const newPages = await pRes.json();
       const newAssets = await aRes.json();
@@ -611,7 +623,7 @@ const Wiki: React.FC<WikiProps> = ({
       const appObj = applications.find(a => String(a._id || a.id) === aId);
       const typeObj = docTypes.find(t => String(t._id || t.id) === dtId);
 
-      const spaceName = spaceObj?.name || 'Shared Space';
+      const spaceName = showSpace ? (spaceObj?.name || 'Shared Space') : 'All Spaces';
       const bundleName = bundleObj?.name || 'General';
       const appName = appObj?.name || 'App Context';
       const typeName = art.documentType || typeObj?.name || 'Protocol';
@@ -621,7 +633,7 @@ const Wiki: React.FC<WikiProps> = ({
       let path = "";
       const currentContext: TreeContext = { spaceId: sId, documentTypeId: dtId };
 
-      path += `space-${sId}`;
+      path += `space-${showSpace ? sId : 'all'}`;
       const spaceNode = findOrCreateNode(currentLevel, path, spaceName, 'space', { ...currentContext });
       currentLevel = spaceNode.children;
 
@@ -634,10 +646,12 @@ const Wiki: React.FC<WikiProps> = ({
 
       const buildMiddle = () => {
         if (primaryGrouping === 'app') {
-          path += `:app-${aId}`;
-          currentContext.applicationId = aId;
-          const appNode = findOrCreateNode(currentLevel, path, appName, 'app', { ...currentContext });
-          currentLevel = appNode.children;
+          if (showApp) {
+            path += `:app-${aId}`;
+            currentContext.applicationId = aId;
+            const appNode = findOrCreateNode(currentLevel, path, appName, 'app', { ...currentContext });
+            currentLevel = appNode.children;
+          }
           if (showDocType) {
             path += `:type-${dtId}`;
             currentContext.documentTypeId = dtId;
@@ -651,10 +665,12 @@ const Wiki: React.FC<WikiProps> = ({
             const typeNode = findOrCreateNode(currentLevel, path, typeName, 'type', { ...currentContext });
             currentLevel = typeNode.children;
           }
-          path += `:app-${aId}`;
-          currentContext.applicationId = aId;
-          const appNode = findOrCreateNode(currentLevel, path, appName, 'app', { ...currentContext });
-          currentLevel = appNode.children;
+          if (showApp) {
+            path += `:app-${aId}`;
+            currentContext.applicationId = aId;
+            const appNode = findOrCreateNode(currentLevel, path, appName, 'app', { ...currentContext });
+            currentLevel = appNode.children;
+          }
         }
       };
       buildMiddle();
@@ -685,7 +701,7 @@ const Wiki: React.FC<WikiProps> = ({
     };
     sortTree(tree);
     return tree;
-  }, [pages, assets, spaces, bundles, applications, docTypes, selSpaceId, selBundleId, selAppId, selMilestone, searchQuery, primaryGrouping, showBundle, showDocType, showMilestone, includeFeedbackAssets]);
+  }, [pages, assets, spaces, bundles, applications, docTypes, selSpaceId, selBundleId, selAppId, selMilestone, searchQuery, primaryGrouping, showBundle, showDocType, showMilestone, includeFeedbackAssets, showApp, showSpace]);
 
   const expandAllNodes = () => {
     const allIds = new Set<string>();
@@ -855,6 +871,19 @@ const Wiki: React.FC<WikiProps> = ({
     refreshFeedbackPackages(activeArtifact);
     refreshReviewers(activeArtifact);
   }, [activeArtifact?._id, activeArtifact?.id]);
+
+  useEffect(() => {
+    const commentsOpen = searchParams.get('comments') === '1';
+    const commentTab = searchParams.get('tab');
+    const cycleId = searchParams.get('cycleId');
+    if (!commentsOpen || commentTab !== 'review') return;
+    setWasSidebarVisible(isSidebarVisible);
+    if (isSidebarVisible) setIsSidebarVisible(false);
+    setCommentInitialFilter('current');
+    setCommentInitialCycleId(cycleId || null);
+    setCommentSuppressNewThread(true);
+    setIsCommentsOpen(true);
+  }, [searchParams, isSidebarVisible]);
 
   useEffect(() => {
     setIsReviewPanelVisible(false);
@@ -1226,44 +1255,69 @@ const Wiki: React.FC<WikiProps> = ({
     <div className="sticky top-0 flex h-[calc(100vh-10.5rem)] bg-white rounded-[3rem] border border-slate-200 shadow-2xl overflow-hidden animate-fadeIn">
       {isSidebarVisible && (
         <aside className="w-80 border-r border-slate-100 flex flex-col bg-slate-50/30 shrink-0">
-          <div className="p-6 border-b border-slate-100 flex items-center justify-end bg-white/50 backdrop-blur">
-            <button onClick={() => setIsSidebarVisible(false)} className="text-slate-300 hover:text-slate-500 transition-colors"><i className="fas fa-chevron-left"></i></button>
-          </div>
-
-          <div className="px-6 py-5 bg-white border-b border-slate-50 space-y-4">
-             <div className="flex flex-col gap-2">
-                <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-1">Organize By</label>
-                <select value={primaryGrouping} onChange={(e) => setPrimaryGrouping(e.target.value as any)} className="w-full bg-slate-50 border border-slate-100 rounded-xl px-3 py-2 text-[10px] font-bold text-slate-600 focus:ring-2 focus:ring-blue-500/10 outline-none transition-all">
-                  <option value="app">Application → Type</option>
-                  <option value="type">Type → Application</option>
-                </select>
-             </div>
-             <div className="grid grid-cols-1 gap-2 pt-2 border-t border-slate-50">
-                <HierarchyToggle label="Show Bundles" active={showBundle} onToggle={setShowBundle} />
-                <HierarchyToggle label="Show Doc Types" active={showDocType} onToggle={setShowDocType} />
-                <HierarchyToggle label="Show Milestones" active={showMilestone} onToggle={setShowMilestone} />
-                <HierarchyToggle label="Include Feedback" active={includeFeedbackAssets} onToggle={(v) => onIncludeFeedbackAssetsChange?.(v)} />
-             </div>
-          </div>
-
-          <div className="px-6 py-3 bg-white border-b border-slate-100 flex items-center justify-center gap-3">
+          <div className="px-6 py-3 bg-white border-b border-slate-100 flex items-center justify-between gap-3">
             <button
-              onClick={expandAllNodes}
-              className="text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-blue-600 transition-colors"
-              title="Expand all"
+              onClick={() => setIsSidebarVisible(false)}
+              className="w-8 h-8 rounded-lg border border-slate-200 text-slate-500 hover:text-blue-600 hover:border-blue-200 flex items-center justify-center"
+              title="Hide sidebar"
             >
-              Expand
+              <i className="fas fa-chevron-left"></i>
             </button>
-            <button
-              onClick={collapseAllNodes}
-              className="text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-blue-600 transition-colors"
-              title="Collapse all"
-            >
-              Collapse
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={expandAllNodes}
+                className="w-8 h-8 rounded-lg border border-slate-200 text-slate-500 hover:text-blue-600 hover:border-blue-200 flex items-center justify-center"
+                title="Expand all"
+              >
+                <img src="/icons/expand.gif" alt="Expand all" className="w-4 h-4" />
+              </button>
+              <button
+                onClick={collapseAllNodes}
+                className="w-8 h-8 rounded-lg border border-slate-200 text-slate-500 hover:text-blue-600 hover:border-blue-200 flex items-center justify-center"
+                title="Collapse all"
+              >
+                <img src="/icons/collapse.gif" alt="Collapse all" className="w-4 h-4" />
+              </button>
+              <div className="relative" ref={viewOptionsRef}>
+              <button
+                onClick={() => setIsViewOptionsOpen((prev) => !prev)}
+                className="w-8 h-8 rounded-lg border border-slate-200 text-slate-500 hover:text-blue-600 hover:border-blue-200 flex items-center justify-center"
+                title="View options"
+              >
+                <img src="/icons/view.gif" alt="View options" className="w-4 h-4" />
+              </button>
+              {isViewOptionsOpen && (
+                <div className="absolute left-full ml-3 top-0 w-80 bg-white border border-slate-200 rounded-2xl shadow-[0_20px_40px_rgba(15,23,42,0.15)] p-5 z-30">
+                  <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">View Options</div>
+                  <div className="grid grid-cols-2 gap-4 text-[11px]">
+                    <HierarchyToggle label="Show Spaces" active={showSpace} onToggle={setShowSpace} />
+                    <HierarchyToggle label="Show Bundles" active={showBundle} onToggle={setShowBundle} />
+                    <HierarchyToggle label="Show Apps" active={showApp} onToggle={setShowApp} />
+                    <HierarchyToggle label="Show Doc Types" active={showDocType} onToggle={setShowDocType} />
+                    <HierarchyToggle label="Show Milestones" active={showMilestone} onToggle={setShowMilestone} />
+                    <HierarchyToggle label="Include Feedback" active={includeFeedbackAssets} onToggle={(v) => onIncludeFeedbackAssetsChange?.(v)} />
+                  </div>
+                </div>
+              )}
+            </div>
+            </div>
+          </div>
+          <div className="px-6 pb-3 bg-white border-b border-slate-100">
+            <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500">
+              <span className="uppercase tracking-widest text-[8px] text-slate-400">Organize By</span>
+              <select
+                value={primaryGrouping}
+                onChange={(e) => setPrimaryGrouping(e.target.value as any)}
+                className="flex-1 bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-[10px] font-bold text-slate-600"
+                title="Organize by"
+              >
+                <option value="app">App → Type</option>
+                <option value="type">Type → App</option>
+              </select>
+            </div>
           </div>
 
-          <nav className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+          <nav className="flex-1 overflow-y-auto p-4 pt-2 custom-scrollbar">
             {treeData.length === 0 ? <div className="p-10 text-center text-slate-300"><p className="text-[10px] font-bold uppercase tracking-widest">Scope Empty</p></div> : treeData.map((node: any) => renderTreeNode(node))}
           </nav>
           
@@ -1445,6 +1499,14 @@ const Wiki: React.FC<WikiProps> = ({
                       </span>
                     )}
                   </button>
+                  {searchParams.get('returnToReview') && (
+                    <button
+                      onClick={() => router.push(`/activities/reviews/${encodeURIComponent(String(searchParams.get('returnToReview')))}`)}
+                      className="px-4 py-2 bg-white border border-slate-200 text-slate-600 text-[9px] font-black uppercase tracking-widest rounded-lg hover:bg-slate-50 transition-all flex items-center gap-2"
+                    >
+                      ← Back to Review
+                    </button>
+                  )}
                   {!isFeedbackDoc && (
                     <button
                       onClick={() => {
@@ -1597,14 +1659,22 @@ const Wiki: React.FC<WikiProps> = ({
                        <i className="fas fa-clipboard-check text-sm"></i>
                        <span className="text-[9px] font-black uppercase tracking-widest">Review</span>
                      </div>
-                     <div className="flex items-center gap-3">
-                       <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                         {review?.status ? review.status : 'No review'}
-                       </div>
+                   <div className="flex items-center gap-3">
+                     <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                       {review?.status ? review.status : 'No review'}
+                     </div>
+                     {review?._id && (
                        <button
-                         onClick={() => setIsReviewCollapsed((prev) => !prev)}
+                         onClick={() => router.push(`/activities/reviews/${encodeURIComponent(String(review._id))}`)}
                          className="text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600"
                        >
+                         Open Details
+                       </button>
+                     )}
+                     <button
+                       onClick={() => setIsReviewCollapsed((prev) => !prev)}
+                       className="text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600"
+                     >
                          {isReviewCollapsed ? 'Expand' : 'Collapse'}
                        </button>
                      </div>
@@ -2391,9 +2461,9 @@ const Wiki: React.FC<WikiProps> = ({
 
 const HierarchyToggle: React.FC<{ label: string; active: boolean; onToggle: (v: boolean) => void }> = ({ label, active, onToggle }) => (
   <button onClick={() => onToggle(!active)} className="flex items-center justify-between group py-1">
-     <span className={`text-[9px] font-bold uppercase tracking-tight transition-colors ${active ? 'text-slate-600' : 'text-slate-300'}`}>{label}</span>
-     <div className={`w-6 h-3 rounded-full relative transition-all ${active ? 'bg-blue-600' : 'bg-slate-200'}`}>
-        <div className={`absolute top-0.5 w-2 h-2 bg-white rounded-full transition-all ${active ? 'left-3.5' : 'left-0.5'}`} />
+     <span className={`text-[11px] font-semibold tracking-tight transition-colors ${active ? 'text-slate-700' : 'text-slate-400'}`}>{label}</span>
+     <div className={`w-7 h-3.5 rounded-full relative transition-all ${active ? 'bg-blue-600' : 'bg-slate-200'}`}>
+        <div className={`absolute top-0.5 w-2.5 h-2.5 bg-white rounded-full transition-all ${active ? 'left-4' : 'left-0.5'}`} />
      </div>
   </button>
 );

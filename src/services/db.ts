@@ -581,7 +581,7 @@ export const seedDatabase = async (applications: any[], workItems: any[], wikiPa
   try {
     const db = await getDb();
     if (applications.length) await db.collection('applications').insertMany(applications);
-    if (workItems.length) await db.collection('wiki_items').insertMany(workItems);
+    if (workItems.length) await db.collection('workitems').insertMany(workItems);
     if (wikiPages.length) await db.collection('wiki_pages').insertMany(wikiPages);
     return { success: true };
   } catch (error) {
@@ -1106,7 +1106,10 @@ const ensureCommentIndexes = async (db: any) => {
 const ensureReviewIndexes = async (db: any) => {
   await db.collection('reviews').createIndex({ 'resource.type': 1, 'resource.id': 1 }, { unique: true });
   await db.collection('reviews').createIndex({ status: 1, createdAt: -1 });
+  await db.collection('reviews').createIndex({ 'resource.bundleId': 1, currentCycleStatus: 1, updatedAt: -1 });
   await db.collection('reviews').createIndex({ currentReviewerUserIds: 1, currentCycleStatus: 1, currentDueAt: 1 });
+  await db.collection('reviews').createIndex({ currentRequestedByUserId: 1, currentRequestedAt: -1 });
+  await db.collection('reviews').createIndex({ 'resource.title': 'text' });
 };
 
 const ensureFeedbackPackageIndexes = async (db: any) => {
@@ -1549,11 +1552,102 @@ export const saveTaxonomyDocumentType = async (type: Partial<TaxonomyDocumentTyp
   }
 };
 
+let warnedLegacyWorkItems = false;
+const warnLegacyWorkItems = async (db: any) => {
+  if (warnedLegacyWorkItems) return;
+  warnedLegacyWorkItems = true;
+  try {
+    const legacyCount = await db.collection('work_items').countDocuments({}, { limit: 1 });
+    if (legacyCount > 0) {
+      console.warn(
+        'Legacy collection work_items contains data. Work Items now use workitems; consider migrating.'
+      );
+    }
+  } catch {
+    // Best-effort warning only.
+  }
+};
+
+const ensureWorkItemsIndexes = async (db: any) => {
+  await db.collection('workitems').createIndex({ bundleId: 1 });
+  await db.collection('workitems').createIndex({ applicationId: 1 });
+  await db.collection('workitems').createIndex({ status: 1, updatedAt: -1 });
+  await db.collection('workitems').createIndex({ assignedTo: 1, updatedAt: -1 });
+  await db.collection('workitems').createIndex({ parentId: 1 });
+  await db.collection('workitems').createIndex({ rank: 1 });
+  await db.collection('workitems').createIndex({ key: 1 }, { unique: false });
+};
+
+let warnedLegacySprints = false;
+const warnLegacySprints = async (db: any) => {
+  if (warnedLegacySprints) return;
+  warnedLegacySprints = true;
+  try {
+    const legacyCount = await db.collection('sprints').countDocuments({}, { limit: 1 });
+    if (legacyCount > 0) {
+      console.warn(
+        'Legacy collection sprints contains data. Work Items now use workitems_sprints; consider migrating.'
+      );
+    }
+  } catch {
+    // Best-effort warning only.
+  }
+};
+
+const normalizeWorkItemRanks = async (
+  db: any,
+  scope: { status?: string; bundleId?: string; applicationId?: string; sprintId?: string }
+) => {
+  const query: any = {};
+  if (scope.status) query.status = scope.status;
+  if (scope.bundleId) query.bundleId = scope.bundleId;
+  if (scope.applicationId) query.applicationId = scope.applicationId;
+  if (scope.sprintId !== undefined) query.sprintId = scope.sprintId;
+
+  const items = await db
+    .collection('workitems')
+    .find(query)
+    .sort({ rank: 1, createdAt: -1 })
+    .limit(1000)
+    .toArray();
+
+  if (items.length < 2) return;
+
+  let needsNormalize = false;
+  let lastRank = 0;
+  for (const item of items) {
+    const rank = typeof item.rank === 'number' ? item.rank : 0;
+    if (!rank) { needsNormalize = true; break; }
+    if (rank <= lastRank || rank - lastRank < 2) { needsNormalize = true; break; }
+    lastRank = rank;
+  }
+
+  if (lastRank > 1_000_000_000) needsNormalize = true;
+  if (!needsNormalize) return;
+
+  const bulk = items.map((item: any, idx: number) => ({
+    updateOne: {
+      filter: { _id: item._id },
+      update: { $set: { rank: (idx + 1) * 1000 } }
+    }
+  }));
+
+  await db.collection('workitems').bulkWrite(bulk, { ordered: false });
+};
+
 export const fetchWorkItems = async (filters: any) => {
   try {
     const db = await getDb();
+    await warnLegacyWorkItems(db);
+    await ensureWorkItemsIndexes(db);
     const query: any = {};
+    const andClauses: any[] = [];
+    const orClauses: any[] = [];
     let sort: any = { rank: 1, createdAt: -1 };
+
+    if (!filters.includeArchived) {
+      andClauses.push({ $or: [{ isArchived: { $exists: false } }, { isArchived: false }] });
+    }
     
     if (filters.bundleId && filters.bundleId !== 'all') {
       const match = safeIdMatch(filters.bundleId);
@@ -1567,7 +1661,7 @@ export const fetchWorkItems = async (filters: any) => {
     
     if (filters.milestoneId && filters.milestoneId !== 'all') {
       const msRegex = new RegExp(`^${filters.milestoneId}$`, 'i');
-      query.$or = [{ milestoneIds: msRegex }, { milestoneId: msRegex }];
+      orClauses.push({ milestoneIds: msRegex }, { milestoneId: msRegex });
     }
 
     const pId = filters.parentId || filters.epicId;
@@ -1596,48 +1690,95 @@ export const fetchWorkItems = async (filters: any) => {
           sort = { updatedAt: -1 };
           break;
         case 'blocked':
-          query.$or = [
+          orClauses.push(
             { status: WorkItemStatus.BLOCKED },
             { isFlagged: true }
-          ];
+          );
           break;
       }
     }
     
     if (filters.q) {
-      query.$or = [
-        ...(query.$or || []),
+      orClauses.push(
         { title: { $regex: filters.q, $options: 'i' } },
         { key: { $regex: filters.q, $options: 'i' } }
-      ];
+      );
     }
+
+    if (filters.types) {
+      const types = String(filters.types).split(',').filter(Boolean);
+      if (types.length) andClauses.push({ type: { $in: types } });
+    }
+
+    if (filters.priorities) {
+      const priorities = String(filters.priorities).split(',').filter(Boolean);
+      if (priorities.length) andClauses.push({ priority: { $in: priorities } });
+    }
+
+    if (filters.health) {
+      const health = String(filters.health).split(',').filter(Boolean);
+      if (health.includes('FLAGGED')) andClauses.push({ isFlagged: true });
+      if (health.includes('BLOCKED')) {
+        orClauses.push({ status: WorkItemStatus.BLOCKED }, { 'links.type': 'IS_BLOCKED_BY' });
+      }
+    }
+
+    if (orClauses.length) andClauses.push({ $or: orClauses });
+    if (andClauses.length) query.$and = andClauses;
     
-    return await db.collection('wiki_items').find(query).sort(sort).toArray();
+    return await db.collection('workitems').find(query).sort(sort).toArray();
   } catch { return []; }
 };
 
 export const fetchWorkItemById = async (id: string) => {
   try {
     const db = await getDb();
+    await warnLegacyWorkItems(db);
     if (ObjectId.isValid(id)) {
-      return await db.collection('wiki_items').findOne({ 
+      return await db.collection('workitems').findOne({ 
         $or: [{ _id: new ObjectId(id) }, { id: id }, { key: id }] 
       });
     }
-    return await db.collection('wiki_items').findOne({ 
+    return await db.collection('workitems').findOne({ 
       $or: [{ id: id }, { key: id }] 
     });
   } catch { return null; }
 };
 
+export const fetchWorkItemByKeyOrId = async (input: string) => {
+  try {
+    const db = await getDb();
+    await warnLegacyWorkItems(db);
+    const key = String(input).trim();
+    if (!key) return null;
+    if (ObjectId.isValid(key)) {
+      return await db.collection('workitems').findOne({
+        $or: [{ _id: new ObjectId(key) }, { id: key }, { key }]
+      });
+    }
+    return await db.collection('workitems').findOne({
+      $or: [{ key: key.toUpperCase() }, { key }, { id: key }]
+    });
+  } catch {
+    return null;
+  }
+};
+
 export const saveWorkItem = async (item: Partial<WorkItem>, user?: any) => {
   const db = await getDb();
+  await warnLegacyWorkItems(db);
+  await ensureWorkItemsIndexes(db);
   const { _id, ...data } = item;
   const now = new Date().toISOString();
   const userName = user?.name || 'Nexus System';
+  const actor = {
+    userId: String(user?.id || user?.userId || user?.email || userName),
+    displayName: String(user?.name || user?.displayName || userName),
+    email: user?.email ? String(user.email) : undefined
+  };
 
   if (_id && ObjectId.isValid(_id as string)) {
-    const existing = await db.collection('wiki_items').findOne({ _id: new ObjectId(_id) });
+    const existing = await db.collection('workitems').findOne({ _id: new ObjectId(_id) });
     if (!existing) throw new Error("Work item not found");
 
     const activities: any[] = [];
@@ -1690,10 +1831,46 @@ export const saveWorkItem = async (item: Partial<WorkItem>, user?: any) => {
     const finalSet = { ...data, updatedAt: now, updatedBy: userName };
     const finalPush = { activity: { $each: activities } };
 
-    return await db.collection('wiki_items').updateOne(
+    const updateResult = await db.collection('workitems').updateOne(
       { _id: new ObjectId(_id) },
       { $set: finalSet, $push: finalPush }
     );
+
+    if (activities.length > 0) {
+      for (const act of activities) {
+        try {
+          const type =
+            act.action === 'CHANGED_STATUS' ? 'workitems.item.statuschanged' :
+            act.action === 'IMPEDIMENT_RAISED' ? 'workitems.item.impedimentraised' :
+            act.action === 'IMPEDIMENT_CLEARED' ? 'workitems.item.impedimentcleared' :
+            act.action === 'WORK_LOGGED' ? 'workitems.item.worklogged' :
+            act.action === 'AI_REFINEMENT_COMMITTED' ? 'workitems.item.airefinement' :
+            act.action === 'CHECKLIST_UPDATED' ? 'workitems.item.checklistupdated' :
+            'workitems.item.updated';
+          await emitEvent({
+            ts: now,
+            type,
+            actor,
+            resource: { type: 'workitems.item', id: String(existing._id || existing.id || _id), title: existing.title },
+            context: { bundleId: existing.bundleId, appId: existing.applicationId },
+            payload: { field: act.field, from: act.from, to: act.to }
+          });
+        } catch {}
+      }
+    }
+
+    if (data.rank !== undefined) {
+      try {
+        await normalizeWorkItemRanks(db, {
+          status: (data.status as string) || existing.status,
+          bundleId: (data.bundleId as string) || existing.bundleId,
+          applicationId: (data.applicationId as string) || existing.applicationId,
+          sprintId: (data.sprintId as string) ?? existing.sprintId
+        });
+      } catch {}
+    }
+
+    return updateResult;
   } else {
     let key = data.key;
     if (!key) {
@@ -1703,7 +1880,7 @@ export const saveWorkItem = async (item: Partial<WorkItem>, user?: any) => {
           : { key: data.bundleId }
       );
       const prefix = bundle?.key || 'TASK';
-      const count = await db.collection('wiki_items').countDocuments({ bundleId: data.bundleId });
+      const count = await db.collection('workitems').countDocuments({ bundleId: data.bundleId });
       key = `${prefix}-${count + 1}`;
     }
 
@@ -1715,19 +1892,35 @@ export const saveWorkItem = async (item: Partial<WorkItem>, user?: any) => {
       createdBy: userName,
       activity: [{ user: userName, action: 'CREATED', createdAt: now }]
     };
-    return await db.collection('wiki_items').insertOne(newItem);
+    const result = await db.collection('workitems').insertOne(newItem);
+    try {
+      await emitEvent({
+        ts: now,
+        type: 'workitems.item.created',
+        actor,
+        resource: { type: 'workitems.item', id: String(result.insertedId), title: newItem.title },
+        context: { bundleId: newItem.bundleId, appId: newItem.applicationId }
+      });
+    } catch {}
+    return result;
   }
 };
 
 export const updateWorkItemStatus = async (id: string, toStatus: string, newRank: number, user: any) => {
   const db = await getDb();
+  await warnLegacyWorkItems(db);
   const now = new Date().toISOString();
   const userName = user?.name || 'Nexus System';
+  const actor = {
+    userId: String(user?.id || user?.userId || user?.email || userName),
+    displayName: String(user?.name || user?.displayName || userName),
+    email: user?.email ? String(user.email) : undefined
+  };
   
-  const existing = await db.collection('wiki_items').findOne({ _id: new ObjectId(id) });
+  const existing = await db.collection('workitems').findOne({ _id: new ObjectId(id) });
   if (!existing) return null;
 
-  return await db.collection('wiki_items').updateOne(
+  const result = await db.collection('workitems').updateOne(
     { _id: new ObjectId(id) },
     { 
       $set: { status: toStatus, rank: newRank, updatedAt: now },
@@ -1742,6 +1935,28 @@ export const updateWorkItemStatus = async (id: string, toStatus: string, newRank
       }
     }
   );
+
+  try {
+    await normalizeWorkItemRanks(db, {
+      status: toStatus,
+      bundleId: existing.bundleId,
+      applicationId: existing.applicationId,
+      sprintId: existing.sprintId
+    });
+  } catch {}
+
+  try {
+    await emitEvent({
+      ts: now,
+      type: 'workitems.item.statuschanged',
+      actor,
+      resource: { type: 'workitems.item', id: String(existing._id || existing.id || id), title: existing.title },
+      context: { bundleId: existing.bundleId, appId: existing.applicationId },
+      payload: { from: existing.status, to: toStatus }
+    });
+  } catch {}
+
+  return result;
 };
 
 export const fetchMilestones = async (filters: any) => {
@@ -1872,6 +2087,7 @@ export const fetchWorkItemsBoard = async (filters: any) => {
 export const fetchSprints = async (filters: any) => {
   try {
     const db = await getDb();
+    await warnLegacySprints(db);
     const query: any = {};
     if (filters.bundleId && filters.bundleId !== 'all') {
       const match = safeIdMatch(filters.bundleId);
@@ -1884,18 +2100,19 @@ export const fetchSprints = async (filters: any) => {
     if (filters.status) {
       query.status = filters.status;
     }
-    return await db.collection('sprints').find(query).sort({ startDate: 1 }).toArray();
+    return await db.collection('workitems_sprints').find(query).sort({ startDate: 1 }).toArray();
   } catch { return []; }
 };
 
 export const saveSprint = async (sprint: Partial<Sprint>) => {
   const db = await getDb();
+  await warnLegacySprints(db);
   const { _id, ...data } = sprint;
   const now = new Date().toISOString();
   if (_id && ObjectId.isValid(_id as string)) {
-    return await db.collection('sprints').updateOne({ _id: new ObjectId(_id) }, { $set: data });
+    return await db.collection('workitems_sprints').updateOne({ _id: new ObjectId(_id) }, { $set: data });
   } else {
-    return await db.collection('sprints').insertOne({ ...data, createdAt: now });
+    return await db.collection('workitems_sprints').insertOne({ ...data, createdAt: now });
   }
 };
 
@@ -1924,6 +2141,7 @@ export const fetchWorkItemTree = async (filters: any) => {
           type: i.type,
           status: i.status,
           isFlagged: i.isFlagged,
+          links: i.links || [],
           workItemId: i._id?.toString() || i.id,
           nodeType: 'WORK_ITEM',
           children: []
@@ -1957,6 +2175,7 @@ export const fetchWorkItemTree = async (filters: any) => {
           type: item.type,
           status: item.status,
           isFlagged: item.isFlagged,
+          links: item.links || [],
           workItemId: item._id?.toString() || item.id,
           nodeType: 'WORK_ITEM',
           completion,

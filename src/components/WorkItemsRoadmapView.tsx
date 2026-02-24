@@ -11,10 +11,11 @@ interface WorkItemsRoadmapViewProps {
   selEpicId: string;
   searchQuery: string;
   quickFilter?: string;
+  activeFilters?: { types: string[]; priorities: string[]; health: string[] };
 }
 
 const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({ 
-  applications, bundles, selBundleId, selAppId, selEpicId, searchQuery, quickFilter 
+  applications, bundles, selBundleId, selAppId, selEpicId, searchQuery, quickFilter, activeFilters 
 }) => {
   const [items, setItems] = useState<WorkItem[]>([]);
   const [milestones, setMilestones] = useState<Milestone[]>([]);
@@ -34,6 +35,9 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
     });
     if (selEpicId !== 'all') params.set('epicId', selEpicId);
     if (quickFilter) params.set('quickFilter', quickFilter);
+    if (activeFilters?.types?.length) params.set('types', activeFilters.types.join(','));
+    if (activeFilters?.priorities?.length) params.set('priorities', activeFilters.priorities.join(','));
+    if (activeFilters?.health?.length) params.set('health', activeFilters.health.join(','));
 
     const [wRes, mRes] = await Promise.all([
       fetch(`/api/work-items?${params.toString()}`),
@@ -224,6 +228,36 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
                           {renderTimelineBar(epic)}
                         </div>
                       </div>
+                      {isExpanded && (
+                        <div className="pl-16 pb-4">
+                          {epicFeatures.length > 0 ? (
+                            epicFeatures.map(feature => (
+                              <div key={feature._id || feature.id} className="flex items-center py-2 hover:bg-slate-50/40 transition-colors">
+                                <div className="w-80 pr-8 shrink-0 flex items-center gap-3">
+                                  <div className="w-6 h-6 rounded-lg flex items-center justify-center bg-slate-100 text-slate-400">
+                                    <i className="fas fa-star text-[8px]"></i>
+                                  </div>
+                                  <div className="min-w-0">
+                                    <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest block mb-0.5">
+                                      {feature.key}
+                                    </span>
+                                    <h5 onClick={() => setActiveItem(feature)} className="text-xs font-bold text-slate-700 truncate cursor-pointer hover:text-blue-600">
+                                      {feature.title}
+                                    </h5>
+                                  </div>
+                                </div>
+                                <div className="flex-1 h-10 relative flex items-center">
+                                  {renderTimelineBar(feature, true)}
+                                </div>
+                              </div>
+                            ))
+                          ) : (
+                            <div className="py-3 text-[10px] font-bold text-slate-300 uppercase tracking-widest">
+                              No features linked to this epic
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </React.Fragment>
                   );
                 })}

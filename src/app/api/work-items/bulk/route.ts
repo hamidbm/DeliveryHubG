@@ -24,6 +24,22 @@ export async function PATCH(request: Request) {
     const now = new Date().toISOString();
     const userName = payload.name as string || 'System';
 
+    if (updates && (updates.assignedTo !== undefined || updates.priority !== undefined)) {
+      const userRole = String((payload as any).role || '');
+      const privilegedRoles = new Set([
+        'CMO Architect',
+        'SVP Architect',
+        'SVP PM',
+        'SVP Engineer',
+        'Director',
+        'VP',
+        'CIO'
+      ]);
+      if (!privilegedRoles.has(userRole)) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
+    }
+
     // Prepare audit log entry for the bulk operation
     const auditEntry = {
       user: userName,

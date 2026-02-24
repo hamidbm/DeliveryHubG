@@ -13,10 +13,11 @@ interface WorkItemsListViewProps {
   selEpicId: string;
   searchQuery: string;
   quickFilter?: string;
+  activeFilters?: { types: string[]; priorities: string[]; health: string[] };
 }
 
 const WorkItemsListView: React.FC<WorkItemsListViewProps> = ({ 
-  applications, bundles, selBundleId, selAppId, selMilestone, selEpicId, searchQuery, quickFilter 
+  applications, bundles, selBundleId, selAppId, selMilestone, selEpicId, searchQuery, quickFilter, activeFilters 
 }) => {
   const [items, setItems] = useState<WorkItem[]>([]);
   const [milestones, setMilestones] = useState<Milestone[]>([]);
@@ -32,6 +33,9 @@ const WorkItemsListView: React.FC<WorkItemsListViewProps> = ({
       bundleId: selBundleId, applicationId: selAppId, milestoneId: selMilestone, q: searchQuery, epicId: selEpicId
     });
     if (quickFilter) params.set('quickFilter', quickFilter);
+    if (activeFilters?.types?.length) params.set('types', activeFilters.types.join(','));
+    if (activeFilters?.priorities?.length) params.set('priorities', activeFilters.priorities.join(','));
+    if (activeFilters?.health?.length) params.set('health', activeFilters.health.join(','));
     try {
       const [iRes, mRes] = await Promise.all([
         fetch(`/api/work-items?${params.toString()}`),
@@ -165,6 +169,15 @@ const WorkItemsListView: React.FC<WorkItemsListViewProps> = ({
                        <div className="flex items-center gap-2">
                           {item.key}
                           {item.isFlagged && <i className="fas fa-flag text-red-500 scale-75 animate-pulse"></i>}
+                          {item.links && item.links.length > 0 && (
+                            <div className="flex items-center gap-1 flex-wrap">
+                              {Array.from(new Set(item.links.map(l => l.type))).slice(0, 3).map(t => (
+                                <span key={t} className="text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded border bg-slate-50 text-slate-500 border-slate-100">
+                                  {t.replace(/_/g, ' ')}
+                                </span>
+                              ))}
+                            </div>
+                          )}
                        </div>
                     </td>
                     <td className="px-6 py-4 text-sm font-bold text-slate-700 group-hover:text-blue-600 truncate">{item.title}</td>

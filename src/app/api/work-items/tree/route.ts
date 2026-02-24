@@ -27,6 +27,10 @@ export async function GET(request: Request) {
     parentId: searchParams.get('parentId'),
     q: searchParams.get('q'),
     quickFilter: searchParams.get('quickFilter'),
+    types: searchParams.get('types'),
+    priorities: searchParams.get('priorities'),
+    health: searchParams.get('health'),
+    includeArchived: searchParams.get('includeArchived') === 'true',
     treeMode: searchParams.get('treeMode') || 'hierarchy',
     currentUser
   };

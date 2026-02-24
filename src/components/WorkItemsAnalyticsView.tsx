@@ -12,10 +12,11 @@ interface WorkItemsAnalyticsViewProps {
   selEpicId: string;
   searchQuery: string;
   quickFilter?: string;
+  activeFilters?: { types: string[]; priorities: string[]; health: string[] };
 }
 
 const WorkItemsAnalyticsView: React.FC<WorkItemsAnalyticsViewProps> = ({ 
-  selBundleId, selAppId, selMilestone, selEpicId, searchQuery, quickFilter 
+  selBundleId, selAppId, selMilestone, selEpicId, searchQuery, quickFilter, activeFilters 
 }) => {
   const [items, setItems] = useState<WorkItem[]>([]);
   const [milestones, setMilestones] = useState<Milestone[]>([]);
@@ -28,6 +29,9 @@ const WorkItemsAnalyticsView: React.FC<WorkItemsAnalyticsViewProps> = ({
         bundleId: selBundleId, applicationId: selAppId, milestoneId: selMilestone, q: searchQuery, epicId: selEpicId
       });
       if (quickFilter) params.set('quickFilter', quickFilter);
+      if (activeFilters?.types?.length) params.set('types', activeFilters.types.join(','));
+      if (activeFilters?.priorities?.length) params.set('priorities', activeFilters.priorities.join(','));
+      if (activeFilters?.health?.length) params.set('health', activeFilters.health.join(','));
 
       try {
         const [iRes, mRes] = await Promise.all([
@@ -44,31 +48,77 @@ const WorkItemsAnalyticsView: React.FC<WorkItemsAnalyticsViewProps> = ({
   }, [selBundleId, selAppId, selMilestone, selEpicId, searchQuery, quickFilter]);
 
   const flowEfficiency = useMemo(() => {
-    let totalValueAdd = 0;
-    let totalWaste = 0;
+    let valueAdd = 0;
+    let waste = 0;
     items.forEach(item => {
-      if (!item.activity) return;
-      const inProgressTime = (item.activity.filter(a => a.to === WorkItemStatus.IN_PROGRESS).length * 24);
-      const blockedTime = (item.activity.filter(a => a.to === WorkItemStatus.BLOCKED || a.action === 'IMPEDIMENT_RAISED').length * 48);
-      totalValueAdd += inProgressTime || 8;
-      totalWaste += blockedTime;
+      const acts = item.activity || [];
+      const inProgress = acts.filter(a => a.to === WorkItemStatus.IN_PROGRESS).length;
+      const blocked = acts.filter(a => a.to === WorkItemStatus.BLOCKED || a.action === 'IMPEDIMENT_RAISED').length;
+      valueAdd += inProgress * 8;
+      waste += blocked * 8;
     });
-    const totalTime = totalValueAdd + totalWaste;
-    return totalTime > 0 ? Math.round((totalValueAdd / totalTime) * 100) : 100;
+    const total = valueAdd + waste;
+    return total > 0 ? Math.round((valueAdd / total) * 100) : 100;
   }, [items]);
 
   const riskAnalysis = useMemo(() => {
     const activeMilestone = milestones.find(m => m.id === selMilestone || m._id === selMilestone);
     if (!activeMilestone) return { status: 'UNKNOWN', message: 'Select a milestone for projection.' };
-    const remainingPoints = items.filter(i => i.status !== WorkItemStatus.DONE).reduce((acc, curr) => acc + (curr.storyPoints || 0), 0);
+
+    const remainingPoints = items
+      .filter(i => i.status !== WorkItemStatus.DONE)
+      .reduce((acc, curr) => acc + (curr.storyPoints || 0), 0);
+
     const dueDate = new Date(activeMilestone.endDate);
     const today = new Date();
     const daysLeft = Math.max(1, Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)));
-    const historicalVelocity = 15; 
-    const requiredVelocity = (remainingPoints / daysLeft) * 14; 
-    if (requiredVelocity > historicalVelocity * 1.5) return { status: 'CRITICAL', message: `Requires ${requiredVelocity.toFixed(1)} pts/sprint.` };
-    return { status: 'HEALTHY', message: `Target adherence verified.` };
+
+    const doneInLast30 = items.filter(i => {
+      if (i.status !== WorkItemStatus.DONE) return false;
+      const doneAt = i.updatedAt || i.createdAt;
+      if (!doneAt) return false;
+      const delta = today.getTime() - new Date(doneAt).getTime();
+      return delta <= 30 * 24 * 60 * 60 * 1000;
+    });
+    const completedPoints = doneInLast30.reduce((acc, curr) => acc + (curr.storyPoints || 0), 0);
+    const velocityPerDay = completedPoints / 30;
+    const projectedCapacity = velocityPerDay * daysLeft;
+
+    if (velocityPerDay === 0) {
+      return { status: 'CRITICAL', message: 'No recent throughput to forecast.' };
+    }
+    if (remainingPoints > projectedCapacity * 1.1) {
+      return { status: 'CRITICAL', message: `Projected shortfall: ~${Math.ceil(remainingPoints - projectedCapacity)} pts.` };
+    }
+    return { status: 'HEALTHY', message: 'Projected capacity meets remaining scope.' };
   }, [items, milestones, selMilestone]);
+
+  const cycleStats = useMemo(() => {
+    const doneItems = items.filter(i => i.status === WorkItemStatus.DONE);
+    const cycleTimes = doneItems
+      .map(i => {
+        const acts = i.activity || [];
+        const inProgress = acts.find(a => a.to === WorkItemStatus.IN_PROGRESS)?.createdAt;
+        const doneAt = acts.find(a => a.to === WorkItemStatus.DONE)?.createdAt || i.updatedAt;
+        if (!inProgress || !doneAt) return null;
+        const days = (new Date(doneAt).getTime() - new Date(inProgress).getTime()) / (1000 * 60 * 60 * 24);
+        return Math.max(0, days);
+      })
+      .filter((v): v is number => v !== null);
+    const avg = cycleTimes.length ? cycleTimes.reduce((a, b) => a + b, 0) / cycleTimes.length : 0;
+    return { cycleTimes, avg };
+  }, [items]);
+
+  const agingStats = useMemo(() => {
+    const active = items.filter(i => i.status !== WorkItemStatus.DONE);
+    const now = Date.now();
+    const staleThreshold = 7 * 24 * 60 * 60 * 1000;
+    const stale = active.filter(i => {
+      const last = new Date(i.updatedAt || i.createdAt || 0).getTime();
+      return now - last > staleThreshold;
+    });
+    return { activeCount: active.length, staleCount: stale.length };
+  }, [items]);
 
   if (loading) return (
     <div className="h-[600px] flex items-center justify-center bg-white rounded-[3rem] border border-slate-100">
@@ -103,7 +153,15 @@ const WorkItemsAnalyticsView: React.FC<WorkItemsAnalyticsViewProps> = ({
             <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-10">Cycle Time Variance</h3>
             <div className="h-80">
                <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart data={items.slice(0, 15).map(i => ({ name: i.key, time: (i.storyPoints || 0) * 1.5 + Math.random()*5, avg: 8 }))}>
+                  <ComposedChart data={items.slice(0, 15).map(i => {
+                    const acts = i.activity || [];
+                    const inProgress = acts.find(a => a.to === WorkItemStatus.IN_PROGRESS)?.createdAt;
+                    const doneAt = acts.find(a => a.to === WorkItemStatus.DONE)?.createdAt || i.updatedAt;
+                    const time = inProgress && doneAt
+                      ? Math.max(0, (new Date(doneAt).getTime() - new Date(inProgress).getTime()) / (1000 * 60 * 60 * 24))
+                      : 0;
+                    return { name: i.key, time: Number(time.toFixed(1)), avg: Number(cycleStats.avg.toFixed(1)) };
+                  })}>
                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                      <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 9 }} />
                      <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 9 }} />
@@ -121,7 +179,7 @@ const WorkItemsAnalyticsView: React.FC<WorkItemsAnalyticsViewProps> = ({
                <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                      <Pie 
-                        data={[{ name: 'Active', value: items.length - 2 }, { name: 'Stale', value: 2 }]} 
+                        data={[{ name: 'Active', value: agingStats.activeCount - agingStats.staleCount }, { name: 'Stale', value: agingStats.staleCount }]} 
                         innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value"
                      >
                         <Cell fill="#10b981" />

@@ -32,6 +32,7 @@ interface WorkItemsBacklogViewProps {
   selEpicId: string;
   searchQuery: string;
   quickFilter: 'all' | 'my' | 'updated' | 'blocked';
+  activeFilters?: { types: string[]; priorities: string[]; health: string[] };
   externalTrigger?: string | null;
   onTriggerProcessed?: () => void;
 }
@@ -57,6 +58,15 @@ const SortableBacklogItem: React.FC<{ item: WorkItem, onClick: () => void }> = (
         </div>
         <span className="text-sm font-bold text-slate-700 truncate">{item.title}</span>
       </div>
+      {item.links && item.links.length > 0 && (
+        <div className="flex items-center gap-1 flex-wrap">
+          {Array.from(new Set(item.links.map(l => l.type))).slice(0, 2).map(t => (
+            <span key={t} className="text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded border bg-slate-50 text-slate-500 border-slate-100">
+              {t.replace(/_/g, ' ')}
+            </span>
+          ))}
+        </div>
+      )}
       <div className="flex items-center gap-3 shrink-0">
         <span className={`text-[8px] font-black px-2 py-0.5 rounded uppercase tracking-tighter ${item.priority === 'CRITICAL' ? 'bg-red-50 text-red-600' : 'bg-slate-50 text-slate-400'}`}>{item.priority}</span>
         <div className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-[10px] font-bold text-slate-500">{item.storyPoints || '-'}</div>
@@ -110,7 +120,7 @@ const SprintContainer: React.FC<{ sprint: Sprint, items: WorkItem[], onItemClick
 };
 
 // Fix: WorkItemsBacklogView now uses the defined WorkItemsBacklogViewProps interface
-const WorkItemsBacklogView: React.FC<WorkItemsBacklogViewProps> = ({ applications, bundles, selBundleId, selAppId, selMilestone, selEpicId, searchQuery, quickFilter, externalTrigger, onTriggerProcessed }) => {
+const WorkItemsBacklogView: React.FC<WorkItemsBacklogViewProps> = ({ applications, bundles, selBundleId, selAppId, selMilestone, selEpicId, searchQuery, quickFilter, activeFilters, externalTrigger, onTriggerProcessed }) => {
   const [items, setItems] = useState<WorkItem[]>([]);
   const [sprints, setSprints] = useState<Sprint[]>([]);
   const [loading, setLoading] = useState(true);
@@ -131,6 +141,9 @@ const WorkItemsBacklogView: React.FC<WorkItemsBacklogViewProps> = ({ application
     setLoading(true);
     const params = new URLSearchParams({ bundleId: selBundleId, applicationId: selAppId, milestoneId: selMilestone, q: searchQuery, epicId: selEpicId });
     if (quickFilter) params.set('quickFilter', quickFilter);
+    if (activeFilters?.types?.length) params.set('types', activeFilters.types.join(','));
+    if (activeFilters?.priorities?.length) params.set('priorities', activeFilters.priorities.join(','));
+    if (activeFilters?.health?.length) params.set('health', activeFilters.health.join(','));
     const res = await fetch(`/api/work-items?${params.toString()}`);
     setItems(await res.json());
     setLoading(false);
@@ -157,10 +170,31 @@ const WorkItemsBacklogView: React.FC<WorkItemsBacklogViewProps> = ({ application
        return;
     }
     if (active.id !== over.id) {
-       setItems((items) => {
-         const oldIndex = items.findIndex(i => (i._id || i.id) === active.id);
-         const newIndex = items.findIndex(i => (i._id || i.id) === over.id);
-         return arrayMove(items, oldIndex, newIndex);
+       const backlogIds = backlogItems.map(i => (i._id || i.id) as string);
+       if (!backlogIds.includes(active.id as string) || !backlogIds.includes(over.id as string)) return;
+       const oldIndex = backlogIds.findIndex(id => id === active.id);
+       const newIndex = backlogIds.findIndex(id => id === over.id);
+       const nextOrder = arrayMove(backlogIds, oldIndex, newIndex);
+
+       const prevId = nextOrder[newIndex - 1];
+       const nextId = nextOrder[newIndex + 1];
+       const prevRank = prevId ? (items.find(i => (i._id || i.id) === prevId)?.rank || 0) : 0;
+       const nextRank = nextId ? (items.find(i => (i._id || i.id) === nextId)?.rank || 0) : 0;
+       let newRank = prevRank + 1000;
+       if (nextRank && nextRank > prevRank) newRank = Math.floor((prevRank + nextRank) / 2);
+
+       setItems((all) => {
+         const backlog = all.filter(i => !i.sprintId);
+         const sprintItems = all.filter(i => i.sprintId);
+         const backlogMap = new Map(backlog.map(i => [(i._id || i.id) as string, i]));
+         const reordered = nextOrder.map(id => backlogMap.get(id)!).filter(Boolean);
+         return [...reordered, ...sprintItems];
+       });
+
+       await fetch(`/api/work-items/${active.id}`, {
+         method: 'PATCH',
+         headers: { 'Content-Type': 'application/json' },
+         body: JSON.stringify({ rank: newRank })
        });
     }
   };

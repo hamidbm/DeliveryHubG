@@ -58,12 +58,9 @@ const Activities: React.FC = () => {
 
   return (
     <div className="p-12 max-w-6xl mx-auto animate-fadeIn">
-      <header className="mb-10">
-        <h2 className="text-4xl font-black text-slate-900 tracking-tighter">Activities</h2>
-        <p className="text-slate-500 font-medium mt-2">Chronological feed of system events.</p>
-      </header>
-
-      <div className="bg-white border border-slate-200 rounded-2xl p-4 mb-8 flex flex-wrap gap-3 items-center">
+      <div className="sticky top-14 z-20 bg-[#F8FAFC] pb-4">
+        <div className="bg-white border border-slate-200 rounded-2xl p-4 flex flex-wrap gap-3 items-center">
+          <div className="text-sm font-semibold text-slate-800 mr-2">Feed</div>
         <select value={timeRange} onChange={(e) => setTimeRange(e.target.value as any)} className="border border-slate-200 rounded-lg px-3 py-2 text-xs font-semibold">
           <option value="24h">Last 24 hours</option>
           <option value="7d">Last 7 days</option>
@@ -96,6 +93,7 @@ const Activities: React.FC = () => {
             <option key={a} value={a}>{a}</option>
           ))}
         </select>
+        </div>
       </div>
 
       <div className="space-y-4">

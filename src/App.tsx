@@ -8,6 +8,7 @@ import AIInsights from './components/AIInsights';
 import WorkItems from './components/WorkItems';
 import Wiki from './components/Wiki';
 import Activities from './components/Activities';
+import ActivitiesContainer from './components/ActivitiesContainer';
 // Fix: Corrected import path for Milestones component as it is located in the components directory
 import Milestones from './components/Milestones';
 import Admin from './components/Admin';
@@ -173,6 +174,7 @@ function RouterSwitcher() {
 function HomeContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const pathname = usePathname();
   const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'dashboard');
   const [bundles, setBundles] = useState<Bundle[]>([]);
   const [applications, setApplications] = useState<Application[]>([]);
@@ -192,9 +194,18 @@ function HomeContent() {
   useEffect(() => {
     const tab = searchParams.get('tab');
     const trigger = searchParams.get('trigger');
-    if (tab) setActiveTab(tab);
+    const isCommentsReview = searchParams.get('comments') === '1' && tab === 'review';
+    if (tab) {
+      setActiveTab(isCommentsReview ? 'wiki' : tab);
+    }
     if (trigger) setExternalTrigger(trigger);
   }, [searchParams]);
+
+  useEffect(() => {
+    if (pathname.startsWith('/activities')) {
+      setActiveTab('activities');
+    }
+  }, [pathname]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -225,6 +236,9 @@ function HomeContent() {
   };
 
   const renderActiveView = () => {
+    if (pathname.startsWith('/activities')) {
+      return <ActivitiesContainer bundles={bundles} />;
+    }
     switch (activeTab) {
       case 'dashboard':
         return <Dashboard applications={applications} bundles={bundles} />;
@@ -286,6 +300,10 @@ function HomeContent() {
   const handleSetActiveTab = (tab: string) => {
     setActiveTab(tab);
     // Persist to URL
+    if (tab === 'activities') {
+      router.push('/activities/feed');
+      return;
+    }
     const params = new URLSearchParams(searchParams.toString());
     params.set('tab', tab);
     router.push(`/?${params.toString()}`);

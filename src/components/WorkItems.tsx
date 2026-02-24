@@ -62,11 +62,6 @@ const WorkItems: React.FC<WorkItemsProps> = (props) => {
       {/* View Switcher & Quick Filters Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between bg-white px-8 py-4 rounded-[2rem] border border-slate-200 shadow-sm gap-4">
         <div className="flex items-center gap-6 overflow-x-auto no-scrollbar">
-          <div>
-            <h2 className="text-xl font-black text-slate-800 tracking-tight">Work Delivery Hub</h2>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Enterprise Execution Plane</p>
-          </div>
-          <div className="h-8 w-[1px] bg-slate-100 hidden md:block"></div>
           <div className="flex bg-slate-100 p-1 rounded-xl shrink-0">
             {[
               { id: 'roadmap', label: 'Roadmap', icon: 'fa-route' },

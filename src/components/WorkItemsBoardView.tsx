@@ -19,14 +19,16 @@ interface WorkItemsBoardViewProps {
   selEpicId: string;
   searchQuery: string;
   quickFilter?: string;
+  activeFilters?: { types: string[]; priorities: string[]; health: string[] };
   externalTrigger?: string | null;
   onTriggerProcessed?: () => void;
 }
 
 const WorkItemsBoardView: React.FC<WorkItemsBoardViewProps> = ({ 
-  applications, bundles, selBundleId, selAppId, selMilestone, selEpicId, searchQuery, quickFilter, externalTrigger, onTriggerProcessed 
+  applications, bundles, selBundleId, selAppId, selMilestone, selEpicId, searchQuery, quickFilter, activeFilters, externalTrigger, onTriggerProcessed 
 }) => {
   const [boardData, setBoardData] = useState<{ columns: any[] }>({ columns: [] });
+  const [items, setItems] = useState<WorkItem[]>([]);
   const [sprints, setSprints] = useState<Sprint[]>([]);
   const [activeSprintId, setActiveSprintId] = useState<string>('all');
   const [activeItem, setActiveItem] = useState<WorkItem | null>(null);
@@ -49,10 +51,22 @@ const WorkItemsBoardView: React.FC<WorkItemsBoardViewProps> = ({
       bundleId: selBundleId, applicationId: selAppId, milestoneId: selMilestone, q: searchQuery, epicId: selEpicId, sprintId: activeSprintId
     });
     if (quickFilter) params.set('quickFilter', quickFilter);
+    if (activeFilters?.types?.length) params.set('types', activeFilters.types.join(','));
+    if (activeFilters?.priorities?.length) params.set('priorities', activeFilters.priorities.join(','));
+    if (activeFilters?.health?.length) params.set('health', activeFilters.health.join(','));
 
     try {
-      const res = await fetch(`/api/work-items/board?${params.toString()}`);
-      setBoardData(await res.json());
+      if (groupBy === 'status') {
+        const res = await fetch(`/api/work-items/board?${params.toString()}`);
+        const data = await res.json();
+        setBoardData(data);
+      } else {
+        const res = await fetch(`/api/work-items?${params.toString()}`);
+        const data = await res.json();
+        setItems(data);
+        const columns = buildGroupedColumns(data, groupBy);
+        setBoardData({ columns });
+      }
     } catch (err) { console.error("Board fetch failed", err); }
     finally { setLoading(false); }
   };
@@ -61,7 +75,7 @@ const WorkItemsBoardView: React.FC<WorkItemsBoardViewProps> = ({
     fetch(`/api/sprints?bundleId=${selBundleId}&applicationId=${selAppId}`).then(r => r.json()).then(setSprints);
   }, [selBundleId, selAppId]);
 
-  useEffect(() => { fetchBoard(); }, [selBundleId, selAppId, selMilestone, selEpicId, searchQuery, activeSprintId, quickFilter]);
+  useEffect(() => { fetchBoard(); }, [selBundleId, selAppId, selMilestone, selEpicId, searchQuery, activeSprintId, quickFilter, groupBy]);
 
   useEffect(() => {
     if (externalTrigger === 'create-item') {
@@ -76,23 +90,119 @@ const WorkItemsBoardView: React.FC<WorkItemsBoardViewProps> = ({
     setDraggedItem(item);
   };
 
+  const findColumnByItemId = (itemId: string) =>
+    boardData.columns.find(c => c.items.some((i: any) => (i._id || i.id) === itemId));
+
+  const findColumnById = (id: string) =>
+    boardData.columns.find(c => c.statusId === id);
+
+  const handleDragOver = (event: DragOverEvent) => {
+    if (groupBy !== 'status') return;
+    const { active, over } = event;
+    if (!over) return;
+    const activeId = active.id as string;
+    const overId = over.id as string;
+    if (activeId === overId) return;
+
+    const activeCol = findColumnByItemId(activeId);
+    if (!activeCol) return;
+    const overCol = findColumnByItemId(overId) || findColumnById(overId);
+    if (!overCol) return;
+    if (activeCol.statusId === overCol.statusId) return;
+
+    setBoardData(prev => {
+      const nextCols = prev.columns.map(col => {
+        if (col.statusId === activeCol.statusId) {
+          return { ...col, items: col.items.filter((i: any) => (i._id || i.id) !== activeId) };
+        }
+        if (col.statusId === overCol.statusId) {
+          const nextItems = [...col.items];
+          const insertIndex = col.items.findIndex((i: any) => (i._id || i.id) === overId);
+          const item = activeCol.items.find((i: any) => (i._id || i.id) === activeId);
+          if (!item) return col;
+          if (insertIndex >= 0) nextItems.splice(insertIndex, 0, { ...item, status: overCol.statusId });
+          else nextItems.push({ ...item, status: overCol.statusId });
+          return { ...col, items: nextItems };
+        }
+        return col;
+      });
+      return { columns: nextCols };
+    });
+  };
+
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
     setDraggedItem(null);
     if (!over) return;
-    const activeCol = boardData.columns.find(c => c.items.some((i: any) => (i._id || i.id) === active.id));
+    if (groupBy !== 'status') return;
+
+    const activeCol = findColumnByItemId(active.id as string);
     if (!activeCol) return;
-    const item = activeCol.items.find((i: any) => (i._id || i.id) === active.id);
-    const index = activeCol.items.indexOf(item);
-    let newRank = (activeCol.items[index-1]?.rank || 0) + 1000;
+
+    const overId = over.id as string;
+    const overCol = findColumnByItemId(overId) || findColumnById(overId);
+    if (!overCol) return;
+
+    const itemId = active.id as string;
+    const item = overCol.items.find((i: any) => (i._id || i.id) === itemId) 
+      || activeCol.items.find((i: any) => (i._id || i.id) === itemId);
+    if (!item) return;
+
+    const overIndex = overCol.items.findIndex((i: any) => (i._id || i.id) === overId);
+    const insertIndex = overIndex >= 0 ? overIndex : overCol.items.length - 1;
+    const prevRank = insertIndex > 0 ? (overCol.items[insertIndex - 1]?.rank || 0) : 0;
+    const nextRank = overCol.items[insertIndex + 1]?.rank;
+    let newRank = prevRank + 1000;
+    if (nextRank && nextRank > prevRank) {
+      newRank = Math.floor((prevRank + nextRank) / 2);
+    } else if (overCol.items.length === 0) {
+      newRank = 1000;
+    }
 
     try {
-      await fetch(`/api/work-items/${active.id}/status`, {
+      const res = await fetch(`/api/work-items/${active.id}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ toStatus: activeCol.statusId, newRank })
+        body: JSON.stringify({ toStatus: overCol.statusId, newRank })
       });
+      if (!res.ok) throw new Error('Status update failed');
+      await fetchBoard();
     } catch (err) { fetchBoard(); }
+  };
+
+  const buildGroupedColumns = (data: WorkItem[], mode: 'status' | 'assignee' | 'epic') => {
+    if (mode === 'assignee') {
+      const groups = new Map<string, WorkItem[]>();
+      data.forEach(item => {
+        const key = item.assignedTo || 'Unassigned';
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key)!.push(item);
+      });
+      return Array.from(groups.entries()).map(([key, list]) => ({
+        statusId: key,
+        statusName: key,
+        items: list
+      }));
+    }
+    if (mode === 'epic') {
+      const epics = new Map<string, WorkItem>();
+      data.filter(i => i.type === WorkItemType.EPIC).forEach(e => epics.set((e._id || e.id) as string, e));
+      const groups = new Map<string, WorkItem[]>();
+      data.forEach(item => {
+        const key = item.parentId && epics.has(item.parentId) ? item.parentId : 'no-epic';
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key)!.push(item);
+      });
+      return Array.from(groups.entries()).map(([key, list]) => {
+        const epic = key !== 'no-epic' ? epics.get(key) : null;
+        return {
+          statusId: key,
+          statusName: epic ? `${epic.key}: ${epic.title}` : 'No Epic',
+          items: list
+        };
+      });
+    }
+    return [];
   };
 
   return (
@@ -121,7 +231,7 @@ const WorkItemsBoardView: React.FC<WorkItemsBoardViewProps> = ({
          )}
       </div>
 
-      <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+      <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd}>
         <div className="flex-1 overflow-auto custom-scrollbar bg-slate-50/20 rounded-[2rem] border border-slate-100">
           <div className="flex gap-6 h-full min-w-max p-6">
             {boardData.columns.map(col => (
@@ -130,6 +240,7 @@ const WorkItemsBoardView: React.FC<WorkItemsBoardViewProps> = ({
                 column={col} 
                 onItemClick={setActiveItem} 
                 wipLimit={wipLimits[col.statusId]}
+                disableDrag={groupBy !== 'status'}
               />
             ))}
           </div>

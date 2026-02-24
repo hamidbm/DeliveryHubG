@@ -23,6 +23,12 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
   const [newChecklistItem, setNewChecklistItem] = useState('');
   const [uploading, setUploading] = useState(false);
   const [closureError, setClosureError] = useState<string | null>(null);
+  const [linkType, setLinkType] = useState<WorkItemLink['type']>('RELATES_TO');
+  const [linkKey, setLinkKey] = useState('');
+  const [currentUser, setCurrentUser] = useState<{ name?: string; email?: string } | null>(null);
+  const [resolvedLinks, setResolvedLinks] = useState<Record<string, { title?: string; type?: string; status?: string; key?: string }>>({});
+  const [parentCandidates, setParentCandidates] = useState<WorkItem[]>([]);
+  const [toast, setToast] = useState<string | null>(null);
 
   const [aiResult, setAiResult] = useState<string | null>(initialItem.aiWorkPlan || null);
   const [isAiProcessing, setIsAiProcessing] = useState(false);
@@ -53,6 +59,47 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
     setClosureError(null);
   }, [initialItem]);
 
+  useEffect(() => {
+    fetch('/api/auth/me')
+      .then((r) => r.json())
+      .then((data) => setCurrentUser(data?.user || null))
+      .catch(() => setCurrentUser(null));
+  }, []);
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 2000);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  useEffect(() => {
+    const loadParents = async () => {
+      let parentType: WorkItemType | null = null;
+      if (item.type === WorkItemType.FEATURE) parentType = WorkItemType.EPIC;
+      else if (item.type === WorkItemType.STORY) parentType = WorkItemType.FEATURE;
+      else if (item.type === WorkItemType.TASK || item.type === WorkItemType.BUG) parentType = WorkItemType.STORY;
+
+      if (!parentType) {
+        setParentCandidates([]);
+        return;
+      }
+
+      const params = new URLSearchParams();
+      if (item.bundleId) params.set('bundleId', item.bundleId);
+      if (item.applicationId) params.set('applicationId', item.applicationId);
+      params.set('types', parentType);
+
+      try {
+        const res = await fetch(`/api/work-items?${params.toString()}`);
+        const data = await res.json();
+        setParentCandidates(Array.isArray(data) ? data : []);
+      } catch {
+        setParentCandidates([]);
+      }
+    };
+    loadParents();
+  }, [item.type, item.bundleId, item.applicationId]);
+
   const handleUpdateItem = async (updates: Partial<WorkItem>) => {
     if (updates.status === WorkItemStatus.IN_PROGRESS && !isReadyForExecution) {
       setClosureError(`DoR Violation: Artifact lacks metadata (Assignee/Description).`);
@@ -75,7 +122,7 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
   const handleAddComment = async () => {
     if (!newComment.trim()) return;
     await handleUpdateItem({ 
-      comments: [...(item.comments || []), { author: 'Current User', body: newComment, createdAt: new Date().toISOString() }] 
+      comments: [...(item.comments || []), { author: currentUser?.name || currentUser?.email || 'Unknown', body: newComment, createdAt: new Date().toISOString() }] 
     });
     setNewComment('');
   };
@@ -101,30 +148,103 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
     const files = e.target.files;
     if (!files || files.length === 0) return;
     setUploading(true);
-    
-    // Fix: Explicitly cast Array.from(files) as File[] to resolve 'unknown' property access errors.
-    const newAttachments = (Array.from(files) as File[]).map((f) => ({
-      name: f.name,
-      size: f.size,
-      type: f.type,
-      url: '#',
-      uploadedBy: 'Current User',
-      createdAt: new Date().toISOString()
-    }));
-    await handleUpdateItem({ attachments: [...(item.attachments || []), ...newAttachments] as any });
-    setUploading(false);
+    try {
+      await uploadFiles(Array.from(files) as File[]);
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
   };
 
-  const handleAddLink = async () => {
-    const targetKey = window.prompt("Enter Target Artifact Key (e.g. CORE-123):");
-    if (!targetKey) return;
-    const link: WorkItemLink = {
-      type: 'RELATES_TO',
-      targetId: 'lookup-pending',
-      targetKey: targetKey.toUpperCase()
-    };
-    await handleUpdateItem({ links: [...(item.links || []), link] });
+  const uploadFiles = async (files: File[]) => {
+    if (!files.length) return;
+    const form = new FormData();
+    files.forEach((f) => form.append('files', f));
+    const res = await fetch(`/api/work-items/${item._id || item.id}/attachments`, {
+      method: 'POST',
+      body: form
+    });
+    if (res.ok) {
+      await loadFullDetails();
+      onUpdate();
+    } else {
+      const err = await res.json().catch(() => ({}));
+      alert(err.error || 'Upload failed');
+    }
   };
+
+  const deleteAttachment = async (assetId?: string) => {
+    if (!assetId) return;
+    if (!confirm('Delete attachment?')) return;
+    const res = await fetch(`/api/work-items/${item._id || item.id}/attachments/${assetId}`, { method: 'DELETE' });
+    if (res.ok) {
+      await loadFullDetails();
+      onUpdate();
+    } else {
+      const err = await res.json().catch(() => ({}));
+      alert(err.error || 'Delete failed');
+    }
+  };
+
+  const replaceAttachment = async (assetId: string, file: File) => {
+    await uploadFiles([file]);
+    await deleteAttachment(assetId);
+  };
+
+  const handleAddLink = async (targetKey: string, type: WorkItemLink['type']) => {
+    const key = String(targetKey || '').trim();
+    if (!key) return;
+    try {
+      const res = await fetch(`/api/work-items/lookup?key=${encodeURIComponent(key)}`);
+      if (!res.ok) {
+        alert('Target not found. Check the key and try again.');
+        return;
+      }
+      const target = await res.json();
+      const targetId = (target._id || target.id) as string;
+      if (String(targetId) === String(item._id || item.id)) {
+        alert('You cannot link an item to itself.');
+        return;
+      }
+      const exists = (item.links || []).some(l => l.type === type && String(l.targetId) === String(targetId));
+      if (exists) {
+        alert('This link already exists.');
+        return;
+      }
+      const link: WorkItemLink = {
+        type,
+        targetId,
+        targetKey: target.key,
+        targetTitle: target.title
+      };
+      await handleUpdateItem({ links: [...(item.links || []), link] });
+      setLinkKey('');
+    } catch {
+      alert('Link lookup failed. Please try again.');
+    }
+  };
+
+  useEffect(() => {
+    const resolve = async () => {
+      const links = item.links || [];
+      if (links.length === 0) return;
+      const next: Record<string, { title?: string; type?: string; status?: string; key?: string }> = {};
+      await Promise.all(
+        links.map(async (link) => {
+          const key = String(link.targetId);
+          if (resolvedLinks[key]) return;
+          try {
+            const res = await fetch(`/api/work-items/lookup?key=${encodeURIComponent(link.targetId)}`);
+            if (!res.ok) return;
+            const data = await res.json();
+            next[key] = { title: data.title, type: data.type, status: data.status, key: data.key };
+          } catch {}
+        })
+      );
+      if (Object.keys(next).length) setResolvedLinks(prev => ({ ...prev, ...next }));
+    };
+    resolve();
+  }, [item.links]);
 
   const runAiTool = async (endpoint: string) => {
     setIsAiProcessing(true);
@@ -156,7 +276,22 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
         <div className="flex items-center gap-6 min-w-0">
           <button onClick={onClose} className="w-10 h-10 rounded-full hover:bg-white hover:shadow-sm flex items-center justify-center text-slate-400 border border-transparent hover:border-slate-100 transition-all"><i className="fas fa-arrow-left"></i></button>
           <div className="min-w-0">
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{item.key}</span>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{item.key}</span>
+              <button
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(item.key);
+                    setToast('Key copied');
+                  } catch {}
+                }}
+                className="text-slate-300 hover:text-blue-600 transition-colors"
+                title="Copy key"
+                aria-label="Copy key"
+              >
+                <i className="fas fa-copy text-[10px]"></i>
+              </button>
+            </div>
             <h3 className="text-xl font-black text-slate-800 tracking-tight truncate leading-tight">{item.title}</h3>
           </div>
         </div>
@@ -169,6 +304,36 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
              }`}
            >
               <i className={`fas ${isSnapshotting ? 'fa-spinner fa-spin' : 'fa-stamp'}`}></i> Snapshot
+           </button>
+           <button
+             onClick={async () => {
+               if (item.isArchived) {
+                 const res = await fetch(`/api/work-items/${item._id || item.id}/restore`, { method: 'POST' });
+                 if (res.ok) {
+                   await loadFullDetails();
+                   onUpdate();
+                 } else {
+                   const err = await res.json().catch(() => ({}));
+                   alert(err.error || 'Restore failed');
+                 }
+               } else {
+                 if (!confirm('Archive this work item?')) return;
+                 const res = await fetch(`/api/work-items/${item._id || item.id}`, { method: 'DELETE' });
+                 if (res.ok) {
+                   onClose();
+                   onUpdate();
+                 } else {
+                   const err = await res.json().catch(() => ({}));
+                   alert(err.error || 'Archive failed');
+                 }
+               }
+             }}
+             className={`px-6 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest flex items-center gap-2 border transition-all ${
+               item.isArchived ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-white text-slate-500 border-slate-200 hover:text-red-600'
+             }`}
+           >
+             <i className={`fas ${item.isArchived ? 'fa-rotate-left' : 'fa-archive'}`}></i>
+             {item.isArchived ? 'Restore' : 'Archive'}
            </button>
         </div>
       </header>
@@ -220,6 +385,24 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
                   </select>
                 </div>
               </div>
+
+              {parentCandidates.length > 0 && (
+                <div className="space-y-2">
+                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Parent</label>
+                  <select
+                    value={item.parentId || ''}
+                    onChange={(e) => handleUpdateItem({ parentId: e.target.value || null })}
+                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 text-sm font-black outline-none focus:ring-2 focus:ring-blue-500/10"
+                  >
+                    <option value="">No Parent</option>
+                    {parentCandidates.map((p) => (
+                      <option key={p._id || p.id} value={p._id || p.id}>
+                        {p.key}: {p.title}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
               
               <div className="space-y-2">
                 <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Assigned Resource</label>
@@ -321,7 +504,40 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
                    <button onClick={handleAddLink} className="text-[10px] font-black text-blue-600 uppercase hover:underline">+ Link Artifact</button>
                 </div>
                 <div className="grid grid-cols-1 gap-4">
-                   {(item.links || []).map((link, i) => (
+                   <div className="flex flex-wrap items-end gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                      <div className="flex flex-col gap-2">
+                        <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Type</label>
+                        <select
+                          value={linkType}
+                          onChange={(e) => setLinkType(e.target.value as WorkItemLink['type'])}
+                          className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-[10px] font-bold"
+                        >
+                          <option value="RELATES_TO">Relates To</option>
+                          <option value="BLOCKS">Blocks</option>
+                          <option value="IS_BLOCKED_BY">Is Blocked By</option>
+                          <option value="DUPLICATES">Duplicates</option>
+                          <option value="IS_DUPLICATED_BY">Is Duplicated By</option>
+                        </select>
+                      </div>
+                      <div className="flex-1 min-w-[220px] flex flex-col gap-2">
+                        <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Target Key</label>
+                        <input
+                          value={linkKey}
+                          onChange={(e) => setLinkKey(e.target.value)}
+                          placeholder="CORE-123"
+                          className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-[10px] font-bold"
+                        />
+                      </div>
+                      <button
+                        onClick={() => handleAddLink(linkKey, linkType)}
+                        className="px-4 py-2 bg-blue-600 text-white text-[10px] font-black uppercase rounded-xl"
+                      >
+                        Add Link
+                      </button>
+                   </div>
+                   {(item.links || []).map((link, i) => {
+                     const meta = resolvedLinks[String(link.targetId)] || {};
+                     return (
                      <div key={i} className="flex items-center justify-between p-5 bg-slate-50 rounded-2xl border border-slate-100 group">
                         <div className="flex items-center gap-4">
                            <div className="w-10 h-10 rounded-xl bg-white border border-slate-100 flex items-center justify-center text-slate-400 shadow-sm">
@@ -329,12 +545,19 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
                            </div>
                            <div>
                               <span className="text-[8px] font-black text-blue-600 uppercase tracking-widest block mb-0.5">{link.type.replace(/_/g, ' ')}</span>
-                              <h5 className="text-sm font-bold text-slate-700">{link.targetKey || 'Linking...'}: {link.targetTitle || 'Fetching status...'}</h5>
+                              <h5 className="text-sm font-bold text-slate-700">
+                                {meta.key || link.targetKey || 'Linking...'}: {meta.title || link.targetTitle || 'Fetching status...'}
+                              </h5>
+                              {(meta.type || meta.status) && (
+                                <div className="text-[9px] font-bold text-slate-400 uppercase">
+                                  {meta.type ? meta.type.replace('_', ' ') : ''}{meta.type && meta.status ? ' • ' : ''}{meta.status || ''}
+                                </div>
+                              )}
                            </div>
                         </div>
                         <button onClick={() => handleUpdateItem({ links: item.links?.filter((_, idx) => idx !== i) })} className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 transition-all"><i className="fas fa-unlink text-xs"></i></button>
                      </div>
-                   ))}
+                   )})}
                    {(!item.links || item.links.length === 0) && (
                      <div className="py-20 text-center flex flex-col items-center opacity-30">
                         <i className="fas fa-network-wired text-4xl mb-4"></i>
@@ -370,8 +593,39 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
                         <div className="min-w-0 flex-1">
                            <p className="text-sm font-bold text-slate-800 truncate mb-0.5">{file.name}</p>
                            <p className="text-[9px] font-bold text-slate-400 uppercase">{(file.size / 1024).toFixed(1)} KB • {new Date(file.createdAt).toLocaleDateString()}</p>
+                           {file.url && file.type.startsWith('image') && (
+                             <img src={file.url} alt={file.name} className="mt-3 max-h-40 rounded-lg border border-slate-200 bg-white" />
+                           )}
+                           {file.url && file.type.includes('pdf') && (
+                             <iframe src={file.url} title={file.name} className="mt-3 w-full h-48 rounded-lg border border-slate-200 bg-white" />
+                           )}
                         </div>
-                        <button className="text-slate-300 hover:text-blue-600 transition-colors"><i className="fas fa-download text-xs"></i></button>
+                        <div className="flex items-center gap-2">
+                          {file.url && (
+                            <a href={file.url} className="text-slate-300 hover:text-blue-600 transition-colors" target="_blank" rel="noreferrer">
+                              <i className="fas fa-download text-xs"></i>
+                            </a>
+                          )}
+                          <label className={`text-slate-300 hover:text-blue-600 transition-colors ${file.assetId ? 'cursor-pointer' : 'opacity-40 cursor-not-allowed'}`}>
+                            <i className="fas fa-rotate text-xs"></i>
+                            <input
+                              type="file"
+                              className="hidden"
+                              disabled={!file.assetId}
+                              onChange={(e) => {
+                                const f = e.target.files?.[0];
+                                if (f && file.assetId) replaceAttachment(file.assetId, f);
+                              }}
+                            />
+                          </label>
+                          <button
+                            disabled={!file.assetId}
+                            onClick={() => deleteAttachment(file.assetId)}
+                            className={`text-slate-300 hover:text-red-600 transition-colors ${file.assetId ? '' : 'opacity-40 cursor-not-allowed'}`}
+                          >
+                            <i className="fas fa-trash text-xs"></i>
+                          </button>
+                        </div>
                      </div>
                    ))}
                 </div>
@@ -489,6 +743,11 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
         }
         .animate-shake { animation: shake 0.2s ease-in-out 0s 2; }
       `}} />
+      {toast && (
+        <div className="absolute bottom-6 right-6 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest px-4 py-2 rounded-xl shadow-xl">
+          {toast}
+        </div>
+      )}
     </div>
   );
 };

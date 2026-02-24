@@ -13,12 +13,13 @@ interface WorkItemsTreeViewProps {
   selEpicId: string;
   searchQuery: string;
   quickFilter?: string;
+  activeFilters?: { types: string[]; priorities: string[]; health: string[] };
   externalTrigger?: string | null;
   onTriggerProcessed?: () => void;
 }
 
 const WorkItemsTreeView: React.FC<WorkItemsTreeViewProps> = ({ 
-  applications, bundles, selBundleId, selAppId, selMilestone, selEpicId, searchQuery, quickFilter, externalTrigger, onTriggerProcessed 
+  applications, bundles, selBundleId, selAppId, selMilestone, selEpicId, searchQuery, quickFilter, activeFilters, externalTrigger, onTriggerProcessed 
 }) => {
   const [treeData, setTreeData] = useState<any[]>([]);
   const [activeItem, setActiveItem] = useState<WorkItem | null>(null);
@@ -41,6 +42,9 @@ const WorkItemsTreeView: React.FC<WorkItemsTreeViewProps> = ({
     });
     if (selEpicId !== 'all') params.set('epicId', selEpicId);
     if (quickFilter) params.set('quickFilter', quickFilter);
+    if (activeFilters?.types?.length) params.set('types', activeFilters.types.join(','));
+    if (activeFilters?.priorities?.length) params.set('priorities', activeFilters.priorities.join(','));
+    if (activeFilters?.health?.length) params.set('health', activeFilters.health.join(','));
 
     try {
       const res = await fetch(`/api/work-items/tree?${params.toString()}`);
@@ -56,7 +60,12 @@ const WorkItemsTreeView: React.FC<WorkItemsTreeViewProps> = ({
     if (node.nodeType === 'WORK_ITEM') {
       try {
         const res = await fetch(`/api/work-items/${node.workItemId}`);
-        setActiveItem(await res.json());
+        if (!res.ok) {
+          setActiveItem(null);
+          return;
+        }
+        const data = await res.json();
+        setActiveItem(data);
       } catch (err) { console.error("Node fetch failed", err); }
     }
   };
@@ -86,6 +95,7 @@ const WorkItemsTreeView: React.FC<WorkItemsTreeViewProps> = ({
     const isExpanded = expandedNodes.has(node.id);
     const hasChildren = node.children && node.children.length > 0;
     const isActive = activeItem && (activeItem._id === node.workItemId || activeItem.id === node.workItemId);
+    const linkBadges: string[] = Array.from(new Set((node.links || []).map((l: any) => l.type))).slice(0, 3);
 
     return (
       <div key={node.id} className="flex flex-col">
@@ -110,6 +120,20 @@ const WorkItemsTreeView: React.FC<WorkItemsTreeViewProps> = ({
           </div>
           <div className="min-w-0 flex-1">
             <span className={`text-sm font-black truncate block tracking-tight ${isActive ? 'text-white' : 'text-slate-800'}`}>{node.label}</span>
+            {linkBadges.length > 0 && (
+              <div className="flex items-center gap-1 mt-1 flex-wrap">
+                {linkBadges.map((t) => (
+                  <span
+                    key={t}
+                    className={`text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded border ${
+                      isActive ? 'bg-white/15 text-white border-white/20' : 'bg-slate-50 text-slate-500 border-slate-100'
+                    }`}
+                  >
+                    {t.replace(/_/g, ' ')}
+                  </span>
+                ))}
+              </div>
+            )}
             {hasChildren && node.completion !== undefined && (
               <div className="flex items-center gap-2 mt-1">
                 <div className={`h-1 flex-1 rounded-full overflow-hidden ${isActive ? 'bg-white/20' : 'bg-slate-100 shadow-inner'}`}>
@@ -143,16 +167,32 @@ const WorkItemsTreeView: React.FC<WorkItemsTreeViewProps> = ({
     <div className="flex h-[800px] bg-white rounded-[3rem] border border-slate-200 shadow-2xl overflow-hidden animate-fadeIn">
       <aside className="w-[450px] border-r border-slate-100 flex flex-col bg-slate-50/30 shrink-0">
         <header className="p-8 border-b border-slate-100 bg-white/50 backdrop-blur shrink-0 space-y-6">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-4">
              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Work Hierarchy</h3>
-             <div className="flex bg-slate-200 p-0.5 rounded-xl">
-                <button onClick={() => setTreeMode('hierarchy')} className={`px-4 py-2 text-[10px] font-black uppercase rounded-lg transition-all ${treeMode === 'hierarchy' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400'}`}>Delivery</button>
-                <button onClick={() => setTreeMode('milestone')} className={`px-4 py-2 text-[10px] font-black uppercase rounded-lg transition-all ${treeMode === 'milestone' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400'}`}>Milestone</button>
+             <div className="flex items-center gap-2">
+               <div className="flex bg-slate-200 p-0.5 rounded-xl">
+                  <button onClick={() => setTreeMode('hierarchy')} className={`px-4 py-2 text-[10px] font-black uppercase rounded-lg transition-all ${treeMode === 'hierarchy' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400'}`}>Delivery</button>
+                  <button onClick={() => setTreeMode('milestone')} className={`px-4 py-2 text-[10px] font-black uppercase rounded-lg transition-all ${treeMode === 'milestone' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400'}`}>Milestone</button>
+               </div>
+               <div className="flex items-center gap-1">
+                 <button
+                   onClick={expandAll}
+                   className="w-8 h-8 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-all flex items-center justify-center"
+                   title="Expand all"
+                   aria-label="Expand all"
+                 >
+                   <img src="/icons/expand.gif" alt="" className="w-4 h-4" />
+                 </button>
+                 <button
+                   onClick={collapseAll}
+                   className="w-8 h-8 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-all flex items-center justify-center"
+                   title="Collapse all"
+                   aria-label="Collapse all"
+                 >
+                   <img src="/icons/collapse.gif" alt="" className="w-4 h-4" />
+                 </button>
+               </div>
              </div>
-          </div>
-          <div className="flex items-center gap-2">
-             <button onClick={expandAll} className="flex-1 py-2.5 bg-white border border-slate-200 rounded-xl text-[9px] font-black text-slate-500 uppercase tracking-[0.2em] hover:bg-slate-50 hover:text-blue-600 transition-all shadow-sm active:scale-95">Expand All</button>
-             <button onClick={collapseAll} className="flex-1 py-2.5 bg-white border border-slate-200 rounded-xl text-[9px] font-black text-slate-500 uppercase tracking-[0.2em] hover:bg-slate-50 hover:text-blue-600 transition-all shadow-sm active:scale-95">Collapse All</button>
           </div>
         </header>
 
@@ -164,7 +204,7 @@ const WorkItemsTreeView: React.FC<WorkItemsTreeViewProps> = ({
       </aside>
 
       <main className="flex-1 overflow-y-auto bg-white relative custom-scrollbar">
-        {activeItem ? <WorkItemDetails item={activeItem} bundles={bundles} applications={applications} onUpdate={fetchTree} onClose={() => setActiveItem(null)} /> : <div className="h-full flex flex-col items-center justify-center p-20 text-center bg-slate-50/10"><div className="w-24 h-24 bg-white rounded-[2.5rem] flex items-center justify-center mb-8 border border-slate-100 shadow-xl shadow-slate-200/50"><i className="fas fa-tasks text-slate-100 text-4xl"></i></div><h3 className="text-xl font-black text-slate-800 tracking-tight uppercase">Hierarchy Explorer</h3><p className="text-slate-400 font-medium max-w-xs mt-3 leading-relaxed">Select an artifact to view implementation details and status roll-ups.</p></div>}
+        {activeItem ? <WorkItemDetails key={(activeItem._id || activeItem.id) as string} item={activeItem} bundles={bundles} applications={applications} onUpdate={fetchTree} onClose={() => setActiveItem(null)} /> : <div className="h-full flex flex-col items-center justify-center p-20 text-center bg-slate-50/10"><div className="w-24 h-24 bg-white rounded-[2.5rem] flex items-center justify-center mb-8 border border-slate-100 shadow-xl shadow-slate-200/50"><i className="fas fa-tasks text-slate-100 text-4xl"></i></div><h3 className="text-xl font-black text-slate-800 tracking-tight uppercase">Hierarchy Explorer</h3><p className="text-slate-400 font-medium max-w-xs mt-3 leading-relaxed">Select an artifact to view implementation details and status roll-ups.</p></div>}
       </main>
 
       {isCreating && <CreateWorkItemModal bundles={bundles} applications={applications} initialBundleId={activeItem?.bundleId || (selBundleId !== 'all' ? selBundleId : '')} initialAppId={activeItem?.applicationId || (selAppId !== 'all' ? selAppId : '')} initialParentId={activeItem?._id || activeItem?.id} initialType={getSubArtifactType(activeItem?.type)} onClose={() => setIsCreating(false)} onSuccess={(item) => { setIsCreating(false); fetchTree(); handleNodeSelect({ nodeType: 'WORK_ITEM', workItemId: item.insertedId || item.id }); }} />}

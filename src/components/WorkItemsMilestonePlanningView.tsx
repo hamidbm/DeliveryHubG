@@ -92,6 +92,7 @@ const WorkItemsMilestonePlanningView: React.FC<WorkItemsMilestonePlanningViewPro
   const [loading, setLoading] = useState(true);
   const [activeItem, setActiveItem] = useState<WorkItem | null>(null);
   const [draggedItem, setDraggedItem] = useState<WorkItem | null>(null);
+  const { setNodeRef: setBacklogRef, isOver: isOverBacklog } = useDroppable({ id: 'backlog' });
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
@@ -134,7 +135,10 @@ const WorkItemsMilestonePlanningView: React.FC<WorkItemsMilestonePlanningViewPro
              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Execution Backlog</h3>
              <p className="text-xs font-bold text-slate-500">{items.filter(i => !i.milestoneIds?.length).length} unscheduled artifacts</p>
           </div>
-          <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar bg-slate-50/20">
+          <div
+            ref={setBacklogRef}
+            className={`flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar transition-all ${isOverBacklog ? 'bg-blue-50/50 border-2 border-dashed border-blue-200' : 'bg-slate-50/20'}`}
+          >
              {items.filter(i => !i.milestoneIds?.length).map(item => <DraggableItem key={(item._id || item.id) as string} item={item} onClick={() => setActiveItem(item)} />)}
           </div>
           <div className="p-6 border-t border-slate-100 bg-white">

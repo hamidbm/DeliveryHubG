@@ -221,19 +221,6 @@ const Layout: React.FC<LayoutProps> = ({
                 className="bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-1.5 text-[11px] font-bold focus:border-blue-500 outline-none w-44 transition-all"
               />
             </div>
-            {activeTab === 'wiki' && (
-              <button
-                onClick={() => setIncludeFeedbackAssets?.(!includeFeedbackAssets)}
-                className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest border transition-all ${
-                  includeFeedbackAssets
-                    ? 'bg-slate-900 text-white border-slate-900'
-                    : 'bg-white text-slate-500 border-slate-200'
-                }`}
-              >
-                {includeFeedbackAssets ? 'Include Feedback' : 'Hide Feedback'}
-              </button>
-            )}
-            
             {activeTab === 'wiki' ? (
               <>
                 <button 
@@ -264,7 +251,7 @@ const Layout: React.FC<LayoutProps> = ({
         </div>
       )}
 
-      <main className={`${showFilterBar ? 'mt-[7.5rem]' : 'mt-16'} p-6 flex-grow overflow-y-auto bg-[#F8FAFC]`}>
+      <main className={`${showFilterBar ? 'mt-[7.5rem]' : 'mt-16'} ${activeTab === 'activities' ? 'px-6 pb-6 pt-0 overflow-y-auto h-[calc(100vh-4rem)] min-h-0' : 'p-6 overflow-y-auto'} overflow-x-visible bg-[#F8FAFC]`}>
         <div className="max-w-[1600px] mx-auto">
           {children}
         </div>

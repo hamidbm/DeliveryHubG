@@ -9,9 +9,10 @@ interface WorkItemCardProps {
   item: WorkItem;
   onClick?: () => void;
   isOverlay?: boolean;
+  disableDrag?: boolean;
 }
 
-const WorkItemCard: React.FC<WorkItemCardProps> = ({ item, onClick, isOverlay }) => {
+const WorkItemCard: React.FC<WorkItemCardProps> = ({ item, onClick, isOverlay, disableDrag }) => {
   const {
     attributes,
     listeners,
@@ -19,7 +20,7 @@ const WorkItemCard: React.FC<WorkItemCardProps> = ({ item, onClick, isOverlay })
     transform,
     transition,
     isDragging
-  } = useSortable({ id: (item._id || item.id) as string });
+  } = useSortable({ id: (item._id || item.id) as string, disabled: !!disableDrag });
 
   const style = {
     transform: CSS.Translate.toString(transform),
@@ -64,7 +65,7 @@ const WorkItemCard: React.FC<WorkItemCardProps> = ({ item, onClick, isOverlay })
       {...attributes}
       {...listeners}
       onClick={onClick}
-      className={`bg-white p-5 rounded-2xl border transition-all cursor-grab active:cursor-grabbing group ${
+      className={`bg-white p-5 rounded-2xl border transition-all ${disableDrag ? 'cursor-default' : 'cursor-grab active:cursor-grabbing'} group ${
         isOverlay ? 'shadow-2xl ring-2 ring-blue-500 rotate-2' : 'shadow-sm border-slate-100 hover:shadow-xl hover:shadow-200/50'
       } ${item.isFlagged ? 'border-l-4 border-l-red-500 ring-1 ring-red-100' : isBlocked ? 'border-l-4 border-l-amber-500' : ''} ${isStale ? 'grayscale-[0.4] opacity-90' : ''}`}
     >
@@ -93,6 +94,15 @@ const WorkItemCard: React.FC<WorkItemCardProps> = ({ item, onClick, isOverlay })
       <h4 className="text-sm font-bold text-slate-800 leading-snug mb-4 group-hover:text-blue-600 transition-colors">
         {item.title}
       </h4>
+      {item.links && item.links.length > 0 && (
+        <div className="flex items-center gap-1 flex-wrap mb-3">
+          {Array.from(new Set(item.links.map(l => l.type))).slice(0, 3).map(t => (
+            <span key={t} className="text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded border bg-slate-50 text-slate-500 border-slate-100">
+              {t.replace(/_/g, ' ')}
+            </span>
+          ))}
+        </div>
+      )}
 
       <div className="flex items-center justify-between mt-auto pt-3 border-t border-slate-50">
         <div className="flex items-center gap-2">
