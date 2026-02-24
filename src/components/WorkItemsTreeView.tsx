@@ -14,12 +14,13 @@ interface WorkItemsTreeViewProps {
   searchQuery: string;
   quickFilter?: string;
   activeFilters?: { types: string[]; priorities: string[]; health: string[] };
+  includeArchived?: boolean;
   externalTrigger?: string | null;
   onTriggerProcessed?: () => void;
 }
 
 const WorkItemsTreeView: React.FC<WorkItemsTreeViewProps> = ({ 
-  applications, bundles, selBundleId, selAppId, selMilestone, selEpicId, searchQuery, quickFilter, activeFilters, externalTrigger, onTriggerProcessed 
+  applications, bundles, selBundleId, selAppId, selMilestone, selEpicId, searchQuery, quickFilter, activeFilters, includeArchived, externalTrigger, onTriggerProcessed 
 }) => {
   const [treeData, setTreeData] = useState<any[]>([]);
   const [activeItem, setActiveItem] = useState<WorkItem | null>(null);
@@ -45,6 +46,7 @@ const WorkItemsTreeView: React.FC<WorkItemsTreeViewProps> = ({
     if (activeFilters?.types?.length) params.set('types', activeFilters.types.join(','));
     if (activeFilters?.priorities?.length) params.set('priorities', activeFilters.priorities.join(','));
     if (activeFilters?.health?.length) params.set('health', activeFilters.health.join(','));
+    if (includeArchived) params.set('includeArchived', 'true');
 
     try {
       const res = await fetch(`/api/work-items/tree?${params.toString()}`);
@@ -91,6 +93,73 @@ const WorkItemsTreeView: React.FC<WorkItemsTreeViewProps> = ({
     }
   };
 
+  const getStatusDot = (status?: string) => {
+    switch (status) {
+      case WorkItemStatus.DONE:
+        return 'bg-emerald-500';
+      case WorkItemStatus.IN_PROGRESS:
+        return 'bg-blue-500';
+      case WorkItemStatus.BLOCKED:
+        return 'bg-red-500';
+      case WorkItemStatus.REVIEW:
+        return 'bg-amber-500';
+      default:
+        return 'bg-slate-300';
+    }
+  };
+
+  const handleQuickAdd = (node: any) => {
+    if (node.nodeType === 'WORK_ITEM') {
+      handleNodeSelect(node);
+      setIsCreating(true);
+    }
+  };
+
+  const toggleFlag = async (node: any) => {
+    if (node.nodeType !== 'WORK_ITEM') return;
+    try {
+      await fetch(`/api/work-items/${node.workItemId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isFlagged: !node.isFlagged })
+      });
+      fetchTree();
+    } catch {}
+  };
+
+  const getAllowedParentType = (childType?: WorkItemType) => {
+    if (childType === WorkItemType.FEATURE) return WorkItemType.EPIC;
+    if (childType === WorkItemType.STORY) return WorkItemType.FEATURE;
+    if (childType === WorkItemType.TASK || childType === WorkItemType.BUG) return WorkItemType.STORY;
+    return null;
+  };
+
+  const handleDragStart = (e: React.DragEvent, node: any) => {
+    if (node.nodeType !== 'WORK_ITEM') return;
+    const payload = { id: node.workItemId, type: node.type };
+    e.dataTransfer.setData('application/json', JSON.stringify(payload));
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDrop = async (e: React.DragEvent, target: any) => {
+    e.preventDefault();
+    if (target.nodeType !== 'WORK_ITEM') return;
+    const raw = e.dataTransfer.getData('application/json');
+    if (!raw) return;
+    try {
+      const dragged = JSON.parse(raw);
+      if (!dragged?.id || dragged.id === target.workItemId) return;
+      const allowedParent = getAllowedParentType(dragged.type);
+      if (!allowedParent || allowedParent !== target.type) return;
+      await fetch(`/api/work-items/${dragged.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ parentId: target.workItemId })
+      });
+      fetchTree();
+    } catch {}
+  };
+
   const renderTreeNode = (node: any, depth = 0) => {
     const isExpanded = expandedNodes.has(node.id);
     const hasChildren = node.children && node.children.length > 0;
@@ -100,11 +169,17 @@ const WorkItemsTreeView: React.FC<WorkItemsTreeViewProps> = ({
     return (
       <div key={node.id} className="flex flex-col">
         <button
+          draggable={node.nodeType === 'WORK_ITEM'}
+          onDragStart={(e) => handleDragStart(e, node)}
+          onDragOver={(e) => {
+            if (node.nodeType === 'WORK_ITEM') e.preventDefault();
+          }}
+          onDrop={(e) => handleDrop(e, node)}
           onClick={() => {
             if (hasChildren) setExpandedNodes(prev => { const n = new Set(prev); n.has(node.id) ? n.delete(node.id) : n.add(node.id); return n; });
             handleNodeSelect(node);
           }}
-          className={`flex items-center gap-3 px-3 py-2.5 rounded-2xl transition-all text-left group border border-transparent mb-1 ${
+          className={`flex items-center gap-3 px-3 py-2 rounded-2xl transition-all text-left group border border-transparent mb-1 ${
             isActive ? 'bg-blue-600 text-white shadow-xl shadow-blue-500/20' : 'hover:bg-white hover:shadow-sm text-slate-600 hover:border-slate-100'
           }`}
           style={{ marginLeft: `${depth * 14}px` }}
@@ -114,6 +189,9 @@ const WorkItemsTreeView: React.FC<WorkItemsTreeViewProps> = ({
           </div>
           <div className="relative shrink-0">
             <i className={`fas ${getIcon(node.type)} text-lg ${isActive ? 'text-white' : ''}`}></i>
+            {node.status && (
+              <span className={`absolute -bottom-1 -right-1 w-2 h-2 rounded-full border-2 border-white ${getStatusDot(node.status)}`}></span>
+            )}
             {node.isFlagged && (
               <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-white animate-pulse" />
             )}
@@ -151,6 +229,36 @@ const WorkItemsTreeView: React.FC<WorkItemsTreeViewProps> = ({
                'bg-slate-50 text-slate-500 border-slate-100'
              }`}>{node.status.replace('_', ' ')}</span>
           )}
+          {node.nodeType === 'WORK_ITEM' && (
+            <div className={`ml-auto items-center gap-2 ${isActive ? 'flex' : 'hidden group-hover:flex'}`}>
+              <span
+                role="button"
+                tabIndex={0}
+                onClick={(e) => { e.stopPropagation(); handleQuickAdd(node); }}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); handleQuickAdd(node); } }}
+                className={`w-6 h-6 rounded-lg flex items-center justify-center text-[10px] transition-all cursor-pointer ${
+                  isActive ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-400 hover:text-blue-600'
+                }`}
+                title="Add child"
+                aria-label="Add child"
+              >
+                <i className="fas fa-plus"></i>
+              </span>
+              <span
+                role="button"
+                tabIndex={0}
+                onClick={(e) => { e.stopPropagation(); toggleFlag(node); }}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleFlag(node); } }}
+                className={`w-6 h-6 rounded-lg flex items-center justify-center text-[10px] transition-all cursor-pointer ${
+                  isActive ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-400 hover:text-red-500'
+                }`}
+                title={node.isFlagged ? 'Clear flag' : 'Raise flag'}
+                aria-label="Toggle flag"
+              >
+                <i className={`fas ${node.isFlagged ? 'fa-flag' : 'fa-flag-checkered'}`}></i>
+              </span>
+            </div>
+          )}
         </button>
         {isExpanded && node.children && <div className="flex flex-col">{node.children.map((child: any) => renderTreeNode(child, depth + 1))}</div>}
       </div>
@@ -166,7 +274,7 @@ const WorkItemsTreeView: React.FC<WorkItemsTreeViewProps> = ({
   return (
     <div className="flex h-[800px] bg-white rounded-[3rem] border border-slate-200 shadow-2xl overflow-hidden animate-fadeIn">
       <aside className="w-[450px] border-r border-slate-100 flex flex-col bg-slate-50/30 shrink-0">
-        <header className="p-8 border-b border-slate-100 bg-white/50 backdrop-blur shrink-0 space-y-6">
+        <header className="sticky top-0 z-10 p-8 border-b border-slate-100 bg-white/90 backdrop-blur shrink-0 space-y-6">
           <div className="flex items-center justify-between gap-4">
              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Work Hierarchy</h3>
              <div className="flex items-center gap-2">

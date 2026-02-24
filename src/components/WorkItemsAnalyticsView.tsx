@@ -13,10 +13,11 @@ interface WorkItemsAnalyticsViewProps {
   searchQuery: string;
   quickFilter?: string;
   activeFilters?: { types: string[]; priorities: string[]; health: string[] };
+  includeArchived?: boolean;
 }
 
 const WorkItemsAnalyticsView: React.FC<WorkItemsAnalyticsViewProps> = ({ 
-  selBundleId, selAppId, selMilestone, selEpicId, searchQuery, quickFilter, activeFilters 
+  selBundleId, selAppId, selMilestone, selEpicId, searchQuery, quickFilter, activeFilters, includeArchived 
 }) => {
   const [items, setItems] = useState<WorkItem[]>([]);
   const [milestones, setMilestones] = useState<Milestone[]>([]);
@@ -32,6 +33,7 @@ const WorkItemsAnalyticsView: React.FC<WorkItemsAnalyticsViewProps> = ({
       if (activeFilters?.types?.length) params.set('types', activeFilters.types.join(','));
       if (activeFilters?.priorities?.length) params.set('priorities', activeFilters.priorities.join(','));
       if (activeFilters?.health?.length) params.set('health', activeFilters.health.join(','));
+      if (includeArchived) params.set('includeArchived', 'true');
 
       try {
         const [iRes, mRes] = await Promise.all([

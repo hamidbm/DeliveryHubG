@@ -14,10 +14,11 @@ interface WorkItemsListViewProps {
   searchQuery: string;
   quickFilter?: string;
   activeFilters?: { types: string[]; priorities: string[]; health: string[] };
+  includeArchived?: boolean;
 }
 
 const WorkItemsListView: React.FC<WorkItemsListViewProps> = ({ 
-  applications, bundles, selBundleId, selAppId, selMilestone, selEpicId, searchQuery, quickFilter, activeFilters 
+  applications, bundles, selBundleId, selAppId, selMilestone, selEpicId, searchQuery, quickFilter, activeFilters, includeArchived 
 }) => {
   const [items, setItems] = useState<WorkItem[]>([]);
   const [milestones, setMilestones] = useState<Milestone[]>([]);
@@ -36,6 +37,7 @@ const WorkItemsListView: React.FC<WorkItemsListViewProps> = ({
     if (activeFilters?.types?.length) params.set('types', activeFilters.types.join(','));
     if (activeFilters?.priorities?.length) params.set('priorities', activeFilters.priorities.join(','));
     if (activeFilters?.health?.length) params.set('health', activeFilters.health.join(','));
+    if (includeArchived) params.set('includeArchived', 'true');
     try {
       const [iRes, mRes] = await Promise.all([
         fetch(`/api/work-items?${params.toString()}`),

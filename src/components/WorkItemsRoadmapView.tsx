@@ -12,10 +12,11 @@ interface WorkItemsRoadmapViewProps {
   searchQuery: string;
   quickFilter?: string;
   activeFilters?: { types: string[]; priorities: string[]; health: string[] };
+  includeArchived?: boolean;
 }
 
 const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({ 
-  applications, bundles, selBundleId, selAppId, selEpicId, searchQuery, quickFilter, activeFilters 
+  applications, bundles, selBundleId, selAppId, selEpicId, searchQuery, quickFilter, activeFilters, includeArchived 
 }) => {
   const [items, setItems] = useState<WorkItem[]>([]);
   const [milestones, setMilestones] = useState<Milestone[]>([]);
@@ -38,6 +39,7 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
     if (activeFilters?.types?.length) params.set('types', activeFilters.types.join(','));
     if (activeFilters?.priorities?.length) params.set('priorities', activeFilters.priorities.join(','));
     if (activeFilters?.health?.length) params.set('health', activeFilters.health.join(','));
+    if (includeArchived) params.set('includeArchived', 'true');
 
     const [wRes, mRes] = await Promise.all([
       fetch(`/api/work-items?${params.toString()}`),

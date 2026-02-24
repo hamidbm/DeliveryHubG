@@ -1578,6 +1578,10 @@ const ensureWorkItemsIndexes = async (db: any) => {
   await db.collection('workitems').createIndex({ key: 1 }, { unique: false });
 };
 
+const ensureWorkItemAttachmentIndexes = async (db: any) => {
+  await db.collection('workitems_attachments').createIndex({ workItemId: 1, createdAt: -1 });
+};
+
 let warnedLegacySprints = false;
 const warnLegacySprints = async (db: any) => {
   if (warnedLegacySprints) return;
@@ -1782,7 +1786,7 @@ export const saveWorkItem = async (item: Partial<WorkItem>, user?: any) => {
     if (!existing) throw new Error("Work item not found");
 
     const activities: any[] = [];
-    const fieldsToTrack = ['status', 'priority', 'assignedTo', 'title', 'description', 'storyPoints', 'parentId', 'milestoneIds', 'timeEstimate', 'timeLogged', 'isFlagged', 'attachments', 'links', 'aiWorkPlan', 'checklists'];
+    const fieldsToTrack = ['status', 'priority', 'assignedTo', 'title', 'description', 'storyPoints', 'parentId', 'milestoneIds', 'timeEstimate', 'timeLogged', 'isFlagged', 'attachments', 'links', 'aiWorkPlan', 'checklists', 'isArchived'];
     
     fieldsToTrack.forEach(field => {
       const oldVal = existing[field];

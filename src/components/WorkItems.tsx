@@ -29,6 +29,7 @@ const WorkItems: React.FC<WorkItemsProps> = (props) => {
   const activeView = searchParams.get('view') || 'tree';
   const [quickFilter, setQuickFilter] = useState<'all' | 'my' | 'updated' | 'blocked'>('all');
   const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
+  const [includeArchived, setIncludeArchived] = useState(false);
   
   // Detailed Filtering State
   const [filters, setFilters] = useState({
@@ -54,13 +55,14 @@ const WorkItems: React.FC<WorkItemsProps> = (props) => {
     ...props,
     selEpicId: props.selEpicId || 'all',
     quickFilter,
-    activeFilters: filters
+    activeFilters: filters,
+    includeArchived
   };
 
   return (
     <div className="flex flex-col gap-6 relative">
       {/* View Switcher & Quick Filters Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between bg-white px-8 py-4 rounded-[2rem] border border-slate-200 shadow-sm gap-4">
+      <div className="sticky top-0 z-40 flex flex-col md:flex-row md:items-center justify-between bg-white/95 backdrop-blur px-8 py-4 rounded-[2rem] border border-slate-200 shadow-sm gap-4">
         <div className="flex items-center gap-6 overflow-x-auto no-scrollbar">
           <div className="flex bg-slate-100 p-1 rounded-xl shrink-0">
             {[
@@ -92,6 +94,15 @@ const WorkItems: React.FC<WorkItemsProps> = (props) => {
            >
               <i className="fas fa-filter"></i> 
               Filters { (filters.types.length + filters.priorities.length) > 0 ? `(${filters.types.length + filters.priorities.length})` : '' }
+           </button>
+           <button
+             onClick={() => setIncludeArchived(v => !v)}
+             className={`px-4 py-2 text-[9px] font-black uppercase rounded-xl border transition-all flex items-center gap-2 ${
+               includeArchived ? 'bg-amber-50 border-amber-200 text-amber-700' : 'bg-white border-slate-200 text-slate-400 hover:text-slate-600'
+             }`}
+           >
+             <i className="fas fa-box-archive"></i>
+             {includeArchived ? 'Archived: On' : 'Archived: Off'}
            </button>
            <div className="h-6 w-[1px] bg-slate-100 mx-2"></div>
            <div className="flex items-center gap-3 bg-slate-50 p-1.5 rounded-2xl border border-slate-100 self-end md:self-auto">

@@ -23,6 +23,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (!files || files.length === 0) return NextResponse.json({ error: 'No files provided' }, { status: 400 });
 
     const db = await getDb();
+    await db.collection('workitems_attachments').createIndex({ workItemId: 1, createdAt: -1 });
     const now = new Date().toISOString();
     const uploadedBy = (payload as any)?.name || 'System';
     const itemId = ObjectId.isValid(id) ? new ObjectId(id) : id;

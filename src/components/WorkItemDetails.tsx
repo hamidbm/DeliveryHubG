@@ -1,9 +1,10 @@
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, Suspense } from 'react';
 import { WorkItem, WorkItemType, WorkItemStatus, Bundle, Application, WorkItemLink, WorkItemAttachment, WorkItemActivity, WorkItemComment, Milestone, ChecklistItem } from '../types';
 import AssigneeSearch from './AssigneeSearch';
-import { marked } from 'marked';
-import DOMPurify from 'isomorphic-dompurify';
+const WorkItemAiPanel = React.lazy(() => import('./WorkItemAiPanel'));
+const WorkItemAttachmentsPanel = React.lazy(() => import('./WorkItemAttachmentsPanel'));
+const WorkItemActivityPanel = React.lazy(() => import('./WorkItemActivityPanel'));
 
 interface WorkItemDetailsProps {
   item: WorkItem;
@@ -191,6 +192,18 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
     await deleteAttachment(assetId);
   };
 
+  const deleteWorkItem = async () => {
+    if (!confirm('Archive this work item?')) return;
+    const res = await fetch(`/api/work-items/${item._id || item.id}`, { method: 'DELETE' });
+    if (res.ok) {
+      onClose();
+      onUpdate();
+    } else {
+      const err = await res.json().catch(() => ({}));
+      alert(err.error || 'Archive failed');
+    }
+  };
+
   const handleAddLink = async (targetKey: string, type: WorkItemLink['type']) => {
     const key = String(targetKey || '').trim();
     if (!key) return;
@@ -296,6 +309,13 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
           </div>
         </div>
         <div className="flex items-center gap-4">
+           <button
+             disabled
+             className="px-6 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest flex items-center gap-2 border border-slate-200 text-slate-300 bg-slate-50 cursor-not-allowed"
+             title="AI assistant coming soon"
+           >
+             <i className="fas fa-wand-magic-sparkles"></i> AI Assist
+           </button>
            <button 
              onClick={handleSnapshot}
              disabled={isSnapshotting || item.status !== WorkItemStatus.DONE}
@@ -317,15 +337,7 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
                    alert(err.error || 'Restore failed');
                  }
                } else {
-                 if (!confirm('Archive this work item?')) return;
-                 const res = await fetch(`/api/work-items/${item._id || item.id}`, { method: 'DELETE' });
-                 if (res.ok) {
-                   onClose();
-                   onUpdate();
-                 } else {
-                   const err = await res.json().catch(() => ({}));
-                   alert(err.error || 'Archive failed');
-                 }
+                 await deleteWorkItem();
                }
              }}
              className={`px-6 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest flex items-center gap-2 border transition-all ${
@@ -351,10 +363,11 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
           <button 
             key={tab.id} 
             onClick={() => setActiveTab(tab.id as any)} 
-            className={`px-6 py-4 text-[10px] font-black uppercase tracking-widest border-b-2 flex items-center gap-2 transition-all ${activeTab === tab.id ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+            className={`relative px-6 py-5 text-[10px] font-black uppercase tracking-widest border-b-2 flex items-center gap-2 transition-all ${activeTab === tab.id ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
           >
             <i className={`fas ${tab.icon} text-[10px]`}></i>
             {tab.label}
+            <span className={`absolute bottom-0 left-1/2 -translate-x-1/2 h-0.5 bg-blue-600 transition-all ${activeTab === tab.id ? 'w-8' : 'w-0'}`} />
           </button>
         ))}
       </div>
@@ -570,165 +583,39 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
         )}
 
         {activeTab === 'attachments' && (
-          <div className="p-10 space-y-8 animate-fadeIn">
-             <div className="bg-white p-10 rounded-[2.5rem] border border-slate-100 shadow-sm">
-                <div className="flex justify-between items-center mb-8">
-                   <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Artifact Vault</h4>
-                   <button 
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={uploading}
-                    className="px-5 py-2 bg-slate-900 text-white text-[9px] font-black uppercase rounded-xl hover:bg-blue-600 transition-all"
-                   >
-                     {uploading ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-cloud-arrow-up mr-2"></i>}
-                     {uploading ? 'Processing...' : 'Upload Docs'}
-                   </button>
-                   <input type="file" ref={fileInputRef} className="hidden" multiple onChange={handleFileUpload} />
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                   {(item.attachments || []).map((file, i) => (
-                     <div key={i} className="flex items-center gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-100 group relative">
-                        <div className="w-12 h-12 rounded-xl bg-white border border-slate-100 flex items-center justify-center text-2xl text-blue-500 shadow-sm">
-                           <i className={`fas ${file.type.includes('image') ? 'fa-file-image' : file.type.includes('pdf') ? 'fa-file-pdf' : 'fa-file-lines'}`}></i>
-                        </div>
-                        <div className="min-w-0 flex-1">
-                           <p className="text-sm font-bold text-slate-800 truncate mb-0.5">{file.name}</p>
-                           <p className="text-[9px] font-bold text-slate-400 uppercase">{(file.size / 1024).toFixed(1)} KB • {new Date(file.createdAt).toLocaleDateString()}</p>
-                           {file.url && file.type.startsWith('image') && (
-                             <img src={file.url} alt={file.name} className="mt-3 max-h-40 rounded-lg border border-slate-200 bg-white" />
-                           )}
-                           {file.url && file.type.includes('pdf') && (
-                             <iframe src={file.url} title={file.name} className="mt-3 w-full h-48 rounded-lg border border-slate-200 bg-white" />
-                           )}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {file.url && (
-                            <a href={file.url} className="text-slate-300 hover:text-blue-600 transition-colors" target="_blank" rel="noreferrer">
-                              <i className="fas fa-download text-xs"></i>
-                            </a>
-                          )}
-                          <label className={`text-slate-300 hover:text-blue-600 transition-colors ${file.assetId ? 'cursor-pointer' : 'opacity-40 cursor-not-allowed'}`}>
-                            <i className="fas fa-rotate text-xs"></i>
-                            <input
-                              type="file"
-                              className="hidden"
-                              disabled={!file.assetId}
-                              onChange={(e) => {
-                                const f = e.target.files?.[0];
-                                if (f && file.assetId) replaceAttachment(file.assetId, f);
-                              }}
-                            />
-                          </label>
-                          <button
-                            disabled={!file.assetId}
-                            onClick={() => deleteAttachment(file.assetId)}
-                            className={`text-slate-300 hover:text-red-600 transition-colors ${file.assetId ? '' : 'opacity-40 cursor-not-allowed'}`}
-                          >
-                            <i className="fas fa-trash text-xs"></i>
-                          </button>
-                        </div>
-                     </div>
-                   ))}
-                </div>
-             </div>
-          </div>
+          <Suspense fallback={<div className="p-10"><div className="h-48 bg-white rounded-2xl border border-slate-100 animate-pulse"></div></div>}>
+            <WorkItemAttachmentsPanel
+              attachments={item.attachments || []}
+              uploading={uploading}
+              onTriggerUpload={() => fileInputRef.current?.click()}
+              onFileChange={handleFileUpload}
+              fileInputRef={fileInputRef}
+              onDelete={deleteAttachment}
+              onReplace={replaceAttachment}
+            />
+          </Suspense>
         )}
 
         {activeTab === 'activity' && (
-          <div className="p-10 space-y-8 animate-fadeIn">
-             <div className="bg-white p-10 rounded-[2.5rem] border border-slate-100 shadow-sm relative overflow-hidden">
-                <div className="absolute left-[4.5rem] top-20 bottom-10 w-[1px] bg-slate-100"></div>
-                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-12">Execution Audit Trail</h4>
-                <div className="space-y-10 relative z-10">
-                   {(item.activity || []).slice().reverse().map((act, i) => (
-                     <div key={i} className="flex gap-10">
-                        <div className="w-12 text-right shrink-0">
-                           <span className="text-[9px] font-black text-slate-300 uppercase tracking-tighter">{new Date(act.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                        </div>
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 border-2 border-white shadow-sm ${
-                          act.action === 'CREATED' ? 'bg-emerald-50 text-white' : 
-                          act.action === 'CHANGED_STATUS' ? 'bg-blue-500 text-white' : 
-                          act.action === 'IMPEDIMENT_RAISED' ? 'bg-red-500 text-white' : 'bg-slate-200 text-slate-500'
-                        }`}>
-                           <i className={`fas ${
-                             act.action === 'CREATED' ? 'fa-plus' : 
-                             act.action === 'CHANGED_STATUS' ? 'fa-rotate' : 
-                             act.action === 'IMPEDIMENT_RAISED' ? 'fa-flag' : 'fa-pen-to-square'
-                           } text-[8px]`}></i>
-                        </div>
-                        <div className="flex-1 pt-1">
-                           <p className="text-xs font-bold text-slate-700">
-                             <span className="text-blue-600">{act.user}</span> {act.action.replace(/_/g, ' ').toLowerCase()} {act.field && <span className="text-slate-400 font-medium">field</span>} <span className="text-slate-900">{act.field}</span>
-                           </p>
-                           {act.from !== undefined && act.to !== undefined && (
-                             <div className="flex items-center gap-2 mt-1 text-[10px] font-bold text-slate-400 uppercase">
-                                <span>{String(act.from)}</span>
-                                <i className="fas fa-arrow-right text-[8px]"></i>
-                                <span className="text-slate-600">{String(act.to)}</span>
-                             </div>
-                           )}
-                           <p className="text-[8px] font-bold text-slate-300 uppercase mt-1 tracking-widest">{new Date(act.createdAt).toLocaleDateString()}</p>
-                        </div>
-                     </div>
-                   ))}
-                </div>
-             </div>
-          </div>
+          <Suspense fallback={<div className="p-10"><div className="h-48 bg-white rounded-2xl border border-slate-100 animate-pulse"></div></div>}>
+            <WorkItemActivityPanel activity={item.activity} />
+          </Suspense>
         )}
 
         {activeTab === 'ai' && (
-          <div className="p-10 space-y-10 animate-fadeIn">
-             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {[
-                  { label: 'Work Plan', icon: 'fa-map-location-dot', endpoint: '/api/ai/refine-task' },
-                  { label: 'Standup Digest', icon: 'fa-microphone-lines', endpoint: '/api/ai/standup-digest' },
-                  { label: 'Load Rebalance', icon: 'fa-scale-balanced', endpoint: '/api/ai/suggest-reassignment' }
-                ].map(tool => (
-                  <button 
-                    key={tool.label}
-                    onClick={() => runAiTool(tool.endpoint)}
-                    disabled={isAiProcessing}
-                    className="bg-white border border-slate-100 p-6 rounded-[2rem] hover:shadow-2xl hover:shadow-blue-500/5 transition-all text-center group flex flex-col items-center"
-                  >
-                     <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center text-xl mb-4 group-hover:bg-blue-600 group-hover:text-white transition-all shadow-inner">
-                        <i className={`fas ${tool.icon}`}></i>
-                     </div>
-                     <span className="text-[10px] font-black uppercase tracking-widest text-slate-700">{tool.label}</span>
-                  </button>
-                ))}
-             </div>
-
-             <div className="bg-slate-900 rounded-[2.5rem] p-10 min-h-[400px] shadow-2xl relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-64 h-64 bg-blue-600/10 rounded-full -mr-32 -mt-32 blur-3xl"></div>
-                <header className="flex items-center gap-4 mb-8">
-                   <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></div>
-                   <h4 className="text-[10px] font-black text-blue-400 uppercase tracking-[0.3em]">Gemini Intelligence Terminal</h4>
-                </header>
-                
-                <div className="prose prose-invert max-w-none">
-                   {isAiProcessing ? (
-                     <div className="space-y-6">
-                        <div className="h-4 bg-white/5 rounded-full w-3/4 animate-pulse"></div>
-                        <div className="h-4 bg-white/5 rounded-full w-1/2 animate-pulse"></div>
-                        <div className="h-4 bg-white/5 rounded-full w-2/3 animate-pulse"></div>
-                     </div>
-                   ) : aiResult ? (
-                     <div className="text-blue-50/80 font-medium leading-relaxed selection:bg-blue-500/30" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(marked.parse(aiResult) as string) }} />
-                   ) : (
-                     <div className="py-20 flex flex-col items-center text-center opacity-40">
-                        <i className="fas fa-brain text-5xl text-blue-500/50 mb-6"></i>
-                        <p className="text-blue-100 font-bold uppercase tracking-widest text-xs">Awaiting Execution Command...</p>
-                     </div>
-                   )}
-                </div>
-                
-                {aiResult && !isAiProcessing && (
-                  <div className="mt-10 pt-10 border-t border-white/5 flex justify-end gap-3">
-                     <button onClick={() => setAiResult(null)} className="px-6 py-2 text-[10px] font-black text-slate-500 uppercase">Discard</button>
-                     <button onClick={() => handleUpdateItem({ aiWorkPlan: aiResult })} className="px-6 py-2 bg-blue-600 text-white text-[10px] font-black uppercase rounded-xl shadow-lg shadow-blue-500/20">Commit to Record</button>
-                  </div>
-                )}
-             </div>
-          </div>
+          <Suspense fallback={
+            <div className="p-10">
+              <div className="h-48 bg-white rounded-2xl border border-slate-100 animate-pulse"></div>
+            </div>
+          }>
+            <WorkItemAiPanel
+              aiResult={aiResult}
+              isAiProcessing={isAiProcessing}
+              onRunTool={runAiTool}
+              onCommit={(value) => handleUpdateItem({ aiWorkPlan: value })}
+              onDiscard={() => setAiResult(null)}
+            />
+          </Suspense>
         )}
       </div>
 

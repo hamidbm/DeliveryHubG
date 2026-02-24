@@ -20,12 +20,13 @@ interface WorkItemsBoardViewProps {
   searchQuery: string;
   quickFilter?: string;
   activeFilters?: { types: string[]; priorities: string[]; health: string[] };
+  includeArchived?: boolean;
   externalTrigger?: string | null;
   onTriggerProcessed?: () => void;
 }
 
 const WorkItemsBoardView: React.FC<WorkItemsBoardViewProps> = ({ 
-  applications, bundles, selBundleId, selAppId, selMilestone, selEpicId, searchQuery, quickFilter, activeFilters, externalTrigger, onTriggerProcessed 
+  applications, bundles, selBundleId, selAppId, selMilestone, selEpicId, searchQuery, quickFilter, activeFilters, includeArchived, externalTrigger, onTriggerProcessed 
 }) => {
   const [boardData, setBoardData] = useState<{ columns: any[] }>({ columns: [] });
   const [items, setItems] = useState<WorkItem[]>([]);
@@ -54,6 +55,7 @@ const WorkItemsBoardView: React.FC<WorkItemsBoardViewProps> = ({
     if (activeFilters?.types?.length) params.set('types', activeFilters.types.join(','));
     if (activeFilters?.priorities?.length) params.set('priorities', activeFilters.priorities.join(','));
     if (activeFilters?.health?.length) params.set('health', activeFilters.health.join(','));
+    if (includeArchived) params.set('includeArchived', 'true');
 
     try {
       if (groupBy === 'status') {
