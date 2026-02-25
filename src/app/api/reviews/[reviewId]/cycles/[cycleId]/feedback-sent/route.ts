@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { jwtVerify } from 'jose';
-import { ensureInReview, fetchReviewById, updateReviewCycleStatus, emitReviewCycleEvent } from '../../../../../../../services/db';
+import { ensureInReview, fetchReviewById, updateReviewCycleStatus, emitReviewCycleEvent, getDb, syncReviewCycleWorkItem } from '../../../../../../../services/db';
+import { WorkItemStatus } from '../../../../../../../types';
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
 
@@ -41,11 +42,37 @@ export async function POST(request: Request, { params }: { params: Promise<{ rev
     });
 
     await emitReviewCycleEvent({
-      type: 'review.cycle.feedbacksent',
+      type: 'reviews.cycle.feedbacksent',
       actor: user,
       resource: { type: review.resource.type, id: review.resource.id, title: review.resource.title },
       cycle: { cycleId, number: cycle.number, status: 'feedback_sent' }
     });
+
+    try {
+      const db = await getDb();
+      const item = await db.collection('workitems').findOne({
+        $or: [
+          { reviewCycleId: cycleId },
+          {
+            reviewCycleId: cycleId,
+            'linkedResource.type': review.resource.type,
+            'linkedResource.id': review.resource.id
+          },
+          { reviewId: String(review._id || `${review.resource.type}:${review.resource.id}`) }
+        ]
+      });
+      if (item && item.status !== WorkItemStatus.REVIEW) {
+        const now = new Date().toISOString();
+        await db.collection('workitems').updateOne(
+          { _id: item._id },
+          {
+            $set: { status: WorkItemStatus.REVIEW, updatedAt: now },
+            $push: { activity: { user: user.displayName, action: 'CHANGED_STATUS', from: item.status, to: WorkItemStatus.REVIEW, createdAt: now } }
+          }
+        );
+      }
+    } catch {}
+    await syncReviewCycleWorkItem({ reviewId: String(review._id), cycleId, actor: user });
 
     return NextResponse.json({ review: updated });
   } catch (error: any) {

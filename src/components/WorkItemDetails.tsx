@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef, useMemo, Suspense } from 'react';
 import { WorkItem, WorkItemType, WorkItemStatus, Bundle, Application, WorkItemLink, WorkItemAttachment, WorkItemActivity, WorkItemComment, Milestone, ChecklistItem } from '../types';
 import AssigneeSearch from './AssigneeSearch';
+import { useRouter } from '../App';
 const WorkItemAiPanel = React.lazy(() => import('./WorkItemAiPanel'));
 const WorkItemAttachmentsPanel = React.lazy(() => import('./WorkItemAttachmentsPanel'));
 const WorkItemActivityPanel = React.lazy(() => import('./WorkItemActivityPanel'));
@@ -15,6 +16,7 @@ interface WorkItemDetailsProps {
 }
 
 const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bundles, applications, onUpdate, onClose }) => {
+  const router = useRouter();
   const [item, setItem] = useState<WorkItem>(initialItem);
   const [children, setChildren] = useState<WorkItem[]>([]);
   const [milestones, setMilestones] = useState<Milestone[]>([]);
@@ -30,12 +32,91 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
   const [resolvedLinks, setResolvedLinks] = useState<Record<string, { title?: string; type?: string; status?: string; key?: string }>>({});
   const [parentCandidates, setParentCandidates] = useState<WorkItem[]>([]);
   const [toast, setToast] = useState<string | null>(null);
+  const [reviewData, setReviewData] = useState<any | null>(null);
+  const [reviewCycle, setReviewCycle] = useState<any | null>(null);
+  const [isSyncingReview, setIsSyncingReview] = useState(false);
 
   const [aiResult, setAiResult] = useState<string | null>(initialItem.aiWorkPlan || null);
   const [isAiProcessing, setIsAiProcessing] = useState(false);
   const [isSnapshotting, setIsSnapshotting] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const buildResourceLink = (resource?: { type: string; id: string }) => {
+    if (!resource?.id) return null;
+    if (resource.type === 'wiki.page' || resource.type === 'wiki.asset') {
+      return `/?tab=wiki&pageId=${encodeURIComponent(resource.id)}`;
+    }
+    return null;
+  };
+
+  const reviewContext = useMemo(() => {
+    if (!item.reviewId && !item.reviewCycleId && !item.linkedResource) return null;
+    const link = item.linkedResource ? buildResourceLink(item.linkedResource) : null;
+    const requestedBy = item.reviewRequestedBy?.displayName || item.reviewRequestedBy?.email || item.reviewRequestedBy?.userId;
+    const cycleLabel = item.reviewCycleNumber ? `#${item.reviewCycleNumber}` : item.reviewCycleId;
+    return {
+      link,
+      resourceLabel: item.linkedResource?.title || item.linkedResource?.id,
+      resourceType: item.linkedResource?.type,
+      cycleLabel,
+      requestedBy,
+      dueAt: item.dueAt,
+      notes: item.reviewNotes
+    };
+  }, [item]);
+
+  const syncFromReview = async () => {
+    if (!item.reviewCycleId) return;
+    setIsSyncingReview(true);
+    try {
+      await fetch('/api/work-items/sync-review', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          reviewId: item.reviewId,
+          cycleId: item.reviewCycleId,
+          resourceType: item.linkedResource?.type,
+          resourceId: item.linkedResource?.id
+        })
+      });
+      await loadFullDetails();
+      onUpdate();
+    } finally {
+      setIsSyncingReview(false);
+    }
+  };
+
+  useEffect(() => {
+    const loadReview = async () => {
+      if (!item.linkedResource?.type || !item.linkedResource?.id) {
+        setReviewData(null);
+        setReviewCycle(null);
+        return;
+      }
+      try {
+        const params = new URLSearchParams({
+          resourceType: item.linkedResource.type,
+          resourceId: item.linkedResource.id
+        });
+        const res = await fetch(`/api/reviews/by-resource?${params.toString()}`, { credentials: 'include' });
+        if (!res.ok) {
+          setReviewData(null);
+          setReviewCycle(null);
+          return;
+        }
+        const review = await res.json();
+        setReviewData(review);
+        const cycle = (review?.cycles || []).find((c: any) => c.cycleId === item.reviewCycleId);
+        setReviewCycle(cycle || null);
+      } catch {
+        setReviewData(null);
+        setReviewCycle(null);
+      }
+    };
+    loadReview();
+  }, [item.linkedResource?.type, item.linkedResource?.id, item.reviewCycleId]);
 
   const isReadyForExecution = useMemo(() => {
     return !!(item.assignedTo && item.storyPoints && item.description && item.description.length > 20);
@@ -306,6 +387,21 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
               </button>
             </div>
             <h3 className="text-xl font-black text-slate-800 tracking-tight truncate leading-tight">{item.title}</h3>
+            {item.linkedResource && (
+              <div className="mt-1 text-[11px] font-semibold text-slate-500 truncate">
+                {buildResourceLink(item.linkedResource) ? (
+                  <button
+                    onClick={() => router.push(buildResourceLink(item.linkedResource) as string)}
+                    className="text-blue-600 hover:text-blue-800 underline decoration-dotted"
+                    title="Open linked resource"
+                  >
+                    {item.linkedResource.title || item.linkedResource.id} ({item.linkedResource.type})
+                  </button>
+                ) : (
+                  <span>{item.linkedResource.title || item.linkedResource.id} ({item.linkedResource.type})</span>
+                )}
+              </div>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-4">
@@ -398,6 +494,122 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
                   </select>
                 </div>
               </div>
+
+              {reviewContext && (
+                <div className="bg-slate-50 border border-slate-100 rounded-2xl p-6 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Review Context</div>
+                    <div className="flex items-center gap-3">
+                      {reviewContext.link && (
+                        <button
+                          onClick={() => router.push(reviewContext.link as string)}
+                          className="text-[10px] font-black uppercase tracking-widest text-blue-600 hover:text-blue-800"
+                        >
+                          Open Review →
+                        </button>
+                      )}
+                      {item.reviewCycleId && (
+                        <button
+                          onClick={syncFromReview}
+                          disabled={isSyncingReview}
+                          className={`text-[10px] font-black uppercase tracking-widest ${
+                            isSyncingReview ? 'text-slate-300' : 'text-slate-500 hover:text-slate-800'
+                          }`}
+                        >
+                          {isSyncingReview ? 'Syncing…' : 'Sync from review'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 text-sm font-semibold text-slate-700">
+                    <div>
+                      <div className="text-[9px] font-black uppercase tracking-widest text-slate-400">Resource</div>
+                      {reviewContext.link ? (
+                        <button
+                          onClick={() => router.push(reviewContext.link as string)}
+                          className="text-blue-600 hover:text-blue-800 underline decoration-dotted"
+                        >
+                          {reviewContext.resourceLabel} ({reviewContext.resourceType})
+                        </button>
+                      ) : (
+                        <div>{reviewContext.resourceLabel} ({reviewContext.resourceType})</div>
+                      )}
+                    </div>
+                    <div>
+                      <div className="text-[9px] font-black uppercase tracking-widest text-slate-400">Cycle</div>
+                      <div>{reviewContext.cycleLabel || '—'}</div>
+                    </div>
+                    <div>
+                      <div className="text-[9px] font-black uppercase tracking-widest text-slate-400">Requested By</div>
+                      <div>{reviewContext.requestedBy || '—'}</div>
+                    </div>
+                    <div>
+                      <div className="text-[9px] font-black uppercase tracking-widest text-slate-400">Due</div>
+                      <div>{reviewContext.dueAt ? new Date(reviewContext.dueAt).toLocaleDateString() : '—'}</div>
+                    </div>
+                    <div>
+                      <div className="text-[9px] font-black uppercase tracking-widest text-slate-400">Cycle Status</div>
+                      <div>{reviewCycle?.status ? String(reviewCycle.status).replace('_', ' ') : '—'}</div>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[9px] font-black uppercase tracking-widest text-slate-400">Submitter Note</div>
+                    <div className="mt-1 text-sm font-medium text-slate-700 whitespace-pre-wrap">
+                      {reviewContext.notes || 'No submitter note provided.'}
+                    </div>
+                  </div>
+                  {reviewCycle?.reviewerNote?.body && (
+                    <div>
+                      <div className="text-[9px] font-black uppercase tracking-widest text-slate-400">Reviewer Note</div>
+                      <div className="mt-1 text-sm font-medium text-slate-700 whitespace-pre-wrap">
+                        {reviewCycle.reviewerNote.body}
+                      </div>
+                    </div>
+                  )}
+                  {reviewCycle?.vendorResponse?.body && (
+                    <div>
+                      <div className="text-[9px] font-black uppercase tracking-widest text-slate-400">Vendor Response</div>
+                      <div className="mt-1 text-sm font-medium text-slate-700 whitespace-pre-wrap">
+                        {reviewCycle.vendorResponse.body}
+                      </div>
+                    </div>
+                  )}
+                  {Array.isArray(reviewCycle?.feedbackAttachments) && reviewCycle.feedbackAttachments.length > 0 && (
+                    <div className="space-y-2">
+                      <div className="text-[9px] font-black uppercase tracking-widest text-slate-400">Feedback Attachments</div>
+                      <div className="flex flex-col gap-2">
+                        {reviewCycle.feedbackAttachments.map((att: any) => (
+                          <button
+                            key={att.assetId || att.filename}
+                            onClick={() => router.push(`/?tab=wiki&pageId=${encodeURIComponent(String(att.assetId))}`)}
+                            className="text-left px-4 py-2 rounded-xl bg-white border border-slate-200 text-sm font-semibold text-blue-600 hover:text-blue-800"
+                          >
+                            {att.filename || att.assetId}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {item.linkedResource && (
+                <div className="space-y-2">
+                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Linked Resource</label>
+                  {buildResourceLink(item.linkedResource) ? (
+                    <button
+                      onClick={() => router.push(buildResourceLink(item.linkedResource) as string)}
+                      className="w-full text-left bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 text-sm font-bold text-blue-600 hover:text-blue-800"
+                    >
+                      {item.linkedResource.title || item.linkedResource.id} ({item.linkedResource.type})
+                    </button>
+                  ) : (
+                    <div className="bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 text-sm font-bold text-slate-700">
+                      {item.linkedResource.title || item.linkedResource.id} ({item.linkedResource.type})
+                    </div>
+                  )}
+                </div>
+              )}
 
               {parentCandidates.length > 0 && (
                 <div className="space-y-2">

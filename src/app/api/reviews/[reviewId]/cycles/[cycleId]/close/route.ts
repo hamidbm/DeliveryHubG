@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { jwtVerify } from 'jose';
-import { emitReviewCycleEvent, fetchReviewById, updateReviewCycleStatus } from '../../../../../../../services/db';
+import { emitReviewCycleEvent, fetchReviewById, updateReviewCycleStatus, closeReviewWorkItem, syncReviewCycleWorkItem } from '../../../../../../../services/db';
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
 
@@ -42,11 +42,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ rev
     });
 
     await emitReviewCycleEvent({
-      type: 'review.cycle.closed',
+      type: 'reviews.cycle.closed',
       actor: user,
       resource: { type: review.resource.type, id: review.resource.id, title: review.resource.title },
       cycle: { cycleId, number: cycle.number, status: 'closed' }
     });
+
+    await closeReviewWorkItem({
+      reviewId: String(review._id || `${review.resource.type}:${review.resource.id}`),
+      cycleId,
+      actor: user,
+      resolution: 'closed'
+    });
+    await syncReviewCycleWorkItem({ reviewId: String(review._id), cycleId, actor: user });
 
     return NextResponse.json({ review: updated });
   } catch (error: any) {

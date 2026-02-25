@@ -212,7 +212,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ rev
 
     await emitEvent({
       ts: new Date().toISOString(),
-      type: 'review.cycle.attachmentuploaded',
+      type: 'reviews.cycle.attachmentuploaded',
       actor: user,
       resource: { type: review.resource.type, id: review.resource.id, title: review.resource.title },
       payload: { reviewId, cycleId, assetId: String(insertedId) },

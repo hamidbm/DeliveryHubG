@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { jwtVerify } from 'jose';
-import { appendReviewCycle, emitReviewCycleEvent, fetchReviewById, updateReviewCycleStatus } from '../../../../../../../services/db';
+import { appendReviewCycle, emitReviewCycleEvent, fetchReviewById, updateReviewCycleStatus, closeReviewWorkItem, createReviewWorkItem } from '../../../../../../../services/db';
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
 
@@ -42,10 +42,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ rev
     });
 
     await emitReviewCycleEvent({
-      type: 'review.cycle.closed',
+      type: 'reviews.cycle.closed',
       actor: user,
       resource: { type: review.resource.type, id: review.resource.id, title: review.resource.title },
       cycle: { cycleId, number: cycle.number, status: 'closed' }
+    });
+
+    await closeReviewWorkItem({
+      reviewId: String(review._id || `${review.resource.type}:${review.resource.id}`),
+      cycleId,
+      actor: user,
+      resolution: 'superseded'
     });
 
     const { review: updated, cycle: newCycle } = await appendReviewCycle({
@@ -58,10 +65,24 @@ export async function POST(request: Request, { params }: { params: Promise<{ rev
     });
 
     await emitReviewCycleEvent({
-      type: 'review.cycle.requested',
+      type: 'reviews.cycle.resubmitted',
       actor: user,
       resource: { type: review.resource.type, id: review.resource.id, title: review.resource.title },
       cycle: { cycleId: newCycle.cycleId, number: newCycle.number, status: 'requested' }
+    });
+
+    await createReviewWorkItem({
+      reviewId: String(review._id || `${review.resource.type}:${review.resource.id}`),
+      cycleId: newCycle.cycleId,
+      cycleNumber: newCycle.number,
+      eventType: 'reviews.cycle.resubmitted',
+      resource: { type: review.resource.type, id: review.resource.id, title: review.resource.title },
+      bundleId: review.resource?.bundleId,
+      applicationId: review.resource?.applicationId,
+      dueAt: newCycle.dueAt,
+      requestedBy: user,
+      reviewers: newCycle.reviewers,
+      actor: user
     });
 
     return NextResponse.json({ review: updated });

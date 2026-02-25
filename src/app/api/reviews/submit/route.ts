@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { jwtVerify } from 'jose';
-import { appendReviewCycle, fetchReview, fetchWikiAssetById, fetchWikiPageById, saveReview, emitReviewCycleEvent, fetchUsersByIds } from '../../../../services/db';
+import { appendReviewCycle, fetchReview, fetchWikiAssetById, fetchWikiPageById, saveReview, emitReviewCycleEvent, fetchUsersByIds, createReviewWorkItem } from '../../../../services/db';
 import { canSubmitForReview } from '../../../../services/authz';
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
@@ -124,10 +124,25 @@ export async function POST(request: Request) {
     });
 
     await emitReviewCycleEvent({
-      type: 'review.cycle.requested',
+      type: 'reviews.cycle.requested',
       actor,
       resource: { type: resourceType, id: resourceId, title: resourceTitle },
       cycle: { cycleId: cycle.cycleId, number: cycle.number, status: cycle.status }
+    });
+
+    await createReviewWorkItem({
+      reviewId: String(updated._id || `${resourceType}:${resourceId}`),
+      cycleId: cycle.cycleId,
+      cycleNumber: cycle.number,
+      eventType: 'reviews.cycle.requested',
+      resource: { type: resourceType, id: resourceId, title: resourceTitle },
+      bundleId,
+      applicationId,
+      dueAt: cycle.dueAt,
+      requestedBy: actor,
+      notes,
+      reviewers: cycle.reviewers,
+      actor
     });
 
     return NextResponse.json({ review: updated, cycle });

@@ -10,6 +10,7 @@ import WorkItemsBacklogView from './WorkItemsBacklogView';
 import WorkItemsRoadmapView from './WorkItemsRoadmapView';
 import WorkItemsMilestonePlanningView from './WorkItemsMilestonePlanningView';
 import Milestones from './Milestones';
+import WorkPlanIntakeModal from './WorkPlanIntakeModal';
 
 interface WorkItemsProps {
   applications: Application[];
@@ -30,6 +31,7 @@ const WorkItems: React.FC<WorkItemsProps> = (props) => {
   const [quickFilter, setQuickFilter] = useState<'all' | 'my' | 'updated' | 'blocked'>('all');
   const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
   const [includeArchived, setIncludeArchived] = useState(false);
+  const [isPlanModalOpen, setIsPlanModalOpen] = useState(false);
   
   // Detailed Filtering State
   const [filters, setFilters] = useState({
@@ -88,6 +90,13 @@ const WorkItems: React.FC<WorkItemsProps> = (props) => {
         </div>
 
         <div className="flex items-center gap-3">
+           <button
+             onClick={() => setIsPlanModalOpen(true)}
+             className="px-4 py-2 text-[9px] font-black uppercase rounded-xl border transition-all flex items-center gap-2 bg-slate-900 text-white border-slate-900 hover:bg-blue-600"
+           >
+             <i className="fas fa-sitemap"></i>
+             Create Plan
+           </button>
            <button 
              onClick={() => setIsFilterDrawerOpen(true)}
              className={`px-4 py-2 text-[9px] font-black uppercase rounded-xl border transition-all flex items-center gap-2 ${filters.types.length || filters.priorities.length ? 'bg-blue-50 border-blue-200 text-blue-600' : 'bg-white border-slate-200 text-slate-400 hover:text-slate-600'}`}
@@ -206,6 +215,18 @@ const WorkItems: React.FC<WorkItemsProps> = (props) => {
           )}
         </div>
       </Suspense>
+
+      {isPlanModalOpen && (
+        <WorkPlanIntakeModal
+          bundles={props.bundles}
+          applications={props.applications}
+          onClose={() => setIsPlanModalOpen(false)}
+          onSuccess={() => {
+            setIsPlanModalOpen(false);
+            router.refresh();
+          }}
+        />
+      )}
     </div>
   );
 };

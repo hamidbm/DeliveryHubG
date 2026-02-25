@@ -45,7 +45,7 @@ export async function POST(request: Request) {
 
     await emitEvent({
       ts: new Date().toISOString(),
-      type: 'review.cycle.attachmentuploaded',
+      type: 'reviews.cycle.attachmentuploaded',
       actor: user,
       resource: { type: resourceType, id: resourceId, title: resourceTitle },
       payload: { cycleId, attachments },

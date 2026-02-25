@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { jwtVerify } from 'jose';
-import { fetchReviewById, updateReviewCycleNote, emitEvent } from '../../../../../../../services/db';
+import { fetchReviewById, updateReviewCycleNote, emitEvent, syncReviewCycleWorkItem } from '../../../../../../../services/db';
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
 
@@ -50,6 +50,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ rev
         submittedBy: user
       }
     });
+
+    await syncReviewCycleWorkItem({ reviewId: String(review._id), cycleId, actor: user });
 
     await emitEvent({
       ts: new Date().toISOString(),

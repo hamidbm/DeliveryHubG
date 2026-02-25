@@ -28,6 +28,7 @@ const WorkItemsTreeView: React.FC<WorkItemsTreeViewProps> = ({
   const [treeMode, setTreeMode] = useState<'hierarchy' | 'milestone'>('hierarchy');
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
   const [isCreating, setIsCreating] = useState(false);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
   useEffect(() => {
     if (externalTrigger === 'create-item') {
@@ -163,7 +164,8 @@ const WorkItemsTreeView: React.FC<WorkItemsTreeViewProps> = ({
   const renderTreeNode = (node: any, depth = 0) => {
     const isExpanded = expandedNodes.has(node.id);
     const hasChildren = node.children && node.children.length > 0;
-    const isActive = activeItem && (activeItem._id === node.workItemId || activeItem.id === node.workItemId);
+    const nodeKey = node.nodeType === 'WORK_ITEM' ? String(node.workItemId) : String(node.id);
+    const isActive = selectedNodeId ? selectedNodeId === nodeKey : (activeItem && (activeItem._id === node.workItemId || activeItem.id === node.workItemId));
     const linkBadges: string[] = Array.from(new Set((node.links || []).map((l: any) => l.type))).slice(0, 3);
 
     return (
@@ -176,6 +178,7 @@ const WorkItemsTreeView: React.FC<WorkItemsTreeViewProps> = ({
           }}
           onDrop={(e) => handleDrop(e, node)}
           onClick={() => {
+            setSelectedNodeId(nodeKey);
             if (hasChildren) setExpandedNodes(prev => { const n = new Set(prev); n.has(node.id) ? n.delete(node.id) : n.add(node.id); return n; });
             handleNodeSelect(node);
           }}

@@ -8,8 +8,10 @@ import AdminAiSettings from './AdminAiSettings';
 import AdminWikiTemplates from './AdminWikiTemplates';
 import AdminBundleAssignments from './AdminBundleAssignments';
 import AdminAdmins from './AdminAdmins';
+import AdminWorkBlueprints from './AdminWorkBlueprints';
+import AdminWorkGenerators from './AdminWorkGenerators';
 
-type AdminModuleId = 'home' | 'wiki-themes' | 'wiki-templates' | 'vendors' | 'roles' | 'bundles' | 'applications' | 'taxonomy' | 'artifact-rules' | 'milestone-templates' | 'users' | 'sharepoint' | 'ai-settings' | 'bundle-assignments' | 'admins';
+type AdminModuleId = 'home' | 'wiki-themes' | 'wiki-templates' | 'vendors' | 'roles' | 'bundles' | 'applications' | 'taxonomy' | 'artifact-rules' | 'milestone-templates' | 'users' | 'sharepoint' | 'ai-settings' | 'bundle-assignments' | 'admins' | 'work-blueprints' | 'work-generators';
 
 interface AdminModule {
   id: AdminModuleId;
@@ -82,6 +84,8 @@ const Admin: React.FC = () => {
         { id: 'milestone-templates', label: 'Milestone Plans', icon: 'fa-route', description: 'Standardize M1-M10 sequence and requirements.', color: 'orange' },
         { id: 'wiki-themes', label: 'Wiki Themes', icon: 'fa-palette', description: 'Enterprise CSS templates for documentation rendering.', color: 'purple' },
         { id: 'wiki-templates', label: 'Wiki Templates', icon: 'fa-file-lines', description: 'Reusable Markdown templates for wiki documents.', color: 'indigo' },
+        { id: 'work-blueprints', label: 'Work Blueprints', icon: 'fa-diagram-project', description: 'Manage delivery blueprint templates.', color: 'slate' },
+        { id: 'work-generators', label: 'Work Generators', icon: 'fa-bolt', description: 'Manage event-driven work creation.', color: 'amber' },
       ]
     },
     {
@@ -175,6 +179,10 @@ const Admin: React.FC = () => {
         return <AdminAdmins />;
       case 'bundle-assignments':
         return <AdminBundleAssignments />;
+      case 'work-blueprints':
+        return <AdminWorkBlueprints />;
+      case 'work-generators':
+        return <AdminWorkGenerators />;
       default:
         return (
           <div className="flex flex-col h-full bg-white relative">

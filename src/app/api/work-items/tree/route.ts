@@ -12,10 +12,18 @@ export async function GET(request: Request) {
   const token = cookieStore.get('nexus_auth_token')?.value;
   
   let currentUser = null;
+  let currentUserId = null;
+  let currentUserName = null;
+  let currentUserEmail = null;
+  let currentUsername = null;
   if (token) {
     try {
       const { payload } = await jwtVerify(token, JWT_SECRET);
       currentUser = payload.name;
+      currentUserId = payload.id || payload.userId || null;
+      currentUserName = payload.name || payload.username || payload.email || null;
+      currentUserEmail = payload.email || null;
+      currentUsername = payload.username || null;
     } catch {}
   }
 
@@ -32,7 +40,11 @@ export async function GET(request: Request) {
     health: searchParams.get('health'),
     includeArchived: searchParams.get('includeArchived') === 'true',
     treeMode: searchParams.get('treeMode') || 'hierarchy',
-    currentUser
+    currentUser,
+    currentUserId,
+    currentUserName,
+    currentUserEmail,
+    currentUsername
   };
   const tree = await fetchWorkItemTree(filters);
   return NextResponse.json(tree);

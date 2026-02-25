@@ -70,12 +70,12 @@ export async function POST(request: Request) {
 
     const eventType =
       action === 'feedback_sent'
-        ? 'review.cycle.feedbacksent'
+        ? 'reviews.cycle.feedbacksent'
         : action === 'resubmitted'
-          ? 'review.cycle.resubmitted'
+          ? 'reviews.cycle.resubmitted'
           : action === 'vendor_addressing'
-            ? 'review.cycle.vendoraddressing'
-            : 'review.cycle.closed';
+            ? 'reviews.cycle.vendoraddressing'
+            : 'reviews.cycle.closed';
 
     await emitReviewCycleEvent({
       type: eventType as any,

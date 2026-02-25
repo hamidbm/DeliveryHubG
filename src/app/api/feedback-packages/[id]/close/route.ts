@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { jwtVerify } from 'jose';
-import { closeFeedbackPackage, emitEvent } from '../../../../../services/db';
+import { closeFeedbackPackage, emitEvent, fetchReview, updateReviewCycleStatus, emitReviewCycleEvent, closeReviewWorkItem, syncReviewCycleWorkItem } from '../../../../../services/db';
 import { canCloseCycle } from '../../../../../services/authz';
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
@@ -34,6 +34,31 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     await closeFeedbackPackage(id, user.userId);
 
     if (resourceType && resourceId) {
+      const review = await fetchReview(resourceType, resourceId);
+      if (review?.currentCycleId) {
+        const cycle = (review.cycles || []).find((c) => c.cycleId === review.currentCycleId);
+        if (cycle && cycle.status !== 'closed') {
+          await updateReviewCycleStatus({
+            review,
+            cycleId: review.currentCycleId,
+            status: 'closed',
+            actor: user
+          });
+          await emitReviewCycleEvent({
+            type: 'reviews.cycle.closed',
+            actor: user,
+            resource: { type: review.resource.type, id: review.resource.id, title: review.resource.title },
+            cycle: { cycleId: review.currentCycleId, number: cycle.number, status: 'closed' }
+          });
+          await closeReviewWorkItem({
+            reviewId: String(review._id || `${review.resource.type}:${review.resource.id}`),
+            cycleId: review.currentCycleId,
+            actor: user,
+            resolution: 'closed'
+          });
+          await syncReviewCycleWorkItem({ reviewId: String(review._id), cycleId: review.currentCycleId, actor: user });
+        }
+      }
       await emitEvent({
         ts: new Date().toISOString(),
         type: 'feedback.package.closed',

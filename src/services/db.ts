@@ -1435,12 +1435,12 @@ export const emitReviewCycleEvent = async ({
   cycle
 }: {
   type:
-    | 'review.cycle.requested'
-    | 'review.cycle.inreview'
-    | 'review.cycle.feedbacksent'
-    | 'review.cycle.resubmitted'
-    | 'review.cycle.vendoraddressing'
-    | 'review.cycle.closed';
+    | 'reviews.cycle.requested'
+    | 'reviews.cycle.inreview'
+    | 'reviews.cycle.feedbacksent'
+    | 'reviews.cycle.resubmitted'
+    | 'reviews.cycle.vendoraddressing'
+    | 'reviews.cycle.closed';
   actor: { userId: string; displayName: string; email?: string };
   resource: { type: string; id: string; title?: string };
   cycle: { cycleId: string; number: number; status: string };
@@ -1457,6 +1457,80 @@ export const emitReviewCycleEvent = async ({
     },
     correlationId: cycle.cycleId
   });
+};
+
+export const syncReviewCycleWorkItem = async ({
+  reviewId,
+  cycleId,
+  actor
+}: {
+  reviewId: string;
+  cycleId: string;
+  actor: { userId?: string; displayName?: string; email?: string };
+}) => {
+  const db = await getDb();
+  const review = await fetchReviewById(reviewId);
+  if (!review) return null;
+  const cycle = (review.cycles || []).find((c) => c.cycleId === cycleId);
+  if (!cycle) return null;
+
+  const statusMap: Record<string, WorkItemStatus> = {
+    requested: WorkItemStatus.TODO,
+    in_review: WorkItemStatus.IN_PROGRESS,
+    feedback_sent: WorkItemStatus.REVIEW,
+    vendor_addressing: WorkItemStatus.REVIEW,
+    closed: WorkItemStatus.DONE
+  };
+  const desiredStatus = statusMap[cycle.status] || WorkItemStatus.TODO;
+
+  const item = await db.collection('workitems').findOne({
+    $or: [
+      { reviewCycleId: cycleId },
+      { reviewId: String(review._id || `${review.resource?.type}:${review.resource?.id}`) }
+    ]
+  });
+  if (!item) return null;
+
+  const updates: any = {
+    reviewCycleStatus: cycle.status,
+    updatedAt: new Date().toISOString()
+  };
+  if (cycle.vendorResponse?.body) {
+    updates.reviewVendorResponse = cycle.vendorResponse.body;
+    updates.reviewVendorResponseAt = cycle.vendorResponse.submittedAt;
+    updates.reviewVendorResponseBy = cycle.vendorResponse.submittedBy;
+  }
+  if (cycle.reviewerNote?.body) {
+    updates.reviewReviewerNote = cycle.reviewerNote.body;
+  }
+  if (Array.isArray(cycle.feedbackAttachments)) {
+    updates.reviewFeedbackAttachments = cycle.feedbackAttachments;
+  }
+  if (item.status !== desiredStatus) {
+    updates.status = desiredStatus;
+  }
+
+  await db.collection('workitems').updateOne(
+    { _id: item._id },
+    {
+      $set: updates,
+      ...(item.status !== desiredStatus
+        ? {
+            $push: {
+              activity: {
+                user: actor.displayName || actor.email || 'System',
+                action: 'CHANGED_STATUS',
+                from: item.status,
+                to: desiredStatus,
+                createdAt: updates.updatedAt
+              }
+            }
+          }
+        : {})
+    }
+  );
+
+  return item;
 };
 
 export const ensureInReview = async ({
@@ -1479,7 +1553,7 @@ export const ensureInReview = async ({
     actor
   });
   await emitReviewCycleEvent({
-    type: 'review.cycle.inreview',
+    type: 'reviews.cycle.inreview',
     actor,
     resource: { type: review.resource.type, id: review.resource.id, title: review.resource.title },
     cycle: { cycleId: cycle.cycleId, number: cycle.number, status: 'in_review' }
@@ -1576,10 +1650,401 @@ const ensureWorkItemsIndexes = async (db: any) => {
   await db.collection('workitems').createIndex({ parentId: 1 });
   await db.collection('workitems').createIndex({ rank: 1 });
   await db.collection('workitems').createIndex({ key: 1 }, { unique: false });
+  await db.collection('workitems').createIndex({ dedupKey: 1 }, { unique: true, sparse: true });
+  await db.collection('workitems').createIndex({ 'scopeRef.type': 1, 'scopeRef.id': 1 });
 };
 
 const ensureWorkItemAttachmentIndexes = async (db: any) => {
   await db.collection('workitems_attachments').createIndex({ workItemId: 1, createdAt: -1 });
+};
+
+const ensureWorkBlueprintIndexes = async (db: any) => {
+  await db.collection('work_blueprints').createIndex({ key: 1 }, { unique: true });
+};
+
+const ensureWorkGeneratorIndexes = async (db: any) => {
+  await db.collection('work_generators').createIndex({ eventType: 1 }, { unique: true });
+};
+
+const seedWorkBlueprints = async (db: any) => {
+  await ensureWorkBlueprintIndexes(db);
+  const builtIns = [
+    {
+      key: 'review_story_v1',
+      name: 'Review Story Generator v1',
+      scope: 'bundle',
+      version: 1,
+      enabled: true,
+      isBuiltIn: true,
+      isDefault: true,
+      template: {
+        epicStrategy: 'scope',
+        featureStrategy: 'governance_reviews',
+        storyStrategy: 'review_cycle'
+      },
+      createdAt: new Date().toISOString()
+    }
+  ];
+  for (const bp of builtIns) {
+    await db.collection('work_blueprints').updateOne(
+      { key: bp.key },
+      { $setOnInsert: bp },
+      { upsert: true }
+    );
+  }
+};
+
+const seedWorkGenerators = async (db: any) => {
+  await ensureWorkGeneratorIndexes(db);
+  const builtIns = [
+    {
+      eventType: 'reviews.cycle.requested',
+      enabled: true,
+      blueprintKey: 'review_story_v1',
+      assignmentStrategy: 'reviewers',
+      priorityStrategy: 'normal',
+      createdAt: new Date().toISOString()
+    },
+    {
+      eventType: 'reviews.cycle.resubmitted',
+      enabled: true,
+      blueprintKey: 'review_story_v1',
+      assignmentStrategy: 'reviewers',
+      priorityStrategy: 'normal',
+      createdAt: new Date().toISOString()
+    }
+  ];
+  for (const gen of builtIns) {
+    await db.collection('work_generators').updateOne(
+      { eventType: gen.eventType },
+      { $setOnInsert: gen },
+      { upsert: true }
+    );
+  }
+};
+
+const resolveScopeRef = async ({
+  bundleId,
+  applicationId,
+  initiativeId,
+  initiativeName
+}: {
+  bundleId?: string;
+  applicationId?: string;
+  initiativeId?: string;
+  initiativeName?: string;
+}) => {
+  const db = await getDb();
+  if (bundleId) {
+    const bundle = await db.collection('bundles').findOne(ObjectId.isValid(bundleId) ? { _id: new ObjectId(bundleId) } : { key: bundleId });
+    const name = bundle?.name || bundle?.key || bundleId;
+    return { type: 'bundle' as const, id: String(bundle?._id || bundle?.key || bundleId), name: String(name) };
+  }
+  if (applicationId) {
+    const app = await db.collection('applications').findOne(ObjectId.isValid(applicationId) ? { _id: new ObjectId(applicationId) } : { aid: applicationId });
+    const name = app?.name || app?.aid || applicationId;
+    return { type: 'application' as const, id: String(app?._id || app?.aid || applicationId), name: String(name) };
+  }
+  return {
+    type: 'initiative' as const,
+    id: 'unscoped',
+    name: 'Unscoped / Misc'
+  };
+};
+
+const ensureEpicForScope = async (scopeRef: { type: 'bundle' | 'application' | 'initiative'; id: string; name: string }) => {
+  const db = await getDb();
+  await ensureWorkItemsIndexes(db);
+  const existing = await db.collection('workitems').findOne({
+    type: WorkItemType.EPIC,
+    'scopeRef.type': scopeRef.type,
+    'scopeRef.id': scopeRef.id
+  });
+  if (existing) return existing;
+  const title = scopeRef.id === 'unscoped' ? scopeRef.name : `${scopeRef.name} Epic`;
+  const data: Partial<WorkItem> = {
+    type: WorkItemType.EPIC,
+    title,
+    description: `Epic for ${scopeRef.name}`,
+    status: WorkItemStatus.TODO,
+    priority: 'MEDIUM',
+    bundleId: scopeRef.type === 'bundle' ? scopeRef.id : '',
+    applicationId: scopeRef.type === 'application' ? scopeRef.id : undefined,
+    scopeRef
+  };
+  const result = await saveWorkItem(data, { name: 'System' });
+  return await db.collection('workitems').findOne({ _id: result.insertedId });
+};
+
+const ensureGovernanceFeature = async (epicId: string, scopeRef: { type: 'bundle' | 'application' | 'initiative'; id: string; name: string }) => {
+  const db = await getDb();
+  await ensureWorkItemsIndexes(db);
+  const existing = await db.collection('workitems').findOne({
+    type: WorkItemType.FEATURE,
+    parentId: epicId,
+    title: 'Governance & Reviews'
+  });
+  if (existing) return existing;
+  const data: Partial<WorkItem> = {
+    type: WorkItemType.FEATURE,
+    title: 'Governance & Reviews',
+    description: 'Review and governance work stream',
+    status: WorkItemStatus.TODO,
+    priority: 'MEDIUM',
+    bundleId: scopeRef.type === 'bundle' ? scopeRef.id : '',
+    applicationId: scopeRef.type === 'application' ? scopeRef.id : undefined,
+    parentId: epicId,
+    scopeRef
+  };
+  const result = await saveWorkItem(data, { name: 'System' });
+  return await db.collection('workitems').findOne({ _id: result.insertedId });
+};
+
+export const createReviewWorkItem = async ({
+  reviewId,
+  cycleId,
+  cycleNumber,
+  eventType,
+  resource,
+  bundleId,
+  applicationId,
+  dueAt,
+  requestedBy,
+  notes,
+  reviewers,
+  actor
+}: {
+  reviewId: string;
+  cycleId: string;
+  cycleNumber?: number;
+  eventType: 'reviews.cycle.requested' | 'reviews.cycle.resubmitted';
+  resource: { type: string; id: string; title?: string };
+  bundleId?: string;
+  applicationId?: string;
+  dueAt?: string;
+  requestedBy?: { userId?: string; displayName?: string; email?: string };
+  notes?: string;
+  reviewers?: Array<{ userId: string; displayName: string; email?: string }>;
+  actor: { userId: string; displayName: string; email?: string };
+}) => {
+  const db = await getDb();
+  await seedWorkBlueprints(db);
+  await seedWorkGenerators(db);
+  const gen = await db.collection('work_generators').findOne({ eventType });
+  if (!gen || gen.enabled === false) return null;
+
+  await ensureWorkItemsIndexes(db);
+
+  const dedupKey = `${eventType}:${reviewId}:${cycleId}`;
+  const existing = await db.collection('workitems').findOne({ dedupKey });
+  if (existing) return existing;
+
+  const scopeRef = await resolveScopeRef({
+    bundleId,
+    applicationId,
+    initiativeId: resource.id,
+    initiativeName: resource.title || 'Initiative'
+  });
+  const scopeDerivation = bundleId || applicationId ? 'direct' : 'unscoped_fallback';
+
+  const epic = await ensureEpicForScope(scopeRef);
+  const feature = await ensureGovernanceFeature(String(epic?._id || epic?.id || ''), scopeRef);
+
+  const reviewerUserIds = reviewers?.map(r => r.userId).filter(Boolean) || [];
+  const assignedTo = reviewers?.[0]?.displayName || reviewers?.[0]?.email || actor.displayName || 'Unassigned';
+  const watchers = reviewerUserIds.length ? reviewerUserIds : reviewers?.map(r => r.email || r.displayName).filter(Boolean) || [];
+  const dueDate = dueAt || new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString();
+  const requester = requestedBy?.displayName || requestedBy?.email || actor.displayName || 'Unknown';
+  const resourceLabel = resource.title || resource.id || resource.type;
+  const cycleLabel = typeof cycleNumber === 'number' ? `#${cycleNumber}` : cycleId;
+  const dueLabel = dueDate ? new Date(dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'TBD';
+  const submitterNote = notes && String(notes).trim().length ? String(notes).trim() : 'No submitter note provided.';
+  const narrative = [
+    '## Review Required',
+    '',
+    `**Resource:** ${resourceLabel} (${resource.type})`,
+    `**Cycle:** ${cycleLabel}`,
+    `**Requested by:** ${requester}`,
+    `**Due:** ${dueLabel}`,
+    '',
+    '### Submitter Note',
+    submitterNote
+  ].join('\n');
+
+  const data: Partial<WorkItem> = {
+    type: WorkItemType.STORY,
+    title: `Review ${resource.title || resource.type}`,
+    description: narrative,
+    status: WorkItemStatus.TODO,
+    priority: 'MEDIUM',
+    bundleId: scopeRef.type === 'bundle' ? scopeRef.id : '',
+    applicationId: scopeRef.type === 'application' ? scopeRef.id : undefined,
+    parentId: String(feature?._id || feature?.id || ''),
+    scopeRef,
+    scopeDerivation,
+    linkedResource: { type: resource.type, id: resource.id, title: resource.title },
+    reviewId,
+    reviewCycleId: cycleId,
+    reviewCycleNumber: cycleNumber,
+    reviewRequestedBy: requestedBy,
+    reviewNotes: notes ? String(notes) : undefined,
+    dedupKey,
+    assignedTo,
+    assigneeUserIds: reviewerUserIds,
+    watcherUserIds: reviewerUserIds,
+    watchers,
+    dueAt: dueDate
+  };
+
+  const result = await saveWorkItem(data, { name: actor.displayName, userId: actor.userId, email: actor.email });
+  return await db.collection('workitems').findOne({ _id: result.insertedId });
+};
+
+export const closeReviewWorkItem = async ({
+  reviewId,
+  cycleId,
+  actor,
+  resolution
+}: {
+  reviewId: string;
+  cycleId: string;
+  actor: { userId: string; displayName: string; email?: string };
+  resolution?: string;
+}) => {
+  const db = await getDb();
+  const item = await db.collection('workitems').findOne({
+    $or: [
+      { dedupKey: `reviews.cycle.requested:${reviewId}:${cycleId}` },
+      { dedupKey: `reviews.cycle.resubmitted:${reviewId}:${cycleId}` }
+    ]
+  });
+  if (!item) return null;
+  const now = new Date().toISOString();
+  await db.collection('workitems').updateOne(
+    { _id: item._id },
+    { $set: { status: WorkItemStatus.DONE, updatedAt: now, resolution }, $push: { activity: { user: actor.displayName, action: 'CHANGED_STATUS', from: item.status, to: WorkItemStatus.DONE, createdAt: now } } }
+  );
+  try {
+    await emitEvent({
+      ts: now,
+      type: 'workitems.item.statuschanged',
+      actor: { userId: actor.userId, displayName: actor.displayName, email: actor.email },
+      resource: { type: 'workitems.item', id: String(item._id || item.id), title: item.title },
+      context: { bundleId: item.bundleId, appId: item.applicationId },
+      payload: { from: item.status, to: WorkItemStatus.DONE }
+    });
+  } catch {}
+  return item;
+};
+
+export const createWorkPlanFromIntake = async ({
+  scopeType,
+  scopeId,
+  goLiveDate,
+  devStartDate,
+  uatStartDate,
+  uatEndDate,
+  milestoneCount = 4,
+  milestoneDurationWeeks = 3,
+  sprintDurationWeeks = 2,
+  milestoneThemes = [],
+  actor
+}: {
+  scopeType: 'bundle' | 'application';
+  scopeId: string;
+  goLiveDate?: string;
+  devStartDate?: string;
+  uatStartDate?: string;
+  uatEndDate?: string;
+  milestoneCount?: number;
+  milestoneDurationWeeks?: number;
+  sprintDurationWeeks?: number;
+  milestoneThemes?: Array<{ milestoneNumber: number; themes: string[] }>;
+  actor: { userId?: string; name?: string; displayName?: string; email?: string };
+}) => {
+  const db = await getDb();
+  await ensureWorkItemsIndexes(db);
+  await seedWorkBlueprints(db);
+
+  const scopeRef = await resolveScopeRef({
+    bundleId: scopeType === 'bundle' ? scopeId : undefined,
+    applicationId: scopeType === 'application' ? scopeId : undefined
+  });
+  const scopeDerivation = 'direct' as const;
+
+  const epic = await ensureEpicForScope(scopeRef);
+  const epicId = String(epic?._id || epic?.id || '');
+  await ensureGovernanceFeature(epicId, scopeRef);
+
+  const startDate = devStartDate ? new Date(devStartDate) : new Date();
+  const milestones: Array<{ id: string; number: number }> = [];
+
+  for (let i = 1; i <= milestoneCount; i += 1) {
+    const msStart = new Date(startDate.getTime() + (i - 1) * milestoneDurationWeeks * 7 * 24 * 60 * 60 * 1000);
+    const msEnd = new Date(msStart.getTime() + milestoneDurationWeeks * 7 * 24 * 60 * 60 * 1000);
+    const ms = await saveMilestone({
+      name: `Milestone ${i}`,
+      startDate: msStart.toISOString(),
+      endDate: msEnd.toISOString(),
+      dueDate: msEnd.toISOString(),
+      status: 'PLANNED',
+      bundleId: scopeType === 'bundle' ? scopeId : undefined,
+      applicationId: scopeType === 'application' ? scopeId : undefined
+    } as any);
+    milestones.push({ id: String(ms.insertedId), number: i });
+  }
+
+  for (const ms of milestones) {
+    const feature = await saveWorkItem({
+      type: WorkItemType.FEATURE,
+      title: `Milestone ${ms.number}`,
+      description: `Delivery milestone ${ms.number}`,
+      status: WorkItemStatus.TODO,
+      priority: 'MEDIUM',
+      bundleId: scopeType === 'bundle' ? scopeId : '',
+      applicationId: scopeType === 'application' ? scopeId : undefined,
+      parentId: epicId,
+      milestoneIds: [ms.id],
+      scopeRef,
+      scopeDerivation
+    }, actor);
+
+    const themes = milestoneThemes.find((m) => Number(m.milestoneNumber) === ms.number)?.themes || [];
+    for (const theme of themes) {
+      await saveWorkItem({
+        type: WorkItemType.STORY,
+        title: String(theme),
+        description: '',
+        status: WorkItemStatus.TODO,
+        priority: 'MEDIUM',
+        bundleId: scopeType === 'bundle' ? scopeId : '',
+        applicationId: scopeType === 'application' ? scopeId : undefined,
+        parentId: String(feature.insertedId || feature._id),
+        milestoneIds: [ms.id],
+        scopeRef,
+        scopeDerivation
+      }, actor);
+    }
+  }
+
+  if (sprintDurationWeeks && sprintDurationWeeks > 0) {
+    const totalWeeks = milestoneCount * milestoneDurationWeeks;
+    const sprintCount = Math.ceil(totalWeeks / sprintDurationWeeks);
+    for (let i = 1; i <= sprintCount; i += 1) {
+      const spStart = new Date(startDate.getTime() + (i - 1) * sprintDurationWeeks * 7 * 24 * 60 * 60 * 1000);
+      const spEnd = new Date(spStart.getTime() + sprintDurationWeeks * 7 * 24 * 60 * 60 * 1000);
+      await saveSprint({
+        name: `Sprint ${i}`,
+        startDate: spStart.toISOString(),
+        endDate: spEnd.toISOString(),
+        status: 'PLANNED',
+        bundleId: scopeType === 'bundle' ? scopeId : undefined,
+        applicationId: scopeType === 'application' ? scopeId : undefined
+      } as any);
+    }
+  }
+
+  return { epicId, scopeRef, scopeDerivation, goLiveDate, uatStartDate, uatEndDate };
 };
 
 let warnedLegacySprints = false;
@@ -1684,9 +2149,25 @@ export const fetchWorkItems = async (filters: any) => {
 
     if (filters.quickFilter) {
       switch (filters.quickFilter) {
-        case 'my':
-          if (filters.currentUser) query.assignedTo = filters.currentUser;
+        case 'my': {
+          const myClauses: any[] = [];
+          if (filters.currentUserId) {
+            const match = safeIdMatch(String(filters.currentUserId));
+            if (match) myClauses.push({ assigneeUserIds: match });
+          }
+          const assignedToCandidates = [
+            filters.currentUserName,
+            filters.currentUsername,
+            filters.currentUserEmail,
+            filters.currentUser
+          ].map((v: any) => (v ? String(v) : '')).filter(Boolean);
+          if (assignedToCandidates.length) {
+            const regexes = assignedToCandidates.map((v) => new RegExp(`^${escapeRegExp(v)}$`, 'i'));
+            myClauses.push({ assignedTo: { $in: regexes } });
+          }
+          if (myClauses.length) andClauses.push({ $or: myClauses });
           break;
+        }
         case 'updated':
           const recent = new Date();
           recent.setDate(recent.getDate() - 7);
@@ -2121,7 +2602,7 @@ export const saveSprint = async (sprint: Partial<Sprint>) => {
 };
 
 export const fetchWorkItemTree = async (filters: any) => {
-  const items = await fetchWorkItems(filters);
+  let items = await fetchWorkItems(filters);
   const treeMode = filters.treeMode || 'hierarchy';
 
   if (treeMode === 'milestone') {
@@ -2152,6 +2633,28 @@ export const fetchWorkItemTree = async (filters: any) => {
         }))
       };
     });
+  }
+
+  if (filters.quickFilter === 'my' && items.length > 0) {
+    const byId = new Map<string, any>();
+    items.forEach((item) => {
+      const id = String(item._id || item.id || '');
+      if (id) byId.set(id, item);
+    });
+    for (const item of [...items]) {
+      let parentId = item.parentId ? String(item.parentId) : '';
+      while (parentId) {
+        if (byId.has(parentId)) break;
+        const parent = await fetchWorkItemById(parentId);
+        if (!parent) break;
+        const parentKey = String(parent._id || parent.id || '');
+        if (parentKey) {
+          byId.set(parentKey, parent);
+          items.push(parent);
+        }
+        parentId = parent.parentId ? String(parent.parentId) : '';
+      }
+    }
   }
 
   const buildTree = (parentId: any = null): any[] => {
