@@ -5,6 +5,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { DEFAULT_MARKMAP_MD } from '../lib/markmapDsl';
 import { toPng, toSvg } from 'html-to-image';
+import { ensureSafeStylesheetAccess } from '../lib/safeStylesheets';
 
 const MarkmapRenderer = dynamic(() => import('./MarkmapRenderer'), { ssr: false });
 
@@ -33,6 +34,7 @@ const MindMapMarkdownEditor: React.FC<MindMapMarkdownEditorProps> = ({ initialCo
     if (!svgEl) return;
     
     try {
+      ensureSafeStylesheetAccess();
       const dataUrl = await toSvg(svgEl as HTMLElement, { backgroundColor: theme === 'dark' ? '#0f172a' : '#ffffff' });
       const link = document.createElement('a');
       link.download = `nexus-blueprint-${Date.now()}.svg`;
@@ -48,6 +50,7 @@ const MindMapMarkdownEditor: React.FC<MindMapMarkdownEditorProps> = ({ initialCo
     if (!svgEl) return;
     
     try {
+      ensureSafeStylesheetAccess();
       const dataUrl = await toPng(svgEl as HTMLElement, { 
         backgroundColor: theme === 'dark' ? '#0f172a' : '#ffffff',
         pixelRatio: 2

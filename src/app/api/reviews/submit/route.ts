@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { jwtVerify } from 'jose';
-import { appendReviewCycle, fetchReview, fetchWikiAssetById, fetchWikiPageById, saveReview, emitReviewCycleEvent, fetchUsersByIds, createReviewWorkItem } from '../../../../services/db';
-import { canSubmitForReview } from '../../../../services/authz';
+import { appendReviewCycle, fetchReview, fetchWikiAssetById, fetchWikiPageById, saveReview, emitReviewCycleEvent, fetchUsersByIds, createReviewWorkItem, fetchArchitectureDiagramById } from '../../../../services/db';
+import { canSubmitForReview, canViewArchitectureDiagram } from '../../../../services/authz';
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
 
@@ -42,28 +42,43 @@ export async function POST(request: Request) {
       ? body.reviewerUserIds.map((id: any) => String(id)).filter(Boolean)
       : [];
 
-    if (!resourceType || !resourceId) {
+    if (!resourceType || !resourceId || ['undefined', 'null'].includes(resourceId)) {
       return NextResponse.json({ error: 'resourceType and resourceId are required.' }, { status: 400 });
     }
 
-    const artifact = resourceType === 'wiki.page'
-      ? await fetchWikiPageById(resourceId)
-      : await fetchWikiAssetById(resourceId);
-    if (resourceType === 'wiki.asset' && artifact && (artifact as any).artifactKind === 'feedback') {
-      return NextResponse.json({ error: 'Feedback documents cannot be submitted for review.' }, { status: 400 });
+    let artifact: any = null;
+    if (resourceType === 'wiki.page') {
+      artifact = await fetchWikiPageById(resourceId);
+    } else if (resourceType === 'wiki.asset') {
+      artifact = await fetchWikiAssetById(resourceId);
+      if (artifact && (artifact as any).artifactKind === 'feedback') {
+        return NextResponse.json({ error: 'Feedback documents cannot be submitted for review.' }, { status: 400 });
+      }
+      if (artifact && (artifact as any).documentType === 'Feedback Document') {
+        return NextResponse.json({ error: 'Feedback documents cannot be submitted for review.' }, { status: 400 });
+      }
+      const status = artifact?.status;
+      if (status && status !== 'Published') {
+        return NextResponse.json({ error: 'Artifact must be published before review.' }, { status: 400 });
+      }
+    } else if (resourceType === 'architecture_diagram') {
+      artifact = await fetchArchitectureDiagramById(resourceId);
+      if (!artifact) {
+        return NextResponse.json({ error: 'Diagram not found.' }, { status: 404 });
+      }
+      if (!canViewArchitectureDiagram(authUser, artifact)) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+      }
     }
-    if (resourceType === 'wiki.asset' && artifact && (artifact as any).documentType === 'Feedback Document') {
-      return NextResponse.json({ error: 'Feedback documents cannot be submitted for review.' }, { status: 400 });
-    }
-    const status = artifact?.status;
-    if (status && status !== 'Published') {
-      return NextResponse.json({ error: 'Artifact must be published before review.' }, { status: 400 });
-    }
+
+    const resolvedTitle = resourceTitle || artifact?.title;
+    const resolvedBundleId = bundleId || artifact?.bundleId;
+    const resolvedApplicationId = applicationId || artifact?.applicationId;
 
     let review = await fetchReview(resourceType, resourceId);
     if (!review) {
       review = {
-        resource: { type: resourceType, id: resourceId, title: resourceTitle, bundleId, applicationId },
+        resource: { type: resourceType, id: resourceId, title: resolvedTitle, bundleId: resolvedBundleId, applicationId: resolvedApplicationId },
         status: 'active',
         createdBy: actor,
         createdAt: new Date().toISOString(),
@@ -73,7 +88,7 @@ export async function POST(request: Request) {
       };
       await saveReview(review);
     } else {
-      review.resource = { ...review.resource, title: resourceTitle, bundleId, applicationId };
+      review.resource = { ...review.resource, title: resolvedTitle, bundleId: resolvedBundleId, applicationId: resolvedApplicationId };
       const currentCycle = review.currentCycleId
         ? (review.cycles || []).find((c) => c.cycleId === review.currentCycleId)
         : null;
@@ -84,7 +99,7 @@ export async function POST(request: Request) {
     if (artifact?.updatedAt) {
       review.resourceVersion = { resourceUpdatedAtAtSubmission: String(artifact.updatedAt) };
     }
-    if (!bundleId && reviewerUserIds.length === 0) {
+    if (!resolvedBundleId && reviewerUserIds.length === 0) {
       return NextResponse.json({ error: 'bundleId or reviewerUserIds is required.' }, { status: 400 });
     }
 
@@ -116,7 +131,7 @@ export async function POST(request: Request) {
 
     const { review: updated, cycle } = await appendReviewCycle({
       review,
-      bundleId: bundleId || '',
+      bundleId: resolvedBundleId || '',
       requestedBy: actor,
       notes,
       dueAt,
@@ -126,7 +141,7 @@ export async function POST(request: Request) {
     await emitReviewCycleEvent({
       type: 'reviews.cycle.requested',
       actor,
-      resource: { type: resourceType, id: resourceId, title: resourceTitle },
+      resource: { type: resourceType, id: resourceId, title: resolvedTitle },
       cycle: { cycleId: cycle.cycleId, number: cycle.number, status: cycle.status }
     });
 
@@ -135,9 +150,9 @@ export async function POST(request: Request) {
       cycleId: cycle.cycleId,
       cycleNumber: cycle.number,
       eventType: 'reviews.cycle.requested',
-      resource: { type: resourceType, id: resourceId, title: resourceTitle },
-      bundleId,
-      applicationId,
+      resource: { type: resourceType, id: resourceId, title: resolvedTitle },
+      bundleId: resolvedBundleId,
+      applicationId: resolvedApplicationId,
       dueAt: cycle.dueAt,
       requestedBy: actor,
       notes,

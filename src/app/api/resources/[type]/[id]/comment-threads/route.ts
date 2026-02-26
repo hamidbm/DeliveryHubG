@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { jwtVerify } from 'jose';
-import { createCommentThread, fetchCommentThreads, emitEvent, fetchReviewById, resolveMentionUsers, ensureInReview } from '../../../../../../services/db';
+import { createCommentThread, fetchCommentThreads, emitEvent, fetchReviewById, resolveMentionUsers, ensureInReview, syncReviewCycleWorkItem } from '../../../../../../services/db';
 import { extractMentionTokens } from '../../../../../../lib/mentions';
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
@@ -54,6 +54,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ typ
       const isReviewer = Boolean(cycle?.reviewerUserIds?.includes(user.userId));
       if (review && cycle && cycle.status === 'requested' && isReviewer) {
         await ensureInReview({ reviewId, cycleId: reviewCycleId, actor: user });
+        await syncReviewCycleWorkItem({ reviewId, cycleId: reviewCycleId, actor: user });
       }
     }
 

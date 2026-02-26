@@ -1,7 +1,11 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback, Suspense, lazy, useMemo } from 'react';
-import { ArchitectureDiagram, DiagramFormat, Application, Bundle, Milestone } from '../types';
+import { ArchitectureDiagram, DiagramFormat, Application, Bundle, Milestone, ReviewRecord } from '../types';
+import { useRouter, useSearchParams } from '../App';
+import CommentsDrawer from './CommentsDrawer';
+import { canSubmitForReviewClient, canResubmitClient, canMarkFeedbackSentClient, isEngineeringRoleClient, isVendorRoleClient } from '../lib/authzClient';
+import { ensureSafeStylesheetAccess } from '../lib/safeStylesheets';
 import * as d3 from 'd3';
 
 const MindMapMarkdownEditor = lazy(() => import('./MindMapMarkdownEditor'));
@@ -170,6 +174,7 @@ const MermaidRenderer: React.FC<{ content: string; id: string }> = ({ content, i
     const render = async () => {
       if (!containerRef.current || !content || content.trim().startsWith('{') || content.trim().startsWith('<')) return;
       try {
+        ensureSafeStylesheetAccess();
         const mermaid = (await import('mermaid')).default;
         mermaid.initialize({ 
           startOnLoad: false, 
@@ -290,6 +295,8 @@ const DrawioEditor: React.FC<{
 };
 
 const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ applications, bundles, activeBundleId, activeAppId }) => {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [diagrams, setDiagrams] = useState<ArchitectureDiagram[]>([]);
   const [isDesignerOpen, setIsDesignerOpen] = useState(false);
   const [editingDiagram, setEditingDiagram] = useState<Partial<ArchitectureDiagram> | null>(null);
@@ -319,6 +326,17 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
     fetchDiagrams();
     fetch('/api/milestones').then(r => r.json()).then(data => setMilestones(Array.isArray(data) ? data : []));
   }, [fetchDiagrams]);
+
+  useEffect(() => {
+    const diagramId = searchParams.get('diagramId');
+    if (!diagramId) return;
+    const match = diagrams.find((d) => String(d._id) === String(diagramId));
+    if (match) {
+      setEditingDiagram(match);
+      setIsEditMode(false);
+      setIsDesignerOpen(true);
+    }
+  }, [diagrams, searchParams]);
 
   useEffect(() => { if (activeBundleId) setSelBundle(activeBundleId); }, [activeBundleId]);
   useEffect(() => { if (activeAppId) setSelApp(activeAppId); }, [activeAppId]);
@@ -356,6 +374,23 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
     }
     setIsEditMode(edit);
     setIsDesignerOpen(true);
+    if (diag?._id) {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set('tab', 'architecture');
+      params.set('diagramId', String(diag._id));
+      router.push(`/?${params.toString()}`);
+    }
+  };
+
+  const closeDesigner = () => {
+    setIsDesignerOpen(false);
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete('diagramId');
+    params.delete('focus');
+    params.delete('reviewId');
+    params.delete('cycleId');
+    params.set('tab', 'architecture');
+    router.push(`/?${params.toString()}`);
   };
 
   const handleDelete = async (id: string, e: React.MouseEvent) => {
@@ -471,12 +506,15 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
       ) : (
         <ArchitectureDesigner 
           diagram={editingDiagram!} 
-          onClose={() => setIsDesignerOpen(false)} 
-          onSuccess={() => { setIsDesignerOpen(false); fetchDiagrams(); }}
+          onClose={closeDesigner} 
+          onSuccess={() => { closeDesigner(); fetchDiagrams(); }}
           bundles={bundles}
           applications={applications}
           isEditMode={isEditMode}
           milestones={milestones}
+          focusReview={searchParams.get('focus') === 'review'}
+          deepLinkReviewId={searchParams.get('reviewId')}
+          deepLinkCycleId={searchParams.get('cycle') || searchParams.get('cycleId')}
         />
       )}
     </div>
@@ -491,7 +529,13 @@ const ArchitectureDesigner: React.FC<{
   applications: Application[];
   isEditMode: boolean;
   milestones: Milestone[];
-}> = ({ diagram, onClose, onSuccess, bundles, applications, isEditMode, milestones }) => {
+  focusReview?: boolean;
+  deepLinkReviewId?: string | null;
+  deepLinkCycleId?: string | null;
+}> = ({ diagram, onClose, onSuccess, bundles, applications, isEditMode, milestones, focusReview, deepLinkReviewId, deepLinkCycleId }) => {
+  const [savedDiagramId, setSavedDiagramId] = useState<string | null>(
+    diagram?._id || diagram?.id ? String(diagram._id || diagram.id) : null
+  );
   const [format, setFormat] = useState<DiagramFormat>(diagram.format || DiagramFormat.MERMAID);
   const [code, setCode] = useState(diagram.content || (diagram.format === DiagramFormat.MERMAID ? DEFAULT_MERMAID_CODE : ''));
   const [title, setTitle] = useState(diagram.title || '');
@@ -503,13 +547,248 @@ const ArchitectureDesigner: React.FC<{
   const [activeMilestoneId, setActiveMilestoneId] = useState(diagram.milestoneId || '');
   const [tagsInput, setTagsInput] = useState(diagram.tags?.join(', ') || '');
   const [isContextOpen, setIsContextOpen] = useState(true);
-  
+  const [sideTab, setSideTab] = useState<'metadata' | 'review' | 'comments'>(focusReview ? 'review' : 'metadata');
+  const [review, setReview] = useState<ReviewRecord | null>(null);
+  const [reviewLoading, setReviewLoading] = useState(false);
+  const [reviewNotes, setReviewNotes] = useState('');
+  const [reviewDueAt, setReviewDueAt] = useState('');
+  const [reviewActionLoading, setReviewActionLoading] = useState(false);
+  const [reviewerAssignments, setReviewerAssignments] = useState<any[]>([]);
+  const [manualReviewerSearch, setManualReviewerSearch] = useState('');
+  const [manualReviewerOptions, setManualReviewerOptions] = useState<any[]>([]);
+  const [extraReviewerIds, setExtraReviewerIds] = useState<string[]>([]);
+  const [reviewToast, setReviewToast] = useState<string | null>(null);
+  const [reviewToastType, setReviewToastType] = useState<'success' | 'error'>('success');
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [vendorResponseBody, setVendorResponseBody] = useState('');
+  const [vendorResponseDirty, setVendorResponseDirty] = useState(false);
+  const [linkedWorkItem, setLinkedWorkItem] = useState<any | null>(null);
+  const [commentInitialFilter, setCommentInitialFilter] = useState<'all' | 'discussion' | 'current' | 'past'>('all');
+  const [commentInitialCycleId, setCommentInitialCycleId] = useState<string | null>(null);
+  const [commentSuppressNewThread, setCommentSuppressNewThread] = useState(false);
+  const diagramId = savedDiagramId || (diagram?._id || diagram?.id ? String(diagram._id || diagram.id) : null);
+
+  useEffect(() => {
+    setSavedDiagramId(diagram?._id || diagram?.id ? String(diagram._id || diagram.id) : null);
+  }, [diagram?._id, diagram?.id]);
+
   useEffect(() => {
     if (!code || code === '') {
       if (format === DiagramFormat.MERMAID) setCode(DEFAULT_MERMAID_CODE);
       else if (format === DiagramFormat.DRAWIO) setCode(DEFAULT_DRAWIO_XML);
     }
   }, [format, code]);
+
+  const setReviewError = (status?: number, message?: string) => {
+    let nextMessage = message || 'Action failed.';
+    if (status === 403) {
+      nextMessage = 'You are not authorized for this action.';
+    }
+    if (status === 409 && (!message || message === 'Action failed.')) {
+      nextMessage = 'A review cycle is already active for this diagram.';
+    }
+    setReviewToastType('error');
+    setReviewToast(nextMessage);
+  };
+
+  const handleReviewError = async (res: Response) => {
+    let message = 'Action failed.';
+    try {
+      const data = await res.json();
+      message = data?.error || message;
+    } catch {}
+    setReviewError(res.status, message);
+  };
+
+  const handleSubmitForReview = async () => {
+    if (!diagramId || ['undefined', 'null'].includes(diagramId)) {
+      setReviewToastType('error');
+      setReviewToast('Save the diagram before submitting for review.');
+      return;
+    }
+    const bundleId = activeBundleId || diagram.bundleId;
+    if (!bundleId && reviewerAssignments.length === 0 && extraReviewerIds.length === 0) {
+      setReviewToastType('error');
+      setReviewToast('No assigned CMO reviewers for this bundle.');
+      return;
+    }
+    setReviewActionLoading(true);
+    try {
+      const defaultReviewerIds = reviewerAssignments.map((a: any) => String(a.userId || a.user?._id || a.user?.id)).filter(Boolean);
+      const reviewerUserIds = Array.from(new Set([...defaultReviewerIds, ...extraReviewerIds]));
+      const res = await fetch('/api/reviews/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          resourceType: 'architecture_diagram',
+          resourceId: diagramId,
+          resourceTitle: title,
+          bundleId: bundleId || undefined,
+          applicationId: activeAppId || diagram.applicationId || undefined,
+          dueAt: reviewDueAt || undefined,
+          notes: reviewNotes || undefined,
+          reviewerUserIds: reviewerUserIds.length > 0 ? reviewerUserIds : undefined
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setReview(data.review || null);
+        setReviewNotes('');
+        setReviewDueAt('');
+        setExtraReviewerIds([]);
+        setReviewToastType('success');
+        setReviewToast('Review submitted');
+      } else {
+        await handleReviewError(res);
+      }
+    } finally {
+      setReviewActionLoading(false);
+    }
+  };
+
+  const handleReviewAction = async (action: 'feedback_sent' | 'resubmitted' | 'closed' | 'vendor_addressing') => {
+    if (!review?.currentCycleId || !review?._id) return;
+    setReviewActionLoading(true);
+    try {
+      const actionMap: Record<string, string> = {
+        feedback_sent: 'feedback-sent',
+        vendor_addressing: 'vendor-addressing',
+        resubmitted: 'resubmit',
+        closed: 'close'
+      };
+      const route = actionMap[action] || action.replace('_', '-');
+      const res = await fetch(`/api/reviews/${encodeURIComponent(String(review._id))}/cycles/${encodeURIComponent(review.currentCycleId)}/${route}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ifMatchUpdatedAt: review.updatedAt, resourceType: 'architecture_diagram', resourceId: diagramId })
+      });
+      if (res.ok) {
+        await refreshReview();
+        setReviewToastType('success');
+        setReviewToast('Review updated');
+      } else {
+        await handleReviewError(res);
+      }
+    } finally {
+      setReviewActionLoading(false);
+    }
+  };
+
+  const handleSaveVendorResponse = async (body: string) => {
+    if (!review?.currentCycleId || !review?._id) return;
+    setReviewActionLoading(true);
+    try {
+      const res = await fetch(`/api/reviews/${encodeURIComponent(String(review._id))}/cycles/${encodeURIComponent(review.currentCycleId)}/vendor-response`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ body, ifMatchUpdatedAt: review.updatedAt })
+      });
+      if (res.ok) {
+        await refreshReview();
+        setReviewToastType('success');
+        setReviewToast('Vendor response saved');
+      } else {
+        await handleReviewError(res);
+      }
+    } finally {
+      setReviewActionLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (focusReview) setSideTab('review');
+  }, [focusReview]);
+
+  useEffect(() => {
+    if (focusReview && deepLinkCycleId) {
+      setCommentInitialFilter('current');
+      setCommentInitialCycleId(deepLinkCycleId);
+      setSideTab('review');
+    }
+  }, [focusReview, deepLinkCycleId]);
+
+  useEffect(() => {
+    fetch('/api/auth/me')
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => setCurrentUser(data?.user || data))
+      .catch(() => setCurrentUser(null));
+  }, []);
+
+  const refreshReview = useCallback(async () => {
+    if (!diagramId) return;
+    setReviewLoading(true);
+    try {
+      const res = await fetch(`/api/reviews/by-resource?resourceType=${encodeURIComponent('architecture_diagram')}&resourceId=${encodeURIComponent(String(diagramId))}`);
+      const data = await res.json();
+      setReview(data || null);
+    } catch {
+      setReview(null);
+    } finally {
+      setReviewLoading(false);
+    }
+  }, [diagramId]);
+
+  const refreshReviewers = useCallback(async () => {
+    const bundleId = activeBundleId || diagram.bundleId;
+    if (!bundleId) {
+      setReviewerAssignments([]);
+      return;
+    }
+    try {
+      const res = await fetch(`/api/bundle-assignments?bundleId=${encodeURIComponent(String(bundleId))}&type=assigned_cmo&active=true`);
+      const data = await res.json();
+      setReviewerAssignments(Array.isArray(data) ? data : []);
+    } catch {
+      setReviewerAssignments([]);
+    }
+  }, [activeBundleId, diagram.bundleId]);
+
+  useEffect(() => {
+    refreshReview();
+    refreshReviewers();
+  }, [refreshReview, refreshReviewers]);
+
+  useEffect(() => {
+    const loadWorkItem = async () => {
+      if (!review?._id || !review.currentCycleId) {
+        setLinkedWorkItem(null);
+        return;
+      }
+      try {
+        const params = new URLSearchParams({
+          reviewId: String(review._id),
+          cycleId: String(review.currentCycleId)
+        });
+        const res = await fetch(`/api/work-items/by-review?${params.toString()}`);
+        const data = await res.json();
+        setLinkedWorkItem(data || null);
+      } catch {
+        setLinkedWorkItem(null);
+      }
+    };
+    loadWorkItem();
+  }, [review?._id, review?.currentCycleId]);
+
+  useEffect(() => {
+    const currentCycle = review?.cycles?.find((c) => c.cycleId === review.currentCycleId);
+    const body = currentCycle?.vendorResponse?.body || '';
+    setVendorResponseBody(body);
+    setVendorResponseDirty(false);
+  }, [review?.currentCycleId, review?.updatedAt]);
+
+  useEffect(() => {
+    if (!manualReviewerSearch.trim()) {
+      setManualReviewerOptions([]);
+      return;
+    }
+    const controller = new AbortController();
+    const q = manualReviewerSearch.trim();
+    fetch(`/api/users/search?scope=cmo&includeAdmin=true&q=${encodeURIComponent(q)}`, { signal: controller.signal })
+      .then((r) => r.ok ? r.json() : [])
+      .then((data) => setManualReviewerOptions(Array.isArray(data) ? data : []))
+      .catch(() => {});
+    return () => controller.abort();
+  }, [manualReviewerSearch]);
 
   const handleAiGeneration = async () => {
     if (!activeAppId || activeAppId === 'all') {
@@ -559,7 +838,12 @@ const ArchitectureDesigner: React.FC<{
           status: 'VERIFIED'
         })
       });
-      if (res.ok) onSuccess();
+      if (res.ok) {
+        const data = await res.json().catch(() => ({}));
+        const insertedId = data?.result?.insertedId;
+        if (insertedId) setSavedDiagramId(String(insertedId));
+        onSuccess();
+      }
     } finally {
       setSaving(false);
     }
@@ -569,6 +853,26 @@ const ArchitectureDesigner: React.FC<{
   const showAiGenButton = useMemo(() => {
     return activeAppId && activeAppId !== 'all' && !readOnly;
   }, [activeAppId, readOnly]);
+
+  const currentRole = currentUser?.role;
+  const currentUserId = String(currentUser?.userId || currentUser?.id || '');
+  const canSubmitReview = canSubmitForReviewClient(currentRole);
+  const canResubmitReview = canResubmitClient(currentRole);
+  const canMarkFeedbackSent = canMarkFeedbackSentClient(currentRole);
+
+  const currentCycle = review?.cycles?.find((c) => c.cycleId === review.currentCycleId);
+  const isReviewer = Boolean(currentCycle && currentUserId && currentCycle.reviewerUserIds?.includes(currentUserId));
+  const isClosed = review?.status === 'closed' || currentCycle?.status === 'closed';
+  const canVendorActions = (isEngineeringRoleClient(currentRole) || isVendorRoleClient(currentRole)) && !isReviewer;
+  const showReviewerActions = Boolean(
+    currentCycle &&
+      isReviewer &&
+      !isClosed &&
+      (currentCycle.status === 'requested' || currentCycle.status === 'in_review')
+  );
+  const showVendorActions = Boolean(currentCycle && !isReviewer && !isClosed && canVendorActions);
+  const showVendorResponseEditor = Boolean(showVendorActions && currentCycle?.status === 'vendor_addressing');
+  const showVendorResponseReadOnly = Boolean(currentCycle?.vendorResponse?.body && ['feedback_sent', 'vendor_addressing', 'closed'].includes(currentCycle.status));
 
   return (
     <div className="fixed inset-0 z-[200] bg-white flex flex-col animate-fadeIn overflow-hidden">
@@ -631,43 +935,325 @@ const ArchitectureDesigner: React.FC<{
           )}
         </div>
 
-        <aside className={`border-l border-slate-200 bg-white transition-all duration-500 ease-in-out shrink-0 z-[204] relative flex flex-col ${isContextOpen ? 'w-80' : 'w-0 overflow-hidden opacity-0'}`}>
-           <div className="p-8 space-y-10 min-w-[320px]">
-             <section>
-                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-8 flex items-center gap-2"><i className="fas fa-link"></i> Context Mapping</h4>
-                <div className="space-y-6">
-                   <div className="space-y-2">
-                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Business Bundle</label>
-                      <select disabled={readOnly} value={activeBundleId} onChange={(e) => { setActiveBundleId(e.target.value); setActiveAppId(''); }} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-xs font-bold text-slate-700 outline-none hover:border-blue-200 transition-all disabled:opacity-50">
-                         <option value="">Cross-Bundle</option>
-                         {bundles.map(b => <option key={b._id} value={b._id}>{b.name}</option>)}
-                      </select>
+        <aside className={`border-l border-slate-200 bg-white transition-all duration-500 ease-in-out shrink-0 z-[204] relative flex flex-col ${isContextOpen ? 'w-[35rem]' : 'w-0 overflow-hidden opacity-0'}`}>
+           <div className="p-8 space-y-8 min-w-[560px]">
+             <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-xl border border-slate-200">
+               <button
+                 onClick={() => setSideTab('metadata')}
+                 className={`px-4 py-2 text-[9px] font-black uppercase rounded-lg transition-all ${
+                   sideTab === 'metadata' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400 hover:text-slate-600'
+                 }`}
+               >
+                 Metadata
+               </button>
+               <button
+                 onClick={() => setSideTab('review')}
+                 className={`px-4 py-2 text-[9px] font-black uppercase rounded-lg transition-all ${
+                   sideTab === 'review' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400 hover:text-slate-600'
+                 }`}
+               >
+                 Review
+               </button>
+               <button
+                 onClick={() => {
+                   setSideTab('comments');
+                   setCommentInitialFilter('all');
+                   setCommentInitialCycleId(null);
+                   setCommentSuppressNewThread(false);
+                 }}
+                 className={`px-4 py-2 text-[9px] font-black uppercase rounded-lg transition-all ${
+                   sideTab === 'comments' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400 hover:text-slate-600'
+                 }`}
+               >
+                 Comments
+               </button>
+               <button
+                 onClick={() => setIsContextOpen(false)}
+                 title="Collapse panel"
+                 aria-label="Collapse panel"
+                 className="ml-auto w-8 h-8 rounded-lg border border-slate-200 bg-white flex items-center justify-center hover:bg-slate-50"
+               >
+                 <img src="/icons/close-pane.png" alt="Collapse panel" className="w-4 h-4" />
+               </button>
+             </div>
+
+             {sideTab === 'metadata' && (
+               <section>
+                  <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-8 flex items-center gap-2"><i className="fas fa-link"></i> Context Mapping</h4>
+                  <div className="space-y-6">
+                     <div className="space-y-2">
+                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Business Bundle</label>
+                        <select disabled={readOnly} value={activeBundleId} onChange={(e) => { setActiveBundleId(e.target.value); setActiveAppId(''); }} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-xs font-bold text-slate-700 outline-none hover:border-blue-200 transition-all disabled:opacity-50">
+                           <option value="">Cross-Bundle</option>
+                           {bundles.map(b => <option key={b._id} value={b._id}>{b.name}</option>)}
+                        </select>
+                     </div>
+                     <div className="space-y-2">
+                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Application Mapping</label>
+                        <select disabled={readOnly} value={activeAppId} onChange={(e) => setActiveAppId(e.target.value)} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-xs font-bold text-slate-700 outline-none hover:border-blue-200 transition-all disabled:opacity-50">
+                           <option value="all">Global Resource</option>
+                           {applications.filter(a => !activeBundleId || a.bundleId === activeBundleId).map(a => <option key={a._id} value={a._id}>{a.name}</option>)}
+                        </select>
+                     </div>
+                     <div className="space-y-2">
+                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Target Milestone</label>
+                        <select disabled={readOnly} value={activeMilestoneId} onChange={(e) => setActiveMilestoneId(e.target.value)} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-xs font-bold text-slate-700 outline-none hover:border-blue-200 transition-all disabled:opacity-50">
+                           <option value="">Unscheduled</option>
+                           {milestones.map(m => <option key={m._id} value={m._id}>{m.name}</option>)}
+                        </select>
+                     </div>
+                     <div className="space-y-2">
+                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Tags (Comma Separated)</label>
+                        <input readOnly={readOnly} value={tagsInput} onChange={(e) => setTagsInput(e.target.value)} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-xs font-bold text-slate-700 outline-none hover:border-blue-200 transition-all disabled:opacity-50" placeholder="cloud, infra, v2" />
+                     </div>
+                  </div>
+               </section>
+             )}
+
+             {sideTab === 'review' && (
+               <section>
+                 <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6 flex items-center gap-2">
+                   <i className="fas fa-clipboard-check"></i> Review
+                 </h4>
+
+                 {reviewToast && (
+                   <div className={`mb-4 text-[10px] font-black uppercase tracking-widest px-3 py-2 rounded-xl border ${
+                     reviewToastType === 'error' ? 'bg-rose-50 border-rose-200 text-rose-700' : 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                   }`}>
+                     {reviewToast}
                    </div>
-                   <div className="space-y-2">
-                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Application Mapping</label>
-                      <select disabled={readOnly} value={activeAppId} onChange={(e) => setActiveAppId(e.target.value)} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-xs font-bold text-slate-700 outline-none hover:border-blue-200 transition-all disabled:opacity-50">
-                         <option value="all">Global Resource</option>
-                         {applications.filter(a => !activeBundleId || a.bundleId === activeBundleId).map(a => <option key={a._id} value={a._id}>{a.name}</option>)}
-                      </select>
+                 )}
+
+                 <>
+                   {reviewLoading && <div className="text-xs text-slate-400">Loading review...</div>}
+                   {!reviewLoading && currentCycle && (
+                     <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 space-y-3">
+                       <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Cycle #{currentCycle.number}</div>
+                       <div className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+                         Status: {currentCycle.status.replace(/_/g, ' ')}
+                       </div>
+                       {linkedWorkItem && (
+                         <button
+                           onClick={() => {
+                             const params = new URLSearchParams();
+                             params.set('tab', 'work-items');
+                             params.set('view', 'tree');
+                             params.set('workItemId', String(linkedWorkItem._id || linkedWorkItem.id || ''));
+                             router.push(`/?${params.toString()}`);
+                           }}
+                           className="text-[9px] font-black uppercase tracking-widest text-blue-600 hover:text-blue-800"
+                           title="Open related work item"
+                         >
+                           Open Work Item → {linkedWorkItem.key}
+                         </button>
+                       )}
+                       <div className="text-[9px] font-bold text-slate-500">
+                         Due: {currentCycle.dueAt ? new Date(currentCycle.dueAt).toLocaleDateString() : '—'}
+                       </div>
+                       <div className="flex flex-wrap gap-2">
+                         {(currentCycle.reviewers || []).map((r: any) => (
+                           <span key={r.userId} className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest bg-white border border-slate-200 text-slate-500">
+                             {r.displayName || r.email || r.userId}
+                           </span>
+                         ))}
+                       </div>
+                     </div>
+                   )}
+
+                   {!reviewLoading && !currentCycle && (
+                     <div className="space-y-4">
+                       <div>
+                         <label className="text-[9px] font-black uppercase tracking-widest text-slate-400">Due Date</label>
+                         <input
+                           type="date"
+                           value={reviewDueAt}
+                           onChange={(e) => setReviewDueAt(e.target.value)}
+                           className="mt-2 w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
+                         />
+                       </div>
+                       <div>
+                         <label className="text-[9px] font-black uppercase tracking-widest text-slate-400">Notes</label>
+                         <textarea
+                           value={reviewNotes}
+                           onChange={(e) => setReviewNotes(e.target.value)}
+                           className="mt-2 w-full border border-slate-200 rounded-xl px-3 py-2 text-xs min-h-[80px]"
+                           placeholder="Optional notes for reviewers"
+                         />
+                       </div>
+                       <div>
+                         <label className="text-[9px] font-black uppercase tracking-widest text-slate-400">Default Reviewers (CMO)</label>
+                         {reviewerAssignments.length === 0 ? (
+                           <div className="mt-2 text-[9px] font-black uppercase tracking-widest text-amber-600">No assigned reviewers.</div>
+                         ) : (
+                           <div className="mt-2 flex flex-wrap gap-2">
+                             {reviewerAssignments.map((assignment: any) => (
+                               <span key={assignment.userId || assignment.user?._id} className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest bg-white border border-slate-200 text-slate-500">
+                                 {assignment.user?.name || assignment.user?.email || assignment.userId}
+                               </span>
+                             ))}
+                           </div>
+                         )}
+                       </div>
+                       <div>
+                         <label className="text-[9px] font-black uppercase tracking-widest text-slate-400">Add Reviewers (CMO/Admin)</label>
+                         <input
+                           value={manualReviewerSearch}
+                           onChange={(e) => setManualReviewerSearch(e.target.value)}
+                           placeholder="Search CMO/Admin users"
+                           className="mt-2 w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
+                         />
+                         <div className="mt-2 flex flex-wrap gap-2">
+                           {manualReviewerOptions.map((user: any) => {
+                             const checked = extraReviewerIds.includes(user.id);
+                             return (
+                               <label key={user.id} className="flex items-center gap-2 px-2 py-1 rounded-full border border-slate-200 bg-white text-[9px] font-black uppercase tracking-widest text-slate-500">
+                                 <input
+                                   type="checkbox"
+                                   checked={checked}
+                                   onChange={(e) => {
+                                     if (e.target.checked) {
+                                       setExtraReviewerIds((prev) => [...prev, user.id]);
+                                     } else {
+                                       setExtraReviewerIds((prev) => prev.filter((id) => id !== user.id));
+                                     }
+                                   }}
+                                 />
+                                 {user.name || user.email}
+                               </label>
+                             );
+                           })}
+                         </div>
+                       </div>
+                     </div>
+                   )}
+
+                   <div className="mt-4 flex flex-wrap gap-3 items-center">
+                     {!currentCycle && (
+                       <button
+                         onClick={handleSubmitForReview}
+                         disabled={!canSubmitReview || reviewActionLoading}
+                         className="px-4 py-2 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest rounded-xl disabled:opacity-50"
+                       >
+                         {reviewActionLoading ? 'Submitting...' : 'Submit for Review'}
+                       </button>
+                     )}
+                     {showReviewerActions && (
+                       <>
+                         <button
+                           onClick={() => {
+                             setSideTab('comments');
+                             setCommentInitialFilter('current');
+                             setCommentInitialCycleId(review?.currentCycleId || null);
+                             setCommentSuppressNewThread(true);
+                           }}
+                           disabled={reviewActionLoading}
+                           className="px-4 py-2 bg-white border border-slate-200 text-slate-600 text-[10px] font-black uppercase tracking-widest rounded-xl"
+                         >
+                           Add Review Comment
+                         </button>
+                         <button
+                           onClick={() => handleReviewAction('feedback_sent')}
+                           disabled={reviewActionLoading || !canMarkFeedbackSent}
+                           className="px-4 py-2 bg-emerald-600 text-white text-[10px] font-black uppercase tracking-widest rounded-xl disabled:opacity-50"
+                         >
+                           {reviewActionLoading ? 'Updating...' : 'Mark Feedback Sent'}
+                         </button>
+                       </>
+                     )}
+                     {showVendorActions && currentCycle?.status === 'feedback_sent' && (
+                       <button
+                         onClick={() => handleReviewAction('vendor_addressing')}
+                         disabled={reviewActionLoading}
+                         className="px-4 py-2 bg-slate-100 text-slate-600 text-[10px] font-black uppercase tracking-widest rounded-xl"
+                       >
+                         {reviewActionLoading ? 'Updating...' : 'Start Addressing'}
+                       </button>
+                     )}
+                     {showVendorActions && (currentCycle?.status === 'feedback_sent' || currentCycle?.status === 'vendor_addressing') && (
+                       <button
+                         onClick={() => handleReviewAction('resubmitted')}
+                         disabled={reviewActionLoading}
+                         className="px-4 py-2 bg-blue-600 text-white text-[10px] font-black uppercase tracking-widest rounded-xl disabled:opacity-50"
+                       >
+                         {reviewActionLoading ? 'Updating...' : 'Resubmit (New Cycle)'}
+                       </button>
+                     )}
+                     {showVendorActions && currentCycle?.status === 'vendor_addressing' && (
+                       <button
+                         onClick={() => handleReviewAction('closed')}
+                         disabled={reviewActionLoading}
+                         className="px-4 py-2 bg-slate-100 text-slate-600 text-[10px] font-black uppercase tracking-widest rounded-xl disabled:opacity-50"
+                       >
+                         {reviewActionLoading ? 'Updating...' : 'Close Cycle'}
+                       </button>
+                     )}
+                     {isClosed && !isReviewer && canResubmitReview && (
+                       <button
+                         onClick={handleSubmitForReview}
+                         disabled={!canSubmitReview || reviewActionLoading}
+                         className="px-4 py-2 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest rounded-xl disabled:opacity-50"
+                       >
+                         Start New Review Cycle
+                       </button>
+                     )}
                    </div>
-                   <div className="space-y-2">
-                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Target Milestone</label>
-                      <select disabled={readOnly} value={activeMilestoneId} onChange={(e) => setActiveMilestoneId(e.target.value)} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-xs font-bold text-slate-700 outline-none hover:border-blue-200 transition-all disabled:opacity-50">
-                         <option value="">Unscheduled</option>
-                         {milestones.map(m => <option key={m._id} value={m._id}>{m.name}</option>)}
-                      </select>
-                   </div>
-                   <div className="space-y-2">
-                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Tags (Comma Separated)</label>
-                      <input readOnly={readOnly} value={tagsInput} onChange={(e) => setTagsInput(e.target.value)} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-xs font-bold text-slate-700 outline-none hover:border-blue-200 transition-all disabled:opacity-50" placeholder="cloud, infra, v2" />
-                   </div>
-                </div>
-             </section>
+
+                   {showVendorResponseEditor && (
+                     <div className="mt-4">
+                       <div className="text-[9px] font-black uppercase tracking-widest text-slate-400">Vendor Response</div>
+                       <textarea
+                         value={vendorResponseBody}
+                         onChange={(e) => { setVendorResponseBody(e.target.value); setVendorResponseDirty(true); }}
+                         className="mt-2 w-full border border-slate-200 rounded-xl px-3 py-2 text-xs min-h-[120px]"
+                         placeholder="Summarize changes or next steps"
+                       />
+                       <div className="mt-2 flex items-center justify-between">
+                         <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400">
+                           {vendorResponseDirty ? 'Unsaved changes' : ''}
+                         </span>
+                         <button
+                           onClick={() => handleSaveVendorResponse(vendorResponseBody)}
+                           disabled={!vendorResponseDirty || reviewActionLoading}
+                           className="px-4 py-2 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest rounded-xl disabled:opacity-50"
+                         >
+                           {reviewActionLoading ? 'Saving...' : 'Save'}
+                         </button>
+                       </div>
+                     </div>
+                   )}
+                   {showVendorResponseReadOnly && currentCycle?.vendorResponse?.body && (
+                     <div className="mt-4">
+                       <div className="text-[9px] font-black uppercase tracking-widest text-slate-400">Vendor Response</div>
+                       <div className="mt-2 bg-white border border-slate-100 rounded-xl p-4 text-xs text-slate-700 whitespace-pre-wrap">
+                         {currentCycle.vendorResponse.body}
+                       </div>
+                     </div>
+                   )}
+                 </>
+               </section>
+             )}
+             {sideTab === 'comments' && (
+               <section className="border border-slate-100 rounded-2xl overflow-hidden">
+                 <CommentsDrawer
+                   embedded
+                   isOpen
+                   onClose={() => {}}
+                   resource={diagramId ? { type: 'architecture_diagram', id: String(diagramId), title } : null}
+                   currentUser={currentUser}
+                   initialFilter={commentInitialFilter}
+                   initialCycleId={commentInitialCycleId}
+                   currentReviewCycleId={review?.currentCycleId || null}
+                   reviewId={review?._id ? String(review._id) : (deepLinkReviewId || null)}
+                   suppressNewThread={commentSuppressNewThread}
+                 />
+               </section>
+             )}
            </div>
         </aside>
 
         <button onClick={() => setIsContextOpen(!isContextOpen)} className={`absolute bottom-8 right-8 z-[215] w-12 h-12 rounded-full shadow-2xl flex items-center justify-center transition-all ${isContextOpen ? 'bg-slate-900 text-white' : 'bg-blue-600 text-white animate-bounce'}`} title={isContextOpen ? "Collapse Mapping Panel" : "Expand Mapping Panel"}><i className={`fas ${isContextOpen ? 'fa-chevron-right' : 'fa-link'}`}></i></button>
       </div>
+
     </div>
   );
 };

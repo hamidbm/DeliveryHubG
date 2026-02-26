@@ -24,9 +24,10 @@ const VENDOR_ROLES = new Set<Role>([
 export const isEngineeringRole = (role?: string) => ENGINEERING_ROLES.has(role as Role);
 export const isVendorRole = (role?: string) => VENDOR_ROLES.has(role as Role);
 
-export const canSubmitForReview = (user?: { role?: string }) => {
-  if (!user?.role) return false;
-  return isEngineeringRole(user.role) || isVendorRole(user.role) || user.role === Role.CMO_MEMBER;
+export const canSubmitForReview = (user?: { role?: string; userId?: string; id?: string }) => {
+  const uid = String(user?.userId || user?.id || '');
+  if (!uid && !user?.role) return false;
+  return true;
 };
 
 export const canMarkFeedbackSent = (user?: { role?: string }) => {
@@ -44,4 +45,9 @@ export const canCloseCycle = async (user?: { role?: string; userId?: string; id?
   const uid = String(user.userId || user.id || '');
   if (uid) return await isAdmin(uid);
   return false;
+};
+
+export const canViewArchitectureDiagram = (user?: { userId?: string; id?: string }) => {
+  const uid = String(user?.userId || user?.id || '');
+  return Boolean(uid);
 };

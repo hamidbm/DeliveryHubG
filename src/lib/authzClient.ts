@@ -24,7 +24,7 @@ export const isEngineeringRoleClient = (role?: string) => ENGINEERING_ROLES.has(
 export const isVendorRoleClient = (role?: string) => VENDOR_ROLES.has(role as Role);
 
 export const canSubmitForReviewClient = (role?: string) =>
-  Boolean(role && (isEngineeringRoleClient(role) || isVendorRoleClient(role) || role === Role.CMO_MEMBER));
+  Boolean(role);
 
 export const canMarkFeedbackSentClient = (role?: string) => role === Role.CMO_MEMBER;
 

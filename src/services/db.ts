@@ -1495,6 +1495,14 @@ export const syncReviewCycleWorkItem = async ({
     reviewCycleStatus: cycle.status,
     updatedAt: new Date().toISOString()
   };
+  if (!item.linkedResource?.id && review.resource?.id) {
+    updates.linkedResource = {
+      ...(item.linkedResource || {}),
+      type: review.resource?.type,
+      id: String(review.resource.id),
+      title: review.resource?.title
+    };
+  }
   if (cycle.vendorResponse?.body) {
     updates.reviewVendorResponse = cycle.vendorResponse.body;
     updates.reviewVendorResponseAt = cycle.vendorResponse.submittedAt;
@@ -1871,6 +1879,16 @@ export const createReviewWorkItem = async ({
     submitterNote
   ].join('\n');
 
+  let linkedResourceId = resource.id ? String(resource.id) : '';
+  if (!linkedResourceId && reviewId && ObjectId.isValid(reviewId)) {
+    try {
+      const review = await fetchReviewById(reviewId);
+      if (review?.resource?.id) {
+        linkedResourceId = String(review.resource.id);
+      }
+    } catch {}
+  }
+
   const data: Partial<WorkItem> = {
     type: WorkItemType.STORY,
     title: `Review ${resource.title || resource.type}`,
@@ -1882,7 +1900,7 @@ export const createReviewWorkItem = async ({
     parentId: String(feature?._id || feature?.id || ''),
     scopeRef,
     scopeDerivation,
-    linkedResource: { type: resource.type, id: resource.id, title: resource.title },
+    linkedResource: { type: resource.type, id: linkedResourceId, title: resource.title },
     reviewId,
     reviewCycleId: cycleId,
     reviewCycleNumber: cycleNumber,
@@ -2702,6 +2720,18 @@ export const fetchArchitectureDiagrams = async (filters: any = {}) => {
     if (filters.applicationId && filters.applicationId !== 'all') query.applicationId = filters.applicationId;
     return await db.collection('architecture_diagrams').find(query).sort({ updatedAt: -1 }).toArray();
   } catch { return []; }
+};
+
+export const fetchArchitectureDiagramById = async (id: string) => {
+  try {
+    const db = await getDb();
+    if (ObjectId.isValid(id)) {
+      return await db.collection('architecture_diagrams').findOne({ _id: new ObjectId(id) });
+    }
+    return await db.collection('architecture_diagrams').findOne({ id });
+  } catch {
+    return null;
+  }
 };
 
 export const saveArchitectureDiagram = async (diagram: Partial<ArchitectureDiagram>, user: any) => {

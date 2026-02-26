@@ -3,6 +3,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { WorkItem, WorkItemType, WorkItemStatus, Bundle, Application } from '../types';
 import WorkItemDetails from './WorkItemDetails';
 import CreateWorkItemModal from './CreateWorkItemModal';
+import { useSearchParams } from '../App';
 
 interface WorkItemsTreeViewProps {
   applications: Application[];
@@ -22,6 +23,7 @@ interface WorkItemsTreeViewProps {
 const WorkItemsTreeView: React.FC<WorkItemsTreeViewProps> = ({ 
   applications, bundles, selBundleId, selAppId, selMilestone, selEpicId, searchQuery, quickFilter, activeFilters, includeArchived, externalTrigger, onTriggerProcessed 
 }) => {
+  const searchParams = useSearchParams();
   const [treeData, setTreeData] = useState<any[]>([]);
   const [activeItem, setActiveItem] = useState<WorkItem | null>(null);
   const [loading, setLoading] = useState(false);
@@ -36,6 +38,21 @@ const WorkItemsTreeView: React.FC<WorkItemsTreeViewProps> = ({
       onTriggerProcessed?.();
     }
   }, [externalTrigger, onTriggerProcessed]);
+
+  useEffect(() => {
+    const workItemId = searchParams.get('workItemId');
+    if (!workItemId) return;
+    const load = async () => {
+      try {
+        const res = await fetch(`/api/work-items/${encodeURIComponent(workItemId)}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        setActiveItem(data);
+        setSelectedNodeId(String(data._id || data.id || workItemId));
+      } catch {}
+    };
+    load();
+  }, [searchParams]);
 
   const fetchTree = async () => {
     setLoading(true);

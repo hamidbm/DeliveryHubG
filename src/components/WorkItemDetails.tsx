@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef, useMemo, Suspense } from 'react';
 import { WorkItem, WorkItemType, WorkItemStatus, Bundle, Application, WorkItemLink, WorkItemAttachment, WorkItemActivity, WorkItemComment, Milestone, ChecklistItem } from '../types';
 import AssigneeSearch from './AssigneeSearch';
+import CommentsDrawer from './CommentsDrawer';
 import { useRouter } from '../App';
 const WorkItemAiPanel = React.lazy(() => import('./WorkItemAiPanel'));
 const WorkItemAttachmentsPanel = React.lazy(() => import('./WorkItemAttachmentsPanel'));
@@ -35,6 +36,7 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
   const [reviewData, setReviewData] = useState<any | null>(null);
   const [reviewCycle, setReviewCycle] = useState<any | null>(null);
   const [isSyncingReview, setIsSyncingReview] = useState(false);
+  const [autoSyncAttempted, setAutoSyncAttempted] = useState(false);
 
   const [aiResult, setAiResult] = useState<string | null>(initialItem.aiWorkPlan || null);
   const [isAiProcessing, setIsAiProcessing] = useState(false);
@@ -42,17 +44,45 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const buildResourceLink = (resource?: { type: string; id: string }) => {
-    if (!resource?.id) return null;
-    if (resource.type === 'wiki.page' || resource.type === 'wiki.asset') {
-      return `/?tab=wiki&pageId=${encodeURIComponent(resource.id)}`;
+  const buildResourceLink = (resource?: { type?: string; id?: string }, opts?: { reviewId?: string; cycleId?: string; dedupKey?: string }) => {
+    let resourceId = resource?.id;
+    let resourceType = resource?.type;
+    if (resourceId && ['undefined', 'null'].includes(String(resourceId))) {
+      resourceId = undefined;
+    }
+    if (opts?.reviewId && opts.reviewId.includes(':')) {
+      const parts = opts.reviewId.split(':');
+      const inferredType = parts[0];
+      const inferredId = parts.slice(1).join(':');
+      if (!resourceType && inferredType) resourceType = inferredType;
+      if (resourceType === 'architecture_diagram' && inferredId) {
+        resourceId = inferredId;
+      } else if (!resourceId && inferredId) {
+        resourceId = inferredId;
+      }
+    }
+    if (!resourceId && opts?.dedupKey) {
+      const parts = opts.dedupKey.split(':');
+      if (parts.length >= 4 && parts[0].startsWith('reviews.cycle')) {
+        resourceId = parts[2] || resourceId;
+      }
+    }
+    if (!resourceId || ['undefined', 'null'].includes(resourceId)) return null;
+    if (resourceType === 'wiki.page' || resourceType === 'wiki.asset') {
+      return `/?tab=wiki&pageId=${encodeURIComponent(resourceId)}`;
+    }
+    if (resourceType === 'architecture_diagram') {
+      const params = new URLSearchParams();
+      params.set('focus', 'review');
+      if (opts?.cycleId) params.set('cycle', opts.cycleId);
+      return `/architecture/diagram/${encodeURIComponent(resourceId)}?${params.toString()}`;
     }
     return null;
   };
 
   const reviewContext = useMemo(() => {
     if (!item.reviewId && !item.reviewCycleId && !item.linkedResource) return null;
-    const link = item.linkedResource ? buildResourceLink(item.linkedResource) : null;
+    const link = item.linkedResource ? buildResourceLink(item.linkedResource, { reviewId: item.reviewId, cycleId: item.reviewCycleId, dedupKey: item.dedupKey }) : null;
     const requestedBy = item.reviewRequestedBy?.displayName || item.reviewRequestedBy?.email || item.reviewRequestedBy?.userId;
     const cycleLabel = item.reviewCycleNumber ? `#${item.reviewCycleNumber}` : item.reviewCycleId;
     return {
@@ -117,6 +147,24 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
     };
     loadReview();
   }, [item.linkedResource?.type, item.linkedResource?.id, item.reviewCycleId]);
+
+  useEffect(() => {
+    if (autoSyncAttempted) return;
+    if (!item.reviewId || !item.reviewCycleId) return;
+    if (item.linkedResource?.id) return;
+    setAutoSyncAttempted(true);
+    fetch('/api/work-items/sync-review', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({
+        reviewId: item.reviewId,
+        cycleId: item.reviewCycleId
+      })
+    })
+      .then(() => loadFullDetails())
+      .catch(() => {});
+  }, [autoSyncAttempted, item.reviewId, item.reviewCycleId, item.linkedResource?.id]);
 
   const isReadyForExecution = useMemo(() => {
     return !!(item.assignedTo && item.storyPoints && item.description && item.description.length > 20);
@@ -389,9 +437,9 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
             <h3 className="text-xl font-black text-slate-800 tracking-tight truncate leading-tight">{item.title}</h3>
             {item.linkedResource && (
               <div className="mt-1 text-[11px] font-semibold text-slate-500 truncate">
-                {buildResourceLink(item.linkedResource) ? (
+                {buildResourceLink(item.linkedResource, { reviewId: item.reviewId, cycleId: item.reviewCycleId, dedupKey: item.dedupKey }) ? (
                   <button
-                    onClick={() => router.push(buildResourceLink(item.linkedResource) as string)}
+                    onClick={() => router.push(buildResourceLink(item.linkedResource, { reviewId: item.reviewId, cycleId: item.reviewCycleId, dedupKey: item.dedupKey }) as string)}
                     className="text-blue-600 hover:text-blue-800 underline decoration-dotted"
                     title="Open linked resource"
                   >
@@ -596,9 +644,9 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
               {item.linkedResource && (
                 <div className="space-y-2">
                   <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Linked Resource</label>
-                  {buildResourceLink(item.linkedResource) ? (
+                  {buildResourceLink(item.linkedResource, { reviewId: item.reviewId, cycleId: item.reviewCycleId, dedupKey: item.dedupKey }) ? (
                     <button
-                      onClick={() => router.push(buildResourceLink(item.linkedResource) as string)}
+                      onClick={() => router.push(buildResourceLink(item.linkedResource, { reviewId: item.reviewId, cycleId: item.reviewCycleId, dedupKey: item.dedupKey }) as string)}
                       className="w-full text-left bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 text-sm font-bold text-blue-600 hover:text-blue-800"
                     >
                       {item.linkedResource.title || item.linkedResource.id} ({item.linkedResource.type})
@@ -693,6 +741,29 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
 
         {activeTab === 'comments' && (
           <div className="p-10 space-y-8 animate-fadeIn">
+             {item.linkedResource?.type === 'architecture_diagram' && item.reviewCycleId && (
+               <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden">
+                 <div className="px-6 pt-6">
+                   <div className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-4">Review Comments</div>
+                 </div>
+                 <CommentsDrawer
+                   embedded
+                   isOpen
+                   onClose={() => {}}
+                   resource={{
+                     type: 'architecture_diagram',
+                     id: String(item.linkedResource.id),
+                     title: item.linkedResource.title || item.title
+                   }}
+                   currentUser={currentUser || undefined}
+                   initialFilter="current"
+                   initialCycleId={item.reviewCycleId}
+                   currentReviewCycleId={item.reviewCycleId}
+                   reviewId={item.reviewId || null}
+                   suppressNewThread
+                 />
+               </div>
+             )}
              <div className="space-y-6">
                 {(item.comments || []).map((c, i) => (
                   <div key={i} className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex gap-4">

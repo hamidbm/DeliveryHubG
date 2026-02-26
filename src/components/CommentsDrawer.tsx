@@ -13,6 +13,7 @@ interface CommentsDrawerProps {
   currentReviewCycleId?: string | null;
   reviewId?: string | null;
   suppressNewThread?: boolean;
+  embedded?: boolean;
 }
 
 const CommentsDrawer: React.FC<CommentsDrawerProps> = ({
@@ -25,7 +26,8 @@ const CommentsDrawer: React.FC<CommentsDrawerProps> = ({
   initialCycleId = null,
   currentReviewCycleId = null,
   reviewId = null,
-  suppressNewThread = false
+  suppressNewThread = false,
+  embedded = false
 }) => {
   const [threads, setThreads] = useState<CommentThread[]>([]);
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
@@ -241,7 +243,247 @@ const CommentsDrawer: React.FC<CommentsDrawerProps> = ({
 
   if (!isOpen) return null;
 
-  return (
+  const shell = embedded ? (
+    <div className="w-full bg-white flex flex-col">
+      <header className="p-4 border-b border-slate-100 flex items-center justify-between">
+        <div>
+          <div className="text-[9px] font-black uppercase tracking-widest text-slate-400">Comments</div>
+          <div className="text-sm font-black text-slate-900">{resource?.title || 'Artifact'}</div>
+        </div>
+      </header>
+      <div className="flex-1 flex flex-col">
+        <div className="px-4 pt-4 pb-3 border-b border-slate-100 bg-slate-50">
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => setReviewFilter('all')}
+              className={`px-3 py-2 rounded-full border text-[9px] font-black uppercase tracking-widest ${
+                reviewFilter === 'all' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-white text-slate-500 border-slate-200'
+              }`}
+            >
+              All
+            </button>
+            {[
+              { key: 'discussion', label: 'Discussion', icon: '/icons/discussion.png' },
+              { key: 'current', label: `Review Feedback${
+                (initialCycleId || currentReviewCycleId)
+                  ? ` (Cycle #${reviewCycleMap[initialCycleId || currentReviewCycleId] || '?'})`
+                  : ''
+              }`, icon: '/icons/cycle.png' },
+              { key: 'past', label: 'Past Reviews', icon: '/icons/time.png' }
+            ].map((tab) => (
+              <button
+                key={tab.key}
+                onClick={() => setReviewFilter(tab.key as any)}
+                title={tab.label}
+                aria-label={tab.label}
+                className={`px-3 py-2 rounded-full border flex items-center justify-center ${
+                  reviewFilter === tab.key ? 'bg-blue-50 text-blue-700 border-blue-200 ring-1 ring-blue-200' : 'bg-white text-slate-500 border-slate-200'
+                }`}
+              >
+                <img src={tab.icon} alt={tab.label} className="w-4 h-4" />
+              </button>
+            ))}
+          </div>
+          <div className="mt-3 flex items-center gap-3">
+          <input
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-xs font-semibold"
+            placeholder="Search by author"
+          />
+          <select
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value as any)}
+            className="border border-slate-200 rounded-lg px-3 py-2 text-xs font-semibold"
+          >
+            <option value="all">All</option>
+            <option value="open">Open</option>
+            <option value="resolved">Resolved</option>
+          </select>
+          </div>
+        </div>
+        <div className="flex flex-1 overflow-hidden">
+          <div className="w-40 border-r border-slate-100 overflow-y-auto">
+            {loadingThreads ? (
+              <div className="p-4 text-xs text-slate-400">Loading threads...</div>
+            ) : filteredThreads.length === 0 ? (
+              <div className="p-4 text-xs text-slate-400">No threads yet.</div>
+            ) : (
+              (reviewFilter === 'past'
+                ? Object.entries(
+                    filteredThreads.reduce<Record<string, CommentThread[]>>((acc, thread) => {
+                      const key = thread.reviewCycleId || 'unknown';
+                      acc[key] = acc[key] || [];
+                      acc[key].push(thread);
+                      return acc;
+                    }, {})
+                  ).map(([cycleId, items]) => {
+                    const cycleNumber = reviewCycleMap[cycleId] || '?';
+                    return (
+                      <div key={cycleId} className="border-b border-slate-100">
+                        <div className="px-4 py-2 text-[9px] font-black uppercase tracking-widest text-slate-400 bg-slate-50">
+                          Cycle #{cycleNumber} (Closed)
+                        </div>
+                        {items.map((thread) => (
+                          <button
+                            key={String(thread._id)}
+                            onClick={() => setSelectedThreadId(String(thread._id))}
+                            className={`w-full text-left px-4 py-3 border-b border-slate-50 transition ${
+                              String(thread._id) === String(selectedThreadId) ? 'bg-slate-100' : 'hover:bg-slate-50'
+                            }`}
+                          >
+                            <div className="text-xs font-bold text-slate-700">{thread.createdBy?.displayName || 'User'}</div>
+                            <div className="text-[10px] text-slate-400">{thread.messageCount} messages</div>
+                            <div className="mt-1">
+                              <span className="text-[9px] font-black uppercase tracking-widest bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">
+                                Review Cycle #{cycleNumber}
+                              </span>
+                            </div>
+                            <div className={`text-[9px] font-black uppercase tracking-widest ${thread.status === 'resolved' ? 'text-emerald-500' : 'text-amber-500'}`}>
+                              {thread.status}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    );
+                  })
+                : filteredThreads.map((thread) => (
+                    <button
+                      key={String(thread._id)}
+                      onClick={() => setSelectedThreadId(String(thread._id))}
+                      className={`w-full text-left px-4 py-3 border-b border-slate-50 transition ${
+                        String(thread._id) === String(selectedThreadId) ? 'bg-slate-100' : 'hover:bg-slate-50'
+                      }`}
+                    >
+                      <div className="text-xs font-bold text-slate-700">{thread.createdBy?.displayName || 'User'}</div>
+                      <div className="text-[10px] text-slate-400">{thread.messageCount} messages</div>
+                      {thread.reviewCycleId && (
+                        <div className="mt-1">
+                          <span className="text-[9px] font-black uppercase tracking-widest bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">
+                            Review Cycle #{reviewCycleMap[thread.reviewCycleId] || '?'}
+                          </span>
+                        </div>
+                      )}
+                      {!thread.reviewCycleId && (
+                        <div className="mt-1">
+                          <span className="text-[9px] font-black uppercase tracking-widest bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">
+                            Discussion
+                          </span>
+                        </div>
+                      )}
+                      <div className={`text-[9px] font-black uppercase tracking-widest ${thread.status === 'resolved' ? 'text-emerald-500' : 'text-amber-500'}`}>
+                        {thread.status}
+                      </div>
+                    </button>
+                  )))
+            )}
+          </div>
+          <div className="flex-1 flex flex-col">
+            {!selectedThread && !suppressNewThread && (
+              <div className="p-6">
+                <div className="text-sm font-semibold text-slate-700 mb-3">Start a new thread</div>
+                <textarea
+                  ref={newThreadRef}
+                  value={newThreadText}
+                  onChange={(e) => setNewThreadText(e.target.value)}
+                  className="w-full min-h-[120px] border border-slate-200 rounded-xl p-3 text-sm"
+                  placeholder="Write your comment..."
+                />
+                <button
+                  onClick={handleCreateThread}
+                  disabled={!newThreadText.trim()}
+                  className="mt-3 px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-xl bg-slate-900 text-white disabled:opacity-50"
+                >
+                  Create Thread
+                </button>
+              </div>
+            )}
+            {!selectedThread && suppressNewThread && (
+              <div className="p-6">
+                <div className="text-sm font-semibold text-slate-700 mb-3">Start a review thread</div>
+                <textarea
+                  ref={newThreadRef}
+                  value={newThreadText}
+                  onChange={(e) => setNewThreadText(e.target.value)}
+                  className="w-full min-h-[120px] border border-slate-200 rounded-xl p-3 text-sm"
+                  placeholder="Write your review comment..."
+                />
+                <button
+                  onClick={handleCreateThread}
+                  disabled={!newThreadText.trim()}
+                  className="mt-3 px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-xl bg-slate-900 text-white disabled:opacity-50"
+                >
+                  Create Review Thread
+                </button>
+              </div>
+            )}
+            {selectedThread && (
+              <>
+                <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+                  <div className="text-xs font-bold text-slate-600">
+                    {selectedThread.messageCount} messages
+                  </div>
+                  {selectedThread.reviewCycleId && (
+                    <span className="text-[9px] font-black uppercase tracking-widest bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">
+                      Review Cycle #{reviewCycleMap[selectedThread.reviewCycleId] || '?'}
+                    </span>
+                  )}
+                  {!selectedThread.reviewCycleId && (
+                    <span className="text-[9px] font-black uppercase tracking-widest bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">
+                      Discussion
+                    </span>
+                  )}
+                  <button
+                    onClick={handleToggleResolve}
+                    className={`px-3 py-2 text-[10px] font-black uppercase tracking-widest rounded-xl border ${
+                      selectedThread.status === 'resolved'
+                        ? 'bg-emerald-50 text-emerald-600 border-emerald-200'
+                        : 'bg-amber-50 text-amber-600 border-amber-200'
+                    }`}
+                  >
+                    {selectedThread.status === 'resolved' ? 'Reopen' : 'Resolve'}
+                  </button>
+                </div>
+                <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                  {loadingMessages ? (
+                    <div className="text-xs text-slate-400">Loading messages...</div>
+                  ) : messages.length === 0 ? (
+                    <div className="text-xs text-slate-400">No messages yet.</div>
+                  ) : (
+                    messages.map((msg) => (
+                      <div key={String(msg._id)} className="bg-slate-50 rounded-xl p-3">
+                        <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">
+                          {msg.author?.displayName || 'User'}
+                        </div>
+                        <div className="text-sm text-slate-700">
+                          <MarkdownRenderer content={msg.body} />
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+                <div className="p-4 border-t border-slate-100">
+                  <textarea
+                    value={composerText}
+                    onChange={(e) => setComposerText(e.target.value)}
+                    className="w-full min-h-[90px] border border-slate-200 rounded-xl p-3 text-sm"
+                    placeholder="Reply to this thread..."
+                  />
+                  <button
+                    onClick={handleSendMessage}
+                    disabled={!composerText.trim()}
+                    className="mt-3 px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-xl bg-slate-900 text-white disabled:opacity-50"
+                  >
+                    Send Reply
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  ) : (
     <div className="fixed inset-0 z-[120]">
       <div className="absolute inset-x-0 top-[7.5rem] bottom-0 bg-slate-900/30" onClick={onClose} />
       <aside className="absolute right-0 top-[7.5rem] bottom-0 w-full max-w-[620px] bg-white shadow-2xl border-l border-slate-200 flex flex-col">
@@ -271,24 +513,33 @@ const CommentsDrawer: React.FC<CommentsDrawerProps> = ({
 
         <div className="px-4 pt-4 pb-3 border-b border-slate-100 bg-slate-50">
           <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => setReviewFilter('all')}
+              className={`px-3 py-2 rounded-full border text-[9px] font-black uppercase tracking-widest ${
+                reviewFilter === 'all' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-white text-slate-500 border-slate-200'
+              }`}
+            >
+              All
+            </button>
             {[
-              { key: 'all', label: 'All' },
-              { key: 'discussion', label: 'Discussion' },
+              { key: 'discussion', label: 'Discussion', icon: '/icons/discussion.png' },
               { key: 'current', label: `Review Feedback${
                 (initialCycleId || currentReviewCycleId)
                   ? ` (Cycle #${reviewCycleMap[initialCycleId || currentReviewCycleId] || '?'})`
                   : ''
-              }` },
-              { key: 'past', label: 'Past Reviews' }
+              }`, icon: '/icons/cycle.png' },
+              { key: 'past', label: 'Past Reviews', icon: '/icons/time.png' }
             ].map((tab) => (
               <button
                 key={tab.key}
                 onClick={() => setReviewFilter(tab.key as any)}
-                className={`px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest border ${
-                  reviewFilter === tab.key ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-500 border-slate-200'
+                title={tab.label}
+                aria-label={tab.label}
+                className={`px-3 py-2 rounded-full border flex items-center justify-center ${
+                  reviewFilter === tab.key ? 'bg-blue-50 text-blue-700 border-blue-200 ring-1 ring-blue-200' : 'bg-white text-slate-500 border-slate-200'
                 }`}
               >
-                {tab.label}
+                <img src={tab.icon} alt={tab.label} className="w-4 h-4" />
               </button>
             ))}
           </div>
@@ -495,6 +746,8 @@ const CommentsDrawer: React.FC<CommentsDrawerProps> = ({
       </aside>
     </div>
   );
+
+  return shell;
 };
 
 export default CommentsDrawer;

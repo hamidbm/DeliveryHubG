@@ -99,6 +99,10 @@ export default function Home() {
 
   const navigationValue = {
     push: (url: string) => {
+      if (url.startsWith('/architecture/diagram/')) {
+        window.location.href = url;
+        return;
+      }
       const [path, query] = url.split('?');
       if (path && path.startsWith('/')) {
         setCurrentPath(path);

@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import CapabilityMap from './CapabilityMap';
 import IntegrationMatrix from './IntegrationMatrix';
 import PortfolioStrategy from './PortfolioStrategy';
@@ -8,6 +8,7 @@ import OpsCenter from './OpsCenter';
 import GovernanceDocuments from './GovernanceDocuments';
 import ArchitectureDiagrams from './ArchitectureDiagrams';
 import { Application, Bundle } from '../types';
+import { useSearchParams } from '../App';
 
 interface ArchitectureHubProps {
   applications: Application[];
@@ -20,6 +21,7 @@ interface ArchitectureHubProps {
 type SubTab = 'capabilities' | 'integrations' | 'lifecycle' | 'diagrams' | 'infrastructure' | 'observability' | 'governance';
 
 const ArchitectureHub: React.FC<ArchitectureHubProps> = ({ applications, bundles, activeBundleId = 'all', activeAppId = 'all', onUpdateApplications }) => {
+  const searchParams = useSearchParams();
   const [activeSubTab, setActiveSubTab] = useState<SubTab>('capabilities');
 
   const tabs = [
@@ -44,6 +46,18 @@ const ArchitectureHub: React.FC<ArchitectureHubProps> = ({ applications, bundles
       default: return <CapabilityMap applications={applications} />;
     }
   };
+
+  useEffect(() => {
+    const sub = searchParams.get('subtab');
+    const hasDiagramFocus = Boolean(searchParams.get('diagramId') || searchParams.get('focus') === 'review');
+    if (sub && tabs.some((t) => t.id === sub)) {
+      setActiveSubTab(sub as SubTab);
+      return;
+    }
+    if (hasDiagramFocus) {
+      setActiveSubTab('diagrams');
+    }
+  }, [searchParams]);
 
   return (
     <div className="space-y-8 animate-fadeIn">
