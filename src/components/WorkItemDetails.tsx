@@ -14,15 +14,17 @@ interface WorkItemDetailsProps {
   applications: Application[];
   onUpdate: () => void;
   onClose: () => void;
+  initialActiveTab?: 'details' | 'checklist' | 'comments' | 'links' | 'attachments' | 'activity' | 'ai';
+  initialThreadId?: string | null;
 }
 
-const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bundles, applications, onUpdate, onClose }) => {
+const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bundles, applications, onUpdate, onClose, initialActiveTab, initialThreadId }) => {
   const router = useRouter();
   const [item, setItem] = useState<WorkItem>(initialItem);
   const [children, setChildren] = useState<WorkItem[]>([]);
   const [milestones, setMilestones] = useState<Milestone[]>([]);
   const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState<'details' | 'checklist' | 'comments' | 'links' | 'attachments' | 'activity' | 'ai'>('details');
+  const [activeTab, setActiveTab] = useState<'details' | 'checklist' | 'comments' | 'links' | 'attachments' | 'activity' | 'ai'>(initialActiveTab || 'details');
   const [newComment, setNewComment] = useState('');
   const [newChecklistItem, setNewChecklistItem] = useState('');
   const [uploading, setUploading] = useState(false);
@@ -188,6 +190,12 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
     loadFullDetails();
     setClosureError(null);
   }, [initialItem]);
+
+  useEffect(() => {
+    if (initialActiveTab) {
+      setActiveTab(initialActiveTab);
+    }
+  }, [initialActiveTab]);
 
   useEffect(() => {
     fetch('/api/auth/me')
@@ -543,6 +551,100 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
                 </div>
               </div>
 
+              <div className="grid grid-cols-2 gap-10">
+                <div className="space-y-2">
+                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Due Date</label>
+                  <input
+                    type="date"
+                    value={item.dueAt ? new Date(item.dueAt).toISOString().slice(0, 10) : ''}
+                    onChange={(e) => handleUpdateItem({ dueAt: e.target.value || undefined })}
+                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 text-sm font-black outline-none focus:ring-2 focus:ring-blue-500/10"
+                  />
+                </div>
+              </div>
+
+              {item.type === WorkItemType.RISK && (
+                <div className="bg-slate-50 border border-slate-100 rounded-2xl p-6 space-y-4">
+                  <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Risk Details</div>
+                  <div className="grid grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Probability</label>
+                      <select
+                        value={item.risk?.probability || 3}
+                        onChange={(e) => handleUpdateItem({ risk: { ...(item.risk || {}), probability: Number(e.target.value) as any, impact: (item.risk?.impact || 3) as any } })}
+                        className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold outline-none"
+                      >
+                        {[1,2,3,4,5].map(v => <option key={v} value={v}>{v}</option>)}
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Impact</label>
+                      <select
+                        value={item.risk?.impact || 3}
+                        onChange={(e) => handleUpdateItem({ risk: { ...(item.risk || {}), impact: Number(e.target.value) as any, probability: (item.risk?.probability || 3) as any } })}
+                        className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold outline-none"
+                      >
+                        {[1,2,3,4,5].map(v => <option key={v} value={v}>{v}</option>)}
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Severity</label>
+                      <div className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold uppercase text-slate-600">
+                        {item.risk?.severity || '—'}
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Area</label>
+                      <select
+                        value={item.risk?.area || ''}
+                        onChange={(e) => handleUpdateItem({ risk: { ...(item.risk || {}), area: e.target.value as any, probability: (item.risk?.probability || 3) as any, impact: (item.risk?.impact || 3) as any } })}
+                        className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold outline-none"
+                      >
+                        <option value="">Select</option>
+                        {['schedule','cost','scope','security','compliance','operations','vendor','other'].map(a => (
+                          <option key={a} value={a}>{a}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-2 col-span-2">
+                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Mitigation</label>
+                      <input
+                        value={item.risk?.mitigation || ''}
+                        onChange={(e) => handleUpdateItem({ risk: { ...(item.risk || {}), mitigation: e.target.value, probability: (item.risk?.probability || 3) as any, impact: (item.risk?.impact || 3) as any } })}
+                        className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {item.type === WorkItemType.DEPENDENCY && (
+                <div className="bg-slate-50 border border-slate-100 rounded-2xl p-6 space-y-4">
+                  <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Dependency Details</div>
+                  <div className="grid grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Blocking</label>
+                      <select
+                        value={item.dependency?.blocking ? 'yes' : 'no'}
+                        onChange={(e) => handleUpdateItem({ dependency: { ...(item.dependency || {}), blocking: e.target.value === 'yes' } })}
+                        className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold outline-none"
+                      >
+                        <option value="yes">Yes</option>
+                        <option value="no">No</option>
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Depends On (name)</label>
+                      <input
+                        value={item.dependency?.dependsOn?.name || ''}
+                        onChange={(e) => handleUpdateItem({ dependency: { ...(item.dependency || {}), dependsOn: { ...(item.dependency?.dependsOn || { type: 'external' }), name: e.target.value }, blocking: typeof item.dependency?.blocking === 'boolean' ? item.dependency.blocking : true } })}
+                        className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {reviewContext && (
                 <div className="bg-slate-50 border border-slate-100 rounded-2xl p-6 space-y-4">
                   <div className="flex items-center justify-between">
@@ -741,6 +843,26 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
 
         {activeTab === 'comments' && (
           <div className="p-10 space-y-8 animate-fadeIn">
+            <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden">
+              <div className="px-6 pt-6">
+                <div className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-4">Work Item Comments</div>
+              </div>
+              <CommentsDrawer
+                embedded
+                isOpen
+                onClose={() => {}}
+                resource={{
+                  type: 'workitems.item',
+                  id: String(item._id || item.id),
+                  title: item.title
+                }}
+                currentUser={currentUser || undefined}
+                initialFilter="all"
+                reviewId={null}
+                suppressNewThread={false}
+                initialThreadId={initialThreadId}
+              />
+            </div>
              {item.linkedResource?.type === 'architecture_diagram' && item.reviewCycleId && (
                <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden">
                  <div className="px-6 pt-6">
@@ -756,14 +878,14 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
                      title: item.linkedResource.title || item.title
                    }}
                    currentUser={currentUser || undefined}
-                   initialFilter="current"
-                   initialCycleId={item.reviewCycleId}
-                   currentReviewCycleId={item.reviewCycleId}
-                   reviewId={item.reviewId || null}
-                   suppressNewThread
-                 />
-               </div>
-             )}
+                    initialFilter="current"
+                    initialCycleId={item.reviewCycleId}
+                    currentReviewCycleId={item.reviewCycleId}
+                    reviewId={item.reviewId || null}
+                    suppressNewThread
+                  />
+                </div>
+              )}
              <div className="space-y-6">
                 {(item.comments || []).map((c, i) => (
                   <div key={i} className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex gap-4">
@@ -797,7 +919,7 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
              <div className="bg-white p-10 rounded-[2.5rem] border border-slate-100 shadow-sm">
                 <div className="flex justify-between items-center mb-8">
                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Dependency Graph</h4>
-                   <button onClick={handleAddLink} className="text-[10px] font-black text-blue-600 uppercase hover:underline">+ Link Artifact</button>
+                   <button onClick={() => {}} className="text-[10px] font-black text-blue-600 uppercase hover:underline">+ Link Artifact</button>
                 </div>
                 <div className="grid grid-cols-1 gap-4">
                    <div className="flex flex-wrap items-end gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-100">

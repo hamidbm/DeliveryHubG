@@ -3,11 +3,16 @@ import { getPortfolioSummary } from '../../../../services/geminiService';
 import { checkAndIncrementAiRateLimit, fetchSystemSettings, fetchApplications, fetchBundles, saveAiAuditLog } from '../../../../services/db';
 import { getRateLimitPerHour, getRequestIdentity, getRetentionDays } from '../../../../services/aiPolicy';
 
+type AiSettings = {
+  geminiProModel?: string;
+  proModel?: string;
+};
+
 export async function POST(request: Request) {
   const startedAt = Date.now();
   try {
     const settings = await fetchSystemSettings();
-    const aiSettings = settings?.ai || {};
+    const aiSettings: AiSettings = (settings?.ai || {}) as AiSettings;
     const identity = getRequestIdentity(request);
     const allowed = await checkAndIncrementAiRateLimit(identity, getRateLimitPerHour(aiSettings, 30));
     if (!allowed) {
@@ -38,7 +43,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ summary });
   } catch (error) {
     const settings = await fetchSystemSettings();
-    const aiSettings = settings?.ai || {};
+    const aiSettings: AiSettings = (settings?.ai || {}) as AiSettings;
     await saveAiAuditLog({
       task: 'portfolioSummary',
       provider: 'UNKNOWN',

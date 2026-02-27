@@ -27,7 +27,7 @@ const WorkPlanIntakeModal: React.FC<WorkPlanIntakeModalProps> = ({ bundles, appl
 
   useEffect(() => {
     if (scopeOptions.length > 0 && !scopeId) {
-      setScopeId(String(scopeOptions[0]._id || scopeOptions[0].id || scopeOptions[0].key || scopeOptions[0].aid));
+      setScopeId(String(scopeOptions[0]._id || scopeOptions[0].id));
     }
   }, [scopeOptions, scopeId]);
 

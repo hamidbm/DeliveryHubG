@@ -209,6 +209,9 @@ function HomeContent() {
     if (pathname.startsWith('/activities')) {
       setActiveTab('activities');
     }
+    if (pathname.startsWith('/applications')) {
+      setActiveTab('applications');
+    }
   }, [pathname]);
 
   useEffect(() => {
@@ -247,7 +250,16 @@ function HomeContent() {
       case 'dashboard':
         return <Dashboard applications={applications} bundles={bundles} />;
       case 'applications':
-        return <Applications filterBundle={activeBundle} applications={applications} bundles={bundles} />;
+        return (
+          <Applications
+            filterBundle={activeBundle}
+            filterApp={activeApp}
+            selMilestone={selMilestone}
+            searchQuery={searchQuery}
+            applications={applications}
+            bundles={bundles}
+          />
+        );
       case 'work-items':
         return (
           <WorkItems 
@@ -306,6 +318,10 @@ function HomeContent() {
     // Persist to URL
     if (tab === 'activities') {
       router.push('/activities/feed');
+      return;
+    }
+    if (tab === 'applications') {
+      router.push('/applications');
       return;
     }
     const params = new URLSearchParams(searchParams.toString());

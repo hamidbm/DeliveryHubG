@@ -56,8 +56,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     }
 
     await db.collection('workitems').updateOne(
-      { _id: itemId },
-      { $push: { attachments: { $each: newAttachments } }, $set: { updatedAt: now } }
+      { _id: itemId } as any,
+      { $push: { attachments: { $each: newAttachments } }, $set: { updatedAt: now } } as any
     );
 
     try {

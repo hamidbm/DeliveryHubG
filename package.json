@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "seed:diagram-templates": "node scripts/seed-diagram-templates.js"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

@@ -5,6 +5,7 @@ import { jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
 import { execSync } from 'child_process';
 import fs from 'fs';
+import { Readable } from 'stream';
 import path from 'path';
 import os from 'os';
 import ExcelJS from 'exceljs';
@@ -159,9 +160,9 @@ export async function POST(request: Request) {
       try {
         const workbook = new ExcelJS.Workbook();
         if (ext === 'csv') {
-          await workbook.csv.read(buffer);
+          await workbook.csv.read(Readable.from(buffer));
         } else {
-          await workbook.xlsx.load(buffer);
+          await workbook.xlsx.load(buffer as any);
         }
         
         const sheetNames = workbook.worksheets.map(ws => ws.name);

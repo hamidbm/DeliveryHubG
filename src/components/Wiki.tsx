@@ -71,6 +71,7 @@ const Wiki: React.FC<WikiProps> = ({
   const [commentUnreadCount, setCommentUnreadCount] = useState(0);
   const [commentInitialFilter, setCommentInitialFilter] = useState<'all' | 'discussion' | 'current' | 'past'>('all');
   const [commentInitialCycleId, setCommentInitialCycleId] = useState<string | null>(null);
+  const [commentInitialThreadId, setCommentInitialThreadId] = useState<string | null>(null);
   const [commentSuppressNewThread, setCommentSuppressNewThread] = useState(false);
   const [review, setReview] = useState<ReviewRecord | null>(null);
   const [feedbackPackages, setFeedbackPackages] = useState<FeedbackPackage[]>([]);
@@ -289,6 +290,15 @@ const Wiki: React.FC<WikiProps> = ({
       }
     }
   }, [searchParams, pages, assets, loading, resolveArtifact, includeFeedbackAssets, onIncludeFeedbackAssetsChange]);
+
+  useEffect(() => {
+    const threadId = searchParams.get('threadId');
+    if (threadId) {
+      setCommentInitialThreadId(threadId);
+      setCommentInitialFilter('all');
+      setIsCommentsOpen(true);
+    }
+  }, [searchParams]);
 
   const handleArtifactSelect = (art: WikiPage | WikiAsset) => {
     setActiveArtifact(art);
@@ -626,7 +636,7 @@ const Wiki: React.FC<WikiProps> = ({
       const spaceName = showSpace ? (spaceObj?.name || 'Shared Space') : 'All Spaces';
       const bundleName = bundleObj?.name || 'General';
       const appName = appObj?.name || 'App Context';
-      const typeName = art.documentType || typeObj?.name || 'Protocol';
+      const typeName = (art as any).documentType || typeObj?.name || 'Protocol';
       const milestoneName = msId;
 
       let currentLevel = tree;
@@ -1389,7 +1399,7 @@ const Wiki: React.FC<WikiProps> = ({
                        })}
                        className="hover:text-blue-600 transition-colors"
                      >
-                     {activeArtifact.documentType || docTypes.find((t) => String(t._id || t.id) === String(activeArtifact.documentTypeId))?.name || 'Artifact'}
+                     {(activeArtifact as any).documentType || docTypes.find((t) => String(t._id || t.id) === String(activeArtifact.documentTypeId))?.name || 'Artifact'}
                      </button>
                      <span>→</span>
                      <span className="text-slate-700">{activeArtifact.title}</span>
@@ -2253,7 +2263,7 @@ const Wiki: React.FC<WikiProps> = ({
         )}
       </main>
 
-      {isEditing && activeArtifact && ('content' in activeArtifact) && (
+      {isEditing && activeArtifact && ('slug' in activeArtifact) && (
         <WikiForm id={activeArtifact._id} initialTitle={activeArtifact.title} initialContent={activeArtifact.content} initialSlug={activeArtifact.slug} spaceId={activeArtifact.spaceId} initialBundleId={activeArtifact.bundleId} initialApplicationId={activeArtifact.applicationId} initialDocumentTypeId={activeArtifact.documentTypeId} initialThemeKey={activeArtifact.themeKey} onSaveSuccess={(id) => { setIsEditing(false); refreshRegistry(id); }} onCancel={() => setIsEditing(false)} currentUser={currentUser} bundles={bundles} applications={applications} />
       )}
 
@@ -2301,6 +2311,7 @@ const Wiki: React.FC<WikiProps> = ({
           currentReviewCycleId={review?.currentCycleId || null}
           reviewId={review?._id || null}
           suppressNewThread={commentSuppressNewThread}
+          initialThreadId={commentInitialThreadId}
         />
       )}
 

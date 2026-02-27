@@ -1,10 +1,11 @@
 
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { markNotificationRead } from '../../../../../services/db';
 
-export async function PATCH(request: Request, { params }: { params: { id: string } }) {
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    await markNotificationRead(params.id);
+    const { id } = await params;
+    await markNotificationRead(id);
     return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json({ error: 'Failed to update notification' }, { status: 500 });

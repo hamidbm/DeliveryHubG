@@ -4,6 +4,17 @@ import { checkAndIncrementAiRateLimit, fetchSystemSettings, saveAiAuditLog } fro
 import { generateOpenAiResponse, pickOpenAiReasoningEffort } from '../../../../services/openaiService';
 import { getRateLimitPerHour, getRequestIdentity, getRetentionDays, resolveTaskRouting } from '../../../../services/aiPolicy';
 
+type AiSettings = {
+  openaiKey?: string;
+  openaiModelHigh?: string;
+  openaiModelDefault?: string;
+  openaiModel?: string;
+  defaultModel?: string;
+  defaultProvider?: string;
+  geminiFlashModel?: string;
+  flashModel?: string;
+};
+
 async function analyzeOpenAiTerraform(code: string, provider: string, apiKey: string, model: string) {
   const prompt = `Act as a Cloud Architect and Security Engineer. Analyze this ${provider} Terraform script for:
   1. Security Risks (Misconfigurations, wide-open rules, missing encryption)
@@ -37,14 +48,21 @@ export async function POST(request: Request) {
     const settings = await fetchSystemSettings();
     const envKey = process.env.OPENAI_API_KEY;
     const identity = getRequestIdentity(request);
-    const aiSettings = settings?.ai || {};
+    const aiSettings: AiSettings = (settings?.ai || {}) as AiSettings;
     const allowed = await checkAndIncrementAiRateLimit(identity, getRateLimitPerHour(aiSettings, 30));
     if (!allowed) {
       return NextResponse.json({ error: 'Rate limit exceeded.' }, { status: 429 });
     }
     
     // Prioritize OpenAI if env var exists or settings explicitly set it
-    const { provider: routedProvider, model: routedModel } = resolveTaskRouting(aiSettings, 'terraformAnalysis', settings?.ai?.defaultProvider || 'GEMINI');
+    const defaultProvider = (aiSettings.defaultProvider === 'OPENAI' || aiSettings.defaultProvider === 'GEMINI' || aiSettings.defaultProvider === 'ANTHROPIC' || aiSettings.defaultProvider === 'HUGGINGFACE' || aiSettings.defaultProvider === 'COHERE')
+      ? aiSettings.defaultProvider
+      : 'GEMINI';
+    const { provider: routedProvider, model: routedModel } = resolveTaskRouting(
+      aiSettings,
+      'terraformAnalysis',
+      defaultProvider
+    );
     const openAiIntended = routedProvider === 'OPENAI';
     const geminiProviderLabel = routedProvider === 'GEMINI' ? 'GEMINI' : 'GEMINI_FALLBACK';
 
@@ -85,7 +103,7 @@ export async function POST(request: Request) {
 
   } catch (error: any) {
     const settings = await fetchSystemSettings();
-    const aiSettings = settings?.ai || {};
+    const aiSettings: AiSettings = (settings?.ai || {}) as AiSettings;
     await saveAiAuditLog({
       task: 'terraformAnalysis',
       provider: 'UNKNOWN',

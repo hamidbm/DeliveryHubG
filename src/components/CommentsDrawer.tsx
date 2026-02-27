@@ -14,6 +14,7 @@ interface CommentsDrawerProps {
   reviewId?: string | null;
   suppressNewThread?: boolean;
   embedded?: boolean;
+  initialThreadId?: string | null;
 }
 
 const CommentsDrawer: React.FC<CommentsDrawerProps> = ({
@@ -27,7 +28,8 @@ const CommentsDrawer: React.FC<CommentsDrawerProps> = ({
   currentReviewCycleId = null,
   reviewId = null,
   suppressNewThread = false,
-  embedded = false
+  embedded = false,
+  initialThreadId = null
 }) => {
   const [threads, setThreads] = useState<CommentThread[]>([]);
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
@@ -95,6 +97,14 @@ const CommentsDrawer: React.FC<CommentsDrawerProps> = ({
       loadThreads();
     }
   }, [resource?.id, resource?.type, isOpen]);
+
+  useEffect(() => {
+    if (!initialThreadId) return;
+    const match = threads.find((t) => String(t._id) === String(initialThreadId));
+    if (match) {
+      setSelectedThreadId(String(match._id));
+    }
+  }, [initialThreadId, threads]);
 
   useEffect(() => {
     if (isOpen) {

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { jwtVerify } from 'jose';
 import { getDb } from '../../../services/db';
+import type { Sort, SortDirection } from 'mongodb';
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
 
@@ -30,7 +31,7 @@ export async function GET(request: Request) {
     const page = Math.max(1, Number(searchParams.get('page') || 1));
     const pageSize = Math.min(100, Math.max(1, Number(searchParams.get('pageSize') || 25)));
     const sort = searchParams.get('sort') || 'updatedAt';
-    const dir = searchParams.get('dir') === 'asc' ? 1 : -1;
+    const dir: SortDirection = searchParams.get('dir') === 'asc' ? 1 : -1;
 
     const query: any = {};
     if (bundleId) {
@@ -57,7 +58,7 @@ export async function GET(request: Request) {
       sort === 'dueAt' ? 'currentDueAt' :
       sort === 'requestedAt' ? 'currentRequestedAt' :
       'updatedAt';
-    const sortClause: Record<string, number> = { [sortField]: dir };
+    const sortClause: Sort = { [sortField]: dir };
 
     const db = await getDb();
     const total = await db.collection('reviews').countDocuments(query);

@@ -1,6 +1,13 @@
 import { Role } from '../types';
 import { isAdmin } from './db';
 
+type AuthUser = {
+  userId?: string;
+  id?: string;
+  role?: string;
+  team?: string;
+};
+
 const ENGINEERING_ROLES = new Set<Role>([
   Role.ENGG_LEADER,
   Role.APP_LEADER,
@@ -24,30 +31,36 @@ const VENDOR_ROLES = new Set<Role>([
 export const isEngineeringRole = (role?: string) => ENGINEERING_ROLES.has(role as Role);
 export const isVendorRole = (role?: string) => VENDOR_ROLES.has(role as Role);
 
-export const canSubmitForReview = (user?: { role?: string; userId?: string; id?: string }) => {
-  const uid = String(user?.userId || user?.id || '');
-  if (!uid && !user?.role) return false;
-  return true;
-};
-
-export const canMarkFeedbackSent = (user?: { role?: string }) => {
-  return user?.role === Role.CMO_MEMBER;
-};
-
-export const canResubmit = (user?: { role?: string }) => {
-  if (!user?.role) return false;
-  return isEngineeringRole(user.role) || isVendorRole(user.role);
-};
-
-export const canCloseCycle = async (user?: { role?: string; userId?: string; id?: string }) => {
+export const canSubmitForReview = (user?: AuthUser) => {
   if (!user) return false;
-  if (isEngineeringRole(user.role) || isVendorRole(user.role)) return true;
-  const uid = String(user.userId || user.id || '');
-  if (uid) return await isAdmin(uid);
-  return false;
+  return Boolean(user.userId || user.id || user.role);
 };
 
-export const canViewArchitectureDiagram = (user?: { userId?: string; id?: string }) => {
-  const uid = String(user?.userId || user?.id || '');
-  return Boolean(uid);
+export const canMarkFeedbackSent = (user?: AuthUser) => user?.role === Role.CMO_MEMBER;
+
+export const canResubmit = (user?: AuthUser) => {
+  const role = user?.role;
+  return Boolean(role && (isEngineeringRole(role) || isVendorRole(role)));
+};
+
+export const canCloseCycle = async (user?: AuthUser) => {
+  if (!user) return false;
+  if (canResubmit(user)) return true;
+  if (user.team === 'Management') return true;
+  const userId = String(user.userId || user.id || '');
+  if (!userId) return false;
+  return await isAdmin(userId);
+};
+
+export const canViewArchitectureDiagram = (user?: AuthUser, _diagram?: any) => {
+  if (!user) return false;
+  return Boolean(user.userId || user.id);
+};
+
+export const canEditBundleProfile = async (user?: AuthUser) => {
+  if (!user) return false;
+  if (user.team === 'Management') return true;
+  const userId = String(user.userId || user.id || '');
+  if (!userId) return false;
+  return await isAdmin(userId);
 };

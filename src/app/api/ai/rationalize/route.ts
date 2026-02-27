@@ -3,6 +3,11 @@ import { suggestRationalization } from '../../../../services/geminiService';
 import { checkAndIncrementAiRateLimit, fetchSystemSettings, saveAiAuditLog } from '../../../../services/db';
 import { getRateLimitPerHour, getRequestIdentity, getRetentionDays } from '../../../../services/aiPolicy';
 
+type AiSettings = {
+  geminiFlashModel?: string;
+  flashModel?: string;
+};
+
 export async function POST(request: Request) {
   const startedAt = Date.now();
   try {
@@ -10,7 +15,7 @@ export async function POST(request: Request) {
     if (!app) return NextResponse.json({ error: 'App data required' }, { status: 400 });
     
     const settings = await fetchSystemSettings();
-    const aiSettings = settings?.ai || {};
+    const aiSettings: AiSettings = (settings?.ai || {}) as AiSettings;
     const identity = getRequestIdentity(request);
     const allowed = await checkAndIncrementAiRateLimit(identity, getRateLimitPerHour(aiSettings, 30));
     if (!allowed) {
@@ -31,7 +36,7 @@ export async function POST(request: Request) {
     return NextResponse.json(result);
   } catch (error) {
     const settings = await fetchSystemSettings();
-    const aiSettings = settings?.ai || {};
+    const aiSettings: AiSettings = (settings?.ai || {}) as AiSettings;
     await saveAiAuditLog({
       task: 'appRationalize',
       provider: 'UNKNOWN',

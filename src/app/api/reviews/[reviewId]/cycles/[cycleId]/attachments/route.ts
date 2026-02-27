@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { jwtVerify } from 'jose';
-import { Buffer } from 'buffer';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import { Readable } from 'stream';
 import { execSync } from 'child_process';
 import ExcelJS from 'exceljs';
 import { addReviewCycleAttachments, emitEvent, ensureInReview, fetchReviewById, saveWikiAsset } from '../../../../../../../services/db';
@@ -82,7 +82,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ rev
     const user = await getUser();
     if (!user?.userId) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
     const { reviewId, cycleId } = await params;
-    const review = await fetchReviewById(reviewId);
+    const review = (await fetchReviewById(reviewId)) as any;
     if (!review) return NextResponse.json({ error: 'Review not found' }, { status: 404 });
     const cycle = (review.cycles || []).find((c) => c.cycleId === cycleId);
     if (!cycle) return NextResponse.json({ error: 'Cycle not found' }, { status: 404 });
@@ -105,7 +105,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ rev
     const reviewedDocumentType = String(formData.get('reviewedDocumentType') || '');
 
     const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
+    const buffer = Buffer.from(arrayBuffer) as unknown as Buffer;
     const base64Data = buffer.toString('base64');
     const ext = file.name.split('.').pop()?.toLowerCase() || '';
 
@@ -126,9 +126,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ rev
       try {
         const workbook = new ExcelJS.Workbook();
         if (ext === 'csv') {
-          await workbook.csv.read(buffer);
+          await workbook.csv.read(Readable.from(buffer));
         } else {
-          await workbook.xlsx.load(buffer);
+          await workbook.xlsx.load(buffer as any);
         }
         const sheetNames = workbook.worksheets.map((ws) => ws.name);
         const sheets = workbook.worksheets.map((worksheet) => {

@@ -1,15 +1,16 @@
 
-import { NextResponse } from 'next/server';
-import { getDb } from '../../../../services/db';
+import { NextRequest, NextResponse } from 'next/server';
+import { getDb } from '@/services/db';
 import { ObjectId } from 'mongodb';
 
-export async function PATCH(request: Request, { params }: { params: { id: string } }) {
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const { id } = await params;
     const data = await request.json();
     const db = await getDb();
     
     const result = await db.collection('applications').updateOne(
-      { _id: new ObjectId(params.id) },
+      { _id: new ObjectId(id) },
       { $set: data }
     );
 

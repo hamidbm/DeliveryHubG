@@ -6,6 +6,17 @@ import { getRateLimitPerHour, getRequestIdentity, getRetentionDays, resolveTaskR
 
 const VALID_TASKS = new Set(['summary', 'key_decisions', 'assumptions']);
 
+type AiSettings = {
+  defaultProvider?: string;
+  openaiKey?: string;
+  openaiModelDefault?: string;
+  openaiModelHigh?: string;
+  openaiModel?: string;
+  defaultModel?: string;
+  geminiFlashModel?: string;
+  flashModel?: string;
+};
+
 const buildAssetPrompt = (task: string, content: string, title?: string) => {
   const header = title ? `Title: ${title}\n\n` : '';
   switch (task) {
@@ -33,8 +44,10 @@ export async function POST(request: Request) {
     }
 
     const settings = await fetchSystemSettings();
-    const aiSettings = settings?.ai || {};
-    const provider = aiSettings.defaultProvider || 'GEMINI';
+    const aiSettings: AiSettings = (settings?.ai || {}) as AiSettings;
+    const provider = (aiSettings.defaultProvider === 'OPENAI' || aiSettings.defaultProvider === 'GEMINI' || aiSettings.defaultProvider === 'ANTHROPIC' || aiSettings.defaultProvider === 'HUGGINGFACE' || aiSettings.defaultProvider === 'COHERE')
+      ? aiSettings.defaultProvider
+      : 'GEMINI';
     const identity = getRequestIdentity(request);
     const allowed = await checkAndIncrementAiRateLimit(identity, getRateLimitPerHour(aiSettings, 30));
     if (!allowed) {
@@ -118,7 +131,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ result, provider: geminiProviderLabel });
   } catch (error) {
     const settings = await fetchSystemSettings();
-    const aiSettings = settings?.ai || {};
+    const aiSettings: AiSettings = (settings?.ai || {}) as AiSettings;
     await saveAiAuditLog({
       task: 'assetAi',
       provider: 'UNKNOWN',

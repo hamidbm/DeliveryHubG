@@ -25,7 +25,10 @@ const CreateWorkItemModal: React.FC<CreateWorkItemModalProps> = ({
     parentId: initialParentId || '',
     priority: 'MEDIUM',
     status: WorkItemStatus.TODO,
-    assignedTo: ''
+    assignedTo: '',
+    dueAt: '',
+    risk: { probability: 3, impact: 3 },
+    dependency: { blocking: true }
   });
   const [loading, setLoading] = useState(false);
   const [potentialParents, setPotentialParents] = useState<WorkItem[]>([]);
@@ -34,7 +37,7 @@ const CreateWorkItemModal: React.FC<CreateWorkItemModalProps> = ({
     let parentType = '';
     if (formData.type === WorkItemType.FEATURE) parentType = WorkItemType.EPIC;
     else if (formData.type === WorkItemType.STORY) parentType = WorkItemType.FEATURE;
-    else if (formData.type === WorkItemType.TASK || formData.type === WorkItemType.BUG) parentType = WorkItemType.STORY;
+    else if (formData.type === WorkItemType.TASK || formData.type === WorkItemType.BUG || formData.type === WorkItemType.RISK || formData.type === WorkItemType.DEPENDENCY) parentType = WorkItemType.STORY;
 
     if (parentType) {
       const params = new URLSearchParams();
@@ -54,10 +57,17 @@ const CreateWorkItemModal: React.FC<CreateWorkItemModalProps> = ({
     e.preventDefault();
     setLoading(true);
     try {
+      const payload: any = {
+        ...formData,
+        dueAt: formData.dueAt || undefined,
+        context: { bundleId: formData.bundleId, appId: formData.applicationId || undefined }
+      };
+      if (formData.type !== WorkItemType.RISK) delete payload.risk;
+      if (formData.type !== WorkItemType.DEPENDENCY) delete payload.dependency;
       const res = await fetch('/api/work-items', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(payload)
       });
       const data = await res.json();
       if (res.ok) onSuccess(data.result);
@@ -67,6 +77,12 @@ const CreateWorkItemModal: React.FC<CreateWorkItemModalProps> = ({
       setLoading(false);
     }
   };
+
+  const riskScore = (formData.risk?.probability || 0) * (formData.risk?.impact || 0);
+  const computedSeverity =
+    riskScore <= 4 ? 'low' :
+    riskScore <= 9 ? 'medium' :
+    riskScore <= 16 ? 'high' : 'critical';
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center p-6">
@@ -128,6 +144,15 @@ const CreateWorkItemModal: React.FC<CreateWorkItemModalProps> = ({
               />
            </DetailField>
 
+           <DetailField label="Due Date">
+              <input
+                type="date"
+                value={formData.dueAt || ''}
+                onChange={(e) => setFormData({ ...formData, dueAt: e.target.value || undefined })}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold outline-none"
+              />
+           </DetailField>
+
            <div className="grid grid-cols-2 gap-8">
               <DetailField label="Bundle">
                  <select 
@@ -164,6 +189,77 @@ const CreateWorkItemModal: React.FC<CreateWorkItemModalProps> = ({
                     )}
                  </select>
               </DetailField>
+           )}
+
+           {formData.type === WorkItemType.RISK && (
+             <div className="grid grid-cols-2 gap-8">
+               <DetailField label="Probability (1-5)">
+                 <select
+                   value={formData.risk?.probability || 3}
+                   onChange={(e) => setFormData({ ...formData, risk: { ...formData.risk, probability: Number(e.target.value) as any } })}
+                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold outline-none"
+                 >
+                   {[1,2,3,4,5].map(v => <option key={v} value={v}>{v}</option>)}
+                 </select>
+               </DetailField>
+               <DetailField label="Impact (1-5)">
+                 <select
+                   value={formData.risk?.impact || 3}
+                   onChange={(e) => setFormData({ ...formData, risk: { ...formData.risk, impact: Number(e.target.value) as any } })}
+                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold outline-none"
+                 >
+                   {[1,2,3,4,5].map(v => <option key={v} value={v}>{v}</option>)}
+                 </select>
+               </DetailField>
+               <DetailField label="Severity (computed)">
+                 <div className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold uppercase text-slate-600">
+                   {computedSeverity}
+                 </div>
+               </DetailField>
+               <DetailField label="Area (optional)">
+                 <select
+                   value={formData.risk?.area || ''}
+                   onChange={(e) => setFormData({ ...formData, risk: { ...formData.risk, area: e.target.value as any } })}
+                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold outline-none"
+                 >
+                   <option value="">Select</option>
+                   {['schedule','cost','scope','security','compliance','operations','vendor','other'].map(a => (
+                     <option key={a} value={a}>{a}</option>
+                   ))}
+                 </select>
+               </DetailField>
+               <DetailField label="Mitigation (optional)">
+                 <input
+                   type="text"
+                   value={formData.risk?.mitigation || ''}
+                   onChange={(e) => setFormData({ ...formData, risk: { ...formData.risk, mitigation: e.target.value } })}
+                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold outline-none"
+                 />
+               </DetailField>
+             </div>
+           )}
+
+           {formData.type === WorkItemType.DEPENDENCY && (
+             <div className="grid grid-cols-2 gap-8">
+               <DetailField label="Blocking">
+                 <select
+                   value={formData.dependency?.blocking ? 'yes' : 'no'}
+                   onChange={(e) => setFormData({ ...formData, dependency: { ...formData.dependency, blocking: e.target.value === 'yes' } })}
+                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold outline-none"
+                 >
+                   <option value="yes">Yes</option>
+                   <option value="no">No</option>
+                 </select>
+               </DetailField>
+               <DetailField label="Depends On (name)">
+                 <input
+                   type="text"
+                   value={formData.dependency?.dependsOn?.name || ''}
+                   onChange={(e) => setFormData({ ...formData, dependency: { ...formData.dependency, dependsOn: { ...formData.dependency?.dependsOn, name: e.target.value, type: formData.dependency?.dependsOn?.type || 'external' } } })}
+                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold outline-none"
+                 />
+               </DetailField>
+             </div>
            )}
 
            <footer className="pt-10 flex gap-4">

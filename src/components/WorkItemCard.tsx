@@ -35,6 +35,8 @@ const WorkItemCard: React.FC<WorkItemCardProps> = ({ item, onClick, isOverlay, d
       case WorkItemType.STORY: return 'fa-file-lines text-blue-500';
       case WorkItemType.TASK: return 'fa-check text-slate-400';
       case WorkItemType.BUG: return 'fa-bug text-red-500';
+      case WorkItemType.RISK: return 'fa-triangle-exclamation text-rose-500';
+      case WorkItemType.DEPENDENCY: return 'fa-link text-indigo-500';
       default: return 'fa-circle text-slate-300';
     }
   };

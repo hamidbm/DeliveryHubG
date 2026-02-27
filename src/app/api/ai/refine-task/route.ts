@@ -4,6 +4,11 @@ import { generateWorkPlan } from '../../../../services/geminiService';
 import { checkAndIncrementAiRateLimit, fetchSystemSettings, fetchWorkItemById, saveAiAuditLog } from '../../../../services/db';
 import { getRateLimitPerHour, getRequestIdentity, getRetentionDays } from '../../../../services/aiPolicy';
 
+type AiSettings = {
+  geminiFlashModel?: string;
+  flashModel?: string;
+};
+
 export async function POST(request: Request) {
   const startedAt = Date.now();
   try {
@@ -14,7 +19,7 @@ export async function POST(request: Request) {
     if (!item) return NextResponse.json({ error: 'Item not found' }, { status: 404 });
 
     const settings = await fetchSystemSettings();
-    const aiSettings = settings?.ai || {};
+    const aiSettings: AiSettings = (settings?.ai || {}) as AiSettings;
     const identity = getRequestIdentity(request);
     const allowed = await checkAndIncrementAiRateLimit(identity, getRateLimitPerHour(aiSettings, 30));
     if (!allowed) {
@@ -34,7 +39,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ plan });
   } catch (error) {
     const settings = await fetchSystemSettings();
-    const aiSettings = settings?.ai || {};
+    const aiSettings: AiSettings = (settings?.ai || {}) as AiSettings;
     await saveAiAuditLog({
       task: 'workPlan',
       provider: 'UNKNOWN',

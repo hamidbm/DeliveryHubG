@@ -22,7 +22,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ rev
     const user = await getUser();
     if (!user?.userId) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
     const { reviewId, cycleId } = await params;
-    const review = await fetchReviewById(reviewId);
+    const review = (await fetchReviewById(reviewId)) as any;
     if (!review) return NextResponse.json({ error: 'Review not found' }, { status: 404 });
     const cycle = (review.cycles || []).find((c) => c.cycleId === cycleId);
     if (!cycle) return NextResponse.json({ error: 'Cycle not found' }, { status: 404 });

@@ -4,6 +4,17 @@ import { generateGeminiText } from '../../../../services/geminiService';
 import { generateOpenAiResponse } from '../../../../services/openaiService';
 import { getRateLimitPerHour, getRequestIdentity, getRetentionDays, resolveTaskRouting } from '../../../../services/aiPolicy';
 
+type AiSettings = {
+  defaultProvider?: string;
+  openaiKey?: string;
+  openaiModelDefault?: string;
+  openaiModelHigh?: string;
+  openaiModel?: string;
+  defaultModel?: string;
+  geminiFlashModel?: string;
+  flashModel?: string;
+};
+
 const buildQaPrompt = (question: string, content: string, title?: string) => {
   const header = title ? `Title: ${title}\n\n` : '';
   return `${header}Answer the question using ONLY the content below. If the answer is not present, say "Not found in this page." Answer in Markdown.\n\nQuestion:\n${question}\n\nContent:\n${content}`;
@@ -23,8 +34,10 @@ export async function POST(request: Request) {
     }
 
     const settings = await fetchSystemSettings();
-    const aiSettings = settings?.ai || {};
-    const provider = aiSettings.defaultProvider || 'GEMINI';
+    const aiSettings: AiSettings = (settings?.ai || {}) as AiSettings;
+    const provider = (aiSettings.defaultProvider === 'OPENAI' || aiSettings.defaultProvider === 'GEMINI' || aiSettings.defaultProvider === 'ANTHROPIC' || aiSettings.defaultProvider === 'HUGGINGFACE' || aiSettings.defaultProvider === 'COHERE')
+      ? aiSettings.defaultProvider
+      : 'GEMINI';
     const identity = getRequestIdentity(request);
     const allowed = await checkAndIncrementAiRateLimit(identity, getRateLimitPerHour(aiSettings, 30));
     if (!allowed) {
@@ -109,7 +122,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ result, provider: geminiProviderLabel });
   } catch (error) {
     const settings = await fetchSystemSettings();
-    const aiSettings = settings?.ai || {};
+    const aiSettings: AiSettings = (settings?.ai || {}) as AiSettings;
     await saveAiAuditLog({
       task: 'wikiQa',
       provider: 'UNKNOWN',

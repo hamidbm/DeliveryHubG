@@ -22,7 +22,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ rev
     const user = await getUser();
     if (!user?.userId) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
     const { reviewId, cycleId } = await params;
-    const review = await fetchReviewById(reviewId);
+    const review = (await fetchReviewById(reviewId)) as any;
     if (!review) return NextResponse.json({ error: 'Review not found' }, { status: 404 });
     const cycle = (review.cycles || []).find((c) => c.cycleId === cycleId);
     if (!cycle) return NextResponse.json({ error: 'Cycle not found' }, { status: 404 });
@@ -33,7 +33,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ rev
     }
 
     const preCycleStatus = cycle.status;
-    const ensuredReview = await ensureInReview({ reviewId, cycleId, actor: user });
+    const ensuredReview = (await ensureInReview({ reviewId, cycleId, actor: user })) as any;
     const reviewToUse = ensuredReview || review;
     const ensuredCycle = (reviewToUse.cycles || []).find((c) => c.cycleId === cycleId);
     const body = await request.json();

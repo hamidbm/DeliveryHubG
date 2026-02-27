@@ -27,7 +27,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     await db.collection('workitems_attachments').deleteOne({ _id: new ObjectId(attachmentId) });
     await db.collection('workitems').updateOne(
       { _id: new ObjectId(id) },
-      { $pull: { attachments: { assetId: attachmentId } }, $set: { updatedAt: now } }
+      { $pull: { attachments: { assetId: attachmentId } }, $set: { updatedAt: now } } as any
     );
 
     return NextResponse.json({ success: true });

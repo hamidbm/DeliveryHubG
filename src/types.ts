@@ -79,7 +79,9 @@ export enum WorkItemType {
   STORY = 'STORY',
   TASK = 'TASK',
   BUG = 'BUG',
-  SUBTASK = 'SUBTASK'
+  SUBTASK = 'SUBTASK',
+  RISK = 'RISK',
+  DEPENDENCY = 'DEPENDENCY'
 }
 
 export enum WorkItemStatus {
@@ -138,6 +140,37 @@ export interface BundleAssignment {
   notes?: string;
 }
 
+export interface BundleProfileMilestone {
+  key: string;
+  name: string;
+  plannedStart?: string;
+  plannedEnd?: string;
+  actualStart?: string;
+  actualEnd?: string;
+  status: 'not_started' | 'in_progress' | 'done' | 'blocked';
+  deliverables?: string;
+}
+
+export interface BundleProfile {
+  _id?: string;
+  bundleId: string;
+  status: 'on_track' | 'at_risk' | 'blocked' | 'unknown';
+  statusSource?: 'manual' | 'computed';
+  schedule: {
+    milestones: BundleProfileMilestone[];
+    uatPlannedStart?: string;
+    uatPlannedEnd?: string;
+    uatActualStart?: string;
+    uatActualEnd?: string;
+    goLivePlanned?: string;
+    goLiveActual?: string;
+  };
+  notes?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  updatedBy?: { userId: string; name: string };
+}
+
 export interface BusinessCapability {
   _id?: string;
   name: string;
@@ -170,16 +203,50 @@ export enum DiagramFormat {
 export interface ArchitectureDiagram {
   _id?: string;
   title: string;
+  diagramType?: string;
   format: DiagramFormat;
   content: string; 
+  contentHash?: string;
+  documentTypeId?: string;
   bundleId?: string;
   applicationId?: string;
   milestoneId?: string;
   capabilityIds?: string[];
   tags?: string[];
+  sourceTemplateId?: string;
+  createdFromTemplate?: boolean;
+  createdFromUpload?: boolean;
   createdBy: string;
   updatedAt: string;
   status: 'DRAFT' | 'VERIFIED' | 'OBSOLETE';
+  reviewSummary?: {
+    reviewId?: string;
+    reviewKeyId?: string;
+    currentCycleId?: string;
+    currentCycleStatus?: string;
+    currentCycleNumber?: number;
+    currentDueAt?: string;
+    reviewers?: Array<{ userId: string; displayName: string; email?: string }>;
+    story?: { id: string; key: string };
+  };
+}
+
+export interface DiagramTemplate {
+  _id?: string;
+  key: string;
+  name: string;
+  description?: string;
+  diagramType: string;
+  format: 'mermaid' | 'drawio' | 'mindmap_md' | DiagramFormat;
+  content: string;
+  preview?: { kind: 'none' | 'base64' | 'url'; data?: string };
+  tags?: string[];
+  isActive: boolean;
+  isDefault?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+  createdBy?: string;
+  updatedBy?: string;
 }
 
 export interface InfrastructureNode {
@@ -269,6 +336,7 @@ export interface WorkItem {
   assigneeUserIds?: string[];
   watcherUserIds?: string[];
   dueAt?: string;
+  context?: { bundleId: string; appId?: string };
   scopeRef?: { type: 'bundle' | 'application' | 'initiative'; id: string; name: string };
   scopeDerivation?: 'direct' | 'unscoped_fallback';
   linkedResource?: { type: string; id: string; title?: string };
@@ -304,6 +372,17 @@ export interface WorkItem {
   activity?: WorkItemActivity[];
   attachments?: WorkItemAttachment[];
   checklists?: ChecklistItem[]; 
+  risk?: {
+    probability: 1 | 2 | 3 | 4 | 5;
+    impact: 1 | 2 | 3 | 4 | 5;
+    severity?: 'low' | 'medium' | 'high' | 'critical';
+    area?: 'schedule' | 'cost' | 'scope' | 'security' | 'compliance' | 'operations' | 'vendor' | 'other';
+    mitigation?: string;
+  };
+  dependency?: {
+    blocking: boolean;
+    dependsOn?: { type: 'bundle' | 'app' | 'external'; id?: string; name?: string };
+  };
 }
 
 export interface ChecklistItem { id: string; label: string; isCompleted: boolean; createdAt: string; }
@@ -396,7 +475,7 @@ export interface CommentAuthor {
 }
 export interface CommentThread {
   _id?: string;
-  resource: { type: string; id: string };
+  resource: { type: string; id: string; title?: string };
   anchor?: { kind: string; data: any };
   status: 'open' | 'resolved';
   createdBy: CommentAuthor;
@@ -424,7 +503,7 @@ export interface EventRecord {
   type: string;
   actor: CommentAuthor;
   resource: { type: string; id: string; title?: string };
-  context?: { bundleId?: string; appId?: string; docType?: string };
+  context?: { bundleId?: string; appId?: string; milestoneId?: string; documentTypeId?: string; docType?: string };
   payload?: any;
   visibility?: { scope: string; teamIds?: string[] };
   correlationId?: string;

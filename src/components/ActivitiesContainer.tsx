@@ -5,6 +5,8 @@ import Activities from './Activities';
 import ReviewsDashboard from './ReviewsDashboard';
 import ReviewDetails from './ReviewDetails';
 import WorkItemsActivity from './WorkItemsActivity';
+import ArchitectureActivity from './ArchitectureActivity';
+import CommentsActivity from './CommentsActivity';
 
 interface ActivitiesContainerProps {
   bundles: Bundle[];
@@ -34,21 +36,13 @@ const ActivitiesContainer: React.FC<ActivitiesContainerProps> = ({ bundles }) =>
       return reviewId ? <ReviewDetails reviewId={reviewId} bundles={bundles} /> : <ReviewsDashboard bundles={bundles} />;
     }
     if (pathname === '/activities/comments') {
-      return (
-        <div className="p-12 text-slate-500">
-          Comments tab coming soon.
-        </div>
-      );
+      return <CommentsActivity />;
     }
     if (pathname === '/activities/work-items') {
       return <WorkItemsActivity />;
     }
     if (pathname === '/activities/architecture') {
-      return (
-        <div className="p-12 text-slate-500">
-          Architecture activity coming soon.
-        </div>
-      );
+      return <ArchitectureActivity bundles={bundles} />;
     }
     return <Activities />;
   };

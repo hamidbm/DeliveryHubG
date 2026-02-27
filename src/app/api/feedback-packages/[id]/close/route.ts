@@ -34,7 +34,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     await closeFeedbackPackage(id, user.userId);
 
     if (resourceType && resourceId) {
-      const review = await fetchReview(resourceType, resourceId);
+      const review = (await fetchReview(resourceType, resourceId)) as any;
       if (review?.currentCycleId) {
         const cycle = (review.cycles || []).find((c) => c.cycleId === review.currentCycleId);
         if (cycle && cycle.status !== 'closed') {

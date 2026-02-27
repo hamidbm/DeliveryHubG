@@ -53,8 +53,8 @@ export async function PATCH(request: Request) {
       { _id: { $in: ids.map(id => new ObjectId(id)) } },
       { 
         $set: { ...updates, updatedAt: now, updatedBy: userName },
-        $push: { activity: auditEntry as any }
-      }
+        $push: { activity: auditEntry }
+      } as any
     );
 
     return NextResponse.json({ success: true, modifiedCount: result.modifiedCount });

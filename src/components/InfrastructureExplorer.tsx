@@ -76,7 +76,7 @@ const InfraMermaidRenderer: React.FC<{ content: string; appId: string }> = ({ co
             const zoom = d3.zoom()
               .scaleExtent([0.1, 8])
               .on('zoom', (event) => {
-                svgSelection.selectAll('g').filter(function() {
+                svgSelection.selectAll('g').filter(function (this: Element) {
                   // Only apply transform to the top-level groups to maintain zoom correctly
                   return this.parentNode === svgEl;
                 }).attr('transform', event.transform);

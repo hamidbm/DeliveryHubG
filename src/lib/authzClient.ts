@@ -30,3 +30,6 @@ export const canMarkFeedbackSentClient = (role?: string) => role === Role.CMO_ME
 
 export const canResubmitClient = (role?: string) =>
   Boolean(role && (isEngineeringRoleClient(role) || isVendorRoleClient(role)));
+
+export const canEditBundleProfileClient = (user?: { team?: string }, isAdmin?: boolean) =>
+  Boolean(isAdmin || user?.team === 'Management');

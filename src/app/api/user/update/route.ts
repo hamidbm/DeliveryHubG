@@ -46,9 +46,9 @@ export async function POST(request: Request) {
             action: role ? 'ROLE_CHANGE' : 'PASSWORD_RESET', 
             role: role || undefined, 
             timestamp: now 
-          } as any
+          }
         }
-      },
+      } as any,
       { returnDocument: 'after' }
     );
 

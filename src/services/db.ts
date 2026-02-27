@@ -1,10 +1,10 @@
-import clientPromise from '../lib/mongodb';
+import getMongoClientPromise from '../lib/mongodb';
 import { ObjectId } from 'mongodb';
-import { WikiPage, WikiSpace, WikiTheme, WikiTemplate, CommentThread, CommentMessage, EventRecord, ReviewRecord, ReviewCycle, ReviewReviewer, FeedbackPackage, UserEventState, Bundle, Application, TaxonomyCategory, TaxonomyDocumentType, WorkItem, WorkItemType, WorkItemStatus, WorkItemActivity, Sprint, Milestone, Notification, ArchitectureDiagram, BusinessCapability, AppInterface, WikiAsset, BundleAssignment, AssignmentType } from '../types';
+import { WikiPage, WikiSpace, WikiTheme, WikiTemplate, CommentThread, CommentMessage, EventRecord, ReviewRecord, ReviewCycle, ReviewReviewer, FeedbackPackage, UserEventState, Bundle, Application, TaxonomyCategory, TaxonomyDocumentType, WorkItem, WorkItemType, WorkItemStatus, WorkItemActivity, Sprint, Milestone, Notification, ArchitectureDiagram, BusinessCapability, AppInterface, WikiAsset, BundleAssignment, AssignmentType, BundleProfile, AttachmentRef, CommentAuthor } from '../types';
 
 export const getDb = async () => {
   try {
-    const client = await clientPromise;
+    const client = await getMongoClientPromise();
     return client.db('deliveryhub');
   } catch (e) {
     console.error("CRITICAL: Database connection failed.", e);
@@ -249,6 +249,12 @@ const ensureBundleAssignmentIndexes = async (db: any) => {
   await db.collection('bundle_assignments').createIndex({ bundleId: 1, userId: 1, assignmentType: 1 }, { unique: true });
 };
 
+const ensureBundleProfileIndexes = async (db: any) => {
+  await db.collection('bundle_profiles').createIndex({ bundleId: 1 }, { unique: true });
+  await db.collection('bundle_profiles').createIndex({ status: 1, updatedAt: -1 });
+  await db.collection('bundle_profiles').createIndex({ 'schedule.goLivePlanned': 1 });
+};
+
 export const fetchBundleAssignments = async (filters: {
   bundleId?: string;
   userId?: string;
@@ -316,6 +322,175 @@ export const updateBundleAssignment = async (id: string, updates: Partial<Bundle
     { _id: new ObjectId(id) },
     { $set: setData }
   );
+};
+
+export const fetchBundleProfile = async (bundleId: string) => {
+  try {
+    const db = await getDb();
+    await ensureBundleProfileIndexes(db);
+    return await db.collection('bundle_profiles').findOne({ bundleId: String(bundleId) });
+  } catch {
+    return null;
+  }
+};
+
+export const fetchBundleProfiles = async (bundleIds?: string[]) => {
+  try {
+    const db = await getDb();
+    await ensureBundleProfileIndexes(db);
+    const query = bundleIds && bundleIds.length > 0 ? { bundleId: { $in: bundleIds.map(String) } } : {};
+    return await db.collection('bundle_profiles').find(query).sort({ updatedAt: -1 }).toArray();
+  } catch {
+    return [];
+  }
+};
+
+export const upsertBundleProfile = async (bundleId: string, profile: Partial<BundleProfile>) => {
+  const db = await getDb();
+  await ensureBundleProfileIndexes(db);
+  const now = new Date().toISOString();
+  const payload = { ...profile, bundleId: String(bundleId), updatedAt: now };
+  return await db.collection('bundle_profiles').updateOne(
+    { bundleId: String(bundleId) },
+    {
+      $set: payload,
+      $setOnInsert: { createdAt: now }
+    },
+    { upsert: true }
+  );
+};
+
+export const computeBundleHealth = async (bundleIds: string[]) => {
+  try {
+    const db = await getDb();
+    await warnLegacyWorkItems(db);
+    await ensureBundleProfileIndexes(db);
+
+    const bundleIdList = (bundleIds || []).map(String).filter(Boolean);
+    const profiles = await db.collection('bundle_profiles').find({ bundleId: { $in: bundleIdList } }).toArray();
+    const profileMap = new Map(profiles.map((p: any) => [String(p.bundleId), p]));
+
+    const workItems = await db.collection('workitems').find({
+      $and: [
+        { type: { $in: ['RISK', 'DEPENDENCY'] } },
+        { $or: [{ bundleId: { $in: bundleIdList } }, { 'context.bundleId': { $in: bundleIdList } }] },
+        { $or: [{ isArchived: { $exists: false } }, { isArchived: false }] }
+      ]
+    }).toArray();
+
+    const itemsByBundle = new Map<string, any[]>();
+    workItems.forEach((item: any) => {
+      const bundleId = String(item.bundleId || item?.context?.bundleId || '');
+      if (!bundleId) return;
+      if (!itemsByBundle.has(bundleId)) itemsByBundle.set(bundleId, []);
+      itemsByBundle.get(bundleId)!.push(item);
+    });
+
+    const computeSeverity = (risk: any) => {
+      const p = Number(risk?.probability || 0);
+      const i = Number(risk?.impact || 0);
+      const score = p * i;
+      if (!p || !i) return undefined;
+      if (score <= 4) return 'low';
+      if (score <= 9) return 'medium';
+      if (score <= 16) return 'high';
+      return 'critical';
+    };
+
+    const today = new Date();
+    const results = bundleIdList.map((bundleId) => {
+      const profile = profileMap.get(String(bundleId));
+      const items = itemsByBundle.get(String(bundleId)) || [];
+      const risks = items.filter((i) => i.type === 'RISK');
+      const deps = items.filter((i) => i.type === 'DEPENDENCY');
+
+      const isOpen = (item: any) => String(item.status || '').toUpperCase() !== String(WorkItemStatus.DONE);
+      const isOverdue = (item: any) => item.dueAt && new Date(item.dueAt) < today && isOpen(item);
+
+      const openRisksBySeverity = { low: 0, medium: 0, high: 0, critical: 0 };
+      let overdueCount = 0;
+      let overdueBlockingDeps = 0;
+      let openRiskPenalty = 0;
+      let overduePenalty = 0;
+      let blockingDependenciesCount = 0;
+
+      risks.forEach((r) => {
+        if (!isOpen(r)) return;
+        const severity = r?.risk?.severity || computeSeverity(r?.risk);
+        if (severity && openRisksBySeverity[severity as keyof typeof openRisksBySeverity] !== undefined) {
+          openRisksBySeverity[severity as keyof typeof openRisksBySeverity] += 1;
+        }
+        if (severity === 'low') openRiskPenalty += 2;
+        else if (severity === 'medium') openRiskPenalty += 5;
+        else if (severity === 'high') openRiskPenalty += 10;
+        else if (severity === 'critical') openRiskPenalty += 20;
+
+        if (isOverdue(r)) {
+          overdueCount += 1;
+          overduePenalty += 5;
+        }
+      });
+
+      deps.forEach((d) => {
+        const blocking = d?.dependency?.blocking !== false;
+        if (blocking && isOpen(d)) blockingDependenciesCount += 1;
+        if (isOverdue(d)) {
+          overdueCount += 1;
+          overduePenalty += blocking ? 10 : 3;
+          if (blocking && isOpen(d)) overdueBlockingDeps += 1;
+        }
+      });
+
+      openRiskPenalty = Math.min(openRiskPenalty, 40);
+      overduePenalty = Math.min(overduePenalty, 30);
+
+      const milestones = profile?.schedule?.milestones || [];
+      const current = milestones.find((m: any) => m.status === 'in_progress') || milestones.find((m: any) => m.status !== 'done') || null;
+      const blockedMilestone = milestones.some((m: any) => m.status === 'blocked');
+
+      let scheduleSlipDays = 0;
+      let schedulePenalty = 0;
+      if (current?.plannedEnd && current?.status !== 'done') {
+        const plannedEnd = new Date(current.plannedEnd);
+        const slip = Math.max(0, Math.floor((today.getTime() - plannedEnd.getTime()) / (1000 * 60 * 60 * 24)));
+        scheduleSlipDays = slip;
+        schedulePenalty = Math.min(30, slip * 2);
+      }
+
+      const blockedPenalty = blockedMilestone ? 20 : 0;
+      const healthScore = Math.max(0, Math.min(100, 100 - schedulePenalty - openRiskPenalty - overduePenalty - blockedPenalty));
+      const healthBand = healthScore >= 80 ? 'healthy' : healthScore >= 60 ? 'watch' : 'at_risk';
+
+      const hardTrigger =
+        openRisksBySeverity.critical > 0 ||
+        overdueBlockingDeps > 0 ||
+        blockedMilestone;
+
+      const thresholdTrigger =
+        openRisksBySeverity.high >= 2 ||
+        (openRisksBySeverity.medium + openRisksBySeverity.high + openRisksBySeverity.critical >= 1 && overdueCount > 0) ||
+        (scheduleSlipDays > 0 && current && current.status !== 'done');
+
+      let computedStatus: 'on_track' | 'at_risk' | 'blocked' | 'unknown' = 'on_track';
+      if (blockedMilestone) computedStatus = 'blocked';
+      else if (hardTrigger || thresholdTrigger || healthScore < 60) computedStatus = 'at_risk';
+
+      return {
+        bundleId,
+        healthScore,
+        healthBand,
+        computedStatus,
+        openRisksBySeverity,
+        overdueCount,
+        blockingDependenciesCount,
+        scheduleSlipDays
+      };
+    });
+
+    return results;
+  } catch {
+    return [];
+  }
 };
 
 export const fetchAssignedCmoReviewers = async (bundleId: string): Promise<ReviewReviewer[]> => {
@@ -565,8 +740,9 @@ export const fetchNotifications = async (userEmail: string) => {
 
 export const saveNotification = async (notification: Partial<Notification>) => {
   const db = await getDb();
+  const { _id, ...rest } = notification as any;
   return await db.collection('notifications').insertOne({
-    ...notification,
+    ...rest,
     read: false,
     createdAt: new Date().toISOString()
   });
@@ -966,7 +1142,7 @@ export const saveWikiComment = async (commentData: any) => {
   const { pageId, ...comment } = commentData;
   return await db.collection('wiki_pages').updateOne(
     { _id: new ObjectId(pageId) },
-    { $push: { comments: { ...comment, createdAt: new Date().toISOString() } } }
+    { $push: { comments: { ...comment, createdAt: new Date().toISOString() } } } as any
   );
 };
 
@@ -1099,7 +1275,9 @@ const ensureCommentIndexes = async (db: any) => {
   await db.collection('comment_threads').createIndex({ reviewId: 1, status: 1 });
   await db.collection('comment_threads').createIndex({ reviewId: 1, reviewCycleId: 1, lastActivityAt: -1 });
   await db.collection('comment_threads').createIndex({ 'resource.type': 1, 'resource.id': 1, reviewCycleId: 1, createdAt: -1 });
+  await db.collection('comment_threads').createIndex({ participants: 1, lastActivityAt: -1 });
   await db.collection('comment_messages').createIndex({ threadId: 1, createdAt: 1 });
+  await db.collection('comment_messages').createIndex({ mentions: 1, createdAt: -1 });
   await db.collection('comment_messages').createIndex({ body: 'text' });
 };
 
@@ -1146,30 +1324,48 @@ export const emitEvent = async (event: Omit<EventRecord, '_id'>) => {
 export const fetchEvents = async ({
   limit = 200,
   type,
+  typePrefix,
   resourceType,
   resourceId,
   actorId,
   since,
-  mentionUserId
+  mentionUserId,
+  bundleId,
+  appId,
+  milestoneId,
+  documentTypeId,
+  search
 }: {
   limit?: number;
   type?: string;
+  typePrefix?: string;
   resourceType?: string;
   resourceId?: string;
   actorId?: string;
   since?: string;
   mentionUserId?: string;
+  bundleId?: string;
+  appId?: string;
+  milestoneId?: string;
+  documentTypeId?: string;
+  search?: string;
 }) => {
   try {
     const db = await getDb();
     await ensureEventIndexes(db);
     const query: any = {};
     if (type) query.type = type;
+    if (!type && typePrefix) query.type = new RegExp(`^${typePrefix.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&')}`);
     if (resourceType) query['resource.type'] = resourceType;
     if (resourceId) query['resource.id'] = resourceId;
     if (actorId) query['actor.userId'] = actorId;
     if (mentionUserId) query['payload.mentionedUserId'] = mentionUserId;
     if (since) query.ts = { $gt: new Date(since) };
+    if (bundleId) query['context.bundleId'] = bundleId;
+    if (appId) query['context.appId'] = appId;
+    if (milestoneId) query['context.milestoneId'] = milestoneId;
+    if (documentTypeId) query['context.documentTypeId'] = documentTypeId;
+    if (search) query['resource.title'] = { $regex: search.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&'), $options: 'i' };
     return await db.collection('events').find(query).sort({ ts: -1 }).limit(limit).toArray();
   } catch {
     return [];
@@ -1287,19 +1483,21 @@ export const createCommentThread = async ({
   const db = await getDb();
   await ensureCommentIndexes(db);
   const now = new Date().toISOString();
+  const participantSet = new Set<string>([author.userId, ...mentions].filter(Boolean));
   const thread: Partial<CommentThread> = {
-    resource: { type: resource.type, id: resource.id },
+    resource: { type: resource.type, id: resource.id, title: resource.title },
     anchor,
     status: 'open',
     createdBy: author,
     createdAt: now,
     lastActivityAt: now,
     messageCount: 1,
-    participants: [author.userId],
+    participants: Array.from(participantSet),
     reviewId,
     reviewCycleId
   };
-  const threadResult = await db.collection('comment_threads').insertOne(thread);
+  const { _id, ...threadData } = thread as any;
+  const threadResult = await db.collection('comment_threads').insertOne(threadData);
   const message: Partial<CommentMessage> = {
     threadId: String(threadResult.insertedId),
     author,
@@ -1307,7 +1505,8 @@ export const createCommentThread = async ({
     createdAt: now,
     mentions
   };
-  await db.collection('comment_messages').insertOne(message);
+  const { _id: messageId, ...messageData } = message as any;
+  await db.collection('comment_messages').insertOne(messageData);
   return { threadId: String(threadResult.insertedId), thread, message };
 };
 
@@ -1352,16 +1551,82 @@ export const addCommentMessage = async ({
     createdAt: now,
     mentions
   };
-  await db.collection('comment_messages').insertOne(message);
+  const { _id: messageId, ...messageData } = message as any;
+  await db.collection('comment_messages').insertOne(messageData);
   await db.collection('comment_threads').updateOne(
     { _id: new ObjectId(threadId) },
     {
       $set: { lastActivityAt: now },
       $inc: { messageCount: 1 },
-      $addToSet: { participants: author.userId }
+      $addToSet: { participants: { $each: Array.from(new Set([author.userId, ...mentions].filter(Boolean))) } }
     }
   );
   return message;
+};
+
+export const fetchCommentThreadsInbox = async ({
+  userId,
+  resourceType,
+  status,
+  mentionsOnly,
+  participatingOnly,
+  since,
+  search,
+  limit = 200
+}: {
+  userId: string;
+  resourceType?: string;
+  status?: 'open' | 'resolved';
+  mentionsOnly?: boolean;
+  participatingOnly?: boolean;
+  since?: string;
+  search?: string;
+  limit?: number;
+}) => {
+  try {
+    const db = await getDb();
+    await ensureCommentIndexes(db);
+    const query: any = {};
+    if (resourceType) query['resource.type'] = resourceType;
+    if (status) query.status = status;
+    if (participatingOnly) query.participants = userId;
+    if (since) query.lastActivityAt = { $gt: new Date(since) };
+    if (search) query['resource.title'] = { $regex: search.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&'), $options: 'i' };
+
+    if (mentionsOnly) {
+      const mentionQuery: any = { mentions: userId };
+      if (since) mentionQuery.createdAt = { $gt: new Date(since) };
+      const threadIds = await db.collection('comment_messages').distinct('threadId', mentionQuery);
+      const objectIds = (threadIds || [])
+        .filter((id: any) => ObjectId.isValid(String(id)))
+        .map((id: any) => new ObjectId(String(id)));
+      if (objectIds.length === 0) return [];
+      query._id = { $in: objectIds };
+    }
+
+    const threads = await db.collection('comment_threads').aggregate([
+      { $match: query },
+      { $sort: { lastActivityAt: -1 } },
+      { $limit: limit },
+      {
+        $lookup: {
+          from: 'comment_messages',
+          let: { tid: { $toString: '$_id' } },
+          pipeline: [
+            { $match: { $expr: { $eq: ['$threadId', '$$tid'] } } },
+            { $sort: { createdAt: -1 } },
+            { $limit: 1 }
+          ],
+          as: 'lastMessage'
+        }
+      },
+      { $addFields: { lastMessage: { $arrayElemAt: ['$lastMessage', 0] } } }
+    ]).toArray();
+
+    return threads;
+  } catch {
+    return [];
+  }
 };
 
 export const updateCommentThreadStatus = async (threadId: string, status: 'open' | 'resolved') => {
@@ -1373,22 +1638,22 @@ export const updateCommentThreadStatus = async (threadId: string, status: 'open'
   );
 };
 
-export const fetchReview = async (resourceType: string, resourceId: string) => {
+export const fetchReview = async (resourceType: string, resourceId: string): Promise<ReviewRecord | null> => {
   try {
     const db = await getDb();
     await ensureReviewIndexes(db);
-    return await db.collection('reviews').findOne({ 'resource.type': resourceType, 'resource.id': resourceId });
+    return await db.collection<ReviewRecord>('reviews').findOne({ 'resource.type': resourceType, 'resource.id': resourceId });
   } catch {
     return null;
   }
 };
 
-export const fetchReviewById = async (reviewId: string) => {
+export const fetchReviewById = async (reviewId: string): Promise<ReviewRecord | null> => {
   try {
     const db = await getDb();
     await ensureReviewIndexes(db);
     if (!ObjectId.isValid(reviewId)) return null;
-    return await db.collection('reviews').findOne({ _id: new ObjectId(reviewId) });
+    return await db.collection<ReviewRecord>('reviews').findOne({ _id: new ObjectId(reviewId) } as any);
   } catch {
     return null;
   }
@@ -1535,7 +1800,7 @@ export const syncReviewCycleWorkItem = async ({
             }
           }
         : {})
-    }
+    } as any
   );
 
   return item;
@@ -1781,7 +2046,8 @@ const ensureEpicForScope = async (scopeRef: { type: 'bundle' | 'application' | '
     scopeRef
   };
   const result = await saveWorkItem(data, { name: 'System' });
-  return await db.collection('workitems').findOne({ _id: result.insertedId });
+  const insertedId = (result as any)?.insertedId;
+  return insertedId ? await db.collection('workitems').findOne({ _id: insertedId } as any) : null;
 };
 
 const ensureGovernanceFeature = async (epicId: string, scopeRef: { type: 'bundle' | 'application' | 'initiative'; id: string; name: string }) => {
@@ -1805,7 +2071,8 @@ const ensureGovernanceFeature = async (epicId: string, scopeRef: { type: 'bundle
     scopeRef
   };
   const result = await saveWorkItem(data, { name: 'System' });
-  return await db.collection('workitems').findOne({ _id: result.insertedId });
+  const insertedId = (result as any)?.insertedId;
+  return insertedId ? await db.collection('workitems').findOne({ _id: insertedId } as any) : null;
 };
 
 export const createReviewWorkItem = async ({
@@ -1915,7 +2182,8 @@ export const createReviewWorkItem = async ({
   };
 
   const result = await saveWorkItem(data, { name: actor.displayName, userId: actor.userId, email: actor.email });
-  return await db.collection('workitems').findOne({ _id: result.insertedId });
+  const insertedId = (result as any)?.insertedId;
+  return insertedId ? await db.collection('workitems').findOne({ _id: insertedId } as any) : null;
 };
 
 export const closeReviewWorkItem = async ({
@@ -1940,7 +2208,7 @@ export const closeReviewWorkItem = async ({
   const now = new Date().toISOString();
   await db.collection('workitems').updateOne(
     { _id: item._id },
-    { $set: { status: WorkItemStatus.DONE, updatedAt: now, resolution }, $push: { activity: { user: actor.displayName, action: 'CHANGED_STATUS', from: item.status, to: WorkItemStatus.DONE, createdAt: now } } }
+    { $set: { status: WorkItemStatus.DONE, updatedAt: now, resolution }, $push: { activity: { user: actor.displayName, action: 'CHANGED_STATUS', from: item.status, to: WorkItemStatus.DONE, createdAt: now } } } as any
   );
   try {
     await emitEvent({
@@ -2009,7 +2277,10 @@ export const createWorkPlanFromIntake = async ({
       bundleId: scopeType === 'bundle' ? scopeId : undefined,
       applicationId: scopeType === 'application' ? scopeId : undefined
     } as any);
-    milestones.push({ id: String(ms.insertedId), number: i });
+    const insertedId = (ms as any)?.insertedId;
+    if (insertedId) {
+      milestones.push({ id: String(insertedId), number: i });
+    }
   }
 
   for (const ms of milestones) {
@@ -2037,7 +2308,7 @@ export const createWorkPlanFromIntake = async ({
         priority: 'MEDIUM',
         bundleId: scopeType === 'bundle' ? scopeId : '',
         applicationId: scopeType === 'application' ? scopeId : undefined,
-        parentId: String(feature.insertedId || feature._id),
+        parentId: String((feature as any).insertedId || (feature as any)._id || ''),
         milestoneIds: [ms.id],
         scopeRef,
         scopeDerivation
@@ -2280,6 +2551,27 @@ export const saveWorkItem = async (item: Partial<WorkItem>, user?: any) => {
     email: user?.email ? String(user.email) : undefined
   };
 
+  const computeRiskSeverity = (risk?: any) => {
+    if (!risk?.probability || !risk?.impact) return undefined;
+    const score = Number(risk.probability) * Number(risk.impact);
+    if (score <= 4) return 'low';
+    if (score <= 9) return 'medium';
+    if (score <= 16) return 'high';
+    return 'critical';
+  };
+
+  if (data.type === WorkItemType.RISK && data.risk) {
+    data.risk = { ...data.risk, severity: computeRiskSeverity(data.risk) };
+  }
+
+  if (data.type === WorkItemType.DEPENDENCY) {
+    data.dependency = { ...(data.dependency || {}), blocking: data.dependency?.blocking !== false };
+  }
+
+  if (!data.context && data.bundleId) {
+    data.context = { bundleId: String(data.bundleId), appId: data.applicationId ? String(data.applicationId) : undefined };
+  }
+
   if (_id && ObjectId.isValid(_id as string)) {
     const existing = await db.collection('workitems').findOne({ _id: new ObjectId(_id) });
     if (!existing) throw new Error("Work item not found");
@@ -2331,12 +2623,22 @@ export const saveWorkItem = async (item: Partial<WorkItem>, user?: any) => {
       }
     });
 
+    if (data.type === WorkItemType.RISK && data.risk) {
+      data.risk = { ...data.risk, severity: computeRiskSeverity(data.risk) };
+    }
+    if (data.type === WorkItemType.DEPENDENCY) {
+      data.dependency = { ...(data.dependency || {}), blocking: data.dependency?.blocking !== false };
+    }
+    if (!data.context && (data.bundleId || existing?.bundleId)) {
+      data.context = { bundleId: String(data.bundleId || existing.bundleId), appId: data.applicationId ? String(data.applicationId) : (existing.applicationId ? String(existing.applicationId) : undefined) };
+    }
+
     const finalSet = { ...data, updatedAt: now, updatedBy: userName };
     const finalPush = { activity: { $each: activities } };
 
     const updateResult = await db.collection('workitems').updateOne(
       { _id: new ObjectId(_id) },
-      { $set: finalSet, $push: finalPush }
+      { $set: finalSet, $push: finalPush } as any
     );
 
     if (activities.length > 0) {
@@ -2436,7 +2738,7 @@ export const updateWorkItemStatus = async (id: string, toStatus: string, newRank
           createdAt: now
         }
       }
-    }
+    } as any
   );
 
   try {
@@ -2720,6 +3022,183 @@ export const fetchArchitectureDiagrams = async (filters: any = {}) => {
     if (filters.applicationId && filters.applicationId !== 'all') query.applicationId = filters.applicationId;
     return await db.collection('architecture_diagrams').find(query).sort({ updatedAt: -1 }).toArray();
   } catch { return []; }
+};
+
+export const fetchDiagramTemplates = async (filters: any = {}) => {
+  try {
+    const db = await getDb();
+    await ensureDiagramTemplateIndexes(db);
+    const query: any = filters.includeInactive ? {} : { isActive: { $ne: false } };
+    if (filters.diagramType) query.diagramType = filters.diagramType;
+    if (filters.format) query.format = filters.format;
+    return await db.collection('diagram_templates').find(query).sort({ isDefault: -1, name: 1 }).toArray();
+  } catch {
+    return [];
+  }
+};
+
+export const fetchDiagramTemplateById = async (id: string) => {
+  try {
+    const db = await getDb();
+    await ensureDiagramTemplateIndexes(db);
+    if (ObjectId.isValid(id)) {
+      return await db.collection('diagram_templates').findOne({ _id: new ObjectId(id) });
+    }
+    return await db.collection('diagram_templates').findOne({ id });
+  } catch {
+    return null;
+  }
+};
+
+const ensureDiagramTemplateIndexes = async (db: any) => {
+  try {
+    await db.collection('diagram_templates').createIndex({ key: 1 }, { unique: true });
+    await db.collection('diagram_templates').createIndex({ diagramType: 1, format: 1, isActive: 1 });
+    await db.collection('diagram_templates').createIndex(
+      { diagramType: 1, format: 1, isDefault: 1 },
+      { unique: true, partialFilterExpression: { isDefault: true } }
+    );
+  } catch {}
+};
+
+export const saveDiagramTemplate = async (template: any, user?: { name?: string }) => {
+  const db = await getDb();
+  await ensureDiagramTemplateIndexes(db);
+  const now = new Date().toISOString();
+  const actor = user?.name || 'System';
+  const { _id, ...data } = template;
+
+  if (_id && ObjectId.isValid(_id)) {
+    if (data.isDefault && data.diagramType && data.format) {
+      await db.collection('diagram_templates').updateMany(
+        { diagramType: data.diagramType, format: data.format, isDefault: true, _id: { $ne: new ObjectId(_id) } },
+        { $set: { isDefault: false, updatedAt: now, updatedBy: actor } }
+      );
+    }
+    return await db.collection('diagram_templates').updateOne(
+      { _id: new ObjectId(_id) },
+      { $set: { ...data, updatedAt: now, updatedBy: actor } }
+    );
+  }
+  const result = await db.collection('diagram_templates').insertOne({
+    ...data,
+    createdAt: now,
+    updatedAt: now,
+    createdBy: actor,
+    updatedBy: actor
+  });
+  if (data.isDefault && data.diagramType && data.format) {
+    await db.collection('diagram_templates').updateMany(
+      { diagramType: data.diagramType, format: data.format, isDefault: true, _id: { $ne: result.insertedId } },
+      { $set: { isDefault: false, updatedAt: now, updatedBy: actor } }
+    );
+  }
+  return result;
+};
+
+export const deleteDiagramTemplate = async (id: string) => {
+  const db = await getDb();
+  await ensureDiagramTemplateIndexes(db);
+  if (ObjectId.isValid(id)) {
+    return await db.collection('diagram_templates').deleteOne({ _id: new ObjectId(id) });
+  }
+  return await db.collection('diagram_templates').deleteOne({ id });
+};
+
+export const fetchArchitectureDiagramsWithReviewSummary = async (filters: any = {}) => {
+  try {
+    const db = await getDb();
+    const diagrams = await fetchArchitectureDiagrams(filters);
+    if (!diagrams.length) return diagrams;
+
+    const diagramIds = diagrams
+      .map((d: any) => String(d._id || d.id || ''))
+      .filter(Boolean);
+    if (!diagramIds.length) return diagrams;
+
+    await ensureReviewIndexes(db);
+    const reviews = await db.collection('reviews').find({
+      'resource.type': 'architecture_diagram',
+      'resource.id': { $in: diagramIds }
+    }).toArray();
+
+    const reviewByResourceId = new Map<string, any>();
+    const reviewerIdSet = new Set<string>();
+    const reviewStoryPairs: Array<{ reviewId: string; cycleId: string }> = [];
+
+    reviews.forEach((review: any) => {
+      const resourceId = String(review.resource?.id || '');
+      if (!resourceId) return;
+      const currentCycle = (review.cycles || []).find((c: any) => c.cycleId === review.currentCycleId);
+      const reviewerUserIds = (currentCycle?.reviewerUserIds || review.currentReviewerUserIds || []).map((id: any) => String(id));
+      reviewerUserIds.forEach((id: string) => reviewerIdSet.add(id));
+      const cycleId = String(review.currentCycleId || '');
+      const reviewKey = `${review.resource?.type}:${review.resource?.id}`;
+      const reviewObjectId = review._id ? String(review._id) : '';
+      if (cycleId) {
+        reviewStoryPairs.push({ reviewId: reviewKey, cycleId });
+        if (reviewObjectId) reviewStoryPairs.push({ reviewId: reviewObjectId, cycleId });
+      }
+      reviewByResourceId.set(resourceId, {
+        reviewId: reviewObjectId || reviewKey,
+        reviewKeyId: reviewKey,
+        currentCycleId: cycleId,
+        currentCycleStatus: currentCycle?.status || review.currentCycleStatus,
+        currentCycleNumber: currentCycle?.number,
+        currentDueAt: currentCycle?.dueAt || review.currentDueAt,
+        currentReviewerUserIds: reviewerUserIds
+      });
+    });
+
+    const reviewerUsers = reviewerIdSet.size ? await fetchUsersByIds(Array.from(reviewerIdSet)) : [];
+    const reviewerMap = new Map<string, any>();
+    reviewerUsers.forEach((u: any) => reviewerMap.set(String(u._id || u.id), u));
+
+    const storyMap = new Map<string, { id: string; key: string }>();
+    if (reviewStoryPairs.length) {
+      const orClauses = reviewStoryPairs.map((pair) => ({
+        reviewId: pair.reviewId,
+        reviewCycleId: pair.cycleId
+      }));
+      const stories = await db.collection('workitems').find({ $or: orClauses }).project({ _id: 1, key: 1, reviewId: 1, reviewCycleId: 1 }).toArray();
+      stories.forEach((story: any) => {
+        const mapKey = `${String(story.reviewId)}:${String(story.reviewCycleId)}`;
+        storyMap.set(mapKey, { id: String(story._id || story.id || ''), key: String(story.key || '') });
+      });
+    }
+
+    return diagrams.map((diagram: any) => {
+      const resourceId = String(diagram._id || diagram.id || '');
+      const summary = reviewByResourceId.get(resourceId);
+      if (!summary) return diagram;
+      const reviewers = (summary.currentReviewerUserIds || []).map((id: string) => {
+        const user = reviewerMap.get(id);
+        return {
+          userId: id,
+          displayName: user?.name || user?.email || 'Reviewer',
+          email: user?.email
+        };
+      });
+      const storyKey = summary.currentCycleId ? `${summary.reviewId}:${summary.currentCycleId}` : '';
+      const storyKeyAlt = summary.currentCycleId ? `${summary.reviewKeyId}:${summary.currentCycleId}` : '';
+      const story = storyMap.get(storyKey) || storyMap.get(storyKeyAlt) || null;
+      return {
+        ...diagram,
+        reviewSummary: {
+          reviewId: summary.reviewId,
+          reviewKeyId: summary.reviewKeyId,
+          currentCycleId: summary.currentCycleId,
+          currentCycleStatus: summary.currentCycleStatus,
+          currentCycleNumber: summary.currentCycleNumber,
+          currentDueAt: summary.currentDueAt,
+          reviewers,
+          story
+        }
+      };
+    });
+  } catch {
+    return await fetchArchitectureDiagrams(filters);
+  }
 };
 
 export const fetchArchitectureDiagramById = async (id: string) => {

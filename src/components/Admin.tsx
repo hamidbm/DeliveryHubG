@@ -10,8 +10,9 @@ import AdminBundleAssignments from './AdminBundleAssignments';
 import AdminAdmins from './AdminAdmins';
 import AdminWorkBlueprints from './AdminWorkBlueprints';
 import AdminWorkGenerators from './AdminWorkGenerators';
+import AdminDiagramTemplates from './AdminDiagramTemplates';
 
-type AdminModuleId = 'home' | 'wiki-themes' | 'wiki-templates' | 'vendors' | 'roles' | 'bundles' | 'applications' | 'taxonomy' | 'artifact-rules' | 'milestone-templates' | 'users' | 'sharepoint' | 'ai-settings' | 'bundle-assignments' | 'admins' | 'work-blueprints' | 'work-generators';
+type AdminModuleId = 'home' | 'wiki-themes' | 'wiki-templates' | 'diagram-templates' | 'vendors' | 'roles' | 'bundles' | 'applications' | 'taxonomy' | 'artifact-rules' | 'milestone-templates' | 'users' | 'sharepoint' | 'ai-settings' | 'bundle-assignments' | 'admins' | 'work-blueprints' | 'work-generators';
 
 interface AdminModule {
   id: AdminModuleId;
@@ -29,6 +30,7 @@ interface AdminSection {
 const Admin: React.FC = () => {
   const [activeModule, setActiveModule] = useState<AdminModuleId>('home');
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
+  const [isCmo, setIsCmo] = useState(false);
 
   React.useEffect(() => {
     const check = async () => {
@@ -40,6 +42,7 @@ const Admin: React.FC = () => {
         }
         const data = await res.json();
         setIsAdmin(Boolean(data?.isAdmin));
+        setIsCmo(Boolean(data?.isCmo));
       } catch {
         setIsAdmin(false);
       }
@@ -47,7 +50,7 @@ const Admin: React.FC = () => {
     check();
   }, []);
 
-  if (isAdmin === false) {
+  if (isAdmin === false && !isCmo) {
     return (
       <div className="flex items-center justify-center min-h-[600px] bg-white border border-slate-200 rounded-[3rem] shadow-2xl">
         <div className="text-center p-12 text-slate-500">
@@ -66,7 +69,7 @@ const Admin: React.FC = () => {
     );
   }
 
-  const sections: AdminSection[] = [
+  const sections: AdminSection[] = isAdmin ? [
     {
       title: 'Configuration',
       modules: [
@@ -84,6 +87,7 @@ const Admin: React.FC = () => {
         { id: 'milestone-templates', label: 'Milestone Plans', icon: 'fa-route', description: 'Standardize M1-M10 sequence and requirements.', color: 'orange' },
         { id: 'wiki-themes', label: 'Wiki Themes', icon: 'fa-palette', description: 'Enterprise CSS templates for documentation rendering.', color: 'purple' },
         { id: 'wiki-templates', label: 'Wiki Templates', icon: 'fa-file-lines', description: 'Reusable Markdown templates for wiki documents.', color: 'indigo' },
+        { id: 'diagram-templates', label: 'Diagram Templates', icon: 'fa-vector-square', description: 'Reusable architecture diagram templates.', color: 'blue' },
         { id: 'work-blueprints', label: 'Work Blueprints', icon: 'fa-diagram-project', description: 'Manage delivery blueprint templates.', color: 'slate' },
         { id: 'work-generators', label: 'Work Generators', icon: 'fa-bolt', description: 'Manage event-driven work creation.', color: 'amber' },
       ]
@@ -101,6 +105,13 @@ const Admin: React.FC = () => {
       modules: [
         { id: 'sharepoint', label: 'SharePoint', icon: 'fa-file-export', description: 'Global base URL patterns and mapping settings.', color: 'sky' },
         { id: 'ai-settings', label: 'AI Settings', icon: 'fa-robot', description: 'Configure Gemini API keys and reasoning parameters.', color: 'violet' },
+      ]
+    }
+  ] : [
+    {
+      title: 'Architecture',
+      modules: [
+        { id: 'diagram-templates', label: 'Diagram Templates', icon: 'fa-vector-square', description: 'Reusable architecture diagram templates.', color: 'blue' }
       ]
     }
   ];
@@ -183,6 +194,8 @@ const Admin: React.FC = () => {
         return <AdminWorkBlueprints />;
       case 'work-generators':
         return <AdminWorkGenerators />;
+      case 'diagram-templates':
+        return <AdminDiagramTemplates />;
       default:
         return (
           <div className="flex flex-col h-full bg-white relative">

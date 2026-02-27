@@ -45,6 +45,8 @@ const SortableBacklogItem: React.FC<{ item: WorkItem, onClick: () => void }> = (
     switch (type) {
       case WorkItemType.EPIC: return 'fa-layer-group text-purple-500';
       case WorkItemType.BUG: return 'fa-bug text-red-500';
+      case WorkItemType.RISK: return 'fa-triangle-exclamation text-rose-500';
+      case WorkItemType.DEPENDENCY: return 'fa-link text-indigo-500';
       default: return 'fa-file-lines text-blue-500';
     }
   };

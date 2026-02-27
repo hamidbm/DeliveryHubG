@@ -426,12 +426,13 @@ const ReviewDetails: React.FC<ReviewDetailsProps> = ({ reviewId, bundles }) => {
     const showAllAttachments = expandedAttachments.has(summary.cycleId);
     const visibleAttachments = showAllAttachments ? attachments : attachments.slice(0, 2);
     const nodes: Array<{ kind: NodeKind; label: string; at?: string }> = [
-      { kind: 'requested', label: 'Requested', at: summary.requestedAt },
-      { kind: 'in_review', label: 'In Review', at: summary.inReviewAt },
-      { kind: 'feedback_sent', label: 'Feedback Sent', at: summary.feedbackSentAt },
-      { kind: 'vendor_response', label: 'Vendor Response', at: cycle.vendorResponse?.submittedAt },
-      { kind: 'closed', label: 'Closed', at: summary.closedAt }
-    ].filter((node) => Boolean(node.at));
+      { kind: 'requested' as NodeKind, label: 'Requested', at: summary.requestedAt },
+      { kind: 'in_review' as NodeKind, label: 'In Review', at: summary.inReviewAt },
+      { kind: 'feedback_sent' as NodeKind, label: 'Feedback Sent', at: summary.feedbackSentAt },
+      { kind: 'vendor_response' as NodeKind, label: 'Vendor Response', at: cycle.vendorResponse?.submittedAt },
+      { kind: 'closed' as NodeKind, label: 'Closed', at: summary.closedAt }
+    ];
+    const visibleNodes = nodes.filter((node) => Boolean(node.at));
     return (
       <div key={summary.cycleId} className="bg-white border border-slate-200 rounded-2xl p-4">
         <div className="flex items-center justify-between">
@@ -456,7 +457,7 @@ const ReviewDetails: React.FC<ReviewDetailsProps> = ({ reviewId, bundles }) => {
         </div>
         <div className="mt-4">
           <div className="flex items-center gap-2 overflow-x-auto">
-            {nodes.map((node, index) => (
+            {visibleNodes.map((node, index) => (
               <React.Fragment key={node.kind}>
                 <button
                   onClick={() => setSelectedNode({ cycleId: summary.cycleId, kind: node.kind })}

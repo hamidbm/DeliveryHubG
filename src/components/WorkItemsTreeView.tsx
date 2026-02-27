@@ -31,6 +31,8 @@ const WorkItemsTreeView: React.FC<WorkItemsTreeViewProps> = ({
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
   const [isCreating, setIsCreating] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const deepLinkThreadId = searchParams.get('threadId');
+  const deepLinkWorkItemId = searchParams.get('workItemId');
 
   useEffect(() => {
     if (externalTrigger === 'create-item') {
@@ -48,7 +50,33 @@ const WorkItemsTreeView: React.FC<WorkItemsTreeViewProps> = ({
         if (!res.ok) return;
         const data = await res.json();
         setActiveItem(data);
-        setSelectedNodeId(String(data._id || data.id || workItemId));
+        const nodeKey = String(data._id || data.id || workItemId);
+        setSelectedNodeId(nodeKey);
+        if (data.parentId) {
+          const expandIds: string[] = [];
+          let currentId = String(data.parentId);
+          const seen = new Set<string>();
+          while (currentId && !seen.has(currentId)) {
+            seen.add(currentId);
+            expandIds.push(currentId);
+            try {
+              const parentRes = await fetch(`/api/work-items/${encodeURIComponent(currentId)}`);
+              if (!parentRes.ok) break;
+              const parent = await parentRes.json();
+              if (!parent?.parentId) break;
+              currentId = String(parent.parentId);
+            } catch {
+              break;
+            }
+          }
+          if (expandIds.length) {
+            setExpandedNodes(prev => {
+              const next = new Set(prev);
+              expandIds.forEach(id => next.add(id));
+              return next;
+            });
+          }
+        }
       } catch {}
     };
     load();
@@ -107,6 +135,8 @@ const WorkItemsTreeView: React.FC<WorkItemsTreeViewProps> = ({
       case WorkItemType.STORY: return 'fa-file-lines text-blue-500';
       case WorkItemType.TASK: return 'fa-check text-slate-400';
       case WorkItemType.BUG: return 'fa-bug text-red-500';
+      case WorkItemType.RISK: return 'fa-triangle-exclamation text-rose-500';
+      case WorkItemType.DEPENDENCY: return 'fa-link text-indigo-500';
       default: return 'fa-circle text-slate-300';
     }
   };
@@ -148,7 +178,7 @@ const WorkItemsTreeView: React.FC<WorkItemsTreeViewProps> = ({
   const getAllowedParentType = (childType?: WorkItemType) => {
     if (childType === WorkItemType.FEATURE) return WorkItemType.EPIC;
     if (childType === WorkItemType.STORY) return WorkItemType.FEATURE;
-    if (childType === WorkItemType.TASK || childType === WorkItemType.BUG) return WorkItemType.STORY;
+    if (childType === WorkItemType.TASK || childType === WorkItemType.BUG || childType === WorkItemType.RISK || childType === WorkItemType.DEPENDENCY) return WorkItemType.STORY;
     return null;
   };
 
@@ -183,7 +213,9 @@ const WorkItemsTreeView: React.FC<WorkItemsTreeViewProps> = ({
     const hasChildren = node.children && node.children.length > 0;
     const nodeKey = node.nodeType === 'WORK_ITEM' ? String(node.workItemId) : String(node.id);
     const isActive = selectedNodeId ? selectedNodeId === nodeKey : (activeItem && (activeItem._id === node.workItemId || activeItem.id === node.workItemId));
-    const linkBadges: string[] = Array.from(new Set((node.links || []).map((l: any) => l.type))).slice(0, 3);
+    const linkBadges = Array.from(
+      new Set((node.links || []).map((l: any) => String(l.type)).filter(Boolean))
+    ).slice(0, 3) as string[];
 
     return (
       <div key={node.id} className="flex flex-col">
@@ -332,7 +364,24 @@ const WorkItemsTreeView: React.FC<WorkItemsTreeViewProps> = ({
       </aside>
 
       <main className="flex-1 overflow-y-auto bg-white relative custom-scrollbar">
-        {activeItem ? <WorkItemDetails key={(activeItem._id || activeItem.id) as string} item={activeItem} bundles={bundles} applications={applications} onUpdate={fetchTree} onClose={() => setActiveItem(null)} /> : <div className="h-full flex flex-col items-center justify-center p-20 text-center bg-slate-50/10"><div className="w-24 h-24 bg-white rounded-[2.5rem] flex items-center justify-center mb-8 border border-slate-100 shadow-xl shadow-slate-200/50"><i className="fas fa-tasks text-slate-100 text-4xl"></i></div><h3 className="text-xl font-black text-slate-800 tracking-tight uppercase">Hierarchy Explorer</h3><p className="text-slate-400 font-medium max-w-xs mt-3 leading-relaxed">Select an artifact to view implementation details and status roll-ups.</p></div>}
+        {activeItem ? (
+          <WorkItemDetails
+            key={(activeItem._id || activeItem.id) as string}
+            item={activeItem}
+            bundles={bundles}
+            applications={applications}
+            onUpdate={fetchTree}
+            onClose={() => setActiveItem(null)}
+            initialActiveTab={deepLinkThreadId && deepLinkWorkItemId && String(activeItem._id || activeItem.id) === String(deepLinkWorkItemId) ? 'comments' : undefined}
+            initialThreadId={deepLinkThreadId && deepLinkWorkItemId && String(activeItem._id || activeItem.id) === String(deepLinkWorkItemId) ? deepLinkThreadId : null}
+          />
+        ) : (
+          <div className="h-full flex flex-col items-center justify-center p-20 text-center bg-slate-50/10">
+            <div className="w-24 h-24 bg-white rounded-[2.5rem] flex items-center justify-center mb-8 border border-slate-100 shadow-xl shadow-slate-200/50"><i className="fas fa-tasks text-slate-100 text-4xl"></i></div>
+            <h3 className="text-xl font-black text-slate-800 tracking-tight uppercase">Hierarchy Explorer</h3>
+            <p className="text-slate-400 font-medium max-w-xs mt-3 leading-relaxed">Select an artifact to view implementation details and status roll-ups.</p>
+          </div>
+        )}
       </main>
 
       {isCreating && <CreateWorkItemModal bundles={bundles} applications={applications} initialBundleId={activeItem?.bundleId || (selBundleId !== 'all' ? selBundleId : '')} initialAppId={activeItem?.applicationId || (selAppId !== 'all' ? selAppId : '')} initialParentId={activeItem?._id || activeItem?.id} initialType={getSubArtifactType(activeItem?.type)} onClose={() => setIsCreating(false)} onSuccess={(item) => { setIsCreating(false); fetchTree(); handleNodeSelect({ nodeType: 'WORK_ITEM', workItemId: item.insertedId || item.id }); }} />}

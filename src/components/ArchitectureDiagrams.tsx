@@ -1,14 +1,17 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback, Suspense, lazy, useMemo } from 'react';
-import { ArchitectureDiagram, DiagramFormat, Application, Bundle, Milestone, ReviewRecord } from '../types';
+import { ArchitectureDiagram, DiagramFormat, Application, Bundle, Milestone, ReviewRecord, TaxonomyCategory, TaxonomyDocumentType } from '../types';
 import { useRouter, useSearchParams } from '../App';
 import CommentsDrawer from './CommentsDrawer';
+import DocumentTypePicker from './DocumentTypePicker';
 import { canSubmitForReviewClient, canResubmitClient, canMarkFeedbackSentClient, isEngineeringRoleClient, isVendorRoleClient } from '../lib/authzClient';
 import { ensureSafeStylesheetAccess } from '../lib/safeStylesheets';
 import * as d3 from 'd3';
+import { DEFAULT_MARKMAP_MD } from '../lib/markmapDsl';
 
 const MindMapMarkdownEditor = lazy(() => import('./MindMapMarkdownEditor'));
+const MindMapFlowEditor = lazy(() => import('./MindMapFlowEditor'));
 
 interface ArchitectureDiagramsProps {
   applications: Application[];
@@ -16,6 +19,46 @@ interface ArchitectureDiagramsProps {
   activeBundleId?: string;
   activeAppId?: string;
 }
+
+const DIAGRAM_TYPES = [
+  { group: 'Enterprise Architecture', items: [
+    { id: 'enterprise_arch', label: 'Cloud Enterprise Architecture' },
+    { id: 'application_integration', label: 'Application Integration' },
+    { id: 'c4_context', label: 'C4 Context' },
+    { id: 'c4_container', label: 'C4 Container' },
+    { id: 'c4_component', label: 'C4 Component' }
+  ]},
+  { group: 'Software Design', items: [
+    { id: 'sequence', label: 'Sequence Diagram' },
+    { id: 'class', label: 'Class Diagram' },
+    { id: 'service_design', label: 'Service Design' },
+    { id: 'api_flow', label: 'API Flow' }
+  ]},
+  { group: 'Data', items: [
+    { id: 'database_schema', label: 'Database Schema' },
+    { id: 'data_flow', label: 'Data Flow Diagram' }
+  ]},
+  { group: 'Strategy / Planning', items: [
+    { id: 'mind_map', label: 'Mind Map' },
+    { id: 'capability_map', label: 'Capability Map' }
+  ]}
+];
+
+const TYPE_TO_FORMATS: Record<string, DiagramFormat[]> = {
+  enterprise_arch: [DiagramFormat.DRAWIO, DiagramFormat.MERMAID],
+  application_integration: [DiagramFormat.DRAWIO, DiagramFormat.MERMAID],
+  c4_context: [DiagramFormat.MERMAID, DiagramFormat.DRAWIO],
+  c4_container: [DiagramFormat.MERMAID, DiagramFormat.DRAWIO],
+  c4_component: [DiagramFormat.MERMAID, DiagramFormat.DRAWIO],
+  sequence: [DiagramFormat.MERMAID],
+  class: [DiagramFormat.MERMAID],
+  service_design: [DiagramFormat.MERMAID, DiagramFormat.DRAWIO],
+  api_flow: [DiagramFormat.MERMAID, DiagramFormat.DRAWIO],
+  database_schema: [DiagramFormat.MERMAID],
+  data_flow: [DiagramFormat.MERMAID, DiagramFormat.DRAWIO],
+  mind_map: [DiagramFormat.MINDMAP_MD],
+  capability_map: [DiagramFormat.MINDMAP_MD, DiagramFormat.MERMAID]
+};
 
 const DEFAULT_MERMAID_CODE = `%%{init: {
   "theme": "base",
@@ -201,8 +244,8 @@ const MermaidRenderer: React.FC<{ content: string; id: string }> = ({ content, i
             const zoom = d3.zoom()
               .scaleExtent([0.05, 5])
               .on('zoom', (event) => {
-                svgSelection.selectAll('g').filter(function() {
-                    return this.parentNode === svgElement;
+                svgSelection.selectAll('g').filter(function (this: Element) {
+                  return this.parentNode === svgElement;
                 }).attr('transform', event.transform);
               });
 
@@ -271,7 +314,7 @@ const DrawioEditor: React.FC<{
           iframe.contentWindow.postMessage(JSON.stringify({ action: 'configure', config: { defaultFonts: ["Inter", "Helvetica", "Arial"], ui: 'atlas' } }), '*');
         } else if (data.event === 'init') {
           setIsReady(true);
-          iframe.contentWindow.postMessage(JSON.stringify({ action: 'load', xml: xmlRef.current || '', autosave: 1 }), '*');
+          iframe.contentWindow.postMessage(JSON.stringify({ action: 'load', xml: xmlRef.current || DEFAULT_DRAWIO_XML, autosave: 1 }), '*');
         } else if (data.event === 'save' || data.event === 'autosave' || data.event === 'export') {
           if (data.xml) onSaveRef.current(data.xml);
           if (data.event === 'save' || data.event === 'export') {
@@ -303,6 +346,21 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
   const [isEditMode, setIsEditMode] = useState(false);
   const [loading, setLoading] = useState(true);
   const [milestones, setMilestones] = useState<Milestone[]>([]);
+  const [docTypes, setDocTypes] = useState<TaxonomyDocumentType[]>([]);
+  const [docCategories, setDocCategories] = useState<TaxonomyCategory[]>([]);
+  const [isWizardOpen, setIsWizardOpen] = useState(false);
+  const [wizardStep, setWizardStep] = useState(1);
+  const [wizardMode, setWizardMode] = useState<'blank' | 'template' | 'upload' | null>(null);
+  const [selectedType, setSelectedType] = useState<string | null>(null);
+  const [selectedFormat, setSelectedFormat] = useState<DiagramFormat | null>(null);
+  const [templateOptions, setTemplateOptions] = useState<any[]>([]);
+  const [templatesLoading, setTemplatesLoading] = useState(false);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+  const [selectedDocumentTypeId, setSelectedDocumentTypeId] = useState<string | null>(null);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadingDiagram, setUploadingDiagram] = useState(false);
+  const [creatingDiagram, setCreatingDiagram] = useState(false);
+  const [wizardError, setWizardError] = useState<string | null>(null);
 
   const [selBundle, setSelBundle] = useState(activeBundleId || 'all');
   const [selApp, setSelApp] = useState(activeAppId || 'all');
@@ -312,7 +370,7 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
   const fetchDiagrams = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/architecture/diagrams`);
+      const res = await fetch(`/api/architecture/diagrams?includeReviewSummary=true`);
       const data = await res.json();
       setDiagrams(Array.isArray(data) ? data : []);
     } catch (e) {
@@ -325,6 +383,8 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
   useEffect(() => {
     fetchDiagrams();
     fetch('/api/milestones').then(r => r.json()).then(data => setMilestones(Array.isArray(data) ? data : []));
+    fetch('/api/taxonomy/document-types?active=true').then(r => r.json()).then(data => setDocTypes(Array.isArray(data) ? data : []));
+    fetch('/api/taxonomy/categories?active=true').then(r => r.json()).then(data => setDocCategories(Array.isArray(data) ? data : []));
   }, [fetchDiagrams]);
 
   useEffect(() => {
@@ -340,6 +400,38 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
 
   useEffect(() => { if (activeBundleId) setSelBundle(activeBundleId); }, [activeBundleId]);
   useEffect(() => { if (activeAppId) setSelApp(activeAppId); }, [activeAppId]);
+
+  useEffect(() => {
+    const loadTemplates = async () => {
+      if (!selectedType || !selectedFormat) {
+        setTemplateOptions([]);
+        return;
+      }
+      setTemplatesLoading(true);
+      try {
+        const params = new URLSearchParams();
+        params.set('diagramType', selectedType);
+        params.set('format', selectedFormat);
+        const res = await fetch(`/api/diagram-templates?${params.toString()}`);
+        const data = await res.json();
+        setTemplateOptions(Array.isArray(data) ? data : []);
+      } catch {
+        setTemplateOptions([]);
+      } finally {
+        setTemplatesLoading(false);
+      }
+    };
+    loadTemplates();
+  }, [selectedType, selectedFormat]);
+
+  useEffect(() => {
+    if (!templateOptions.length) return;
+    if (selectedTemplateId) return;
+    const defaultTpl = templateOptions.find((t) => t.isDefault);
+    if (defaultTpl) {
+      setSelectedTemplateId(String(defaultTpl._id || defaultTpl.id));
+    }
+  }, [templateOptions, selectedTemplateId]);
 
   const allTags = useMemo(() => {
     const tags = new Set<string>();
@@ -382,6 +474,162 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
     }
   };
 
+  const openWizard = () => {
+    setWizardStep(1);
+    setWizardMode(null);
+    setSelectedType(null);
+    setSelectedFormat(null);
+    setSelectedTemplateId(null);
+    setTemplateOptions([]);
+    setSelectedDocumentTypeId(null);
+    setUploadFile(null);
+    setWizardError(null);
+    setIsWizardOpen(true);
+  };
+
+  const getDefaultContent = (format: DiagramFormat) => {
+    if (format === DiagramFormat.DRAWIO) return DEFAULT_DRAWIO_XML;
+    if (format === DiagramFormat.MINDMAP_MD) return DEFAULT_MARKMAP_MD;
+    return DEFAULT_MERMAID_CODE;
+  };
+
+  const createFromWizard = async () => {
+    const requiresType = wizardMode === 'template';
+    if ((requiresType && !selectedType) || !selectedFormat || !selectedDocumentTypeId) return;
+    setWizardError(null);
+    setCreatingDiagram(true);
+    try {
+      let content = getDefaultContent(selectedFormat);
+      let sourceTemplateId: string | undefined = undefined;
+      let createdFromTemplate = false;
+      let title = DIAGRAM_TYPES.flatMap(g => g.items).find(i => i.id === selectedType)?.label || 'New Diagram';
+
+      if (selectedTemplateId) {
+        try {
+          const res = await fetch(`/api/diagram-templates/${encodeURIComponent(selectedTemplateId)}`);
+          if (res.ok) {
+            const template = await res.json();
+            if (template?.content) content = String(template.content);
+            if (template?.name) title = String(template.name);
+            sourceTemplateId = String(template._id || template.id || selectedTemplateId);
+            createdFromTemplate = true;
+          }
+        } catch {}
+      }
+
+      const payload: Partial<ArchitectureDiagram> = {
+        title,
+        diagramType: selectedType || undefined,
+        format: selectedFormat,
+        content,
+        documentTypeId: selectedDocumentTypeId,
+        bundleId: selBundle !== 'all' ? selBundle : undefined,
+        applicationId: selApp !== 'all' ? selApp : undefined,
+        milestoneId: selMilestone !== 'all' ? selMilestone : undefined,
+        tags: [],
+        status: 'DRAFT',
+        sourceTemplateId,
+        createdFromTemplate
+      };
+
+      const res = await fetch('/api/architecture/diagrams', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) {
+        const data = await res.json().catch(() => ({}));
+        const insertedId = data?.result?.insertedId;
+        const created = { ...payload, _id: insertedId || payload._id } as ArchitectureDiagram;
+        setIsWizardOpen(false);
+        setEditingDiagram(created);
+        setIsEditMode(true);
+        setIsDesignerOpen(true);
+        fetchDiagrams();
+      } else {
+        let message = 'Failed to create diagram.';
+        try {
+          const data = await res.json();
+          message = data?.error || message;
+        } catch {}
+        setWizardError(message);
+      }
+    } catch (error: any) {
+      setWizardError(error?.message || 'Failed to create diagram.');
+    } finally {
+      setCreatingDiagram(false);
+    }
+  };
+
+  const resolveUploadFormat = (file: File): DiagramFormat => {
+    const name = file.name.toLowerCase();
+    if (name.endsWith('.drawio') || name.endsWith('.xml')) return DiagramFormat.DRAWIO;
+    if (name.endsWith('.mmd')) return DiagramFormat.MERMAID;
+    if (name.endsWith('.md')) return DiagramFormat.MINDMAP_MD;
+    if (name.endsWith('.json')) return DiagramFormat.MINDMAP;
+    if (name.endsWith('.svg') || name.endsWith('.png') || name.endsWith('.jpeg') || name.endsWith('.jpg')) return DiagramFormat.IMAGE;
+    if (name.endsWith('.pdf')) return DiagramFormat.PDF;
+    return DiagramFormat.MERMAID;
+  };
+
+  const handleUploadDiagram = async () => {
+    if (!uploadFile || !selectedDocumentTypeId) return;
+    setUploadingDiagram(true);
+    setWizardError(null);
+    try {
+      const format = resolveUploadFormat(uploadFile);
+      const content = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(new Error('Failed to read file'));
+        reader.onload = () => resolve(String(reader.result || ''));
+        if ([DiagramFormat.IMAGE, DiagramFormat.PDF].includes(format)) {
+          reader.readAsDataURL(uploadFile);
+        } else {
+          reader.readAsText(uploadFile);
+        }
+      });
+      const payload: Partial<ArchitectureDiagram> = {
+        title: uploadFile.name.replace(/\.[^/.]+$/, ''),
+        diagramType: selectedType || undefined,
+        format,
+        content,
+        createdFromUpload: true,
+        documentTypeId: selectedDocumentTypeId,
+        bundleId: selBundle !== 'all' ? selBundle : undefined,
+        applicationId: selApp !== 'all' ? selApp : undefined,
+        milestoneId: selMilestone !== 'all' ? selMilestone : undefined,
+        tags: [],
+        status: 'DRAFT'
+      };
+      const res = await fetch('/api/architecture/diagrams', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) {
+        const data = await res.json().catch(() => ({}));
+        const insertedId = data?.result?.insertedId;
+        const created = { ...payload, _id: insertedId || payload._id } as ArchitectureDiagram;
+        setIsWizardOpen(false);
+        setEditingDiagram(created);
+        setIsEditMode(true);
+        setIsDesignerOpen(true);
+        fetchDiagrams();
+      } else {
+        let message = 'Failed to upload diagram.';
+        try {
+          const data = await res.json();
+          message = data?.error || message;
+        } catch {}
+        setWizardError(message);
+      }
+    } catch (error: any) {
+      setWizardError(error?.message || 'Failed to upload diagram.');
+    } finally {
+      setUploadingDiagram(false);
+    }
+  };
+
   const closeDesigner = () => {
     setIsDesignerOpen(false);
     const params = new URLSearchParams(searchParams.toString());
@@ -410,7 +658,7 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
               <p className="text-slate-400 font-medium text-lg">Visualizing system relationships, sequence flows, and mind maps.</p>
             </div>
             <button 
-              onClick={() => openDesigner(undefined, true)}
+              onClick={openWizard}
               className="px-8 py-3 bg-slate-900 text-white text-[10px] font-black rounded-2xl shadow-xl hover:bg-blue-600 transition-all uppercase tracking-widest flex items-center gap-2"
             >
               <i className="fas fa-magic"></i> New Canvas
@@ -450,57 +698,146 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pb-20">
-            {loading && diagrams.length === 0 ? [...Array(3)].map((_, i) => <div key={i} className="h-48 bg-slate-100 rounded-[2rem] animate-pulse"></div>) : 
+            {loading && diagrams.length === 0 ? [...Array(3)].map((_, i) => <div key={i} className="h-56 bg-slate-100 rounded-[2rem] animate-pulse"></div>) : 
              filteredDiagrams.length === 0 ? (
                <div className="col-span-full py-32 text-center bg-slate-50/50 border-2 border-dashed border-slate-100 rounded-[3rem]">
                   <i className="fas fa-pencil-ruler text-5xl mb-6 text-slate-200"></i>
                   <p className="text-sm font-black text-slate-400 uppercase tracking-widest">No diagrams found matching filters</p>
                </div>
-             ) : filteredDiagrams.map(diag => (
-              <div key={diag._id} className="bg-white border border-slate-200 rounded-[2rem] p-6 hover:shadow-xl transition-all group cursor-pointer relative flex flex-col justify-between" onClick={() => openDesigner(diag, false)}>
-                 <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-all z-20">
+             ) : filteredDiagrams.map(diag => {
+              const summary = diag.reviewSummary;
+              const reviewers = summary?.reviewers || [];
+              const cycleStatus = summary?.currentCycleStatus || '';
+              const cycleNumber = summary?.currentCycleNumber;
+              const cycleDue = summary?.currentDueAt;
+              const isClosed = cycleStatus === 'closed';
+              const isOverdue = !!cycleDue && !isClosed && new Date(cycleDue).getTime() < Date.now();
+              const statusLabel = cycleStatus ? cycleStatus.replace(/_/g, ' ') : '';
+              const statusClass = cycleStatus === 'requested'
+                ? 'bg-slate-100 text-slate-500 border-slate-200'
+                : cycleStatus === 'in_review'
+                  ? 'bg-blue-50 text-blue-600 border-blue-200'
+                  : cycleStatus === 'feedback_sent'
+                    ? 'bg-purple-50 text-purple-600 border-purple-200'
+                    : cycleStatus === 'vendor_addressing'
+                      ? 'bg-amber-50 text-amber-700 border-amber-200'
+                      : cycleStatus === 'closed'
+                        ? 'bg-emerald-50 text-emerald-600 border-emerald-200'
+                        : 'bg-slate-100 text-slate-500 border-slate-200';
+
+              return (
+                <div key={diag._id} className="bg-white border border-slate-200 rounded-[2rem] p-5 hover:shadow-xl transition-all group cursor-pointer relative flex flex-col justify-between h-[230px]" onClick={() => openDesigner(diag, false)}>
+                  <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-all z-20">
                     <button onClick={(e) => { e.stopPropagation(); openDesigner(diag, true); }} className="w-8 h-8 rounded-lg bg-white text-slate-400 hover:text-blue-600 flex items-center justify-center shadow-sm border border-slate-100"><i className="fas fa-pen text-[10px]"></i></button>
                     <button onClick={(e) => handleDelete(diag._id!, e)} className="w-8 h-8 rounded-lg bg-white text-slate-400 hover:text-red-500 flex items-center justify-center shadow-sm border border-slate-100"><i className="fas fa-trash text-[10px]"></i></button>
-                 </div>
-                 
-                 <div>
-                    <div className="flex items-center gap-3 mb-4">
-                       <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-white shadow-md ${
-                         diag.format === DiagramFormat.MERMAID ? 'bg-indigo-500' : 
-                         diag.format === DiagramFormat.DRAWIO ? 'bg-orange-500' : 
-                         diag.format === DiagramFormat.MINDMAP_MD ? 'bg-blue-500' : 'bg-slate-500'
-                       }`}><i className={`fas ${diag.format === DiagramFormat.MERMAID ? 'fa-code' : diag.format === DiagramFormat.DRAWIO ? 'fa-vector-square' : 'fa-diagram-project'} text-sm`}></i></div>
-                       <div className="min-w-0">
-                          <h4 className="text-sm font-black text-slate-800 group-hover:text-blue-600 transition-colors truncate pr-8">{diag.title}</h4>
-                          <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest">{diag.format}</span>
-                       </div>
+                  </div>
+                  
+                  <div>
+                    <div className="flex items-start gap-3 mb-3">
+                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-white shadow-md ${
+                        diag.format === DiagramFormat.MERMAID ? 'bg-indigo-500' : 
+                        diag.format === DiagramFormat.DRAWIO ? 'bg-orange-500' : 
+                        diag.format === DiagramFormat.MINDMAP_MD ? 'bg-blue-500' : 'bg-slate-500'
+                      }`}><i className={`fas ${diag.format === DiagramFormat.MERMAID ? 'fa-code' : diag.format === DiagramFormat.DRAWIO ? 'fa-vector-square' : 'fa-diagram-project'} text-sm`}></i></div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start justify-between gap-2">
+                          <h4 className="text-sm font-black text-slate-800 group-hover:text-blue-600 transition-colors line-clamp-2">{diag.title}</h4>
+                          {summary && (
+                            <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-full border ${statusClass}`}>
+                              {cycleNumber ? `#${cycleNumber}` : ''} {statusLabel || 'review'}
+                            </span>
+                          )}
+                        </div>
+                      </div>
                     </div>
 
-                    <div className="space-y-2 mb-4">
-                       <div className="flex items-center gap-2">
-                          <i className="fas fa-boxes-stacked text-[9px] text-slate-300"></i>
-                          <span className="text-[10px] font-bold text-slate-500 truncate">
-                            {bundles.find(b => b._id === diag.bundleId)?.name || 'Unassigned Cluster'}
-                          </span>
-                       </div>
-                       <div className="flex items-center gap-2">
-                          <i className="fas fa-cube text-[9px] text-slate-300"></i>
-                          <span className="text-[10px] font-bold text-slate-500 truncate">
-                            {applications.find(a => a._id === diag.applicationId || a.id === diag.applicationId)?.name || 'No App Context'}
-                          </span>
-                       </div>
+                    <div className="space-y-1.5">
+                      <div className="flex items-center gap-2">
+                        <i className="fas fa-boxes-stacked text-[9px] text-slate-300"></i>
+                        <span className="text-[10px] font-bold text-slate-500 truncate">
+                          {bundles.find(b => b._id === diag.bundleId)?.name || 'Unassigned Cluster'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <i className="fas fa-cube text-[9px] text-slate-300"></i>
+                        <span className="text-[10px] font-bold text-slate-500 truncate">
+                          {applications.find(a => a._id === diag.applicationId || a.id === diag.applicationId)?.name || 'No App Context'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <i className="fas fa-layer-group text-[9px] text-slate-300"></i>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{diag.format}</span>
+                      </div>
+                      {summary && reviewers.length > 0 && (
+                        <div className="flex items-center gap-2 pt-1">
+                          <div className="flex -space-x-2">
+                            {reviewers.slice(0, 2).map((r: any) => (
+                              <img key={r.userId} src={`https://ui-avatars.com/api/?name=${encodeURIComponent(r.displayName || 'R')}&background=0D8ABC&color=fff&size=32`} className="w-6 h-6 rounded-full border-2 border-white shadow-sm" />
+                            ))}
+                          </div>
+                          {reviewers.length > 2 && (
+                            <span className="text-[9px] font-black uppercase text-slate-400">+{reviewers.length - 2}</span>
+                          )}
+                        </div>
+                      )}
                     </div>
-                 </div>
+                  </div>
 
-                 <div className="flex flex-wrap gap-1.5 border-t border-slate-50 pt-4 mt-2">
-                    {diag.tags && diag.tags.length > 0 ? diag.tags.map(t => (
-                      <span key={t} className="px-2 py-0.5 bg-slate-50 text-slate-400 text-[8px] font-black uppercase rounded border border-slate-100">{t}</span>
-                    )) : (
-                      <span className="text-[8px] font-black text-slate-200 uppercase italic">No tags attached</span>
+                  <div className="flex items-center justify-between border-t border-slate-50 pt-3 mt-2">
+                    {summary ? (
+                      <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-slate-400">
+                        {cycleDue ? (
+                          <>
+                            <i className="fas fa-calendar text-[9px]"></i>
+                            <span>{new Date(cycleDue).toLocaleDateString()}</span>
+                            {isOverdue && <span className="text-red-500">Overdue</span>}
+                          </>
+                        ) : (
+                          <span>No due date</span>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-[8px] font-black text-slate-200 uppercase italic">No review</span>
                     )}
-                 </div>
-              </div>
-            ))}
+                    {summary && (
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openDesigner(diag, false);
+                            const params = new URLSearchParams(searchParams.toString());
+                            params.set('tab', 'architecture');
+                            params.set('diagramId', String(diag._id));
+                            params.set('focus', 'review');
+                            if (summary.currentCycleId) params.set('cycleId', summary.currentCycleId);
+                            if (summary.reviewId) params.set('reviewId', summary.reviewId);
+                            router.push(`/?${params.toString()}`);
+                          }}
+                          className="text-[9px] font-black uppercase tracking-widest text-blue-600 hover:text-blue-800"
+                        >
+                          View Review
+                        </button>
+                        {summary.story?.id && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const params = new URLSearchParams();
+                              params.set('tab', 'work-items');
+                              params.set('view', 'tree');
+                              params.set('workItemId', summary.story!.id);
+                              router.push(`/?${params.toString()}`);
+                            }}
+                            className="text-[9px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-800"
+                          >
+                            Open Review Story
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       ) : (
@@ -515,7 +852,347 @@ const ArchitectureDiagrams: React.FC<ArchitectureDiagramsProps> = ({ application
           focusReview={searchParams.get('focus') === 'review'}
           deepLinkReviewId={searchParams.get('reviewId')}
           deepLinkCycleId={searchParams.get('cycle') || searchParams.get('cycleId')}
+          deepLinkThreadId={searchParams.get('threadId')}
         />
+      )}
+
+      {isWizardOpen && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm">
+          <div className="w-[900px] max-w-[95vw] max-h-[85vh] bg-white rounded-[2rem] shadow-2xl border border-slate-100 overflow-hidden flex flex-col">
+            <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Create Diagram</div>
+                <div className="text-xl font-black text-slate-800">New Canvas Wizard</div>
+              </div>
+              <button onClick={() => setIsWizardOpen(false)} className="w-9 h-9 rounded-full bg-slate-50 hover:bg-slate-100 text-slate-400 flex items-center justify-center"><i className="fas fa-times"></i></button>
+            </div>
+
+            <div className="px-8 py-6 overflow-y-auto flex-1">
+              <div className="flex items-center gap-3 mb-6">
+                {wizardMode === 'upload' ? (
+                  <div className="px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border bg-blue-50 text-blue-600 border-blue-200">
+                    Upload
+                  </div>
+                ) : (
+                  (wizardMode === 'blank' ? [1, 2] : [1, 2, 3]).map(step => (
+                    <div key={step} className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${wizardStep === step ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-slate-50 text-slate-400 border-slate-100'}`}>
+                      Step {step}
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {!wizardMode && (
+                <div className="grid grid-cols-3 gap-4">
+                  {[
+                    { id: 'template', title: 'Template', desc: 'Start from curated templates.' },
+                    { id: 'blank', title: 'Blank', desc: 'Start from a clean canvas.' },
+                    { id: 'upload', title: 'Upload', desc: 'Upload an existing diagram.' }
+                  ].map(mode => (
+                    <button
+                      key={mode.id}
+                      onClick={() => {
+                        setWizardMode(mode.id as any);
+                        setWizardStep(1);
+                        setSelectedType(null);
+                        setSelectedFormat(null);
+                        setSelectedTemplateId(null);
+                      }}
+                      className="p-6 rounded-[1.5rem] border border-slate-100 hover:border-slate-200 hover:bg-slate-50 text-left transition-all"
+                    >
+                      <div className="text-sm font-black text-slate-800">{mode.title}</div>
+                      <div className="text-[10px] text-slate-400 mt-2">{mode.desc}</div>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {wizardMode === 'template' && wizardStep === 1 && (
+                <div className="space-y-6">
+                  {DIAGRAM_TYPES.map(group => (
+                    <div key={group.group}>
+                      <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-3">{group.group}</div>
+                      <div className="grid grid-cols-2 gap-3">
+                        {group.items.map(item => (
+                          <button
+                            key={item.id}
+                            onClick={() => setSelectedType(item.id)}
+                            className={`p-3 rounded-2xl border text-left transition-all ${selectedType === item.id ? 'border-blue-300 bg-blue-50' : 'border-slate-100 hover:border-slate-200 hover:bg-slate-50'}`}
+                          >
+                            <div className="text-[13px] font-black text-slate-800">{item.label}</div>
+                            <div className="text-[9px] text-slate-400 uppercase tracking-widest mt-1">{item.id.replace(/_/g, ' ')}</div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {wizardMode === 'template' && wizardStep === 2 && (
+                <div className="space-y-6">
+                  <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Choose Format</div>
+                  <div className="flex flex-wrap gap-3">
+                    {(selectedType ? TYPE_TO_FORMATS[selectedType] || [] : []).map(fmt => (
+                      <button
+                        key={fmt}
+                        onClick={() => setSelectedFormat(fmt)}
+                        className={`px-4 py-2.5 rounded-2xl text-[9px] font-black uppercase tracking-widest border transition-all ${selectedFormat === fmt ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'}`}
+                      >
+                        {fmt === DiagramFormat.MINDMAP_MD ? 'Mind Map (MD)' : fmt}
+                      </button>
+                    ))}
+                    {!selectedType && (
+                      <div className="text-sm text-slate-400">Select a diagram type first.</div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {wizardMode === 'blank' && wizardStep === 1 && (
+                <div className="space-y-6">
+                  <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Choose Format</div>
+                  <div className="flex flex-wrap gap-3">
+                    {[DiagramFormat.MERMAID, DiagramFormat.DRAWIO, DiagramFormat.MINDMAP_MD, DiagramFormat.MINDMAP].map(fmt => (
+                      <button
+                        key={fmt}
+                        onClick={() => setSelectedFormat(fmt)}
+                        className={`px-4 py-2.5 rounded-2xl text-[9px] font-black uppercase tracking-widest border transition-all ${selectedFormat === fmt ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'}`}
+                      >
+                        {fmt === DiagramFormat.MINDMAP_MD ? 'Mind Map (MD)' : fmt === DiagramFormat.MINDMAP ? 'Mind Map (JSON)' : fmt}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {wizardMode === 'template' && wizardStep === 3 && (
+                <div className="space-y-6">
+                  <DocumentTypePicker
+                    label="Document Type"
+                    required
+                    value={selectedDocumentTypeId}
+                    onChange={setSelectedDocumentTypeId}
+                    docTypes={docTypes}
+                    categories={docCategories}
+                  />
+                  <div className="flex items-center justify-between">
+                    <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Start From Template</div>
+                    <button
+                      onClick={() => setSelectedTemplateId(null)}
+                      className={`text-[9px] font-black uppercase tracking-widest ${selectedTemplateId === null ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
+                    >
+                      Blank Diagram
+                    </button>
+                  </div>
+                  {templatesLoading ? (
+                    <div className="grid grid-cols-3 gap-4">
+                      {[...Array(3)].map((_, i) => <div key={i} className="h-28 bg-slate-100 rounded-2xl animate-pulse" />)}
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-3 gap-4">
+                      {templateOptions.map(t => (
+                        <button
+                          key={t._id || t.id}
+                          onClick={() => setSelectedTemplateId(String(t._id || t.id))}
+                          className={`p-3 rounded-2xl border text-left transition-all ${selectedTemplateId === String(t._id || t.id) ? 'border-blue-300 bg-blue-50' : 'border-slate-100 hover:border-slate-200'}`}
+                        >
+                          <div className="h-16 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center overflow-hidden">
+                            {t.preview?.kind === 'base64' && t.preview?.data ? (
+                              <img src={`data:image/png;base64,${t.preview.data}`} className="object-cover w-full h-full" />
+                            ) : t.preview?.kind === 'url' && t.preview?.data ? (
+                              <img src={t.preview.data} className="object-cover w-full h-full" />
+                            ) : (
+                              <span className="text-[9px] font-black uppercase tracking-widest text-slate-300">No Preview</span>
+                            )}
+                          </div>
+                          <div className="mt-2 text-[12px] font-black text-slate-800">{t.name}</div>
+                          <div className="text-[9px] text-slate-400 mt-1 line-clamp-2">{t.description || 'Template'}</div>
+                        </button>
+                      ))}
+                      {templateOptions.length === 0 && (
+                        <div className="col-span-full text-sm text-slate-400">No templates available for this type/format.</div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {wizardMode === 'blank' && wizardStep === 2 && (
+                <div className="space-y-6">
+                  <DocumentTypePicker
+                    label="Document Type"
+                    required
+                    value={selectedDocumentTypeId}
+                    onChange={setSelectedDocumentTypeId}
+                    docTypes={docTypes}
+                    categories={docCategories}
+                  />
+
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Bundle (optional)</label>
+                      <select value={selBundle} onChange={(e) => setSelBundle(e.target.value)} className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-2 text-xs font-bold text-slate-700">
+                        <option value="all">All Bundles</option>
+                        {bundles.map(b => <option key={b._id} value={b._id}>{b.name}</option>)}
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Application (optional)</label>
+                      <select value={selApp} onChange={(e) => setSelApp(e.target.value)} className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-2 text-xs font-bold text-slate-700">
+                        <option value="all">All Apps</option>
+                        {applications.filter(a => selBundle === 'all' || a.bundleId === selBundle).map(a => <option key={a._id} value={a._id}>{a.name}</option>)}
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Milestone (optional)</label>
+                      <select value={selMilestone} onChange={(e) => setSelMilestone(e.target.value)} className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-2 text-xs font-bold text-slate-700">
+                        <option value="all">All Milestones</option>
+                        {milestones.map(m => <option key={m._id} value={m._id}>{m.name}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {wizardMode === 'upload' && (
+                <div className="space-y-6">
+                  <DocumentTypePicker
+                    label="Document Type"
+                    required
+                    value={selectedDocumentTypeId}
+                    onChange={setSelectedDocumentTypeId}
+                    docTypes={docTypes}
+                    categories={docCategories}
+                  />
+
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Bundle (optional)</label>
+                      <select value={selBundle} onChange={(e) => setSelBundle(e.target.value)} className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-2 text-xs font-bold text-slate-700">
+                        <option value="all">All Bundles</option>
+                        {bundles.map(b => <option key={b._id} value={b._id}>{b.name}</option>)}
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Application (optional)</label>
+                      <select value={selApp} onChange={(e) => setSelApp(e.target.value)} className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-2 text-xs font-bold text-slate-700">
+                        <option value="all">All Apps</option>
+                        {applications.filter(a => selBundle === 'all' || a.bundleId === selBundle).map(a => <option key={a._id} value={a._id}>{a.name}</option>)}
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Milestone (optional)</label>
+                      <select value={selMilestone} onChange={(e) => setSelMilestone(e.target.value)} className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-2 text-xs font-bold text-slate-700">
+                        <option value="all">All Milestones</option>
+                        {milestones.map(m => <option key={m._id} value={m._id}>{m.name}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Diagram Type (optional)</label>
+                    <select value={selectedType || ''} onChange={(e) => setSelectedType(e.target.value || null)} className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-2 text-xs font-bold text-slate-700">
+                      <option value="">None</option>
+                      {DIAGRAM_TYPES.flatMap(g => g.items).map(t => (
+                        <option key={t.id} value={t.id}>{t.label}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Upload File</label>
+                    <input
+                      type="file"
+                      accept=".drawio,.xml,.svg,.png,.jpeg,.jpg,.pdf,.mmd,.md,.json"
+                      onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
+                      className="w-full text-xs"
+                    />
+                    {uploadFile && (
+                      <div className="text-[10px] text-slate-500">Selected: {uploadFile.name}</div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {wizardError && (
+              <div className="px-8 pb-4">
+                <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-[11px] font-bold text-rose-700">
+                  {wizardError}
+                </div>
+              </div>
+            )}
+
+            <div className="px-8 py-6 border-t border-slate-100 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => {
+                  if (!wizardMode) {
+                    setIsWizardOpen(false);
+                    return;
+                  }
+                  if (wizardMode === 'upload') {
+                    setWizardMode(null);
+                    return;
+                  }
+                  setWizardStep(Math.max(1, wizardStep - 1));
+                }}
+                className="px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border border-slate-200 text-slate-500 hover:text-slate-700"
+                disabled={wizardMode && wizardMode !== 'upload' ? wizardStep === 1 : false}
+              >
+                {wizardMode ? 'Back' : 'Cancel'}
+              </button>
+              <div className="flex items-center gap-3">
+                {!wizardMode ? (
+                  <button
+                    type="button"
+                    className="px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest bg-slate-100 text-slate-300"
+                    disabled
+                  >
+                    Next
+                  </button>
+                ) : wizardMode === 'upload' ? (
+                  <button
+                    type="button"
+                    onClick={handleUploadDiagram}
+                    className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest ${(!selectedDocumentTypeId || !uploadFile || uploadingDiagram) ? 'bg-slate-100 text-slate-300' : 'bg-blue-600 text-white'}`}
+                    disabled={!selectedDocumentTypeId || !uploadFile || uploadingDiagram}
+                  >
+                    {uploadingDiagram ? 'Uploading...' : 'Upload'}
+                  </button>
+                ) : wizardMode === 'blank' && wizardStep < 2 ? (
+                  <button
+                    type="button"
+                    onClick={() => setWizardStep(Math.min(2, wizardStep + 1))}
+                    className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest ${wizardStep === 1 && !selectedFormat ? 'bg-slate-100 text-slate-300' : 'bg-blue-600 text-white'}`}
+                    disabled={wizardStep === 1 && !selectedFormat}
+                  >
+                    Next
+                  </button>
+                ) : wizardMode === 'template' && wizardStep < 3 ? (
+                  <button
+                    type="button"
+                    onClick={() => setWizardStep(Math.min(3, wizardStep + 1))}
+                    className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest ${wizardStep === 1 && !selectedType ? 'bg-slate-100 text-slate-300' : wizardStep === 2 && !selectedFormat ? 'bg-slate-100 text-slate-300' : 'bg-blue-600 text-white'}`}
+                    disabled={(wizardStep === 1 && !selectedType) || (wizardStep === 2 && !selectedFormat)}
+                  >
+                    Next
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={createFromWizard}
+                    className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest ${(!selectedFormat || (wizardMode === 'template' && !selectedType) || !selectedDocumentTypeId || creatingDiagram) ? 'bg-slate-100 text-slate-300' : 'bg-slate-900 text-white'}`}
+                    disabled={!selectedFormat || (wizardMode === 'template' && !selectedType) || !selectedDocumentTypeId || creatingDiagram}
+                  >
+                    {creatingDiagram ? 'Creating...' : 'Create'}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -532,9 +1209,11 @@ const ArchitectureDesigner: React.FC<{
   focusReview?: boolean;
   deepLinkReviewId?: string | null;
   deepLinkCycleId?: string | null;
-}> = ({ diagram, onClose, onSuccess, bundles, applications, isEditMode, milestones, focusReview, deepLinkReviewId, deepLinkCycleId }) => {
+  deepLinkThreadId?: string | null;
+}> = ({ diagram, onClose, onSuccess, bundles, applications, isEditMode, milestones, focusReview, deepLinkReviewId, deepLinkCycleId, deepLinkThreadId }) => {
+  const router = useRouter();
   const [savedDiagramId, setSavedDiagramId] = useState<string | null>(
-    diagram?._id || diagram?.id ? String(diagram._id || diagram.id) : null
+    diagram?._id ? String(diagram._id) : null
   );
   const [format, setFormat] = useState<DiagramFormat>(diagram.format || DiagramFormat.MERMAID);
   const [code, setCode] = useState(diagram.content || (diagram.format === DiagramFormat.MERMAID ? DEFAULT_MERMAID_CODE : ''));
@@ -566,18 +1245,29 @@ const ArchitectureDesigner: React.FC<{
   const [commentInitialFilter, setCommentInitialFilter] = useState<'all' | 'discussion' | 'current' | 'past'>('all');
   const [commentInitialCycleId, setCommentInitialCycleId] = useState<string | null>(null);
   const [commentSuppressNewThread, setCommentSuppressNewThread] = useState(false);
-  const diagramId = savedDiagramId || (diagram?._id || diagram?.id ? String(diagram._id || diagram.id) : null);
+  const [commentInitialThreadId, setCommentInitialThreadId] = useState<string | null>(null);
+  const diagramId = savedDiagramId || (diagram?._id ? String(diagram._id) : null);
 
   useEffect(() => {
-    setSavedDiagramId(diagram?._id || diagram?.id ? String(diagram._id || diagram.id) : null);
-  }, [diagram?._id, diagram?.id]);
+    setSavedDiagramId(diagram?._id ? String(diagram._id) : null);
+  }, [diagram?._id]);
 
   useEffect(() => {
     if (!code || code === '') {
       if (format === DiagramFormat.MERMAID) setCode(DEFAULT_MERMAID_CODE);
       else if (format === DiagramFormat.DRAWIO) setCode(DEFAULT_DRAWIO_XML);
     }
+    if (format === DiagramFormat.DRAWIO && code && !code.trim().startsWith('<mxfile')) {
+      setCode(DEFAULT_DRAWIO_XML);
+    }
   }, [format, code]);
+
+  useEffect(() => {
+    if (deepLinkThreadId) {
+      setSideTab('comments');
+      setCommentInitialThreadId(String(deepLinkThreadId));
+    }
+  }, [deepLinkThreadId]);
 
   const setReviewError = (status?: number, message?: string) => {
     let nextMessage = message || 'Action failed.';
@@ -874,6 +1564,8 @@ const ArchitectureDesigner: React.FC<{
   const showVendorResponseEditor = Boolean(showVendorActions && currentCycle?.status === 'vendor_addressing');
   const showVendorResponseReadOnly = Boolean(currentCycle?.vendorResponse?.body && ['feedback_sent', 'vendor_addressing', 'closed'].includes(currentCycle.status));
 
+  const isBinaryFormat = format === DiagramFormat.IMAGE || format === DiagramFormat.PDF;
+
   return (
     <div className="fixed inset-0 z-[200] bg-white flex flex-col animate-fadeIn overflow-hidden">
       <header className="px-10 py-5 bg-white border-b border-slate-200 flex items-center justify-between shrink-0 z-[210]">
@@ -885,10 +1577,10 @@ const ArchitectureDesigner: React.FC<{
           </div>
         </div>
         <div className="flex items-center gap-4">
-          {!readOnly && (
+          {!readOnly && !isBinaryFormat && (
             <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 mr-4 shadow-inner">
-              {[DiagramFormat.MERMAID, DiagramFormat.DRAWIO, DiagramFormat.MINDMAP_MD].map(fmt => (
-                <button key={fmt} onClick={() => setFormat(fmt)} className={`px-4 py-2 text-[9px] font-black uppercase rounded-lg transition-all ${format === fmt ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>{fmt === DiagramFormat.MINDMAP_MD ? 'Mind Map (MD)' : fmt}</button>
+              {[DiagramFormat.MERMAID, DiagramFormat.DRAWIO, DiagramFormat.MINDMAP_MD, DiagramFormat.MINDMAP].map(fmt => (
+                <button key={fmt} onClick={() => setFormat(fmt)} className={`px-4 py-2 text-[9px] font-black uppercase rounded-lg transition-all ${format === fmt ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>{fmt === DiagramFormat.MINDMAP_MD ? 'Mind Map (MD)' : fmt === DiagramFormat.MINDMAP ? 'Mind Map (JSON)' : fmt}</button>
               ))}
             </div>
           )}
@@ -914,7 +1606,9 @@ const ArchitectureDesigner: React.FC<{
 
       <div className="flex-1 flex flex-row overflow-hidden bg-slate-50 relative">
         <div className="flex-1 relative overflow-hidden flex flex-col min-w-0">
-          {format === DiagramFormat.MINDMAP_MD ? (
+          {format === DiagramFormat.MINDMAP ? (
+            <Suspense fallback={<div className="flex-1 flex items-center justify-center bg-white"><i className="fas fa-circle-notch fa-spin text-blue-500 text-2xl"></i></div>}><MindMapFlowEditor initialContent={code} onSave={setCode} readOnly={readOnly} /></Suspense>
+          ) : format === DiagramFormat.MINDMAP_MD ? (
             <Suspense fallback={<div className="flex-1 flex items-center justify-center bg-white"><i className="fas fa-circle-notch fa-spin text-blue-500 text-2xl"></i></div>}><MindMapMarkdownEditor initialContent={code} onSave={setCode} readOnly={readOnly} /></Suspense>
           ) : format === DiagramFormat.MERMAID ? (
             <div className="flex-1 flex overflow-hidden">
@@ -930,8 +1624,18 @@ const ArchitectureDesigner: React.FC<{
                  )}
                </div>
             </div>
-          ) : (
+          ) : format === DiagramFormat.DRAWIO ? (
             <div className="flex-1 relative bg-white h-full w-full"><DrawioEditor xml={code || DEFAULT_DRAWIO_XML} onSave={(xml) => setCode(xml)} readOnly={readOnly} /></div>
+          ) : format === DiagramFormat.IMAGE ? (
+            <div className="flex-1 relative bg-white h-full w-full flex items-center justify-center">
+              {code ? <img src={code} alt={title} className="max-h-full max-w-full object-contain" /> : <div className="text-slate-400 text-sm">No image content</div>}
+            </div>
+          ) : format === DiagramFormat.PDF ? (
+            <div className="flex-1 relative bg-white h-full w-full">
+              {code ? <iframe src={code} className="w-full h-full" /> : <div className="text-slate-400 text-sm p-6">No PDF content</div>}
+            </div>
+          ) : (
+            <div className="flex-1 relative bg-white h-full w-full flex items-center justify-center text-slate-400">Unsupported format</div>
           )}
         </div>
 
@@ -1234,20 +1938,21 @@ const ArchitectureDesigner: React.FC<{
              )}
              {sideTab === 'comments' && (
                <section className="border border-slate-100 rounded-2xl overflow-hidden">
-                 <CommentsDrawer
-                   embedded
-                   isOpen
-                   onClose={() => {}}
-                   resource={diagramId ? { type: 'architecture_diagram', id: String(diagramId), title } : null}
-                   currentUser={currentUser}
-                   initialFilter={commentInitialFilter}
-                   initialCycleId={commentInitialCycleId}
-                   currentReviewCycleId={review?.currentCycleId || null}
-                   reviewId={review?._id ? String(review._id) : (deepLinkReviewId || null)}
-                   suppressNewThread={commentSuppressNewThread}
-                 />
-               </section>
-             )}
+                <CommentsDrawer
+                  embedded
+                  isOpen
+                  onClose={() => {}}
+                  resource={diagramId ? { type: 'architecture_diagram', id: String(diagramId), title } : null}
+                  currentUser={currentUser}
+                  initialFilter={commentInitialFilter}
+                  initialCycleId={commentInitialCycleId}
+                  currentReviewCycleId={review?.currentCycleId || null}
+                  reviewId={review?._id ? String(review._id) : (deepLinkReviewId || null)}
+                  suppressNewThread={commentSuppressNewThread}
+                  initialThreadId={commentInitialThreadId}
+                />
+              </section>
+            )}
            </div>
         </aside>
 
