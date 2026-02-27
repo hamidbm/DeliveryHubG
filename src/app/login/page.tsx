@@ -56,31 +56,31 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6 relative overflow-hidden">
-      <div className="absolute top-0 -right-20 w-80 h-80 bg-blue-600/10 rounded-full blur-[100px]"></div>
-      <div className="absolute bottom-0 -left-20 w-96 h-96 bg-indigo-600/10 rounded-full blur-[120px]"></div>
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6 relative overflow-hidden">
+      <div className="absolute top-0 -right-20 w-80 h-80 bg-blue-200/40 rounded-full blur-[100px]"></div>
+      <div className="absolute bottom-0 -left-20 w-96 h-96 bg-indigo-200/40 rounded-full blur-[120px]"></div>
 
       <div className="max-w-md w-full relative z-10">
         <div className="text-center mb-10">
           <div className="inline-flex items-center justify-center w-20 h-20 bg-blue-600 rounded-3xl mb-6 shadow-2xl shadow-blue-500/30 rotate-3 hover:rotate-0 transition-transform duration-500 animate-fadeIn">
             <i className="fas fa-bolt text-4xl text-white"></i>
           </div>
-          <h1 className="text-4xl font-black text-white tracking-tighter">NexusPortal</h1>
-          <p className="text-slate-400 mt-2 font-medium">Enterprise Software Delivery Ecosystem</p>
+          <h1 className="text-4xl font-black text-slate-900 tracking-tighter">DeliveryHub</h1>
+          <p className="text-slate-500 mt-2 font-medium">Enterprise Software Delivery Ecosystem</p>
         </div>
 
-        <div className="bg-slate-900/40 backdrop-blur-2xl border border-slate-800 rounded-[2.5rem] p-10 shadow-2xl">
-          <h2 className="text-xl font-bold text-white mb-8">System Access</h2>
+        <div className="bg-white/80 backdrop-blur-2xl border border-slate-200 rounded-[2.5rem] p-10 shadow-2xl">
+          <h2 className="text-xl font-bold text-slate-900 mb-8">System Access</h2>
           
           {error && (
-            <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 text-red-400 text-sm rounded-2xl flex items-center gap-3 animate-shake">
+            <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-600 text-sm rounded-2xl flex items-center gap-3 animate-shake">
               <i className="fas fa-shield-halved"></i>
               <span>{error}</span>
             </div>
           )}
 
           {success && (
-            <div className="mb-6 p-4 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm rounded-2xl flex items-center gap-3 animate-fadeIn">
+            <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm rounded-2xl flex items-center gap-3 animate-fadeIn">
               <i className="fas fa-circle-check"></i>
               <span>{success}</span>
             </div>
@@ -90,7 +90,7 @@ export default function LoginPage() {
             <div className="space-y-2">
               <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest ml-1">Identity</label>
               <div className="relative group">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-600 group-focus-within:text-blue-500 transition-colors">
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-blue-500 transition-colors">
                   <i className="fas fa-at"></i>
                 </div>
                 <input
@@ -98,8 +98,8 @@ export default function LoginPage() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full bg-slate-950/50 border border-slate-800 rounded-2xl pl-12 pr-5 py-4 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all placeholder:text-slate-700"
-                  placeholder="nexus-id@company.com"
+                  className="w-full bg-white border border-slate-200 rounded-2xl pl-12 pr-5 py-4 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition-all placeholder:text-slate-400"
+                  placeholder="user@company.com"
                 />
               </div>
             </div>
@@ -107,10 +107,10 @@ export default function LoginPage() {
             <div className="space-y-2">
               <div className="flex justify-between items-center ml-1">
                 <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest">Passcode</label>
-                <button type="button" className="text-[10px] font-bold text-blue-500 hover:text-blue-400 uppercase tracking-tighter">Secure recovery</button>
+                <button type="button" className="text-[10px] font-bold text-blue-600 hover:text-blue-500 uppercase tracking-tighter">Account recovery</button>
               </div>
               <div className="relative group">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-600 group-focus-within:text-blue-500 transition-colors">
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-blue-500 transition-colors">
                   <i className="fas fa-key"></i>
                 </div>
                 <input
@@ -118,7 +118,7 @@ export default function LoginPage() {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-slate-950/50 border border-slate-800 rounded-2xl pl-12 pr-5 py-4 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all placeholder:text-slate-700"
+                  className="w-full bg-white border border-slate-200 rounded-2xl pl-12 pr-5 py-4 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition-all placeholder:text-slate-400"
                   placeholder="••••••••"
                 />
               </div>
@@ -133,11 +133,11 @@ export default function LoginPage() {
                     checked={rememberMe}
                     onChange={(e) => setRememberMe(e.target.checked)}
                   />
-                  <div className={`w-5 h-5 border-2 rounded flex items-center justify-center transition-all ${rememberMe ? 'bg-blue-600 border-blue-600' : 'bg-transparent border-slate-700 group-hover:border-slate-500'}`}>
+                  <div className={`w-5 h-5 border-2 rounded flex items-center justify-center transition-all ${rememberMe ? 'bg-blue-600 border-blue-600' : 'bg-transparent border-slate-300 group-hover:border-slate-400'}`}>
                     {rememberMe && <i className="fas fa-check text-[10px] text-white"></i>}
                   </div>
                 </div>
-                <span className="text-xs font-bold text-slate-400 uppercase tracking-widest select-none">Remember Me</span>
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-widest select-none">Remember Me</span>
               </label>
             </div>
 
@@ -157,7 +157,7 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <div className="mt-8 pt-8 border-t border-slate-800/50 text-center">
+          <div className="mt-8 pt-8 border-t border-slate-200 text-center">
             <p className="text-slate-500 text-sm">
               New to the platform?{' '}
               <a
@@ -170,7 +170,7 @@ export default function LoginPage() {
                     window.location.href = '/register';
                   }
                 }}
-                className="text-blue-500 font-bold hover:text-blue-400 transition cursor-pointer"
+                className="text-blue-600 font-bold hover:text-blue-500 transition cursor-pointer"
               >
                 Request Provisioning
               </a>

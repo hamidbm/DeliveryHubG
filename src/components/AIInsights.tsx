@@ -76,7 +76,7 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
 
         <div className="space-y-6">
            <div className="bg-gradient-to-br from-blue-600 to-indigo-700 p-6 rounded-xl text-white shadow-lg">
-              <h3 className="font-bold text-lg mb-2">Ask Nexus AI</h3>
+              <h3 className="font-bold text-lg mb-2">Ask DeliveryHub AI</h3>
               <p className="text-blue-100 text-sm mb-4">Query your delivery metrics using natural language.</p>
               <div className="relative">
                 <input 

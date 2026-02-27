@@ -400,7 +400,7 @@ const GovernanceDocuments: React.FC = () => {
                 <span className="text-[9px] font-black uppercase tracking-[0.2em] text-blue-100">Compliance Logic Engine</span>
             </div>
             <h4 className="text-3xl font-black tracking-tight leading-tight">Artifact Readiness Scorecard</h4>
-            <p className="text-blue-100/70 text-base max-w-xl font-medium leading-relaxed">Nexus automatically audits your application portfolio against the Taxonomy Registry. Verify required ADRs and Security Assessments per milestone.</p>
+            <p className="text-blue-100/70 text-base max-w-xl font-medium leading-relaxed">DeliveryHub automatically audits your application portfolio against the Taxonomy Registry. Verify required ADRs and Security Assessments per milestone.</p>
           </div>
           
           <div className="relative z-10 flex flex-col items-center gap-4 shrink-0">

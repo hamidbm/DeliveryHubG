@@ -121,7 +121,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
               $addToSet: { 
                 links: { type: inv, targetId: id, targetKey: originalItem.key, targetTitle: originalItem.title } 
               },
-              $push: { activity: { user: 'Nexus System', action: 'AUTO_LINK_SYNC', field: 'links', to: `Inferred ${inv} from ${originalItem.key}`, createdAt: now } }
+              $push: { activity: { user: 'DeliveryHub System', action: 'AUTO_LINK_SYNC', field: 'links', to: `Inferred ${inv} from ${originalItem.key}`, createdAt: now } }
             } as any
           );
         }
@@ -139,7 +139,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
             targetFilter,
             { 
               $pull: { links: { targetId: id, type: inv } },
-              $push: { activity: { user: 'Nexus System', action: 'AUTO_LINK_PURGE', field: 'links', to: `Severed ${inv} relation with ${originalItem.key}`, createdAt: now } }
+              $push: { activity: { user: 'DeliveryHub System', action: 'AUTO_LINK_PURGE', field: 'links', to: `Severed ${inv} relation with ${originalItem.key}`, createdAt: now } }
             } as any
           );
         }

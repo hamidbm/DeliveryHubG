@@ -318,7 +318,7 @@ const DrawioEditor: React.FC<{
         } else if (data.event === 'save' || data.event === 'autosave' || data.event === 'export') {
           if (data.xml) onSaveRef.current(data.xml);
           if (data.event === 'save' || data.event === 'export') {
-             iframe.contentWindow.postMessage(JSON.stringify({ action: 'status', message: 'Nexus Registry Synchronized', modified: false }), '*');
+             iframe.contentWindow.postMessage(JSON.stringify({ action: 'status', message: 'Registry Synchronized', modified: false }), '*');
           }
         }
       } catch (e) {}

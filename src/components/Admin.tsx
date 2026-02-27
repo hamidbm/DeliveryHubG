@@ -11,8 +11,9 @@ import AdminAdmins from './AdminAdmins';
 import AdminWorkBlueprints from './AdminWorkBlueprints';
 import AdminWorkGenerators from './AdminWorkGenerators';
 import AdminDiagramTemplates from './AdminDiagramTemplates';
+import AdminSamples from './AdminSamples';
 
-type AdminModuleId = 'home' | 'wiki-themes' | 'wiki-templates' | 'diagram-templates' | 'vendors' | 'roles' | 'bundles' | 'applications' | 'taxonomy' | 'artifact-rules' | 'milestone-templates' | 'users' | 'sharepoint' | 'ai-settings' | 'bundle-assignments' | 'admins' | 'work-blueprints' | 'work-generators';
+type AdminModuleId = 'home' | 'wiki-themes' | 'wiki-templates' | 'diagram-templates' | 'vendors' | 'roles' | 'bundles' | 'applications' | 'taxonomy' | 'artifact-rules' | 'milestone-templates' | 'users' | 'sharepoint' | 'ai-settings' | 'bundle-assignments' | 'admins' | 'work-blueprints' | 'work-generators' | 'samples';
 
 interface AdminModule {
   id: AdminModuleId;
@@ -78,6 +79,7 @@ const Admin: React.FC = () => {
         { id: 'bundles', label: 'Bundles', icon: 'fa-layer-group', description: 'Configure business bundles and application hierarchies.', color: 'slate' },
         { id: 'applications', label: 'Applications', icon: 'fa-cubes', description: 'Onboard enterprise software assets and identity metadata.', color: 'blue' },
         { id: 'taxonomy', label: 'Taxonomy', icon: 'fa-tags', description: 'Define document categories, types, and format options.', color: 'emerald' },
+        { id: 'samples', label: 'Samples', icon: 'fa-vial', description: 'Import curated sample data into the database.', color: 'amber' },
       ]
     },
     {
@@ -196,6 +198,8 @@ const Admin: React.FC = () => {
         return <AdminWorkGenerators />;
       case 'diagram-templates':
         return <AdminDiagramTemplates />;
+      case 'samples':
+        return <AdminSamples />;
       default:
         return (
           <div className="flex flex-col h-full bg-white relative">
@@ -238,7 +242,7 @@ const Admin: React.FC = () => {
              </div>
              <h2 className="text-xl font-black text-slate-900 tracking-tighter">Console</h2>
            </div>
-           <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Nexus System Admin</p>
+           <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">DeliveryHub System Admin</p>
         </div>
         
         <nav className="flex-1 p-6 space-y-2 overflow-y-auto custom-scrollbar">

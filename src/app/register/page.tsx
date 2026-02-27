@@ -61,36 +61,36 @@ export default function RegisterPage() {
         setError(data.error || 'Registration failed. Please contact your system administrator.');
       }
     } catch (err) {
-      setError('A network error occurred. Check your connection to the Nexus network.');
+      setError('A network error occurred. Check your connection and try again.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6 relative overflow-hidden">
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6 relative overflow-hidden">
       {/* Decorative Background Elements */}
-      <div className="absolute top-0 -left-20 w-72 h-72 bg-blue-600/10 rounded-full blur-3xl"></div>
-      <div className="absolute bottom-0 -right-20 w-96 h-96 bg-indigo-600/10 rounded-full blur-3xl"></div>
+      <div className="absolute top-0 -left-20 w-72 h-72 bg-blue-200/40 rounded-full blur-3xl"></div>
+      <div className="absolute bottom-0 -right-20 w-96 h-96 bg-indigo-200/40 rounded-full blur-3xl"></div>
 
       <div className="max-w-md w-full relative z-10">
         <div className="text-center mb-10">
           <div className="inline-flex items-center justify-center w-20 h-20 bg-blue-600 rounded-3xl mb-6 shadow-2xl shadow-blue-500/20 rotate-3 animate-fadeIn">
             <i className="fas fa-id-card text-4xl text-white"></i>
           </div>
-          <h1 className="text-3xl font-bold text-white tracking-tight">Access Provisioning</h1>
-          <p className="text-slate-400 mt-2 font-medium">Register for the NexusDelivery Portal</p>
+          <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Access Provisioning</h1>
+          <p className="text-slate-500 mt-2 font-medium">Register for DeliveryHub</p>
         </div>
 
-        <div className="bg-slate-900/50 backdrop-blur-xl border border-slate-800 rounded-[2.5rem] p-10 shadow-2xl">
+        <div className="bg-white/80 backdrop-blur-xl border border-slate-200 rounded-[2.5rem] p-10 shadow-2xl">
           {error && (
-            <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 text-red-400 text-sm rounded-2xl flex items-center gap-3">
+            <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-600 text-sm rounded-2xl flex items-center gap-3">
               <i className="fas fa-exclamation-triangle"></i>
               <span>{error}</span>
             </div>
           )}
           {success && (
-            <div className="mb-6 p-4 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm rounded-2xl flex items-center gap-3">
+            <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm rounded-2xl flex items-center gap-3">
               <i className="fas fa-circle-check"></i>
               <span>{success}</span>
             </div>
@@ -104,7 +104,7 @@ export default function RegisterPage() {
                 required
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full bg-slate-950/50 border border-slate-800 rounded-2xl px-5 py-4 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all placeholder:text-slate-700"
+                className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-4 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition-all placeholder:text-slate-400"
                 placeholder="Engineer Name"
               />
             </div>
@@ -116,7 +116,7 @@ export default function RegisterPage() {
                 required
                 value={formData.username}
                 onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                className="w-full bg-slate-950/50 border border-slate-800 rounded-2xl px-5 py-4 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all placeholder:text-slate-700"
+                className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-4 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition-all placeholder:text-slate-400"
                 placeholder="first.last"
               />
             </div>
@@ -128,8 +128,8 @@ export default function RegisterPage() {
                 required
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                className="w-full bg-slate-950/50 border border-slate-800 rounded-2xl px-5 py-4 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all placeholder:text-slate-700"
-                placeholder="user@nexus.com"
+                className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-4 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition-all placeholder:text-slate-400"
+                placeholder="user@company.com"
               />
             </div>
 
@@ -146,15 +146,15 @@ export default function RegisterPage() {
                       role: TEAM_ROLE_OPTIONS[nextTeam][0]
                     });
                   }}
-                  className="w-full bg-slate-950/50 border border-slate-800 rounded-2xl px-5 py-4 text-white appearance-none focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all cursor-pointer"
+                  className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-4 text-slate-900 appearance-none focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition-all cursor-pointer"
                 >
                   {Object.values(Team).map((teamValue) => (
-                    <option key={teamValue} value={teamValue} className="bg-slate-900 text-white">
+                    <option key={teamValue} value={teamValue} className="bg-white text-slate-900">
                       {teamValue}
                     </option>
                   ))}
                 </select>
-                <div className="absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500">
+                <div className="absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
                   <i className="fas fa-chevron-down text-xs"></i>
                 </div>
               </div>
@@ -166,15 +166,15 @@ export default function RegisterPage() {
                 <select
                   value={formData.role}
                   onChange={(e) => setFormData({ ...formData, role: e.target.value as Role })}
-                  className="w-full bg-slate-950/50 border border-slate-800 rounded-2xl px-5 py-4 text-white appearance-none focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all cursor-pointer"
+                  className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-4 text-slate-900 appearance-none focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition-all cursor-pointer"
                 >
                   {TEAM_ROLE_OPTIONS[formData.team].map((roleValue) => (
-                    <option key={roleValue} value={roleValue} className="bg-slate-900 text-white">
+                    <option key={roleValue} value={roleValue} className="bg-white text-slate-900">
                       {roleValue}
                     </option>
                   ))}
                 </select>
-                <div className="absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500">
+                <div className="absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
                   <i className="fas fa-chevron-down text-xs"></i>
                 </div>
               </div>
@@ -188,7 +188,7 @@ export default function RegisterPage() {
                 minLength={8}
                 value={formData.password}
                 onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                className="w-full bg-slate-950/50 border border-slate-800 rounded-2xl px-5 py-4 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all placeholder:text-slate-700"
+                className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-4 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition-all placeholder:text-slate-400"
                 placeholder="••••••••"
               />
             </div>
@@ -209,7 +209,7 @@ export default function RegisterPage() {
             </button>
           </form>
 
-          <div className="mt-8 pt-8 border-t border-slate-800/50 text-center">
+          <div className="mt-8 pt-8 border-t border-slate-200 text-center">
             <p className="text-slate-500 text-sm">
               Already have credentials?{' '}
               <a
@@ -222,7 +222,7 @@ export default function RegisterPage() {
                     window.location.href = '/login';
                   }
                 }}
-                className="text-blue-500 font-bold hover:text-blue-400 transition cursor-pointer"
+                className="text-blue-600 font-bold hover:text-blue-500 transition cursor-pointer"
               >
                 Sign In
               </a>
@@ -230,8 +230,8 @@ export default function RegisterPage() {
           </div>
         </div>
 
-        <p className="text-center text-slate-600 text-[10px] mt-8 uppercase tracking-[0.2em] font-black">
-          Nexus Security Protocol v4.0.2
+        <p className="text-center text-slate-500 text-[10px] mt-8 uppercase tracking-[0.2em] font-black">
+          Security Protocol v4.0.2
         </p>
       </div>
     </div>

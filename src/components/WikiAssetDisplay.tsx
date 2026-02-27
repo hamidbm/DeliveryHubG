@@ -130,7 +130,7 @@ const WikiAssetDisplay: React.FC<WikiAssetDisplayProps> = ({
         <div className="py-32 flex flex-col items-center justify-center bg-slate-50 rounded-[3rem] border-2 border-dashed border-slate-100">
            <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-6"></div>
            <h4 className="text-xl font-black text-slate-800 tracking-tight uppercase">Normalizing Artifact Preview</h4>
-           <p className="text-slate-400 font-medium">Nexus is preparing the document for secure inline reading...</p>
+          <p className="text-slate-400 font-medium">DeliveryHub is preparing the document for secure inline reading...</p>
         </div>
       );
     }

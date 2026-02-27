@@ -66,7 +66,7 @@ const ArchitectureHub: React.FC<ArchitectureHubProps> = ({ applications, bundles
         <div className="flex items-center gap-6 shrink-0">
           <div>
             <h2 className="text-xl font-black text-slate-800 tracking-tight">Enterprise Architecture</h2>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Nexus EAM Plane</p>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Architecture Execution Plane</p>
           </div>
           <div className="h-8 w-[1px] bg-slate-100"></div>
           <nav className="flex bg-slate-100 p-1 rounded-xl shrink-0">

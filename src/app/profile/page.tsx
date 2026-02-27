@@ -75,7 +75,7 @@ export default function ProfilePage() {
         // Synchronize local state with the new claims returned from the server
         setUser({ ...user, role: targetRole });
       } else {
-        setError(data.error || 'The Nexus gateway rejected the update request.');
+        setError(data.error || 'The DeliveryHub gateway rejected the update request.');
       }
     } catch (err) {
       setError('Connection to security services lost. Please retry.');

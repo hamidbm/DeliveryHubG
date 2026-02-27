@@ -53,7 +53,7 @@ ${item.description || 'No description provided.'}
     // Mark item as snapshotted in activity
     await db.collection('workitems').updateOne(
       { _id: new ObjectId(id) },
-      { $push: { activity: { user: 'Nexus Governance', action: 'AUDIT_SNAPSHOT_CREATED', createdAt: now } } } as any
+      { $push: { activity: { user: 'DeliveryHub Governance', action: 'AUDIT_SNAPSHOT_CREATED', createdAt: now } } } as any
     );
 
     return NextResponse.json({ success: true });
