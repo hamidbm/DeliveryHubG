@@ -1,35 +1,46 @@
 # Architecture Module
 
-The Architecture module supports system integration views and diagram management.
+The Architecture module supports system integration views, diagram management, and review workflows for architectural artifacts.
 
 ## Core Features
-- Integration map views for system interfaces
-- Architecture diagrams with multiple formats
-- Capability and integration metadata
-- Exportable visuals for documentation and reviews
+- Architecture diagram gallery (Mermaid, Draw.io, Markdown/Mindmap)
+- Diagram creation wizard (blank, template-based, or upload)
+- Document metadata (document type, bundle, application, milestone)
+- Architecture reviews with cycles and reviewer feedback
+- Linked Work Items for review requests
+- Inline diagram rendering inside wiki pages
 
 ## Diagram Types
 - Mermaid diagrams for text-to-diagram workflows
 - Mind map diagrams for conceptual structure
-- Draw.io and other uploaded diagram assets
+- Draw.io diagrams (embedded editor + XML content)
+- Uploaded assets (.drawio/.xml, .svg, .png, .jpeg, .pdf, .mmd, .md, .json)
 
-## Views
-- Integration matrix and relationship maps
-- Architecture diagram gallery
-- Inline diagram rendering inside wiki pages
+## Diagram Creation
+- Wizard flow supports:
+  - Blank creation (choose format + metadata)
+  - Template selection (from Admin-managed templates)
+  - Upload from local files
+- Document type is required for all diagrams.
+- Bundle, application, and milestone are optional metadata.
 
-## Diagram Rendering
-- Client-side rendering for Mermaid and mind maps
-- Sanitized inputs for safety
-- Diagram export where supported
+## Reviews
+- Submit diagram for review with default reviewers (CMO/Admin) and optional additional reviewers.
+- Review cycles track requests, reviewer feedback, and vendor responses.
+- Review comments are stored separately from general diagram comments.
+- A Work Item is created automatically for each review request and links back to the diagram.
+- See `docs/wiki/Reviews.md` for the shared workflow.
 
-## AI Assistance
-Architecture diagrams can be supported by AI workflows when enabled:
-- Generate diagram drafts from structured input
-- Summarize architecture documents
-- Extract key decisions and assumptions from design content
+## Comments
+- Diagram comments are stored in comment threads/messages.
+- Review comments entered through the review flow are also linked into the review Work Item.
 
-AI outputs are never applied automatically and require explicit user action.
+## Activities
+- Architecture events are emitted for creation, upload, and updates.
+- Events appear under Activities → Architecture.
 
 ## Data
-- Stored in `architecture_diagrams` and `interfaces` collections
+- Diagrams stored in `architecture_diagrams`
+- Templates in `diagram_templates`
+- Reviews in `reviews`
+- Comments in `comment_threads` and `comment_messages`

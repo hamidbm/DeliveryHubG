@@ -1,14 +1,26 @@
 # Applications Module
 
-The Applications module is the portfolio inventory for systems and services.
+The Applications module is the portfolio inventory for systems and services, with bundle-level profiles for executive visibility.
 
-## Features
+## Core Features
 - Application registry and metadata
-- Ownership, lifecycle, and classification fields
-- Filtering and search
+- Bundle profiles and ownership mapping
+- Lifecycle, criticality, and migration status fields
+- Portfolio-level search and filtering
 - Cross-linking to architecture and wiki artifacts
-- Bundles and milestones association
-- Portfolio-level grouping and reporting
+
+## Bundle Profiles
+- Bundle summary and key metrics
+- Ownership and executive accountability (driven by Admin → Bundle Assignments)
+- Milestone status rollups
+- Risks & Dependencies tab (read-only summary from Work Items)
+  - Open risks count
+  - High severity risks
+  - Blocking dependencies
+  - Quick-create risk/dependency work items
 
 ## Data
-- Stored in `applications` collection
+- Applications stored in `applications`
+- Bundles stored in `bundles`
+- Bundle profiles stored in `bundle_profiles`
+- Bundle assignments stored in `bundle_assignments`

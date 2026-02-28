@@ -38,7 +38,35 @@ Observed indexes:
 
 ### `architecture_diagrams`
 Top-level fields:
-- `_id`, `content`, `createdBy`, `format`, `status`, `title`, `updatedAt`
+- `_id`, `content`, `createdBy`, `format`, `status`, `title`, `documentTypeId`, `bundleId`, `applicationId`, `milestoneId`, `updatedAt`
+
+Observed indexes:
+- `{ _id: 1 }`
+
+### `diagram_templates`
+Top-level fields:
+- `_id`, `key`, `name`, `diagramType`, `format`, `content`, `isActive`, `isDefault`, `createdAt`, `updatedAt`
+
+Observed indexes:
+- `{ _id: 1 }`
+
+### `admins`
+Top-level fields:
+- `_id`, `userId`, `createdAt`, `createdBy`
+
+Observed indexes:
+- `{ _id: 1 }`
+
+### `bundle_assignments`
+Top-level fields:
+- `_id`, `bundleId`, `userId`, `role`, `createdAt`
+
+Observed indexes:
+- `{ _id: 1 }`
+
+### `bundle_profiles`
+Top-level fields:
+- `_id`, `bundleId`, `health`, `summary`, `updatedAt`, `updatedBy`
 
 Observed indexes:
 - `{ _id: 1 }`
@@ -195,16 +223,72 @@ Top-level fields:
 Observed indexes:
 - `{ _id: 1 }`
 
-### `work_items`
+### `workitems`
 Top-level fields:
-- `_id`, `activity`, `applicationId`, `assignedTo`, `bundleId`, `createdAt`, `createdBy`, `description`, `key`, `milestoneIds`, `priority`, `status`, `title`, `type`, `updatedAt`, `updatedBy`
+- `_id`, `activity`, `applicationId`, `assigneeUserIds`, `watcherUserIds`, `bundleId`, `createdAt`, `createdBy`, `description`, `key`, `milestoneIds`, `priority`, `status`, `title`, `type`, `rank`, `linkedResource`, `reviewId`, `reviewCycleId`, `updatedAt`, `updatedBy`
 
 Observed indexes:
 - `{ _id: 1 }`
 
-### `workitems` (legacy)
+### `workitems_attachments`
 Top-level fields:
-- `_id`, `applicationId`, `assignedTo`, `bundleId`, `createdAt`, `description`, `priority`, `status`, `title`, `type`, `updatedAt`
+- `_id`, `workItemId`, `filename`, `contentType`, `size`, `createdAt`, `createdBy`
+
+Observed indexes:
+- `{ _id: 1 }`
+
+### `workitems_sprints`
+Top-level fields:
+- `_id`, `bundleId`, `applicationId`, `name`, `startDate`, `endDate`, `status`, `createdAt`
+
+Observed indexes:
+- `{ _id: 1 }`
+
+### `work_blueprints`
+Top-level fields:
+- `_id`, `key`, `name`, `description`, `steps`, `createdAt`, `updatedAt`
+
+Observed indexes:
+- `{ _id: 1 }`
+
+### `work_generators`
+Top-level fields:
+- `_id`, `eventType`, `isActive`, `rules`, `createdAt`, `updatedAt`
+
+Observed indexes:
+- `{ _id: 1 }`
+
+### `reviews`
+Top-level fields:
+- `_id`, `resource`, `status`, `currentCycleId`, `currentCycleStatus`, `currentReviewerUserIds`, `cycles`, `createdAt`, `updatedAt`
+
+Observed indexes:
+- `{ _id: 1 }`
+
+### `comment_threads`
+Top-level fields:
+- `_id`, `resource`, `reviewId`, `reviewCycleId`, `participants`, `status`, `lastActivityAt`, `createdAt`
+
+Observed indexes:
+- `{ _id: 1 }`
+
+### `comment_messages`
+Top-level fields:
+- `_id`, `threadId`, `author`, `body`, `mentions`, `createdAt`
+
+Observed indexes:
+- `{ _id: 1 }`
+
+### `feedback_packages`
+Top-level fields:
+- `_id`, `resource`, `status`, `files`, `notes`, `createdAt`, `updatedAt`
+
+Observed indexes:
+- `{ _id: 1 }`
+
+### `work_items` (legacy)
+Top-level fields:
+- `_id`, `activity`, `applicationId`, `assignedTo`, `bundleId`, `createdAt`, `createdBy`, `description`, `key`, `milestoneIds`, `priority`, `status`, `title`, `type`, `updatedAt`, `updatedBy`
 
 Observed indexes:
 - `{ _id: 1 }`
@@ -455,3 +539,16 @@ run().catch(err => {
   "updatedBy": "Hamid Ben Malek"
 }
 ```
+### `events`
+Top-level fields:
+- `_id`, `type`, `ts`, `actor`, `resource`, `context`, `correlationId`
+
+Observed indexes:
+- `{ _id: 1 }`
+
+### `user_event_state`
+Top-level fields:
+- `_id`, `userId`, `lastSeenAt`, `resources`
+
+Observed indexes:
+- `{ _id: 1 }`

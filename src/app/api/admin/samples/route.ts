@@ -5,7 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import { EJSON } from 'bson';
 import { MongoClient } from 'mongodb';
-import { isAdmin } from '../../../../../services/db';
+import { isAdmin } from '../../../../services/db';
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
 const DEFAULT_DB = process.env.MONGODB_DB_NAME || 'deliveryhub';

@@ -5,11 +5,12 @@ DeliveryHub is organized into functional modules that map to delivery governance
 ## Modules
 - Dashboards: executive and program-level rollups
 - Work Items: epics, features, stories, tasks with kanban and analytics
-- Architecture: integration and capability views, diagrams
-- Applications: portfolio inventory and metadata
+- Architecture: integration and capability views, diagram reviews
+- Applications: portfolio inventory, bundle profiles, risk/dependency rollups
 - Wiki: documentation, assets, AI-assisted insights
+- Activities: unified feed across reviews, comments, work items, and architecture
 - AI Insights: cross-module insights and summaries
-- Admin: taxonomies, settings, themes, AI policy
+- Admin: taxonomies, settings, themes, templates, AI policy
 
 ## Cross-Cutting Capabilities
 - Role-aware access and ownership

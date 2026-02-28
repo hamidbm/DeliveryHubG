@@ -1,25 +1,29 @@
 # Work Items Module
 
-The Work Items module is the execution system for DeliveryHub. It supports planning, tracking, and reporting for delivery work across milestones, bundles, and applications.
+The Work Items module is the execution system for DeliveryHub. It supports planning, tracking, and reporting for delivery work across milestones, bundles, and applications, and acts as the system of record for risks and dependencies.
 
 ## Work Item Types
 - Epic
 - Feature
-- Story
+- User Story
 - Task
+- Risk
+- Dependency
 
 Each item can have a parent and children to form a delivery hierarchy.
 
 ## Core Features
 - Hierarchical work items with parent-child relationships
-- Kanban board with status columns
-- Tree view for portfolio-level navigation
-- List view for fast filtering and bulk actions
-- Roadmap view for time-based planning
-- Milestone planning view
-- Activity history per item
-- Assignment and ownership tracking
-- Priority, due dates, and metadata fields
+- Tree view, list view, board view (Kanban), backlog, and roadmap
+- Drag-and-drop status changes on board/backlog
+- Sprint planning and milestone planning
+- Activity history per item (status changes, assignments, links)
+- Assignment, watchers, and ownership tracking
+- Priority, due dates, health, and metadata fields
+- Dependencies and cross-item links
+- Attachments and comments
+- Linked resources (e.g., wiki pages, architecture diagrams)
+- Review-driven work items (auto-created from review requests)
 
 ## Views
 
@@ -27,16 +31,22 @@ Each item can have a parent and children to form a delivery hierarchy.
 - Explore epics, features, stories, and tasks in hierarchy
 - Expand and collapse to control scope
 - Select an item to see details and activity
+- Link badges show connected items and resources
 
-### Kanban Board
+### Board (Kanban)
 - Drag-and-drop across status columns
-- Visualize flow of work
-- Focus on current milestone or bundle
+- Visualize flow of work by phase
+- Filter by bundle, application, milestone, and assignee
+
+### Backlog
+- Ranked list of work items
+- Quick reprioritization
+- Focus on upcoming milestones
 
 ### List View
 - Flat list for search and filters
 - Sort by status, owner, or priority
-- Bulk update statuses and assignments
+- Bulk selection and quick actions
 
 ### Roadmap View
 - Timeline-style visualization
@@ -54,6 +64,12 @@ Each item can have a parent and children to form a delivery hierarchy.
 - DONE
 - BLOCKED
 
+## Reviews Integration
+- Review requests (wiki or architecture) can generate user stories automatically.
+- Review cycles can be synced back into the work item.
+- Review attachments and reviewer responses are linked into the work item activity.
+- See `docs/wiki/Reviews.md` for the shared workflow.
+
 ## Activity and History
 - Every update is logged as activity
 - Status and assignment changes are tracked
@@ -65,6 +81,7 @@ Each item can have a parent and children to form a delivery hierarchy.
 - Milestone
 - Status
 - Assignee
+- My Issues (assigned to current user)
 
 ## AI Assistance
 Work Items support AI-generated insights for planning and delivery management. AI is assistive only and requires explicit user action to apply results.
@@ -76,9 +93,8 @@ Supported AI workflows:
 - Rationalize scope or priorities
 - Refine task descriptions
 
-AI behavior is controlled by Admin settings and governed through rate limits, retention, and audit logs.
-
 ## Data
-- Stored in `work_items` collection
-- Historical snapshots are tracked
-- Activity history is stored alongside items
+- Stored in `workitems` collection
+- Attachments stored in `workitems_attachments`
+- Sprint planning in `workitems_sprints`
+- Historical snapshots tracked alongside items

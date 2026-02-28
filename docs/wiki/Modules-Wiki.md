@@ -20,6 +20,12 @@ The Wiki module is the documentation hub for DeliveryHub. It supports authored p
 - Draft, In Review, Approved, Rejected, Archived
 - Ownership and explicit approvals required
 
+## Reviews
+- Wiki pages and assets can be submitted for review.
+- Review cycles capture reviewer feedback and vendor responses.
+- A linked Work Item is created for each review request.
+- See `docs/wiki/Reviews.md` for the shared workflow.
+
 ## Assets
 - Word uploads are converted to Markdown
 - Original file is preserved for download

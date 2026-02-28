@@ -11,6 +11,7 @@ Use this wiki to understand what the app does today, how it is structured, and h
 - Work Items module: see `docs/wiki/Modules-WorkItems.md`
 - Applications module: see `docs/wiki/Modules-Applications.md`
 - Architecture module: see `docs/wiki/Modules-Architecture.md`
+- Reviews: see `docs/wiki/Reviews.md`
 - Dashboards and AI Insights: see `docs/wiki/Modules-Dashboards.md`
 - Admin module: see `docs/wiki/Admin.md`
 - AI capabilities and governance: see `docs/wiki/AI.md`
