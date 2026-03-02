@@ -36,6 +36,7 @@ COPY --from=build /app/next.config.* ./
 COPY --from=build /app/public ./public
 COPY --from=build /app/.next ./.next
 COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/seed ./seed
 
 # If you use the App Router and standalone output, you’d copy /app/.next/standalone instead.
 # (Optional optimization, depends on your build settings.)
