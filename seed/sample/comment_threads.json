@@ -1,0 +1,54 @@
+[
+  {
+    "_seedKey": "thread:review-1",
+    "status": "open",
+    "createdAt": "2026-03-02T04:33:31.832Z",
+    "lastActivityAt": "2026-03-02T04:33:31.832Z",
+    "_refs": {
+      "reviewSeedKey": "review:diagram-1",
+      "participantEmails": [
+        "amina.rahman@example.com",
+        "omar.haddad@example.com"
+      ]
+    }
+  },
+  {
+    "_seedKey": "thread:review-2",
+    "status": "open",
+    "createdAt": "2026-03-02T04:33:31.832Z",
+    "lastActivityAt": "2026-03-02T04:33:31.832Z",
+    "_refs": {
+      "reviewSeedKey": "review:diagram-1",
+      "participantEmails": [
+        "david.chen@example.com",
+        "omar.haddad@example.com"
+      ]
+    }
+  },
+  {
+    "_seedKey": "thread:review-wiki-1",
+    "status": "open",
+    "createdAt": "2026-03-02T04:33:31.832Z",
+    "lastActivityAt": "2026-03-02T04:33:31.832Z",
+    "_refs": {
+      "reviewSeedKey": "review:wiki-1",
+      "participantEmails": [
+        "amina.rahman@example.com",
+        "sophie.martin@example.com"
+      ]
+    }
+  },
+  {
+    "_seedKey": "thread:review-risk-1",
+    "status": "open",
+    "createdAt": "2026-03-02T04:33:31.832Z",
+    "lastActivityAt": "2026-03-02T04:33:31.832Z",
+    "_refs": {
+      "reviewSeedKey": "review:risk-1",
+      "participantEmails": [
+        "amina.rahman@example.com",
+        "james.walker@example.com"
+      ]
+    }
+  }
+]

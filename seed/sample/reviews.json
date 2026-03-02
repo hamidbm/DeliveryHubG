@@ -1,0 +1,117 @@
+[
+  {
+    "_seedKey": "review:diagram-1",
+    "status": "active",
+    "createdAt": "2026-03-02T04:33:31.831Z",
+    "updatedAt": "2026-03-02T04:33:31.831Z",
+    "currentCycleId": "cycle-001",
+    "currentCycleStatus": "feedback_sent",
+    "cycles": [
+      {
+        "cycleId": "cycle-001",
+        "number": 1,
+        "status": "feedback_sent",
+        "requestedAt": "2026-03-02T04:33:31.831Z",
+        "requestedByEmail": "omar.haddad@example.com",
+        "reviewersEmails": [
+          "amina.rahman@example.com",
+          "david.chen@example.com"
+        ],
+        "feedbackSentAt": "2026-03-02T04:33:31.831Z",
+        "feedbackSentByEmail": "amina.rahman@example.com",
+        "reviewerNote": {
+          "body": "Please confirm the cache invalidation strategy and DR topology.",
+          "createdAt": "2026-03-02T04:33:31.831Z"
+        },
+        "vendorResponse": {
+          "body": "We will add cache invalidation notes and DR topology in the next revision.",
+          "submittedAt": "2026-03-02T04:33:31.831Z"
+        },
+        "correlationId": "sample-review-cycle-1"
+      },
+      {
+        "cycleId": "cycle-002",
+        "number": 2,
+        "status": "closed",
+        "requestedAt": "2026-03-02T04:33:31.831Z",
+        "requestedByEmail": "omar.haddad@example.com",
+        "reviewersEmails": [
+          "amina.rahman@example.com"
+        ],
+        "feedbackSentAt": "2026-03-02T04:33:31.831Z",
+        "feedbackSentByEmail": "amina.rahman@example.com",
+        "reviewerNote": {
+          "body": "Reviewed update; ok to proceed.",
+          "createdAt": "2026-03-02T04:33:31.831Z"
+        },
+        "vendorResponse": {
+          "body": "Changes applied and validated.",
+          "submittedAt": "2026-03-02T04:33:31.831Z"
+        },
+        "correlationId": "sample-review-cycle-2"
+      }
+    ],
+    "_refs": {
+      "diagramSeedKey": "diagram:bundle-1"
+    }
+  },
+  {
+    "_seedKey": "review:wiki-1",
+    "status": "active",
+    "createdAt": "2026-03-02T04:33:31.831Z",
+    "updatedAt": "2026-03-02T04:33:31.831Z",
+    "currentCycleId": "wiki-cycle-1",
+    "currentCycleStatus": "vendor_addressing",
+    "cycles": [
+      {
+        "cycleId": "wiki-cycle-1",
+        "number": 1,
+        "status": "vendor_addressing",
+        "requestedAt": "2026-03-02T04:33:31.831Z",
+        "requestedByEmail": "sophie.martin@example.com",
+        "reviewersEmails": [
+          "amina.rahman@example.com"
+        ],
+        "feedbackSentAt": "2026-03-02T04:33:31.831Z",
+        "feedbackSentByEmail": "amina.rahman@example.com",
+        "reviewerNote": {
+          "body": "Please add compliance references and audit controls.",
+          "createdAt": "2026-03-02T04:33:31.831Z"
+        },
+        "vendorResponse": {
+          "body": "Working on compliance references; will update.",
+          "submittedAt": "2026-03-02T04:33:31.831Z"
+        },
+        "correlationId": "sample-review-wiki-1"
+      }
+    ],
+    "_refs": {
+      "wikiPageSeedKey": "wiki_page:extra-2"
+    }
+  },
+  {
+    "_seedKey": "review:risk-1",
+    "status": "active",
+    "createdAt": "2026-03-02T04:33:31.831Z",
+    "updatedAt": "2026-03-02T04:33:31.831Z",
+    "currentCycleId": "risk-cycle-1",
+    "currentCycleStatus": "requested",
+    "cycles": [
+      {
+        "cycleId": "risk-cycle-1",
+        "number": 1,
+        "status": "requested",
+        "requestedAt": "2026-03-02T04:33:31.831Z",
+        "requestedByEmail": "james.walker@example.com",
+        "reviewersEmails": [
+          "amina.rahman@example.com",
+          "david.chen@example.com"
+        ],
+        "correlationId": "sample-review-risk-1"
+      }
+    ],
+    "_refs": {
+      "workitemSeedKey": "workitem:risk-1"
+    }
+  }
+]

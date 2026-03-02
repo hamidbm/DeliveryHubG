@@ -1,0 +1,899 @@
+[
+  {
+    "key": "GPS-F1",
+    "type": "FEATURE",
+    "title": "GPS Data Platform Migration",
+    "description": "Feature 1 for GPS.",
+    "status": "IN_PROGRESS",
+    "priority": "HIGH",
+    "createdAt": "2026-03-02T04:33:31.830Z",
+    "updatedAt": "2026-03-02T04:33:31.830Z",
+    "_seedKey": "workitem:GPS:feature-1",
+    "_refs": {
+      "bundleName": "GPS",
+      "parentKey": "GPS-EPIC",
+      "assigneeEmails": [
+        "marco.silva@example.com"
+      ],
+      "createdByEmail": "james.walker@example.com",
+      "updatedByEmail": "james.walker@example.com"
+    }
+  },
+  {
+    "key": "GPS-S1",
+    "type": "STORY",
+    "title": "Implement API gateway policies",
+    "description": "Deliver scoped implementation work for this feature.",
+    "status": "IN_PROGRESS",
+    "priority": "HIGH",
+    "createdAt": "2026-03-02T04:33:31.830Z",
+    "updatedAt": "2026-03-02T04:33:31.830Z",
+    "_seedKey": "workitem:GPS:story-1",
+    "_refs": {
+      "bundleName": "GPS",
+      "parentKey": "GPS-F1",
+      "assigneeEmails": [
+        "priya.nair@example.com"
+      ],
+      "watcherEmails": [
+        "omar.haddad@example.com"
+      ],
+      "createdByEmail": "sophie.martin@example.com",
+      "updatedByEmail": "sophie.martin@example.com"
+    },
+    "linkedResource": {
+      "type": "architecture_diagram",
+      "id": "__RESOLVE__",
+      "title": "GPS Target Architecture"
+    },
+    "_refsLinkedDiagram": {
+      "diagramSeedKey": "diagram:bundle-1"
+    }
+  },
+  {
+    "key": "GPS-T1",
+    "type": "TASK",
+    "title": "Task 1 for GPS",
+    "description": "Task supporting story execution.",
+    "status": "TODO",
+    "priority": "LOW",
+    "createdAt": "2026-03-02T04:33:31.830Z",
+    "updatedAt": "2026-03-02T04:33:31.830Z",
+    "_seedKey": "workitem:GPS:task-1",
+    "_refs": {
+      "bundleName": "GPS",
+      "parentKey": "GPS-S1",
+      "assigneeEmails": [
+        "marco.silva@example.com"
+      ],
+      "createdByEmail": "james.walker@example.com",
+      "updatedByEmail": "james.walker@example.com"
+    }
+  },
+  {
+    "key": "GPS-S2",
+    "type": "STORY",
+    "title": "Story 2 for GPS",
+    "description": "Deliver scoped implementation work for this feature.",
+    "status": "TODO",
+    "priority": "MEDIUM",
+    "createdAt": "2026-03-02T04:33:31.830Z",
+    "updatedAt": "2026-03-02T04:33:31.830Z",
+    "_seedKey": "workitem:GPS:story-2",
+    "_refs": {
+      "bundleName": "GPS",
+      "parentKey": "GPS-F1",
+      "assigneeEmails": [
+        "priya.nair@example.com"
+      ],
+      "watcherEmails": [
+        "omar.haddad@example.com"
+      ],
+      "createdByEmail": "sophie.martin@example.com",
+      "updatedByEmail": "sophie.martin@example.com"
+    }
+  },
+  {
+    "key": "GPS-T2",
+    "type": "TASK",
+    "title": "Task 2 for GPS",
+    "description": "Task supporting story execution.",
+    "status": "TODO",
+    "priority": "LOW",
+    "createdAt": "2026-03-02T04:33:31.830Z",
+    "updatedAt": "2026-03-02T04:33:31.830Z",
+    "_seedKey": "workitem:GPS:task-2",
+    "_refs": {
+      "bundleName": "GPS",
+      "parentKey": "GPS-S2",
+      "assigneeEmails": [
+        "marco.silva@example.com"
+      ],
+      "createdByEmail": "james.walker@example.com",
+      "updatedByEmail": "james.walker@example.com"
+    }
+  },
+  {
+    "key": "GPS-F2",
+    "type": "FEATURE",
+    "title": "GPS Identity & Access Modernization",
+    "description": "Feature 2 for GPS.",
+    "status": "TODO",
+    "priority": "MEDIUM",
+    "createdAt": "2026-03-02T04:33:31.830Z",
+    "updatedAt": "2026-03-02T04:33:31.830Z",
+    "_seedKey": "workitem:GPS:feature-2",
+    "_refs": {
+      "bundleName": "GPS",
+      "parentKey": "GPS-EPIC",
+      "assigneeEmails": [
+        "marco.silva@example.com"
+      ],
+      "createdByEmail": "james.walker@example.com",
+      "updatedByEmail": "james.walker@example.com"
+    }
+  },
+  {
+    "key": "GPS-S3",
+    "type": "STORY",
+    "title": "Story 3 for GPS",
+    "description": "Deliver scoped implementation work for this feature.",
+    "status": "IN_PROGRESS",
+    "priority": "HIGH",
+    "createdAt": "2026-03-02T04:33:31.830Z",
+    "updatedAt": "2026-03-02T04:33:31.830Z",
+    "_seedKey": "workitem:GPS:story-3",
+    "_refs": {
+      "bundleName": "GPS",
+      "parentKey": "GPS-F2",
+      "assigneeEmails": [
+        "priya.nair@example.com"
+      ],
+      "watcherEmails": [
+        "omar.haddad@example.com"
+      ],
+      "createdByEmail": "sophie.martin@example.com",
+      "updatedByEmail": "sophie.martin@example.com"
+    }
+  },
+  {
+    "key": "GPS-T3",
+    "type": "TASK",
+    "title": "Task 3 for GPS",
+    "description": "Task supporting story execution.",
+    "status": "TODO",
+    "priority": "LOW",
+    "createdAt": "2026-03-02T04:33:31.830Z",
+    "updatedAt": "2026-03-02T04:33:31.830Z",
+    "_seedKey": "workitem:GPS:task-3",
+    "_refs": {
+      "bundleName": "GPS",
+      "parentKey": "GPS-S3",
+      "assigneeEmails": [
+        "marco.silva@example.com"
+      ],
+      "createdByEmail": "james.walker@example.com",
+      "updatedByEmail": "james.walker@example.com"
+    }
+  },
+  {
+    "key": "GPS-S4",
+    "type": "STORY",
+    "title": "Story 4 for GPS",
+    "description": "Deliver scoped implementation work for this feature.",
+    "status": "TODO",
+    "priority": "MEDIUM",
+    "createdAt": "2026-03-02T04:33:31.830Z",
+    "updatedAt": "2026-03-02T04:33:31.830Z",
+    "_seedKey": "workitem:GPS:story-4",
+    "_refs": {
+      "bundleName": "GPS",
+      "parentKey": "GPS-F2",
+      "assigneeEmails": [
+        "priya.nair@example.com"
+      ],
+      "watcherEmails": [
+        "omar.haddad@example.com"
+      ],
+      "createdByEmail": "sophie.martin@example.com",
+      "updatedByEmail": "sophie.martin@example.com"
+    }
+  },
+  {
+    "key": "GPS-T4",
+    "type": "TASK",
+    "title": "Task 4 for GPS",
+    "description": "Task supporting story execution.",
+    "status": "TODO",
+    "priority": "LOW",
+    "createdAt": "2026-03-02T04:33:31.830Z",
+    "updatedAt": "2026-03-02T04:33:31.830Z",
+    "_seedKey": "workitem:GPS:task-4",
+    "_refs": {
+      "bundleName": "GPS",
+      "parentKey": "GPS-S4",
+      "assigneeEmails": [
+        "marco.silva@example.com"
+      ],
+      "createdByEmail": "james.walker@example.com",
+      "updatedByEmail": "james.walker@example.com"
+    }
+  },
+  {
+    "key": "GPS-F3",
+    "type": "FEATURE",
+    "title": "GPS Network & Connectivity",
+    "description": "Feature 3 for GPS.",
+    "status": "TODO",
+    "priority": "MEDIUM",
+    "createdAt": "2026-03-02T04:33:31.830Z",
+    "updatedAt": "2026-03-02T04:33:31.830Z",
+    "_seedKey": "workitem:GPS:feature-3",
+    "_refs": {
+      "bundleName": "GPS",
+      "parentKey": "GPS-EPIC",
+      "assigneeEmails": [
+        "marco.silva@example.com"
+      ],
+      "createdByEmail": "james.walker@example.com",
+      "updatedByEmail": "james.walker@example.com"
+    }
+  },
+  {
+    "key": "GPS-S5",
+    "type": "STORY",
+    "title": "Story 5 for GPS",
+    "description": "Deliver scoped implementation work for this feature.",
+    "status": "IN_PROGRESS",
+    "priority": "HIGH",
+    "createdAt": "2026-03-02T04:33:31.830Z",
+    "updatedAt": "2026-03-02T04:33:31.830Z",
+    "_seedKey": "workitem:GPS:story-5",
+    "_refs": {
+      "bundleName": "GPS",
+      "parentKey": "GPS-F3",
+      "assigneeEmails": [
+        "priya.nair@example.com"
+      ],
+      "watcherEmails": [
+        "omar.haddad@example.com"
+      ],
+      "createdByEmail": "sophie.martin@example.com",
+      "updatedByEmail": "sophie.martin@example.com"
+    }
+  },
+  {
+    "key": "GPS-T5",
+    "type": "TASK",
+    "title": "Task 5 for GPS",
+    "description": "Task supporting story execution.",
+    "status": "TODO",
+    "priority": "LOW",
+    "createdAt": "2026-03-02T04:33:31.830Z",
+    "updatedAt": "2026-03-02T04:33:31.830Z",
+    "_seedKey": "workitem:GPS:task-5",
+    "_refs": {
+      "bundleName": "GPS",
+      "parentKey": "GPS-S5",
+      "assigneeEmails": [
+        "marco.silva@example.com"
+      ],
+      "createdByEmail": "james.walker@example.com",
+      "updatedByEmail": "james.walker@example.com"
+    }
+  },
+  {
+    "key": "GPS-S6",
+    "type": "STORY",
+    "title": "Story 6 for GPS",
+    "description": "Deliver scoped implementation work for this feature.",
+    "status": "TODO",
+    "priority": "MEDIUM",
+    "createdAt": "2026-03-02T04:33:31.830Z",
+    "updatedAt": "2026-03-02T04:33:31.830Z",
+    "_seedKey": "workitem:GPS:story-6",
+    "_refs": {
+      "bundleName": "GPS",
+      "parentKey": "GPS-F3",
+      "assigneeEmails": [
+        "priya.nair@example.com"
+      ],
+      "watcherEmails": [
+        "omar.haddad@example.com"
+      ],
+      "createdByEmail": "sophie.martin@example.com",
+      "updatedByEmail": "sophie.martin@example.com"
+    }
+  },
+  {
+    "key": "GPS-T6",
+    "type": "TASK",
+    "title": "Task 6 for GPS",
+    "description": "Task supporting story execution.",
+    "status": "TODO",
+    "priority": "LOW",
+    "createdAt": "2026-03-02T04:33:31.830Z",
+    "updatedAt": "2026-03-02T04:33:31.830Z",
+    "_seedKey": "workitem:GPS:task-6",
+    "_refs": {
+      "bundleName": "GPS",
+      "parentKey": "GPS-S6",
+      "assigneeEmails": [
+        "marco.silva@example.com"
+      ],
+      "createdByEmail": "james.walker@example.com",
+      "updatedByEmail": "james.walker@example.com"
+    }
+  },
+  {
+    "key": "GPS-R1",
+    "type": "RISK",
+    "title": "Risk: GPS data readiness",
+    "description": "Historical data quality may impact migration cutover.",
+    "status": "BLOCKED",
+    "priority": "HIGH",
+    "risk": {
+      "probability": 4,
+      "impact": 4,
+      "severity": "critical",
+      "area": "compliance",
+      "mitigation": "Run cleansing pipeline before cutover."
+    },
+    "createdAt": "2026-03-02T04:33:31.830Z",
+    "updatedAt": "2026-03-02T04:33:31.830Z",
+    "_seedKey": "workitem:GPS:risk-1",
+    "_refs": {
+      "bundleName": "GPS",
+      "parentKey": "GPS-F1",
+      "assigneeEmails": [
+        "sophie.martin@example.com"
+      ],
+      "createdByEmail": "sophie.martin@example.com",
+      "updatedByEmail": "sophie.martin@example.com"
+    },
+    "linkedResource": {
+      "type": "wiki_page",
+      "id": "__RESOLVE__",
+      "title": "GPS Architecture Overview"
+    },
+    "_refsLinkedWiki": {
+      "wikiPageSeedKey": "wiki_page:1"
+    }
+  },
+  {
+    "key": "GPS-D1",
+    "type": "DEPENDENCY",
+    "title": "Dependency: GPS identity rollout",
+    "description": "Requires new managed identity service.",
+    "status": "BLOCKED",
+    "priority": "HIGH",
+    "dependency": {
+      "blocking": true,
+      "dependsOn": {
+        "type": "external",
+        "name": "Identity Platform Team"
+      }
+    },
+    "createdAt": "2026-03-02T04:33:31.830Z",
+    "updatedAt": "2026-03-02T04:33:31.830Z",
+    "_seedKey": "workitem:GPS:dependency-1",
+    "_refs": {
+      "bundleName": "GPS",
+      "parentKey": "GPS-F1",
+      "assigneeEmails": [
+        "james.walker@example.com"
+      ],
+      "createdByEmail": "james.walker@example.com",
+      "updatedByEmail": "james.walker@example.com"
+    }
+  },
+  {
+    "key": "BILLIN-F1",
+    "type": "FEATURE",
+    "title": "Billing Feature 1",
+    "description": "Feature 1 for Billing.",
+    "status": "IN_PROGRESS",
+    "priority": "HIGH",
+    "createdAt": "2026-03-02T04:33:31.830Z",
+    "updatedAt": "2026-03-02T04:33:31.830Z",
+    "_seedKey": "workitem:BILLIN:feature-1",
+    "_refs": {
+      "bundleName": "Billing",
+      "parentKey": "BILLIN-EPIC",
+      "assigneeEmails": [
+        "marco.silva@example.com"
+      ],
+      "createdByEmail": "james.walker@example.com",
+      "updatedByEmail": "james.walker@example.com"
+    }
+  },
+  {
+    "key": "BILLIN-S7",
+    "type": "STORY",
+    "title": "Story 7 for Billing",
+    "description": "Deliver scoped implementation work for this feature.",
+    "status": "IN_PROGRESS",
+    "priority": "HIGH",
+    "createdAt": "2026-03-02T04:33:31.830Z",
+    "updatedAt": "2026-03-02T04:33:31.830Z",
+    "_seedKey": "workitem:BILLIN:story-7",
+    "_refs": {
+      "bundleName": "Billing",
+      "parentKey": "BILLIN-F1",
+      "assigneeEmails": [
+        "priya.nair@example.com"
+      ],
+      "watcherEmails": [
+        "omar.haddad@example.com"
+      ],
+      "createdByEmail": "sophie.martin@example.com",
+      "updatedByEmail": "sophie.martin@example.com"
+    }
+  },
+  {
+    "key": "BILLIN-T7",
+    "type": "TASK",
+    "title": "Task 7 for Billing",
+    "description": "Task supporting story execution.",
+    "status": "TODO",
+    "priority": "LOW",
+    "createdAt": "2026-03-02T04:33:31.830Z",
+    "updatedAt": "2026-03-02T04:33:31.830Z",
+    "_seedKey": "workitem:BILLIN:task-7",
+    "_refs": {
+      "bundleName": "Billing",
+      "parentKey": "BILLIN-S7",
+      "assigneeEmails": [
+        "marco.silva@example.com"
+      ],
+      "createdByEmail": "james.walker@example.com",
+      "updatedByEmail": "james.walker@example.com"
+    }
+  },
+  {
+    "key": "BILLIN-S8",
+    "type": "STORY",
+    "title": "Story 8 for Billing",
+    "description": "Deliver scoped implementation work for this feature.",
+    "status": "TODO",
+    "priority": "MEDIUM",
+    "createdAt": "2026-03-02T04:33:31.830Z",
+    "updatedAt": "2026-03-02T04:33:31.830Z",
+    "_seedKey": "workitem:BILLIN:story-8",
+    "_refs": {
+      "bundleName": "Billing",
+      "parentKey": "BILLIN-F1",
+      "assigneeEmails": [
+        "priya.nair@example.com"
+      ],
+      "watcherEmails": [
+        "omar.haddad@example.com"
+      ],
+      "createdByEmail": "sophie.martin@example.com",
+      "updatedByEmail": "sophie.martin@example.com"
+    }
+  },
+  {
+    "key": "BILLIN-T8",
+    "type": "TASK",
+    "title": "Task 8 for Billing",
+    "description": "Task supporting story execution.",
+    "status": "TODO",
+    "priority": "LOW",
+    "createdAt": "2026-03-02T04:33:31.830Z",
+    "updatedAt": "2026-03-02T04:33:31.830Z",
+    "_seedKey": "workitem:BILLIN:task-8",
+    "_refs": {
+      "bundleName": "Billing",
+      "parentKey": "BILLIN-S8",
+      "assigneeEmails": [
+        "marco.silva@example.com"
+      ],
+      "createdByEmail": "james.walker@example.com",
+      "updatedByEmail": "james.walker@example.com"
+    }
+  },
+  {
+    "key": "BILLIN-F2",
+    "type": "FEATURE",
+    "title": "Billing Feature 2",
+    "description": "Feature 2 for Billing.",
+    "status": "TODO",
+    "priority": "MEDIUM",
+    "createdAt": "2026-03-02T04:33:31.830Z",
+    "updatedAt": "2026-03-02T04:33:31.830Z",
+    "_seedKey": "workitem:BILLIN:feature-2",
+    "_refs": {
+      "bundleName": "Billing",
+      "parentKey": "BILLIN-EPIC",
+      "assigneeEmails": [
+        "marco.silva@example.com"
+      ],
+      "createdByEmail": "james.walker@example.com",
+      "updatedByEmail": "james.walker@example.com"
+    }
+  },
+  {
+    "key": "BILLIN-S9",
+    "type": "STORY",
+    "title": "Story 9 for Billing",
+    "description": "Deliver scoped implementation work for this feature.",
+    "status": "IN_PROGRESS",
+    "priority": "HIGH",
+    "createdAt": "2026-03-02T04:33:31.830Z",
+    "updatedAt": "2026-03-02T04:33:31.830Z",
+    "_seedKey": "workitem:BILLIN:story-9",
+    "_refs": {
+      "bundleName": "Billing",
+      "parentKey": "BILLIN-F2",
+      "assigneeEmails": [
+        "priya.nair@example.com"
+      ],
+      "watcherEmails": [
+        "omar.haddad@example.com"
+      ],
+      "createdByEmail": "sophie.martin@example.com",
+      "updatedByEmail": "sophie.martin@example.com"
+    }
+  },
+  {
+    "key": "BILLIN-T9",
+    "type": "TASK",
+    "title": "Task 9 for Billing",
+    "description": "Task supporting story execution.",
+    "status": "TODO",
+    "priority": "LOW",
+    "createdAt": "2026-03-02T04:33:31.830Z",
+    "updatedAt": "2026-03-02T04:33:31.830Z",
+    "_seedKey": "workitem:BILLIN:task-9",
+    "_refs": {
+      "bundleName": "Billing",
+      "parentKey": "BILLIN-S9",
+      "assigneeEmails": [
+        "marco.silva@example.com"
+      ],
+      "createdByEmail": "james.walker@example.com",
+      "updatedByEmail": "james.walker@example.com"
+    }
+  },
+  {
+    "key": "BILLIN-S10",
+    "type": "STORY",
+    "title": "Story 10 for Billing",
+    "description": "Deliver scoped implementation work for this feature.",
+    "status": "TODO",
+    "priority": "MEDIUM",
+    "createdAt": "2026-03-02T04:33:31.830Z",
+    "updatedAt": "2026-03-02T04:33:31.830Z",
+    "_seedKey": "workitem:BILLIN:story-10",
+    "_refs": {
+      "bundleName": "Billing",
+      "parentKey": "BILLIN-F2",
+      "assigneeEmails": [
+        "priya.nair@example.com"
+      ],
+      "watcherEmails": [
+        "omar.haddad@example.com"
+      ],
+      "createdByEmail": "sophie.martin@example.com",
+      "updatedByEmail": "sophie.martin@example.com"
+    }
+  },
+  {
+    "key": "BILLIN-T10",
+    "type": "TASK",
+    "title": "Task 10 for Billing",
+    "description": "Task supporting story execution.",
+    "status": "TODO",
+    "priority": "LOW",
+    "createdAt": "2026-03-02T04:33:31.830Z",
+    "updatedAt": "2026-03-02T04:33:31.830Z",
+    "_seedKey": "workitem:BILLIN:task-10",
+    "_refs": {
+      "bundleName": "Billing",
+      "parentKey": "BILLIN-S10",
+      "assigneeEmails": [
+        "marco.silva@example.com"
+      ],
+      "createdByEmail": "james.walker@example.com",
+      "updatedByEmail": "james.walker@example.com"
+    }
+  },
+  {
+    "key": "BILLIN-F3",
+    "type": "FEATURE",
+    "title": "Billing Feature 3",
+    "description": "Feature 3 for Billing.",
+    "status": "TODO",
+    "priority": "MEDIUM",
+    "createdAt": "2026-03-02T04:33:31.830Z",
+    "updatedAt": "2026-03-02T04:33:31.830Z",
+    "_seedKey": "workitem:BILLIN:feature-3",
+    "_refs": {
+      "bundleName": "Billing",
+      "parentKey": "BILLIN-EPIC",
+      "assigneeEmails": [
+        "marco.silva@example.com"
+      ],
+      "createdByEmail": "james.walker@example.com",
+      "updatedByEmail": "james.walker@example.com"
+    }
+  },
+  {
+    "key": "BILLIN-S11",
+    "type": "STORY",
+    "title": "Story 11 for Billing",
+    "description": "Deliver scoped implementation work for this feature.",
+    "status": "IN_PROGRESS",
+    "priority": "HIGH",
+    "createdAt": "2026-03-02T04:33:31.830Z",
+    "updatedAt": "2026-03-02T04:33:31.830Z",
+    "_seedKey": "workitem:BILLIN:story-11",
+    "_refs": {
+      "bundleName": "Billing",
+      "parentKey": "BILLIN-F3",
+      "assigneeEmails": [
+        "priya.nair@example.com"
+      ],
+      "watcherEmails": [
+        "omar.haddad@example.com"
+      ],
+      "createdByEmail": "sophie.martin@example.com",
+      "updatedByEmail": "sophie.martin@example.com"
+    }
+  },
+  {
+    "key": "BILLIN-T11",
+    "type": "TASK",
+    "title": "Task 11 for Billing",
+    "description": "Task supporting story execution.",
+    "status": "TODO",
+    "priority": "LOW",
+    "createdAt": "2026-03-02T04:33:31.830Z",
+    "updatedAt": "2026-03-02T04:33:31.830Z",
+    "_seedKey": "workitem:BILLIN:task-11",
+    "_refs": {
+      "bundleName": "Billing",
+      "parentKey": "BILLIN-S11",
+      "assigneeEmails": [
+        "marco.silva@example.com"
+      ],
+      "createdByEmail": "james.walker@example.com",
+      "updatedByEmail": "james.walker@example.com"
+    }
+  },
+  {
+    "key": "BILLIN-S12",
+    "type": "STORY",
+    "title": "Story 12 for Billing",
+    "description": "Deliver scoped implementation work for this feature.",
+    "status": "TODO",
+    "priority": "MEDIUM",
+    "createdAt": "2026-03-02T04:33:31.830Z",
+    "updatedAt": "2026-03-02T04:33:31.830Z",
+    "_seedKey": "workitem:BILLIN:story-12",
+    "_refs": {
+      "bundleName": "Billing",
+      "parentKey": "BILLIN-F3",
+      "assigneeEmails": [
+        "priya.nair@example.com"
+      ],
+      "watcherEmails": [
+        "omar.haddad@example.com"
+      ],
+      "createdByEmail": "sophie.martin@example.com",
+      "updatedByEmail": "sophie.martin@example.com"
+    }
+  },
+  {
+    "key": "BILLIN-T12",
+    "type": "TASK",
+    "title": "Task 12 for Billing",
+    "description": "Task supporting story execution.",
+    "status": "TODO",
+    "priority": "LOW",
+    "createdAt": "2026-03-02T04:33:31.830Z",
+    "updatedAt": "2026-03-02T04:33:31.830Z",
+    "_seedKey": "workitem:BILLIN:task-12",
+    "_refs": {
+      "bundleName": "Billing",
+      "parentKey": "BILLIN-S12",
+      "assigneeEmails": [
+        "marco.silva@example.com"
+      ],
+      "createdByEmail": "james.walker@example.com",
+      "updatedByEmail": "james.walker@example.com"
+    }
+  },
+  {
+    "key": "BILLIN-R1",
+    "type": "RISK",
+    "title": "Risk: Billing data readiness",
+    "description": "Historical data quality may impact migration cutover.",
+    "status": "IN_PROGRESS",
+    "priority": "HIGH",
+    "risk": {
+      "probability": 4,
+      "impact": 4,
+      "severity": "high",
+      "area": "operations",
+      "mitigation": "Run cleansing pipeline before cutover."
+    },
+    "createdAt": "2026-03-02T04:33:31.830Z",
+    "updatedAt": "2026-03-02T04:33:31.830Z",
+    "_seedKey": "workitem:BILLIN:risk-1",
+    "_refs": {
+      "bundleName": "Billing",
+      "parentKey": "BILLIN-F1",
+      "assigneeEmails": [
+        "sophie.martin@example.com"
+      ],
+      "createdByEmail": "sophie.martin@example.com",
+      "updatedByEmail": "sophie.martin@example.com"
+    }
+  },
+  {
+    "key": "BILLIN-D1",
+    "type": "DEPENDENCY",
+    "title": "Dependency: Billing identity rollout",
+    "description": "Requires new managed identity service.",
+    "status": "BLOCKED",
+    "priority": "HIGH",
+    "dependency": {
+      "blocking": true,
+      "dependsOn": {
+        "type": "external",
+        "name": "Identity Platform Team"
+      }
+    },
+    "createdAt": "2026-03-02T04:33:31.830Z",
+    "updatedAt": "2026-03-02T04:33:31.830Z",
+    "_seedKey": "workitem:BILLIN:dependency-1",
+    "_refs": {
+      "bundleName": "Billing",
+      "parentKey": "BILLIN-F1",
+      "assigneeEmails": [
+        "james.walker@example.com"
+      ],
+      "createdByEmail": "james.walker@example.com",
+      "updatedByEmail": "james.walker@example.com"
+    }
+  },
+  {
+    "key": "GPS-T1",
+    "type": "TASK",
+    "title": "Finalize migration cutover plan",
+    "description": "Define rollback and cutover steps.",
+    "status": "TODO",
+    "priority": "MEDIUM",
+    "createdAt": "2026-03-02T04:33:31.830Z",
+    "updatedAt": "2026-03-02T04:33:31.830Z",
+    "_seedKey": "workitem:task-1",
+    "_refs": {
+      "bundleName": "GPS",
+      "parentKey": "GPS-F1",
+      "assigneeEmails": [
+        "marco.silva@example.com"
+      ],
+      "createdByEmail": "james.walker@example.com",
+      "updatedByEmail": "james.walker@example.com"
+    }
+  },
+  {
+    "key": "GPS-T2",
+    "type": "TASK",
+    "title": "Define DR testing schedule",
+    "description": "Coordinate disaster recovery test windows.",
+    "status": "IN_PROGRESS",
+    "priority": "LOW",
+    "createdAt": "2026-03-02T04:33:31.830Z",
+    "updatedAt": "2026-03-02T04:33:31.830Z",
+    "_seedKey": "workitem:task-2",
+    "_refs": {
+      "bundleName": "GPS",
+      "parentKey": "GPS-F1",
+      "assigneeEmails": [
+        "priya.nair@example.com"
+      ],
+      "createdByEmail": "james.walker@example.com",
+      "updatedByEmail": "james.walker@example.com"
+    }
+  },
+  {
+    "key": "GPS-S2",
+    "type": "STORY",
+    "title": "Implement caching strategy",
+    "description": "Define cache invalidation and TTL policy.",
+    "status": "IN_PROGRESS",
+    "priority": "HIGH",
+    "createdAt": "2026-03-02T04:33:31.830Z",
+    "updatedAt": "2026-03-02T04:33:31.830Z",
+    "_seedKey": "workitem:story-2",
+    "_refs": {
+      "bundleName": "GPS",
+      "parentKey": "GPS-F1",
+      "assigneeEmails": [
+        "priya.nair@example.com"
+      ],
+      "watcherEmails": [
+        "omar.haddad@example.com"
+      ],
+      "createdByEmail": "sophie.martin@example.com",
+      "updatedByEmail": "sophie.martin@example.com"
+    }
+  },
+  {
+    "key": "GPS-S3",
+    "type": "STORY",
+    "title": "Observability dashboards",
+    "description": "Add SLO dashboards for latency and errors.",
+    "status": "TODO",
+    "priority": "MEDIUM",
+    "createdAt": "2026-03-02T04:33:31.830Z",
+    "updatedAt": "2026-03-02T04:33:31.830Z",
+    "_seedKey": "workitem:story-3",
+    "_refs": {
+      "bundleName": "GPS",
+      "parentKey": "GPS-F1",
+      "assigneeEmails": [
+        "marco.silva@example.com"
+      ],
+      "createdByEmail": "marco.silva@example.com",
+      "updatedByEmail": "marco.silva@example.com"
+    }
+  },
+  {
+    "key": "GPS-R2",
+    "type": "RISK",
+    "title": "Vendor capacity risk",
+    "description": "Vendor bandwidth may delay delivery.",
+    "status": "TODO",
+    "priority": "MEDIUM",
+    "risk": {
+      "probability": 3,
+      "impact": 3,
+      "severity": "medium",
+      "area": "vendor",
+      "mitigation": "Confirm staffing plan and buffer schedule."
+    },
+    "createdAt": "2026-03-02T04:33:31.830Z",
+    "updatedAt": "2026-03-02T04:33:31.830Z",
+    "_seedKey": "workitem:risk-2",
+    "_refs": {
+      "bundleName": "GPS",
+      "parentKey": "GPS-F1",
+      "assigneeEmails": [
+        "sophie.martin@example.com"
+      ],
+      "createdByEmail": "sophie.martin@example.com",
+      "updatedByEmail": "sophie.martin@example.com"
+    }
+  },
+  {
+    "key": "GPS-D2",
+    "type": "DEPENDENCY",
+    "title": "Dependency on data platform",
+    "description": "Requires data platform team to provision pipelines.",
+    "status": "IN_PROGRESS",
+    "priority": "HIGH",
+    "dependency": {
+      "blocking": false,
+      "dependsOn": {
+        "type": "external",
+        "name": "Data Platform Team"
+      }
+    },
+    "createdAt": "2026-03-02T04:33:31.830Z",
+    "updatedAt": "2026-03-02T04:33:31.830Z",
+    "_seedKey": "workitem:dependency-2",
+    "_refs": {
+      "bundleName": "GPS",
+      "parentKey": "GPS-F1",
+      "assigneeEmails": [
+        "james.walker@example.com"
+      ],
+      "createdByEmail": "james.walker@example.com",
+      "updatedByEmail": "james.walker@example.com"
+    }
+  }
+]

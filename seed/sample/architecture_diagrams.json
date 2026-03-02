@@ -1,0 +1,92 @@
+[
+  {
+    "title": "GPS Target Architecture",
+    "format": "MERMAID",
+    "status": "DRAFT",
+    "content": "flowchart LR\n  Client-->API\n  API-->DB\n  API-->Cache\n  Cache-->DB",
+    "createdAt": "2026-03-02T04:33:31.829Z",
+    "updatedAt": "2026-03-02T04:33:31.829Z",
+    "_seedKey": "diagram:bundle-1",
+    "_refs": {
+      "bundleName": "GPS",
+      "documentTypeKey": "ADR",
+      "createdByEmail": "omar.haddad@example.com",
+      "updatedByEmail": "omar.haddad@example.com"
+    }
+  },
+  {
+    "title": "Billing Target Architecture",
+    "format": "MERMAID",
+    "status": "DRAFT",
+    "content": "flowchart LR\n  Client-->API\n  API-->DB\n  API-->Cache\n  Cache-->DB",
+    "createdAt": "2026-03-02T04:33:31.829Z",
+    "updatedAt": "2026-03-02T04:33:31.829Z",
+    "_seedKey": "diagram:BILLIN-core",
+    "_refs": {
+      "bundleName": "Billing",
+      "documentTypeKey": "SOL",
+      "createdByEmail": "omar.haddad@example.com",
+      "updatedByEmail": "omar.haddad@example.com"
+    }
+  },
+  {
+    "title": "GPS Identity Flow",
+    "format": "MERMAID",
+    "status": "DRAFT",
+    "content": "sequenceDiagram\n  participant User\n  participant Auth\n  participant API\n  User->>Auth: Login\n  Auth->>API: Token\n  API-->>User: Session",
+    "createdAt": "2026-03-02T04:33:31.829Z",
+    "updatedAt": "2026-03-02T04:33:31.829Z",
+    "_seedKey": "diagram:extra-1",
+    "_refs": {
+      "bundleName": "GPS",
+      "documentTypeKey": "SOL",
+      "createdByEmail": "omar.haddad@example.com",
+      "updatedByEmail": "omar.haddad@example.com"
+    }
+  },
+  {
+    "title": "Billing Data Pipeline Overview",
+    "format": "MERMAID",
+    "status": "DRAFT",
+    "content": "flowchart TD\n  Source-->Ingest\n  Ingest-->Transform\n  Transform-->Store\n  Store-->Analytics",
+    "createdAt": "2026-03-02T04:33:31.829Z",
+    "updatedAt": "2026-03-02T04:33:31.829Z",
+    "_seedKey": "diagram:extra-2",
+    "_refs": {
+      "bundleName": "Billing",
+      "documentTypeKey": "TECH",
+      "createdByEmail": "omar.haddad@example.com",
+      "updatedByEmail": "omar.haddad@example.com"
+    }
+  },
+  {
+    "title": "GPS Network Segmentation",
+    "format": "MERMAID",
+    "status": "DRAFT",
+    "content": "flowchart LR\n  Internet-->WAF\n  WAF-->Gateway\n  Gateway-->Services\n  Services-->DB",
+    "createdAt": "2026-03-02T04:33:31.829Z",
+    "updatedAt": "2026-03-02T04:33:31.829Z",
+    "_seedKey": "diagram:extra-3",
+    "_refs": {
+      "bundleName": "GPS",
+      "documentTypeKey": "ADR",
+      "createdByEmail": "omar.haddad@example.com",
+      "updatedByEmail": "omar.haddad@example.com"
+    }
+  },
+  {
+    "title": "Billing DR Topology",
+    "format": "MERMAID",
+    "status": "DRAFT",
+    "content": "flowchart LR\n  RegionA-->RegionB\n  RegionB-->RegionA",
+    "createdAt": "2026-03-02T04:33:31.829Z",
+    "updatedAt": "2026-03-02T04:33:31.829Z",
+    "_seedKey": "diagram:extra-4",
+    "_refs": {
+      "bundleName": "Billing",
+      "documentTypeKey": "SOL",
+      "createdByEmail": "omar.haddad@example.com",
+      "updatedByEmail": "omar.haddad@example.com"
+    }
+  }
+]

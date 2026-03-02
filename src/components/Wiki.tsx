@@ -621,6 +621,15 @@ const Wiki: React.FC<WikiProps> = ({
       return node;
     };
 
+    if (showSpace) {
+      spaces.forEach((space) => {
+        const sId = String(space._id || space.id);
+        const spaceName = space.name || 'Shared Space';
+        const path = `space-${sId}`;
+        findOrCreateNode(tree, path, spaceName, 'space', { spaceId: sId });
+      });
+    }
+
     filtered.forEach(art => {
       const sId = art.spaceId || 'unassigned';
       const bId = art.bundleId || 'general';

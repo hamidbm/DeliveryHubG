@@ -1,0 +1,102 @@
+[
+  {
+    "name": "Amina Rahman",
+    "username": "amina",
+    "email": "amina.rahman@example.com",
+    "role": "CMO Member",
+    "team": "CMO",
+    "password": "$2a$10$Q73rOWCwfw0YsMWw3N3/0OPktOnESAp6eRaiNgxTAgMLQyXRBcHvu",
+    "createdAt": "2026-03-02T04:33:31.816Z",
+    "updatedAt": "2026-03-02T04:33:31.817Z",
+    "_seedKey": "user:1"
+  },
+  {
+    "name": "David Chen",
+    "username": "david",
+    "email": "david.chen@example.com",
+    "role": "CMO Member",
+    "team": "CMO",
+    "password": "$2a$10$Q73rOWCwfw0YsMWw3N3/0OPktOnESAp6eRaiNgxTAgMLQyXRBcHvu",
+    "createdAt": "2026-03-02T04:33:31.817Z",
+    "updatedAt": "2026-03-02T04:33:31.817Z",
+    "_seedKey": "user:2"
+  },
+  {
+    "name": "Omar Haddad",
+    "username": "omar",
+    "email": "omar.haddad@example.com",
+    "role": "SVP Architect",
+    "team": "SVP",
+    "password": "$2a$10$Q73rOWCwfw0YsMWw3N3/0OPktOnESAp6eRaiNgxTAgMLQyXRBcHvu",
+    "createdAt": "2026-03-02T04:33:31.817Z",
+    "updatedAt": "2026-03-02T04:33:31.817Z",
+    "_seedKey": "user:3"
+  },
+  {
+    "name": "Lina Kovacs",
+    "username": "lina",
+    "email": "lina.kovacs@example.com",
+    "role": "SVP Delivery Lead",
+    "team": "SVP",
+    "password": "$2a$10$Q73rOWCwfw0YsMWw3N3/0OPktOnESAp6eRaiNgxTAgMLQyXRBcHvu",
+    "createdAt": "2026-03-02T04:33:31.817Z",
+    "updatedAt": "2026-03-02T04:33:31.817Z",
+    "_seedKey": "user:4"
+  },
+  {
+    "name": "Marco Silva",
+    "username": "marco",
+    "email": "marco.silva@example.com",
+    "role": "Engineering EA",
+    "team": "Engineering",
+    "password": "$2a$10$Q73rOWCwfw0YsMWw3N3/0OPktOnESAp6eRaiNgxTAgMLQyXRBcHvu",
+    "createdAt": "2026-03-02T04:33:31.817Z",
+    "updatedAt": "2026-03-02T04:33:31.817Z",
+    "_seedKey": "user:5"
+  },
+  {
+    "name": "Priya Nair",
+    "username": "priya",
+    "email": "priya.nair@example.com",
+    "role": "Engineering DBA",
+    "team": "Engineering",
+    "password": "$2a$10$Q73rOWCwfw0YsMWw3N3/0OPktOnESAp6eRaiNgxTAgMLQyXRBcHvu",
+    "createdAt": "2026-03-02T04:33:31.817Z",
+    "updatedAt": "2026-03-02T04:33:31.817Z",
+    "_seedKey": "user:6"
+  },
+  {
+    "name": "Sophie Martin",
+    "username": "sophie",
+    "email": "sophie.martin@example.com",
+    "role": "Management",
+    "team": "Management",
+    "password": "$2a$10$Q73rOWCwfw0YsMWw3N3/0OPktOnESAp6eRaiNgxTAgMLQyXRBcHvu",
+    "createdAt": "2026-03-02T04:33:31.817Z",
+    "updatedAt": "2026-03-02T04:33:31.817Z",
+    "_seedKey": "user:7"
+  },
+  {
+    "name": "James Walker",
+    "username": "james",
+    "email": "james.walker@example.com",
+    "role": "Engg Leader",
+    "team": "Engineering",
+    "password": "$2a$10$Q73rOWCwfw0YsMWw3N3/0OPktOnESAp6eRaiNgxTAgMLQyXRBcHvu",
+    "createdAt": "2026-03-02T04:33:31.817Z",
+    "updatedAt": "2026-03-02T04:33:31.817Z",
+    "_seedKey": "user:8"
+  },
+  {
+    "name": "System Admin",
+    "username": "admin",
+    "email": "admin@example.com",
+    "role": "Management",
+    "team": "Management",
+    "isAdmin": true,
+    "password": "$2a$10$Q73rOWCwfw0YsMWw3N3/0OPktOnESAp6eRaiNgxTAgMLQyXRBcHvu",
+    "createdAt": "2026-03-02T04:33:31.817Z",
+    "updatedAt": "2026-03-02T04:33:31.817Z",
+    "_seedKey": "user:9"
+  }
+]

@@ -1,0 +1,68 @@
+[
+  {
+    "assignmentType": "assigned_cmo",
+    "active": true,
+    "createdAt": "2026-03-02T04:33:31.824Z",
+    "updatedAt": "2026-03-02T04:33:31.824Z",
+    "_seedKey": "bundle_assignment:1",
+    "_refs": {
+      "bundleName": "GPS",
+      "userEmail": "amina.rahman@example.com"
+    }
+  },
+  {
+    "assignmentType": "cmo_reviewer",
+    "active": true,
+    "createdAt": "2026-03-02T04:33:31.824Z",
+    "updatedAt": "2026-03-02T04:33:31.824Z",
+    "_seedKey": "bundle_assignment:1-b",
+    "_refs": {
+      "bundleName": "GPS",
+      "userEmail": "david.chen@example.com"
+    }
+  },
+  {
+    "assignmentType": "bundle_owner",
+    "active": true,
+    "createdAt": "2026-03-02T04:33:31.824Z",
+    "updatedAt": "2026-03-02T04:33:31.824Z",
+    "_seedKey": "bundle_assignment:1-c",
+    "_refs": {
+      "bundleName": "GPS",
+      "userEmail": "omar.haddad@example.com"
+    }
+  },
+  {
+    "assignmentType": "assigned_cmo",
+    "active": true,
+    "createdAt": "2026-03-02T04:33:31.824Z",
+    "updatedAt": "2026-03-02T04:33:31.824Z",
+    "_seedKey": "bundle_assignment:2",
+    "_refs": {
+      "bundleName": "Billing",
+      "userEmail": "amina.rahman@example.com"
+    }
+  },
+  {
+    "assignmentType": "cmo_reviewer",
+    "active": true,
+    "createdAt": "2026-03-02T04:33:31.824Z",
+    "updatedAt": "2026-03-02T04:33:31.824Z",
+    "_seedKey": "bundle_assignment:2-b",
+    "_refs": {
+      "bundleName": "Billing",
+      "userEmail": "david.chen@example.com"
+    }
+  },
+  {
+    "assignmentType": "bundle_owner",
+    "active": true,
+    "createdAt": "2026-03-02T04:33:31.824Z",
+    "updatedAt": "2026-03-02T04:33:31.824Z",
+    "_seedKey": "bundle_assignment:2-c",
+    "_refs": {
+      "bundleName": "Billing",
+      "userEmail": "omar.haddad@example.com"
+    }
+  }
+]

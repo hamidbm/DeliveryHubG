@@ -5,7 +5,8 @@ import { WikiPage, WikiSpace, WikiTheme, WikiTemplate, CommentThread, CommentMes
 export const getDb = async () => {
   try {
     const client = await getMongoClientPromise();
-    return client.db('deliveryhub');
+    const dbName = process.env.MONGODB_DB_NAME;
+    return dbName ? client.db(dbName) : client.db();
   } catch (e) {
     console.error("CRITICAL: Database connection failed.", e);
     throw new Error("DB_OFFLINE");

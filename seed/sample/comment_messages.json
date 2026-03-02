@@ -1,0 +1,65 @@
+[
+  {
+    "_seedKey": "message:review-1",
+    "body": "Can you clarify the cache invalidation strategy for cross-region failover?",
+    "createdAt": "2026-03-02T04:33:31.832Z",
+    "_refs": {
+      "threadSeedKey": "thread:review-1",
+      "authorEmail": "amina.rahman@example.com"
+    }
+  },
+  {
+    "_seedKey": "message:review-2",
+    "body": "We will document failover cache rules in the next revision.",
+    "createdAt": "2026-03-02T04:33:31.832Z",
+    "_refs": {
+      "threadSeedKey": "thread:review-1",
+      "authorEmail": "omar.haddad@example.com"
+    }
+  },
+  {
+    "_seedKey": "message:review-3",
+    "body": "Please include DR topology diagram references.",
+    "createdAt": "2026-03-02T04:33:31.832Z",
+    "_refs": {
+      "threadSeedKey": "thread:review-2",
+      "authorEmail": "david.chen@example.com"
+    }
+  },
+  {
+    "_seedKey": "message:review-4",
+    "body": "Working on DR topology update; will share shortly.",
+    "createdAt": "2026-03-02T04:33:31.832Z",
+    "_refs": {
+      "threadSeedKey": "thread:review-2",
+      "authorEmail": "omar.haddad@example.com"
+    }
+  },
+  {
+    "_seedKey": "message:review-wiki-1",
+    "body": "Please add compliance references and audit controls.",
+    "createdAt": "2026-03-02T04:33:31.832Z",
+    "_refs": {
+      "threadSeedKey": "thread:review-wiki-1",
+      "authorEmail": "amina.rahman@example.com"
+    }
+  },
+  {
+    "_seedKey": "message:review-wiki-2",
+    "body": "Acknowledged; adding compliance references now.",
+    "createdAt": "2026-03-02T04:33:31.832Z",
+    "_refs": {
+      "threadSeedKey": "thread:review-wiki-1",
+      "authorEmail": "sophie.martin@example.com"
+    }
+  },
+  {
+    "_seedKey": "message:review-risk-1",
+    "body": "Can we quantify the compliance gating risk?",
+    "createdAt": "2026-03-02T04:33:31.832Z",
+    "_refs": {
+      "threadSeedKey": "thread:review-risk-1",
+      "authorEmail": "amina.rahman@example.com"
+    }
+  }
+]

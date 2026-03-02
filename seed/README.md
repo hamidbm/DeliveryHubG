@@ -1,41 +1,71 @@
-# Seed Data (Export/Import)
+# Seed Data
 
-This folder contains JSON exports of important collections for bootstrapping a new environment.
+DeliveryHub uses a two-tier seeding system:
 
-## Export (from local MongoDB)
+- **Baseline** (required): installed automatically at startup.
+- **Sample** (optional): demo data installed manually by Admin or via env flag.
 
-```bash
-MONGODB_URI="mongodb://admin:secretpassword@localhost:27017/deliveryhub?authSource=admin" \
-npm run seed:export
+## Folder Layout
+
+```
+seed/
+  baseline/
+    taxonomy_categories.json
+    taxonomy_document_types.json
+    wiki_themes.json
+    wiki_templates.json
+    diagram_templates.json
+    bundles.json
+    (optional) system_settings.json
+
+  sample/
+    users.json
+    bundle_assignments.json
+    wiki_pages.json
+    work_items.json
+    diagrams.json
 ```
 
-Optional overrides:
-- `SEED_BUNDLE_NAMES="Bundle 1,Bundle 2,Bundle 3"` (defaults to these)
-- `MONGODB_DB_NAME=deliveryhub`
-- `SEED_DIR=/path/to/seed/collections`
+Each file contains **an array of MongoDB documents**.
 
-The export writes JSON files to `seed/collections/` and a `seed/manifest.json`.
+## Baseline Auto-Bootstrap
 
-## Import (into Railway MongoDB)
+Baseline seeding runs at startup unless explicitly disabled.
 
-Railway provides `MONGO_URL` automatically, so this usually works:
+Environment variable:
 
-```bash
-railway run npm run seed:import
+```
+AUTO_BOOTSTRAP_BASELINE=true
 ```
 
-If you need to run locally against Railway without `railway run`:
+## Sample Seeding
 
-```bash
-MONGO_URL="mongodb://mongo:...@mongodb.railway.internal:27017" \
-npm run seed:import
+Sample seeding is **manual** by default:
+
+- Admin → Samples → Install Sample Data
+
+Or automatically by env flag:
+
+```
+INSTALL_SAMPLE_DATA=true
 ```
 
-Optional overrides:
-- `MONGODB_DB_NAME=deliveryhub`
-- `SEED_DIR=/path/to/seed/collections`
+## CLI
 
-## Notes
+```bash
+npm run db:bootstrap     # baseline
+npm run db:seed-sample   # sample
+```
 
-- Import is idempotent (upsert by `_id`).
-- IDs are preserved using EJSON.
+## Export Helpers
+
+```bash
+MONGODB_URI="mongodb://..." npm run db:export-baseline
+MONGODB_URI="mongodb://..." npm run db:export-sample
+```
+
+## Reset Sample Data
+
+Admin → Samples → Reset Sample Data
+
+This removes only documents tagged with `demoTag: "sample-v1"`.

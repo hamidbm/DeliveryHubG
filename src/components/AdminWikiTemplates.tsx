@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { WikiTemplate, TaxonomyDocumentType } from '../types';
+import DocumentTypePicker from './DocumentTypePicker';
 
 const AdminWikiTemplates: React.FC = () => {
   const [templates, setTemplates] = useState<WikiTemplate[]>([]);
@@ -153,17 +154,11 @@ const AdminWikiTemplates: React.FC = () => {
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Document Type</label>
-                  <select
-                    required
+                  <DocumentTypePicker
+                    docTypes={docTypes}
                     value={editingTemplate?.documentTypeId || ''}
-                    onChange={(e) => setEditingTemplate({ ...editingTemplate, documentTypeId: e.target.value })}
-                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-slate-700 focus:border-blue-500 transition-all font-bold"
-                  >
-                    <option value="">Select Document Type</option>
-                    {docTypes.map((d) => (
-                      <option key={d._id} value={d._id}>{d.name}</option>
-                    ))}
-                  </select>
+                    onChange={(value) => setEditingTemplate({ ...editingTemplate, documentTypeId: value })}
+                  />
                 </div>
               </div>
 

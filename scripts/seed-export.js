@@ -7,8 +7,10 @@ const { EJSON } = require('bson');
 const DEFAULT_DB = process.env.MONGODB_DB_NAME || 'deliveryhub';
 const DEFAULT_BUNDLE_NAMES = ['Bundle 1', 'Bundle 2', 'Bundle 3'];
 
-const OUTPUT_DIR = path.join(process.cwd(), 'seed');
-const COLLECTION_DIR = path.join(OUTPUT_DIR, 'collections');
+const OUTPUT_DIR = process.env.SEED_DIR
+  ? path.resolve(process.cwd(), process.env.SEED_DIR)
+  : path.join(process.cwd(), 'seed');
+const COLLECTION_DIR = OUTPUT_DIR;
 
 const ensureDir = (dir) => {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -24,8 +26,14 @@ const getBundleNames = () => {
 
 const writeCollection = (name, docs) => {
   const filePath = path.join(COLLECTION_DIR, `${name}.json`);
-  const payload = EJSON.stringify(docs, { relaxed: false, space: 2 });
-  fs.writeFileSync(filePath, payload, 'utf8');
+  const payload = EJSON.stringify(docs, { relaxed: false });
+  let formatted = payload;
+  try {
+    formatted = JSON.stringify(JSON.parse(payload), null, 2);
+  } catch {
+    formatted = payload;
+  }
+  fs.writeFileSync(filePath, formatted, 'utf8');
   return { name, count: docs.length, file: filePath };
 };
 
@@ -47,6 +55,22 @@ const exportSeed = async () => {
   await client.connect();
   const db = client.db(DEFAULT_DB);
   const available = await listCollections(db);
+
+  const collectionEnv = process.env.COLLECTIONS;
+  if (collectionEnv) {
+    const collections = collectionEnv.split(',').map((c) => c.trim()).filter(Boolean);
+    const outputs = [];
+    for (const name of collections) {
+      if (!available.has(name)) {
+        outputs.push(writeCollection(name, []));
+        continue;
+      }
+      const docs = await db.collection(name).find({}).toArray();
+      outputs.push(writeCollection(name, docs));
+    }
+    await client.close();
+    return outputs;
+  }
 
   const bundleNames = getBundleNames();
   const bundles = await db.collection('bundles').find({ name: { $in: bundleNames } }).toArray();
@@ -199,18 +223,9 @@ const exportSeed = async () => {
     ? await db.collection('users').find({ _id: { $in: Array.from(userIds).filter(ObjectId.isValid).map((id) => new ObjectId(id)) } }).toArray()
     : [];
 
-  const manifest = {
-    generatedAt: new Date().toISOString(),
-    db: DEFAULT_DB,
-    bundleNames,
-    bundleIds,
-    counts: {}
-  };
-
   const outputs = [];
   const pushOutput = (name, docs) => {
     outputs.push(writeCollection(name, docs));
-    manifest.counts[name] = docs.length;
   };
 
   pushOutput('bundles', bundles);
@@ -235,8 +250,6 @@ const exportSeed = async () => {
   pushOutput('taxonomy_categories', taxonomyCategories);
   pushOutput('taxonomy_document_types', taxonomyDocumentTypes);
   pushOutput('users', users);
-
-  fs.writeFileSync(path.join(OUTPUT_DIR, 'manifest.json'), JSON.stringify(manifest, null, 2));
 
   await client.close();
   return outputs;

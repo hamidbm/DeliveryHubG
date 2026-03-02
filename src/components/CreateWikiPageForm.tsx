@@ -1,6 +1,7 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { WikiPage, WikiTheme, WikiTemplate, Bundle, Application, TaxonomyCategory, TaxonomyDocumentType } from '../types';
 import WikiPageDisplay from './WikiPageDisplay';
+import DocumentTypePicker from './DocumentTypePicker';
 
 interface CreateWikiPageFormProps {
   parentId?: string;
@@ -615,17 +616,15 @@ const CreateWikiPageForm: React.FC<CreateWikiPageFormProps> = ({
             )}
 
             <div className="space-y-2">
-              <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Semantic Doc Type</label>
-              <select value={documentTypeId} onChange={(e) => setDocumentTypeId(e.target.value)} className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-4 text-xs font-bold text-slate-700 outline-none shadow-sm focus:border-blue-500 transition-all">
-                <option value="">Select Bluepint...</option>
-                {categories.map(cat => (
-                  <optgroup key={cat._id} label={cat.name}>
-                    {docTypes.filter(t => t.categoryId === cat._id).map(type => (
-                      <option key={type._id} value={type._id}>{type.name}</option>
-                    ))}
-                  </optgroup>
-                ))}
-              </select>
+              <DocumentTypePicker
+                label="Semantic Doc Type"
+                required
+                value={documentTypeId}
+                onChange={(value) => setDocumentTypeId(value || '')}
+                docTypes={docTypes}
+                categories={categories}
+                className="space-y-2"
+              />
             </div>
 
             {mode !== 'upload' && (

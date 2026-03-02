@@ -2,7 +2,7 @@ import React from 'react';
 
 interface SampleCollection {
   name: string;
-  count: number | null;
+  count?: number | null;
 }
 
 const AdminSamples: React.FC = () => {
@@ -12,15 +12,18 @@ const AdminSamples: React.FC = () => {
   const [importing, setImporting] = React.useState(false);
   const [message, setMessage] = React.useState<string | null>(null);
   const [results, setResults] = React.useState<Record<string, any> | null>(null);
+  const [status, setStatus] = React.useState<any>(null);
 
   const fetchCollections = async () => {
     setLoading(true);
     setMessage(null);
     try {
-      const res = await fetch('/api/admin/samples');
+      const res = await fetch('/api/admin/sample/status');
       const data = await res.json();
-      const list = Array.isArray(data?.collections) ? data.collections : [];
+      const raw = Array.isArray(data?.collections) ? data.collections : [];
+      const list = raw.map((name: string) => ({ name, count: null }));
       setCollections(list);
+      setStatus(data?.status || null);
       const defaults: Record<string, boolean> = {};
       list.forEach((c: SampleCollection) => { defaults[c.name] = true; });
       setSelected(defaults);
@@ -47,7 +50,7 @@ const AdminSamples: React.FC = () => {
     setResults(null);
     try {
       const body = all ? {} : { collections: Object.keys(selected).filter((k) => selected[k]) };
-      const res = await fetch('/api/admin/samples', {
+      const res = await fetch('/api/admin/sample/install', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
@@ -57,10 +60,31 @@ const AdminSamples: React.FC = () => {
         setMessage(data?.error || 'Import failed');
         return;
       }
-      setResults(data?.results || null);
+      setResults(data?.result || data?.results || null);
       setMessage('Sample data import completed.');
+      await fetchCollections();
     } catch (error: any) {
       setMessage(error?.message || 'Import failed');
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const handleReset = async () => {
+    setImporting(true);
+    setMessage(null);
+    setResults(null);
+    try {
+      const res = await fetch('/api/admin/sample/reset', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) {
+        setMessage(data?.error || 'Reset failed');
+        return;
+      }
+      setMessage('Sample data reset completed.');
+      await fetchCollections();
+    } catch (error: any) {
+      setMessage(error?.message || 'Reset failed');
     } finally {
       setImporting(false);
     }
@@ -98,6 +122,13 @@ const AdminSamples: React.FC = () => {
             Import Selected
           </button>
           <button
+            className="px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-xl border border-rose-200 text-rose-600 hover:bg-rose-50 disabled:opacity-50"
+            onClick={handleReset}
+            disabled={importing}
+          >
+            Reset Sample
+          </button>
+          <button
             className="px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-50"
             onClick={fetchCollections}
             disabled={importing}
@@ -109,6 +140,9 @@ const AdminSamples: React.FC = () => {
         <div className="bg-slate-50/60 border border-slate-100 rounded-3xl p-8">
           <div className="flex items-center justify-between mb-6">
             <h4 className="text-sm font-black uppercase tracking-widest text-slate-500">Collections</h4>
+            <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+              {status?.status ? `Sample Status: ${status.status}` : 'Sample Status: Unknown'}
+            </div>
             <div className="flex items-center gap-2">
               <button
                 className="text-[10px] font-black uppercase tracking-widest text-blue-600"

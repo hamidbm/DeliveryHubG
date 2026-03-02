@@ -1,17 +1,19 @@
 import React from "react";
 import type { Metadata } from "next";
 import "./globals.css";
+import { runBootstrap } from "../lib/bootstrap/runBootstrap";
 
 export const metadata: Metadata = {
   title: "DeliveryHub",
   description: "Software Delivery & APM Portal",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  await runBootstrap();
   return (
     <html lang="en">
       <head>
