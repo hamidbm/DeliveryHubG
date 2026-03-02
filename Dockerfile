@@ -16,6 +16,7 @@ ENV TURBOPACK=0
 ENV NEXT_TELEMETRY_DISABLED=1
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+COPY seed ./seed
 
 # Build Next.js
 RUN npm run build
