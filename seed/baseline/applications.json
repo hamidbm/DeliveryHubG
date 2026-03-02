@@ -4,20 +4,20 @@
       "$oid": "696645923c24168fcb84a5fd"
     },
     "aid": "GPS123",
-    "name": "Member Hub",
     "bundleId": {
       "$oid": "6966443e3c24168fcb84a5f2"
     },
-    "isActive": true,
-    "status": {
-      "health": "Healthy"
-    },
     "createdAt": "2026-01-13T13:16:02.692Z",
-    "updatedAt": "2026-01-13T13:16:02.692Z",
     "createdBy": {
       "name": "Hamid Ben Malek",
       "email": "hamid@benmalek.net"
     },
+    "isActive": true,
+    "name": "Member Hub",
+    "status": {
+      "health": "Healthy"
+    },
+    "updatedAt": "2026-01-13T13:16:02.692Z",
     "updatedBy": {
       "name": "Hamid Ben Malek",
       "email": "hamid@benmalek.net"
@@ -28,20 +28,20 @@
       "$oid": "696645ac3c24168fcb84a5fe"
     },
     "aid": "GPS234",
-    "name": "Subscription Hub",
     "bundleId": {
       "$oid": "6966443e3c24168fcb84a5f2"
     },
-    "isActive": true,
-    "status": {
-      "health": "Healthy"
-    },
     "createdAt": "2026-01-13T13:16:28.332Z",
-    "updatedAt": "2026-01-13T13:16:28.332Z",
     "createdBy": {
       "name": "Hamid Ben Malek",
       "email": "hamid@benmalek.net"
     },
+    "isActive": true,
+    "name": "Subscription Hub",
+    "status": {
+      "health": "Healthy"
+    },
+    "updatedAt": "2026-01-13T13:16:28.332Z",
     "updatedBy": {
       "name": "Hamid Ben Malek",
       "email": "hamid@benmalek.net"
@@ -52,13 +52,13 @@
       "$oid": "6995ebfcb66b0fc0a610a552"
     },
     "aid": "AIDE0074837",
-    "name": "MES",
     "bundleId": "6995e8eab66b0fc0a610a54d",
+    "createdAt": "2026-02-18T16:42:36.628Z",
     "isActive": true,
+    "name": "MES",
     "status": {
       "health": "Healthy"
     },
-    "createdAt": "2026-02-18T16:42:36.628Z",
     "updatedAt": "2026-02-18T16:42:36.628Z"
   },
   {
@@ -66,13 +66,13 @@
       "$oid": "6995ed89b66b0fc0a610a553"
     },
     "aid": "UHGWM110-013948",
-    "name": "CAS",
     "bundleId": "6995e8eab66b0fc0a610a54d",
+    "createdAt": "2026-02-18T16:49:13.599Z",
     "isActive": true,
+    "name": "CAS",
     "status": {
       "health": "Healthy"
     },
-    "createdAt": "2026-02-18T16:49:13.599Z",
     "updatedAt": "2026-02-18T16:49:13.599Z"
   },
   {
@@ -80,13 +80,13 @@
       "$oid": "6995edd2b66b0fc0a610a554"
     },
     "aid": "UHGWM110-008885",
-    "name": "Task Tracker",
     "bundleId": "6995ea88b66b0fc0a610a551",
+    "createdAt": "2026-02-18T16:50:26.892Z",
     "isActive": true,
+    "name": "Task Tracker",
     "status": {
       "health": "Healthy"
     },
-    "createdAt": "2026-02-18T16:50:26.892Z",
     "updatedAt": "2026-02-18T16:50:26.892Z"
   },
   {
@@ -94,13 +94,13 @@
       "$oid": "6995ee04b66b0fc0a610a555"
     },
     "aid": "UHGWM110-025543",
-    "name": "Maestro",
     "bundleId": "6995ea88b66b0fc0a610a551",
+    "createdAt": "2026-02-18T16:51:16.134Z",
     "isActive": true,
+    "name": "Maestro",
     "status": {
       "health": "Healthy"
     },
-    "createdAt": "2026-02-18T16:51:16.134Z",
     "updatedAt": "2026-02-18T16:51:16.134Z"
   },
   {
@@ -108,13 +108,13 @@
       "$oid": "6995ee5db66b0fc0a610a556"
     },
     "aid": "UHGWM110-00",
-    "name": "ACET",
     "bundleId": "6995ea88b66b0fc0a610a551",
+    "createdAt": "2026-02-18T16:52:45.145Z",
     "isActive": true,
+    "name": "ACET",
     "status": {
       "health": "Healthy"
     },
-    "createdAt": "2026-02-18T16:52:45.145Z",
     "updatedAt": "2026-02-18T16:52:45.145Z"
   },
   {
@@ -122,13 +122,13 @@
       "$oid": "6995eee7b66b0fc0a610a557"
     },
     "aid": "AIDE-0080632",
-    "name": "BRMS",
     "bundleId": "6995e89eb66b0fc0a610a54b",
+    "createdAt": "2026-02-18T16:55:03.070Z",
     "isActive": true,
+    "name": "BRMS",
     "status": {
       "health": "Healthy"
     },
-    "createdAt": "2026-02-18T16:55:03.070Z",
     "updatedAt": "2026-02-18T16:55:03.070Z"
   },
   {
@@ -136,13 +136,13 @@
       "$oid": "6995ef35b66b0fc0a610a558"
     },
     "aid": "UHGWM110-005707",
-    "name": "Billing - Data Delivery",
     "bundleId": "6995e89eb66b0fc0a610a54b",
+    "createdAt": "2026-02-18T16:56:21.233Z",
     "isActive": true,
+    "name": "Billing - Data Delivery",
     "status": {
       "health": "Healthy"
     },
-    "createdAt": "2026-02-18T16:56:21.233Z",
     "updatedAt": "2026-02-18T16:56:21.233Z"
   },
   {
@@ -150,13 +150,13 @@
       "$oid": "6995ef69b66b0fc0a610a559"
     },
     "aid": "UHGWM110-015040",
-    "name": "Billing RRA",
     "bundleId": "6995e89eb66b0fc0a610a54b",
+    "createdAt": "2026-02-18T16:57:13.984Z",
     "isActive": true,
+    "name": "Billing RRA",
     "status": {
       "health": "Healthy"
     },
-    "createdAt": "2026-02-18T16:57:13.984Z",
     "updatedAt": "2026-02-18T16:57:13.984Z"
   },
   {
@@ -164,13 +164,13 @@
       "$oid": "6995ef9fb66b0fc0a610a55a"
     },
     "aid": "UHGWM110-002645",
-    "name": "Billing OFSC",
     "bundleId": "6995e89eb66b0fc0a610a54b",
+    "createdAt": "2026-02-18T16:58:07.018Z",
     "isActive": true,
+    "name": "Billing OFSC",
     "status": {
       "health": "Healthy"
     },
-    "createdAt": "2026-02-18T16:58:07.018Z",
     "updatedAt": "2026-02-18T16:58:07.018Z"
   },
   {
@@ -178,13 +178,13 @@
       "$oid": "6995efceb66b0fc0a610a55b"
     },
     "aid": "UHGWM110-002857",
-    "name": "Billing SIMON",
     "bundleId": "6995e89eb66b0fc0a610a54b",
+    "createdAt": "2026-02-18T16:58:54.656Z",
     "isActive": true,
+    "name": "Billing SIMON",
     "status": {
       "health": "Healthy"
     },
-    "createdAt": "2026-02-18T16:58:54.656Z",
     "updatedAt": "2026-02-18T16:58:54.656Z"
   },
   {
@@ -192,13 +192,13 @@
       "$oid": "6995effdb66b0fc0a610a55c"
     },
     "aid": "UHGWM110-023612",
-    "name": "Billing ISB",
     "bundleId": "6995e89eb66b0fc0a610a54b",
+    "createdAt": "2026-02-18T16:59:41.956Z",
     "isActive": true,
+    "name": "Billing ISB",
     "status": {
       "health": "Healthy"
     },
-    "createdAt": "2026-02-18T16:59:41.956Z",
     "updatedAt": "2026-02-18T16:59:41.956Z"
   },
   {
@@ -206,13 +206,13 @@
       "$oid": "6995f028b66b0fc0a610a55d"
     },
     "aid": "AIDE_0076687",
-    "name": "Billing IIL",
     "bundleId": "6995e89eb66b0fc0a610a54b",
+    "createdAt": "2026-02-18T17:00:24.840Z",
     "isActive": true,
+    "name": "Billing IIL",
     "status": {
       "health": "Healthy"
     },
-    "createdAt": "2026-02-18T17:00:24.840Z",
     "updatedAt": "2026-02-18T17:00:24.840Z"
   },
   {
@@ -220,13 +220,13 @@
       "$oid": "6995f048b66b0fc0a610a55e"
     },
     "aid": "AIDE_0083433",
-    "name": "Billing IRS",
     "bundleId": "6995e89eb66b0fc0a610a54b",
+    "createdAt": "2026-02-18T17:00:56.913Z",
     "isActive": true,
+    "name": "Billing IRS",
     "status": {
       "health": "Healthy"
     },
-    "createdAt": "2026-02-18T17:00:56.913Z",
     "updatedAt": "2026-02-18T17:00:56.913Z"
   },
   {
@@ -234,13 +234,13 @@
       "$oid": "6995f06db66b0fc0a610a55f"
     },
     "aid": "UHGWM110-000010",
-    "name": "Billing OBS",
     "bundleId": "6995e89eb66b0fc0a610a54b",
+    "createdAt": "2026-02-18T17:01:33.612Z",
     "isActive": true,
+    "name": "Billing OBS",
     "status": {
       "health": "Healthy"
     },
-    "createdAt": "2026-02-18T17:01:33.612Z",
     "updatedAt": "2026-02-18T17:01:33.612Z"
   },
   {
@@ -248,13 +248,13 @@
       "$oid": "6995f0b2b66b0fc0a610a560"
     },
     "aid": "UHGWM110-028637",
-    "name": "Sales LPS",
     "bundleId": "6995ea39b66b0fc0a610a550",
+    "createdAt": "2026-02-18T17:02:42.346Z",
     "isActive": true,
+    "name": "Sales LPS",
     "status": {
       "health": "Healthy"
     },
-    "createdAt": "2026-02-18T17:02:42.346Z",
     "updatedAt": "2026-02-18T17:02:42.346Z"
   },
   {
@@ -262,13 +262,13 @@
       "$oid": "6995f13bb66b0fc0a610a561"
     },
     "aid": "UHGWM110-019300",
-    "name": "Sales File Hub",
     "bundleId": "6995ea39b66b0fc0a610a550",
+    "createdAt": "2026-02-18T17:04:59.019Z",
     "isActive": true,
+    "name": "Sales File Hub",
     "status": {
       "health": "Healthy"
     },
-    "createdAt": "2026-02-18T17:04:59.019Z",
     "updatedAt": "2026-02-18T17:04:59.019Z"
   },
   {
@@ -276,13 +276,13 @@
       "$oid": "6995f17db66b0fc0a610a562"
     },
     "aid": "UHGWM110-025755",
-    "name": "Sales MIRA",
     "bundleId": "6995ea39b66b0fc0a610a550",
+    "createdAt": "2026-02-18T17:06:05.520Z",
     "isActive": true,
+    "name": "Sales MIRA",
     "status": {
       "health": "Healthy"
     },
-    "createdAt": "2026-02-18T17:06:05.520Z",
     "updatedAt": "2026-02-18T17:06:05.520Z"
   },
   {
@@ -290,13 +290,13 @@
       "$oid": "6995f1dab66b0fc0a610a563"
     },
     "aid": "UHGWM110-006881",
-    "name": "Sales SRA",
     "bundleId": "6995ea39b66b0fc0a610a550",
+    "createdAt": "2026-02-18T17:07:38.295Z",
     "isActive": true,
+    "name": "Sales SRA",
     "status": {
       "health": "Healthy"
     },
-    "createdAt": "2026-02-18T17:07:38.295Z",
     "updatedAt": "2026-02-18T17:07:38.295Z"
   },
   {
@@ -304,13 +304,13 @@
       "$oid": "6995f233b66b0fc0a610a564"
     },
     "aid": "AIDE_0074887",
-    "name": "Sales Planning and Operations Tools",
     "bundleId": "6995ea39b66b0fc0a610a550",
+    "createdAt": "2026-02-18T17:09:07.343Z",
     "isActive": true,
+    "name": "Sales Planning and Operations Tools",
     "status": {
       "health": "Healthy"
     },
-    "createdAt": "2026-02-18T17:09:07.343Z",
     "updatedAt": "2026-02-18T17:09:07.343Z"
   },
   {
@@ -318,13 +318,13 @@
       "$oid": "6995f2a9b66b0fc0a610a565"
     },
     "aid": "UHGWM110-015410",
-    "name": "Tactical Ramp Intake and Onboarding ",
     "bundleId": "6995ea39b66b0fc0a610a550",
+    "createdAt": "2026-02-18T17:11:05.501Z",
     "isActive": true,
+    "name": "Tactical Ramp Intake and Onboarding ",
     "status": {
       "health": "Healthy"
     },
-    "createdAt": "2026-02-18T17:11:05.501Z",
     "updatedAt": "2026-02-18T17:11:05.501Z"
   },
   {
@@ -332,13 +332,13 @@
       "$oid": "6995f2ecb66b0fc0a610a566"
     },
     "aid": "UHGWM110-017727",
-    "name": "Event Reporting Application",
     "bundleId": "6995ea39b66b0fc0a610a550",
+    "createdAt": "2026-02-18T17:12:12.787Z",
     "isActive": true,
+    "name": "Event Reporting Application",
     "status": {
       "health": "Healthy"
     },
-    "createdAt": "2026-02-18T17:12:12.787Z",
     "updatedAt": "2026-02-18T17:12:12.787Z"
   },
   {
@@ -346,13 +346,13 @@
       "$oid": "6995f32bb66b0fc0a610a567"
     },
     "aid": "UHGWM110-027838",
-    "name": "Broker Issue Application",
     "bundleId": "6995ea39b66b0fc0a610a550",
+    "createdAt": "2026-02-18T17:13:15.035Z",
     "isActive": true,
+    "name": "Broker Issue Application",
     "status": {
       "health": "Healthy"
     },
-    "createdAt": "2026-02-18T17:13:15.035Z",
     "updatedAt": "2026-02-18T17:13:15.035Z"
   }
 ]

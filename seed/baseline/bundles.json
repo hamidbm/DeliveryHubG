@@ -3,16 +3,16 @@
     "_id": {
       "$oid": "6966443e3c24168fcb84a5f2"
     },
-    "key": "GPS",
     "name": "GPS",
-    "isActive": true,
-    "description": "A bundle of applications related to member subscriptions in the MR++ program",
     "createdAt": "2026-01-13T13:10:22.507Z",
-    "updatedAt": "2026-01-13T13:10:22.507Z",
     "createdBy": {
       "name": "Hamid Ben Malek",
       "email": "hamid@benmalek.net"
     },
+    "description": "A bundle of applications related to member subscriptions in the MR++ program",
+    "isActive": true,
+    "key": "GPS",
+    "updatedAt": "2026-01-13T13:10:22.507Z",
     "updatedBy": {
       "name": "Hamid Ben Malek",
       "email": "hamid@benmalek.net"
@@ -22,77 +22,77 @@
     "_id": {
       "$oid": "6995e89eb66b0fc0a610a54b"
     },
-    "key": "BILLIN",
     "name": "Billing",
-    "isActive": true,
-    "wipLimits": {},
     "createdAt": "2026-02-18T16:28:14.955Z",
-    "updatedAt": "2026-02-18T16:28:14.955Z"
+    "isActive": true,
+    "key": "BILLIN",
+    "updatedAt": "2026-02-18T16:28:14.955Z",
+    "wipLimits": {}
   },
   {
     "_id": {
       "$oid": "6995e8b5b66b0fc0a610a54c"
     },
-    "key": "NGS",
     "name": "NGS",
-    "isActive": true,
-    "wipLimits": {},
     "createdAt": "2026-02-18T16:28:37.526Z",
-    "updatedAt": "2026-02-18T16:28:37.526Z"
+    "isActive": true,
+    "key": "NGS",
+    "updatedAt": "2026-02-18T16:28:37.526Z",
+    "wipLimits": {}
   },
   {
     "_id": {
       "$oid": "6995e8eab66b0fc0a610a54d"
     },
-    "key": "CLAIMS",
     "name": "Claims",
-    "isActive": true,
-    "wipLimits": {},
     "createdAt": "2026-02-18T16:29:30.412Z",
-    "updatedAt": "2026-02-18T16:29:30.412Z"
+    "isActive": true,
+    "key": "CLAIMS",
+    "updatedAt": "2026-02-18T16:29:30.412Z",
+    "wipLimits": {}
   },
   {
     "_id": {
       "$oid": "6995e929b66b0fc0a610a54e"
     },
-    "key": "COMPAS",
     "name": "Compass",
-    "isActive": true,
-    "wipLimits": {},
     "createdAt": "2026-02-18T16:30:33.627Z",
-    "updatedAt": "2026-02-18T16:30:33.627Z"
+    "isActive": true,
+    "key": "COMPAS",
+    "updatedAt": "2026-02-18T16:30:33.627Z",
+    "wipLimits": {}
   },
   {
     "_id": {
       "$oid": "6995ea25b66b0fc0a610a54f"
     },
-    "key": "MAPS",
     "name": "MAPS",
-    "isActive": true,
-    "wipLimits": {},
     "createdAt": "2026-02-18T16:34:45.177Z",
-    "updatedAt": "2026-02-18T16:34:45.177Z"
+    "isActive": true,
+    "key": "MAPS",
+    "updatedAt": "2026-02-18T16:34:45.177Z",
+    "wipLimits": {}
   },
   {
     "_id": {
       "$oid": "6995ea39b66b0fc0a610a550"
     },
-    "key": "SALES",
     "name": "Sales",
-    "isActive": true,
-    "wipLimits": {},
     "createdAt": "2026-02-18T16:35:05.017Z",
-    "updatedAt": "2026-02-18T16:35:05.017Z"
+    "isActive": true,
+    "key": "SALES",
+    "updatedAt": "2026-02-18T16:35:05.017Z",
+    "wipLimits": {}
   },
   {
     "_id": {
       "$oid": "6995ea88b66b0fc0a610a551"
     },
-    "key": "CONTAC",
     "name": "Contact Center",
-    "isActive": true,
-    "wipLimits": {},
     "createdAt": "2026-02-18T16:36:24.544Z",
-    "updatedAt": "2026-02-18T16:36:24.544Z"
+    "isActive": true,
+    "key": "CONTAC",
+    "updatedAt": "2026-02-18T16:36:24.544Z",
+    "wipLimits": {}
   }
 ]

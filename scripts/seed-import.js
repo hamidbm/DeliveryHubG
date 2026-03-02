@@ -4,7 +4,7 @@ const path = require('path');
 const { MongoClient } = require('mongodb');
 const { EJSON } = require('bson');
 
-const DEFAULT_DB = process.env.MONGODB_DB_NAME || 'deliveryhub';
+const DEFAULT_DB = null;
 const SEED_DIR = process.env.SEED_DIR || path.join(process.cwd(), 'seed', 'collections');
 
 const readCollectionFile = (filePath) => {
@@ -32,7 +32,7 @@ const importSeed = async () => {
 
   const client = new MongoClient(uri);
   await client.connect();
-  const db = client.db(DEFAULT_DB);
+  const db = client.db();
 
   for (const file of files) {
     const name = path.basename(file, '.json');

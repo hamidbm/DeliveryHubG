@@ -21,7 +21,7 @@ const BASELINE_FILES: Array<{ file: string; collection: string; required?: boole
   { file: 'diagram_templates.json', collection: 'diagram_templates', required: true },
   { file: 'bundles.json', collection: 'bundles', required: true },
   { file: 'applications.json', collection: 'applications' },
-  { file: 'system_settings.json', collection: 'ai_settings' }
+  { file: 'ai_settings.json', collection: 'ai_settings' }
 ];
 
 const SAMPLE_FILES: Array<{ file: string; collection: string }> = [
@@ -149,6 +149,7 @@ const getBaselineFilter = (collection: string, doc: any) => {
     if (doc.key) return { key: doc.key };
     return { name: doc.name, bundleId: doc.bundleId };
   }
+  if (collection === 'ai_settings') return { key: doc.key || 'ai_settings' };
   if (collection === 'settings') return doc.key ? { key: doc.key } : { _id: doc._id };
   if (collection === 'bundles') return { name: doc.name };
   return doc._id ? { _id: doc._id } : { name: doc.name };
@@ -571,6 +572,61 @@ const loadBaselineFiles = () => {
   });
 };
 
+let aiSecretNoticeLogged = false;
+
+const applyAiSecretOverrides = (doc: any) => {
+  if (!doc) return doc;
+  const next = { ...doc };
+  const providers = { ...(next.providers || {}) };
+  const ensureProvider = (key: string) => {
+    if (!providers[key]) providers[key] = { apiKey: '', models: {} };
+  };
+
+  const envOpenai = process.env.OPENAI_API_KEY;
+  const envGemini = process.env.GEMINI_API_KEY;
+  const envAnthropic = process.env.ANTHROPIC_API_KEY;
+  const envHugging = process.env.HUGGINGFACE_API_KEY;
+  const envCohere = process.env.COHERE_API_KEY;
+
+  if (envOpenai) {
+    ensureProvider('OPENAI');
+    providers.OPENAI.apiKey = envOpenai;
+  }
+  if (envGemini) {
+    ensureProvider('GEMINI');
+    providers.GEMINI.apiKey = envGemini;
+  }
+  if (envAnthropic) {
+    ensureProvider('ANTHROPIC');
+    providers.ANTHROPIC.apiKey = envAnthropic;
+  }
+  if (envHugging) {
+    ensureProvider('HUGGINGFACE');
+    providers.HUGGINGFACE.apiKey = envHugging;
+  }
+  if (envCohere) {
+    ensureProvider('COHERE');
+    providers.COHERE.apiKey = envCohere;
+  }
+
+  if (!aiSecretNoticeLogged) {
+    const missing = [
+      !envOpenai && 'OPENAI_API_KEY',
+      !envGemini && 'GEMINI_API_KEY',
+      !envAnthropic && 'ANTHROPIC_API_KEY',
+      !envHugging && 'HUGGINGFACE_API_KEY',
+      !envCohere && 'COHERE_API_KEY'
+    ].filter(Boolean);
+    if (missing.length) {
+      console.info(`[bootstrap] AI keys not provided: ${missing.join(', ')}. Providers will remain unconfigured until set via env or Admin.`);
+    }
+    aiSecretNoticeLogged = true;
+  }
+
+  next.providers = providers;
+  return next;
+};
+
 const loadSampleFiles = (collections?: string[]) => {
   const filter = collections?.length ? new Set(collections) : null;
   return SAMPLE_FILES.filter((entry) => !filter || filter.has(entry.collection)).map((entry) => {
@@ -605,6 +661,11 @@ export const runBaselineBootstrap = async (installedBy = 'system') => {
     for (const entry of files) {
       if (entry.collection === 'bundles') {
         await seedBundlesAndApps(db, entry.docs);
+        continue;
+      }
+      if (entry.collection === 'ai_settings') {
+        const docs = entry.docs.map(applyAiSecretOverrides);
+        await upsertBaselineDocs(db, entry.collection, docs);
         continue;
       }
       await upsertBaselineDocs(db, entry.collection, entry.docs);

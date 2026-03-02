@@ -4,12 +4,12 @@ const path = require('path');
 const { MongoClient, ObjectId } = require('mongodb');
 const { EJSON } = require('bson');
 
-const DEFAULT_DB = process.env.MONGODB_DB_NAME || 'deliveryhub';
+const DEFAULT_DB = null;
 const DEFAULT_BUNDLE_NAMES = ['Bundle 1', 'Bundle 2', 'Bundle 3'];
 
 const OUTPUT_DIR = process.env.SEED_DIR
   ? path.resolve(process.cwd(), process.env.SEED_DIR)
-  : path.join(process.cwd(), 'seed');
+  : path.join(process.cwd(), 'seed', 'baseline');
 const COLLECTION_DIR = OUTPUT_DIR;
 
 const ensureDir = (dir) => {
@@ -53,10 +53,22 @@ const exportSeed = async () => {
 
   const client = new MongoClient(uri);
   await client.connect();
-  const db = client.db(DEFAULT_DB);
+  const db = client.db();
   const available = await listCollections(db);
 
   const collectionEnv = process.env.COLLECTIONS;
+  const exportAll = process.env.EXPORT_ALL === 'true';
+
+  if (exportAll) {
+    const outputs = [];
+    for (const name of Array.from(available)) {
+      const docs = await db.collection(name).find({}).toArray();
+      outputs.push(writeCollection(name, docs));
+    }
+    await client.close();
+    return outputs;
+  }
+
   if (collectionEnv) {
     const collections = collectionEnv.split(',').map((c) => c.trim()).filter(Boolean);
     const outputs = [];
@@ -131,10 +143,6 @@ const exportSeed = async () => {
     ? await db.collection('wiki_spaces').find({ _id: { $in: Array.from(new Set(wikiPages.map((p) => p.spaceId).filter(Boolean).map((id) => new ObjectId(String(id))))) } }).toArray()
     : [];
 
-  const wikiThemes = available.has('wiki_themes')
-    ? await db.collection('wiki_themes').find({}).toArray()
-    : [];
-
   const wikiHistory = available.has('wiki_history')
     ? await db.collection('wiki_history').find({ pageId: { $in: wikiPageIds } }).toArray()
     : [];
@@ -197,6 +205,18 @@ const exportSeed = async () => {
   const taxonomyDocumentTypes = available.has('taxonomy_document_types')
     ? await db.collection('taxonomy_document_types').find({}).toArray()
     : [];
+  const wikiTemplates = available.has('wiki_templates')
+    ? await db.collection('wiki_templates').find({}).toArray()
+    : [];
+  const wikiThemes = available.has('wiki_themes')
+    ? await db.collection('wiki_themes').find({}).toArray()
+    : [];
+  const diagramTemplates = available.has('diagram_templates')
+    ? await db.collection('diagram_templates').find({}).toArray()
+    : [];
+  const aiSettings = available.has('ai_settings')
+    ? await db.collection('ai_settings').find({}).toArray()
+    : [];
 
   const userIds = new Set();
   const addUserId = (value) => {
@@ -239,6 +259,8 @@ const exportSeed = async () => {
   pushOutput('wiki_assets', wikiAssets);
   pushOutput('wiki_spaces', wikiSpaces);
   pushOutput('wiki_themes', wikiThemes);
+  pushOutput('wiki_templates', wikiTemplates);
+  pushOutput('diagram_templates', diagramTemplates);
   pushOutput('wiki_history', wikiHistory);
   pushOutput('workitems', workitems);
   pushOutput('workitems_attachments', workitemAttachments);
@@ -249,6 +271,7 @@ const exportSeed = async () => {
   pushOutput('feedback_packages', feedbackPackages);
   pushOutput('taxonomy_categories', taxonomyCategories);
   pushOutput('taxonomy_document_types', taxonomyDocumentTypes);
+  pushOutput('ai_settings', aiSettings);
   pushOutput('users', users);
 
   await client.close();

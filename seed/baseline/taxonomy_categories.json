@@ -1,1 +1,158 @@
-[{"_id":{"$oid":"6966682b4400ba02c336a3e7"},"key":"ARCH","name":"Architecture","icon":"fa-folder","isActive":true,"sortOrder":{"$numberInt":"10"},"createdAt":"2026-01-13T15:43:39.991Z"},{"_id":{"$oid":"696669ae4400ba02c336a3f2"},"key":"ENG","name":"Design & Engineering","icon":"fa-folder","isActive":true,"sortOrder":{"$numberInt":"10"},"createdAt":"2026-01-13T15:50:06.128Z"},{"_id":{"$oid":"69666ac64400ba02c336a3fd"},"key":"SEC","name":"Security & Risk","icon":"fa-folder","isActive":true,"sortOrder":{"$numberInt":"10"},"createdAt":"2026-01-13T15:54:46.204Z"},{"_id":{"$oid":"69666bfe4400ba02c336a409"},"key":"DEVOPS","name":"DevOps & Platform","icon":"fa-folder","isActive":true,"sortOrder":{"$numberInt":"10"},"createdAt":"2026-01-13T15:59:58.976Z"},{"_id":{"$oid":"69666d284400ba02c336a413"},"key":"OPRT","name":"Operations & Support","icon":"fa-folder","isActive":true,"sortOrder":{"$numberInt":"10"},"createdAt":"2026-01-13T16:04:56.184Z"},{"_id":{"$oid":"69666e624400ba02c336a41e"},"key":"QA","name":"Testing & Quality","icon":"fa-folder","isActive":true,"sortOrder":{"$numberInt":"10"},"createdAt":"2026-01-13T16:10:10.578Z"},{"_id":{"$oid":"69667e824400ba02c336a428"},"key":"DLVRPM","name":"Delivery & Program Management","icon":"fa-folder","isActive":true,"sortOrder":{"$numberInt":"10"},"createdAt":"2026-01-13T17:18:58.845Z"},{"_id":{"$oid":"69667fe44400ba02c336a433"},"key":"GVRN","name":"Governance & Compliance","icon":"fa-folder","isActive":true,"sortOrder":{"$numberInt":"10"},"createdAt":"2026-01-13T17:24:52.447Z"},{"_id":{"$oid":"69668c4c4400ba02c336a43c"},"key":"DATANLTCS","name":"Data & Analytics","icon":"fa-folder","isActive":true,"sortOrder":{"$numberInt":"10"},"createdAt":"2026-01-13T18:17:48.281Z"},{"_id":{"$oid":"69668df04400ba02c336a442"},"key":"PRDBUS","name":"Product & Business","icon":"fa-folder","isActive":true,"sortOrder":{"$numberInt":"10"},"createdAt":"2026-01-13T18:24:48.578Z"},{"_id":{"$oid":"69668f224400ba02c336a448"},"key":"FINMANG","name":"Financials & Vendor Management","icon":"fa-folder","isActive":true,"sortOrder":{"$numberInt":"10"},"createdAt":"2026-01-13T18:29:54.265Z"},{"_id":{"$oid":"696690194400ba02c336a44d"},"key":"KTRUNBK","name":"Knowledge Base & Runbooks","icon":"fa-folder","isActive":true,"sortOrder":{"$numberInt":"10"},"createdAt":"2026-01-13T18:34:01.471Z"}]
+[
+  {
+    "_id": {
+      "$oid": "6966682b4400ba02c336a3e7"
+    },
+    "key": "ARCH",
+    "createdAt": "2026-01-13T15:43:39.991Z",
+    "icon": "fa-folder",
+    "isActive": true,
+    "name": "Architecture",
+    "sortOrder": {
+      "$numberInt": "10"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "696669ae4400ba02c336a3f2"
+    },
+    "key": "ENG",
+    "createdAt": "2026-01-13T15:50:06.128Z",
+    "icon": "fa-folder",
+    "isActive": true,
+    "name": "Design & Engineering",
+    "sortOrder": {
+      "$numberInt": "10"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "69666ac64400ba02c336a3fd"
+    },
+    "key": "SEC",
+    "createdAt": "2026-01-13T15:54:46.204Z",
+    "icon": "fa-folder",
+    "isActive": true,
+    "name": "Security & Risk",
+    "sortOrder": {
+      "$numberInt": "10"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "69666bfe4400ba02c336a409"
+    },
+    "key": "DEVOPS",
+    "createdAt": "2026-01-13T15:59:58.976Z",
+    "icon": "fa-folder",
+    "isActive": true,
+    "name": "DevOps & Platform",
+    "sortOrder": {
+      "$numberInt": "10"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "69666d284400ba02c336a413"
+    },
+    "key": "OPRT",
+    "createdAt": "2026-01-13T16:04:56.184Z",
+    "icon": "fa-folder",
+    "isActive": true,
+    "name": "Operations & Support",
+    "sortOrder": {
+      "$numberInt": "10"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "69666e624400ba02c336a41e"
+    },
+    "key": "QA",
+    "createdAt": "2026-01-13T16:10:10.578Z",
+    "icon": "fa-folder",
+    "isActive": true,
+    "name": "Testing & Quality",
+    "sortOrder": {
+      "$numberInt": "10"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "69667e824400ba02c336a428"
+    },
+    "key": "DLVRPM",
+    "createdAt": "2026-01-13T17:18:58.845Z",
+    "icon": "fa-folder",
+    "isActive": true,
+    "name": "Delivery & Program Management",
+    "sortOrder": {
+      "$numberInt": "10"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "69667fe44400ba02c336a433"
+    },
+    "key": "GVRN",
+    "createdAt": "2026-01-13T17:24:52.447Z",
+    "icon": "fa-folder",
+    "isActive": true,
+    "name": "Governance & Compliance",
+    "sortOrder": {
+      "$numberInt": "10"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "69668c4c4400ba02c336a43c"
+    },
+    "key": "DATANLTCS",
+    "createdAt": "2026-01-13T18:17:48.281Z",
+    "icon": "fa-folder",
+    "isActive": true,
+    "name": "Data & Analytics",
+    "sortOrder": {
+      "$numberInt": "10"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "69668df04400ba02c336a442"
+    },
+    "key": "PRDBUS",
+    "createdAt": "2026-01-13T18:24:48.578Z",
+    "icon": "fa-folder",
+    "isActive": true,
+    "name": "Product & Business",
+    "sortOrder": {
+      "$numberInt": "10"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "69668f224400ba02c336a448"
+    },
+    "key": "FINMANG",
+    "createdAt": "2026-01-13T18:29:54.265Z",
+    "icon": "fa-folder",
+    "isActive": true,
+    "name": "Financials & Vendor Management",
+    "sortOrder": {
+      "$numberInt": "10"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "696690194400ba02c336a44d"
+    },
+    "key": "KTRUNBK",
+    "createdAt": "2026-01-13T18:34:01.471Z",
+    "icon": "fa-folder",
+    "isActive": true,
+    "name": "Knowledge Base & Runbooks",
+    "sortOrder": {
+      "$numberInt": "10"
+    }
+  }
+]

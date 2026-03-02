@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "seed:diagram-templates": "node scripts/seed-diagram-templates.js",
-    "seed:export": "node scripts/seed-export.js",
+    "seed:export": "SEED_DIR=seed/all EXPORT_ALL=true node scripts/seed-export.js",
     "seed:import": "node scripts/seed-import.js",
     "db:bootstrap": "tsx scripts/bootstrap-baseline.ts",
     "db:seed-sample": "tsx scripts/bootstrap-sample.ts",
