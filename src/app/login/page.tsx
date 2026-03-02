@@ -2,6 +2,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { useRouter, useSearchParams } from '../../App';
 
 export default function LoginPage() {
@@ -98,7 +99,7 @@ export default function LoginPage() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full bg-white border border-slate-200 rounded-2xl pl-12 pr-5 py-4 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition-all placeholder:text-slate-400"
+                  className="w-full bg-white border border-slate-200 rounded-2xl pl-12 pr-5 py-2.5 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition-all placeholder:text-slate-400"
                   placeholder="user@company.com"
                 />
               </div>
@@ -107,7 +108,6 @@ export default function LoginPage() {
             <div className="space-y-2">
               <div className="flex justify-between items-center ml-1">
                 <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest">Passcode</label>
-                <button type="button" className="text-[10px] font-bold text-blue-600 hover:text-blue-500 uppercase tracking-tighter">Account recovery</button>
               </div>
               <div className="relative group">
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-blue-500 transition-colors">
@@ -118,7 +118,7 @@ export default function LoginPage() {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-white border border-slate-200 rounded-2xl pl-12 pr-5 py-4 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition-all placeholder:text-slate-400"
+                  className="w-full bg-white border border-slate-200 rounded-2xl pl-12 pr-5 py-2.5 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition-all placeholder:text-slate-400"
                   placeholder="••••••••"
                 />
               </div>
@@ -150,7 +150,7 @@ export default function LoginPage() {
                 <i className="fas fa-circle-notch fa-spin"></i>
               ) : (
                 <div className="flex items-center justify-center gap-2">
-                  <span>Initialize Session</span>
+                  <span>Login</span>
                   <i className="fas fa-arrow-right-to-bracket text-xs group-hover:translate-x-1 transition-transform"></i>
                 </div>
               )}
@@ -160,20 +160,12 @@ export default function LoginPage() {
           <div className="mt-8 pt-8 border-t border-slate-200 text-center">
             <p className="text-slate-500 text-sm">
               New to the platform?{' '}
-              <a
+              <Link
                 href="/register"
-                onClick={(e) => {
-                  e.preventDefault();
-                  try {
-                    router.push('/register');
-                  } catch {
-                    window.location.href = '/register';
-                  }
-                }}
                 className="text-blue-600 font-bold hover:text-blue-500 transition cursor-pointer"
               >
-                Request Provisioning
-              </a>
+                Create Account
+              </Link>
             </p>
           </div>
         </div>
