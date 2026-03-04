@@ -19,8 +19,9 @@ import AdminJiraIntegration from './AdminJiraIntegration';
 import AdminGitHubIntegration from './AdminGitHubIntegration';
 import AdminDeliveryPolicy from './AdminDeliveryPolicy';
 import AdminBackupRestore from './AdminBackupRestore';
+import AdminBundleCapacity from './AdminBundleCapacity';
 
-type AdminModuleId = 'home' | 'wiki-themes' | 'wiki-templates' | 'diagram-templates' | 'vendors' | 'roles' | 'bundles' | 'applications' | 'taxonomy' | 'artifact-rules' | 'milestone-templates' | 'users' | 'sharepoint' | 'ai-settings' | 'bundle-assignments' | 'admins' | 'work-blueprints' | 'work-generators' | 'samples' | 'audit-events' | 'audit-notifications' | 'notification-settings' | 'delivery-policy' | 'jira' | 'github' | 'backup';
+type AdminModuleId = 'home' | 'wiki-themes' | 'wiki-templates' | 'diagram-templates' | 'vendors' | 'roles' | 'bundles' | 'applications' | 'taxonomy' | 'artifact-rules' | 'milestone-templates' | 'users' | 'sharepoint' | 'ai-settings' | 'bundle-assignments' | 'admins' | 'work-blueprints' | 'work-generators' | 'samples' | 'audit-events' | 'audit-notifications' | 'notification-settings' | 'delivery-policy' | 'jira' | 'github' | 'backup' | 'bundle-capacity';
 
 interface AdminModule {
   id: AdminModuleId;
@@ -129,6 +130,7 @@ const Admin: React.FC = () => {
     {
       title: 'Operations',
       modules: [
+        { id: 'bundle-capacity', label: 'Bundle Capacity', icon: 'fa-gauge-high', description: 'Configure bundle-level story point capacity planning.', color: 'slate' },
         { id: 'backup', label: 'Backup & Restore', icon: 'fa-database', description: 'Export and restore configuration bundles safely.', color: 'slate' }
       ]
     },
@@ -156,6 +158,7 @@ const Admin: React.FC = () => {
     {
       title: 'Operations',
       modules: [
+        { id: 'bundle-capacity', label: 'Bundle Capacity', icon: 'fa-gauge-high', description: 'Configure bundle-level story point capacity planning.', color: 'slate' },
         { id: 'backup', label: 'Backup & Restore', icon: 'fa-database', description: 'Export and restore configuration bundles safely.', color: 'slate' }
       ]
     },
@@ -260,6 +263,8 @@ const Admin: React.FC = () => {
         return <AdminDeliveryPolicy />;
       case 'backup':
         return <AdminBackupRestore />;
+      case 'bundle-capacity':
+        return <AdminBundleCapacity />;
       case 'jira':
         return <AdminJiraIntegration />;
       case 'github':

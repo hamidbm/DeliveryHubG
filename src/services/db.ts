@@ -260,6 +260,11 @@ const ensureBundleProfileIndexes = async (db: any) => {
   await db.collection('bundle_profiles').createIndex({ 'schedule.goLivePlanned': 1 });
 };
 
+const ensureBundleCapacityIndexes = async (db: any) => {
+  await db.collection('bundle_capacity').createIndex({ bundleId: 1 }, { unique: true });
+  await db.collection('bundle_capacity').createIndex({ updatedAt: -1 });
+};
+
 export const fetchBundleAssignments = async (filters: {
   bundleId?: string;
   userId?: string;
@@ -360,6 +365,43 @@ export const upsertBundleProfile = async (bundleId: string, profile: Partial<Bun
     {
       $set: payload,
       $setOnInsert: { createdAt: now }
+    },
+    { upsert: true }
+  );
+};
+
+export const fetchBundleCapacity = async (bundleIds?: string[]) => {
+  try {
+    const db = await getDb();
+    await ensureBundleCapacityIndexes(db);
+    const query = bundleIds && bundleIds.length ? { bundleId: { $in: bundleIds.map(String) } } : {};
+    return await db.collection('bundle_capacity').find(query).sort({ bundleId: 1 }).toArray();
+  } catch {
+    return [];
+  }
+};
+
+export const upsertBundleCapacity = async (bundleId: string, capacity: { unit: 'POINTS_PER_SPRINT' | 'POINTS_PER_WEEK'; value: number }, userId?: string) => {
+  const db = await getDb();
+  await ensureBundleCapacityIndexes(db);
+  const now = new Date().toISOString();
+  const targetId = String(bundleId);
+  const payload = {
+    _id: targetId,
+    bundleId: targetId,
+    unit: capacity.unit,
+    value: capacity.value,
+    updatedAt: now,
+    updatedBy: userId
+  };
+  return await db.collection('bundle_capacity').updateOne(
+    { bundleId: targetId },
+    {
+      $set: payload,
+      $setOnInsert: {
+        createdAt: now,
+        createdBy: userId
+      }
     },
     { upsert: true }
   );

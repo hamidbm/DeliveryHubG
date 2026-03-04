@@ -41,15 +41,57 @@ type ProgramIntel = {
   };
 };
 
+type CapacityPlan = {
+  bundleId: string;
+  bundleName?: string;
+  capacity: { unit: 'POINTS_PER_SPRINT' | 'POINTS_PER_WEEK'; value: number };
+  horizon: { startDate: string; endDate: string; buckets: 'SPRINT' | 'WEEK'; count: number };
+  buckets: Array<{
+    key: string;
+    startDate: string;
+    endDate: string;
+    capacityPoints: number;
+    demandPoints: number;
+    overBy: number;
+    drivers: Array<{ milestoneId: string; name: string; demandPoints: number }>;
+  }>;
+  summary: { totalCapacity: number; totalDemand: number; isOvercommitted: boolean; maxOverBy: number };
+};
+
+type CapacityResponse = {
+  bundlePlans: CapacityPlan[];
+  atRiskBundles: Array<{
+    bundleId: string;
+    bundleName?: string;
+    totalCapacity: number;
+    totalDemand: number;
+    maxOverBy: number;
+    topDrivers: Array<{ milestoneId: string; name: string; demandPoints: number }>;
+  }>;
+  recommendedActions: Array<{
+    type: 'SCOPE_REDUCE' | 'SLIP_MILESTONE' | 'ADD_CAPACITY';
+    bundleId: string;
+    milestoneId?: string;
+    milestoneName?: string;
+    reason: string;
+    overBy?: number;
+  }>;
+};
+
 const ProgramCoordination: React.FC = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
   const bundleIdsParam = searchParams.get('bundleIds') || '';
   const milestoneIdsParam = searchParams.get('milestoneIds') || '';
+  const panel = searchParams.get('panel') || 'overview';
   const [loading, setLoading] = useState(true);
   const [intel, setIntel] = useState<ProgramIntel | null>(null);
   const [listsCache, setListsCache] = useState<ProgramIntel['lists'] | null>(null);
   const [modal, setModal] = useState<{ title: string; content: React.ReactNode } | null>(null);
+  const [capacityLoading, setCapacityLoading] = useState(false);
+  const [capacityData, setCapacityData] = useState<CapacityResponse | null>(null);
+  const [capacityError, setCapacityError] = useState<string | null>(null);
+  const [horizonWeeks, setHorizonWeeks] = useState(8);
 
   const fetchIntel = async (includeLists = false) => {
     const params = new URLSearchParams();
@@ -81,6 +123,44 @@ const ProgramCoordination: React.FC = () => {
     setListsCache(null);
   }, [bundleIdsParam, milestoneIdsParam]);
 
+  const setPanel = (next: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (next === 'overview') {
+      params.delete('panel');
+    } else {
+      params.set('panel', next);
+    }
+    router.push(`/program?${params.toString()}`);
+  };
+
+  const fetchCapacity = async () => {
+    const params = new URLSearchParams();
+    if (bundleIdsParam) params.set('bundleIds', bundleIdsParam);
+    params.set('horizonWeeks', String(horizonWeeks));
+    const res = await fetch(`/api/capacity/plan?${params.toString()}`);
+    if (!res.ok) throw new Error('Failed to load capacity');
+    return (await res.json()) as CapacityResponse;
+  };
+
+  useEffect(() => {
+    if (panel !== 'capacity') return;
+    let isMounted = true;
+    const load = async () => {
+      setCapacityLoading(true);
+      setCapacityError(null);
+      try {
+        const data = await fetchCapacity();
+        if (isMounted) setCapacityData(data);
+      } catch {
+        if (isMounted) setCapacityError('Unable to load capacity plan.');
+      } finally {
+        if (isMounted) setCapacityLoading(false);
+      }
+    };
+    load();
+    return () => { isMounted = false; };
+  }, [panel, bundleIdsParam, horizonWeeks]);
+
   const ensureLists = async () => {
     if (listsCache) return listsCache;
     const data = await fetchIntel(true);
@@ -99,6 +179,9 @@ const ProgramCoordination: React.FC = () => {
 
   const summary = intel?.summary;
   const bundleRollups = intel?.bundleRollups || [];
+  const capacityPlans = capacityData?.bundlePlans || [];
+  const atRiskCapacityBundles = capacityData?.atRiskBundles || [];
+  const capacityActions = capacityData?.recommendedActions || [];
 
   const openBundleModal = (bundle: ProgramIntel['bundleRollups'][number]) => {
     setModal({
@@ -217,6 +300,36 @@ const ProgramCoordination: React.FC = () => {
     });
   };
 
+  const openCapacityCell = (bundleName: string, bucket: CapacityPlan['buckets'][number]) => {
+    setModal({
+      title: `${bundleName} • ${bucket.key}`,
+      content: (
+        <div className="space-y-3">
+          <div className="text-xs text-slate-500">
+            Demand {bucket.demandPoints} / Capacity {bucket.capacityPoints} • Over by {bucket.overBy}
+          </div>
+          {(bucket.drivers || []).map((driver) => (
+            <div key={driver.milestoneId} className="border border-slate-100 rounded-xl p-4 flex items-center justify-between">
+              <div>
+                <div className="text-sm font-semibold text-slate-800">{driver.name}</div>
+                <div className="text-[11px] text-slate-400">{driver.demandPoints} pts in this bucket</div>
+              </div>
+              <button
+                onClick={() => router.push('/?tab=work-items&view=milestone-plan')}
+                className="px-3 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg bg-slate-900 text-white hover:bg-blue-600"
+              >
+                Open Planning
+              </button>
+            </div>
+          ))}
+          {(bucket.drivers || []).length === 0 && (
+            <div className="text-sm text-slate-400">No drivers for this bucket.</div>
+          )}
+        </div>
+      )
+    });
+  };
+
   const summaryCards = useMemo(() => ([
     { label: 'Bundles', value: summary?.bundles ?? 0 },
     { label: 'Milestones', value: summary?.milestones ?? 0 },
@@ -233,101 +346,252 @@ const ProgramCoordination: React.FC = () => {
           <h2 className="text-2xl font-black text-slate-900 tracking-tight">Program Coordination</h2>
           <p className="text-[11px] text-slate-400 uppercase font-bold tracking-widest">Cross-bundle execution intelligence</p>
         </div>
-      </div>
-
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-        {summaryCards.map((card) => (
-          <div key={card.label} className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm">
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{card.label}</p>
-            <p className="text-2xl font-black text-slate-900">{card.value}</p>
-          </div>
-        ))}
-      </div>
-
-      <div className="bg-white border border-slate-100 rounded-[2rem] p-6 shadow-sm">
-        <ChangeFeed scopeType="PROGRAM" title="Program activity" limit={20} />
-      </div>
-
-      <div className="bg-white border border-slate-100 rounded-[2rem] p-6 shadow-sm">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-black uppercase tracking-widest text-slate-500">At-Risk Bundles</h3>
-          <button
-            onClick={openAtRiskBundles}
-            className="px-3 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200"
-          >
-            View ({intel?.listCounts?.topAtRiskBundles ?? 0})
-          </button>
+        <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-xl">
+          {[
+            { id: 'overview', label: 'Overview' },
+            { id: 'capacity', label: 'Capacity' }
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setPanel(tab.id)}
+              className={`px-4 py-2 text-[10px] font-black uppercase rounded-lg transition-all ${
+                panel === tab.id ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400 hover:text-slate-600'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-[10px] uppercase tracking-widest text-slate-400">
-                <th className="text-left py-2">Band</th>
-                <th className="text-left py-2">Bundle</th>
-                <th className="text-left py-2">Blocked</th>
-                <th className="text-left py-2">High/Critical</th>
-                <th className="text-left py-2">Overdue</th>
-                <th className="text-left py-2">Avg Confidence</th>
-                <th className="text-left py-2">Avg Readiness</th>
-                <th className="text-left py-2">Late Milestones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {bundleRollups.map((bundle) => (
-                <tr
-                  key={bundle.bundleId}
-                  className="border-t border-slate-100 hover:bg-slate-50 cursor-pointer"
-                  onClick={() => openBundleModal(bundle)}
+      </div>
+
+      {panel === 'overview' && (
+        <>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+            {summaryCards.map((card) => (
+              <div key={card.label} className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{card.label}</p>
+                <p className="text-2xl font-black text-slate-900">{card.value}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="bg-white border border-slate-100 rounded-[2rem] p-6 shadow-sm">
+            <ChangeFeed scopeType="PROGRAM" title="Program activity" limit={20} />
+          </div>
+
+          <div className="bg-white border border-slate-100 rounded-[2rem] p-6 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-black uppercase tracking-widest text-slate-500">At-Risk Bundles</h3>
+              <button
+                onClick={openAtRiskBundles}
+                className="px-3 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200"
+              >
+                View ({intel?.listCounts?.topAtRiskBundles ?? 0})
+              </button>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-[10px] uppercase tracking-widest text-slate-400">
+                    <th className="text-left py-2">Band</th>
+                    <th className="text-left py-2">Bundle</th>
+                    <th className="text-left py-2">Blocked</th>
+                    <th className="text-left py-2">High/Critical</th>
+                    <th className="text-left py-2">Overdue</th>
+                    <th className="text-left py-2">Avg Confidence</th>
+                    <th className="text-left py-2">Avg Readiness</th>
+                    <th className="text-left py-2">Late Milestones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {bundleRollups.map((bundle) => (
+                    <tr
+                      key={bundle.bundleId}
+                      className="border-t border-slate-100 hover:bg-slate-50 cursor-pointer"
+                      onClick={() => openBundleModal(bundle)}
+                    >
+                      <td className="py-3">
+                        <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded ${bandBadge(bundle.band)}`}>{bundle.band}</span>
+                      </td>
+                      <td className="py-3 font-semibold text-slate-700">{bundle.bundleName || bundle.bundleId}</td>
+                      <td className="py-3 text-slate-500">{bundle.aggregated.blockedDerived}</td>
+                      <td className="py-3 text-slate-500">{bundle.aggregated.highCriticalRisks}</td>
+                      <td className="py-3 text-slate-500">{bundle.aggregated.overdueOpen}</td>
+                      <td className="py-3 text-slate-500">{bundle.aggregated.confidenceAvg}</td>
+                      <td className="py-3 text-slate-500">{bundle.aggregated.readinessAvg}</td>
+                      <td className="py-3 text-slate-500">{bundle.aggregated.isLateCount}</td>
+                    </tr>
+                  ))}
+                  {bundleRollups.length === 0 && !loading && (
+                    <tr>
+                      <td colSpan={8} className="py-6 text-center text-slate-400 text-sm">No bundles available.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="bg-white border border-slate-100 rounded-[2rem] p-6 shadow-sm">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-black uppercase tracking-widest text-slate-500">Top Cross-Bundle Blockers</h3>
+                <button
+                  onClick={openTopBlockers}
+                  className="px-3 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200"
                 >
-                  <td className="py-3">
-                    <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded ${bandBadge(bundle.band)}`}>{bundle.band}</span>
-                  </td>
-                  <td className="py-3 font-semibold text-slate-700">{bundle.bundleName || bundle.bundleId}</td>
-                  <td className="py-3 text-slate-500">{bundle.aggregated.blockedDerived}</td>
-                  <td className="py-3 text-slate-500">{bundle.aggregated.highCriticalRisks}</td>
-                  <td className="py-3 text-slate-500">{bundle.aggregated.overdueOpen}</td>
-                  <td className="py-3 text-slate-500">{bundle.aggregated.confidenceAvg}</td>
-                  <td className="py-3 text-slate-500">{bundle.aggregated.readinessAvg}</td>
-                  <td className="py-3 text-slate-500">{bundle.aggregated.isLateCount}</td>
-                </tr>
+                  View ({intel?.listCounts?.topCrossBundleBlockers ?? 0})
+                </button>
+              </div>
+              <p className="text-sm text-slate-500">Most disruptive blockers causing cross-bundle dependency drag.</p>
+            </div>
+
+            <div className="bg-white border border-slate-100 rounded-[2rem] p-6 shadow-sm">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-black uppercase tracking-widest text-slate-500">At-Risk Milestones</h3>
+                <button
+                  onClick={openAtRiskMilestones}
+                  className="px-3 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200"
+                >
+                  View ({intel?.listCounts?.topAtRiskMilestones ?? 0})
+                </button>
+              </div>
+              <p className="text-sm text-slate-500">Milestones with the highest slip risk and active blockers.</p>
+            </div>
+          </div>
+        </>
+      )}
+
+      {panel === 'capacity' && (
+        <div className="flex flex-col gap-6">
+          <div className="bg-white border border-slate-100 rounded-[2rem] p-6 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-sm font-black uppercase tracking-widest text-slate-500">Capacity Overview</h3>
+                <p className="text-xs text-slate-400 mt-1">Even allocation across weeks until milestone end date.</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Horizon</span>
+                <select
+                  className="px-3 py-2 text-xs rounded-lg border border-slate-200 bg-white"
+                  value={horizonWeeks}
+                  onChange={(e) => setHorizonWeeks(Number(e.target.value))}
+                >
+                  {[6, 8, 12].map((w) => (
+                    <option key={w} value={w}>{w} weeks</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {capacityError && <div className="text-sm text-red-500">{capacityError}</div>}
+            {capacityLoading && <div className="text-sm text-slate-400">Loading capacity plan...</div>}
+
+            {!capacityLoading && !capacityError && (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="text-[10px] uppercase tracking-widest text-slate-400">
+                      <th className="text-left py-2 pr-4">Bundle</th>
+                      {capacityPlans[0]?.buckets?.map((bucket) => (
+                        <th key={bucket.key} className="text-left py-2 pr-4">{bucket.key}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {capacityPlans.map((plan) => (
+                      <tr key={plan.bundleId} className="border-t border-slate-100">
+                        <td className="py-3 pr-4 font-semibold text-slate-700">{plan.bundleName || plan.bundleId}</td>
+                        {plan.buckets.map((bucket) => (
+                          <td key={bucket.key} className="py-3 pr-4">
+                            <button
+                              onClick={() => openCapacityCell(plan.bundleName || plan.bundleId, bucket)}
+                              className={`px-2 py-1 rounded-lg text-[10px] font-semibold ${
+                                bucket.overBy > 0 ? 'bg-red-50 text-red-600' : 'bg-slate-50 text-slate-600'
+                              }`}
+                            >
+                              {bucket.demandPoints}/{bucket.capacityPoints}
+                            </button>
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                    {capacityPlans.length === 0 && (
+                      <tr>
+                        <td colSpan={6} className="py-6 text-center text-slate-400">No capacity data available.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          <div className="bg-white border border-slate-100 rounded-[2rem] p-6 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-black uppercase tracking-widest text-slate-500">At-Risk Bundles</h3>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-[10px] uppercase tracking-widest text-slate-400">
+                    <th className="text-left py-2">Bundle</th>
+                    <th className="text-left py-2">Demand</th>
+                    <th className="text-left py-2">Capacity</th>
+                    <th className="text-left py-2">Max Over</th>
+                    <th className="text-left py-2">Top Drivers</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {atRiskCapacityBundles.map((b) => (
+                    <tr key={b.bundleId} className="border-t border-slate-100">
+                      <td className="py-3 font-semibold text-slate-700">{b.bundleName || b.bundleId}</td>
+                      <td className="py-3 text-slate-500">{b.totalDemand}</td>
+                      <td className="py-3 text-slate-500">{b.totalCapacity}</td>
+                      <td className="py-3 text-red-600 font-semibold">{b.maxOverBy}</td>
+                      <td className="py-3 text-slate-500">
+                        {(b.topDrivers || []).map((d) => d.name).join(', ') || '—'}
+                      </td>
+                    </tr>
+                  ))}
+                  {atRiskCapacityBundles.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="py-6 text-center text-slate-400 text-sm">No bundles over capacity.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="bg-white border border-slate-100 rounded-[2rem] p-6 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-black uppercase tracking-widest text-slate-500">Recommended Actions</h3>
+            </div>
+            <div className="space-y-3">
+              {capacityActions.map((action, idx) => (
+                <div key={`${action.type}-${idx}`} className="border border-slate-100 rounded-xl p-4 flex items-center justify-between">
+                  <div>
+                    <div className="text-sm font-semibold text-slate-800">{action.type.replace('_', ' ')}</div>
+                    <div className="text-[11px] text-slate-400">{action.reason}</div>
+                  </div>
+                  {action.milestoneId && (
+                    <button
+                      onClick={() => router.push('/?tab=work-items&view=milestone-plan')}
+                      className="px-3 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg bg-slate-900 text-white hover:bg-blue-600"
+                    >
+                      Open Planning
+                    </button>
+                  )}
+                </div>
               ))}
-              {bundleRollups.length === 0 && !loading && (
-                <tr>
-                  <td colSpan={8} className="py-6 text-center text-slate-400 text-sm">No bundles available.</td>
-                </tr>
+              {capacityActions.length === 0 && (
+                <div className="text-sm text-slate-400">No capacity actions recommended.</div>
               )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white border border-slate-100 rounded-[2rem] p-6 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-black uppercase tracking-widest text-slate-500">Top Cross-Bundle Blockers</h3>
-            <button
-              onClick={openTopBlockers}
-              className="px-3 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200"
-            >
-              View ({intel?.listCounts?.topCrossBundleBlockers ?? 0})
-            </button>
+            </div>
           </div>
-          <p className="text-sm text-slate-500">Most disruptive blockers causing cross-bundle dependency drag.</p>
         </div>
-
-        <div className="bg-white border border-slate-100 rounded-[2rem] p-6 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-black uppercase tracking-widest text-slate-500">At-Risk Milestones</h3>
-            <button
-              onClick={openAtRiskMilestones}
-              className="px-3 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200"
-            >
-              View ({intel?.listCounts?.topAtRiskMilestones ?? 0})
-            </button>
-          </div>
-          <p className="text-sm text-slate-500">Milestones with the highest slip risk and active blockers.</p>
-        </div>
-      </div>
+      )}
 
       {modal && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-[100] p-6">

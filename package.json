@@ -46,6 +46,7 @@
     "test:scope-requests": "NODE_ENV=test tsx scripts/test-scope-requests.ts",
     "test:jira": "NODE_ENV=test tsx scripts/test-jira-mapping.ts",
     "test:feed": "NODE_ENV=test tsx scripts/test-feed.ts",
+    "test:capacity-plan": "NODE_ENV=test tsx scripts/test-capacity-plan.ts",
     "test:visibility": "NODE_ENV=test tsx scripts/test-visibility.ts",
     "test:data-quality": "NODE_ENV=test tsx scripts/test-data-quality.ts",
     "test:api": "NODE_ENV=test tsx scripts/test-api.ts"

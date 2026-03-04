@@ -461,6 +461,17 @@ export interface Notification {
 }
 export interface Sprint { _id?: string; id?: string; name: string; startDate?: string; endDate?: string; goal?: string; status: 'PLANNED' | 'ACTIVE' | 'CLOSED'; bundleId?: string; applicationId?: string; createdAt?: string; }
 
+export interface BundleCapacity {
+  _id?: string;
+  bundleId: string;
+  unit: 'POINTS_PER_SPRINT' | 'POINTS_PER_WEEK';
+  value: number;
+  updatedAt?: string;
+  updatedBy?: string;
+  createdAt?: string;
+  createdBy?: string;
+}
+
 export interface Milestone {
   _id?: string;
   id?: string;
