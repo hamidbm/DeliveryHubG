@@ -16,7 +16,7 @@ export type BundleCapacityPlan = {
     capacityPoints: number;
     demandPoints: number;
     overBy: number;
-    drivers: Array<{ milestoneId: string; name: string; demandPoints: number }>;
+    drivers: Array<{ milestoneId: string; name: string; demandPoints: number; endDate?: string; p50?: string; p80?: string; p90?: string; hitProbability?: number }>;
   }>;
   summary: {
     totalCapacity: number;
@@ -118,12 +118,10 @@ export const computeBundleCapacityPlans = async (bundleIds: string[], horizonWee
       capacityPoints: perBucketCapacity,
       demandPoints: 0,
       overBy: 0,
-      drivers: [] as Array<{ milestoneId: string; name: string; demandPoints: number }>
+      drivers: [] as Array<{ milestoneId: string; name: string; demandPoints: number; endDate?: string; p50?: string; p80?: string; p90?: string; hitProbability?: number }>
     }));
 
     const driverTotals = new Map<string, { milestoneId: string; name: string; demandPoints: number; endDate: Date | null }>();
-    const milestoneEndMap = new Map<string, Date | null>();
-
     bundleMilestones.forEach((milestone) => {
       const milestoneId = buildMilestoneKey(milestone);
       const rollup = rollupMap.get(milestoneId) || null;
@@ -131,7 +129,7 @@ export const computeBundleCapacityPlans = async (bundleIds: string[], horizonWee
       if (!remainingPoints) return;
       const endDate = resolveMilestoneEnd(milestone, rollup);
       if (!endDate) return;
-      milestoneEndMap.set(milestoneId, endDate);
+      const mc = rollup?.forecast?.monteCarlo;
 
       let lastIndex = buckets.length - 1;
       if (endDate.getTime() < horizonStart.getTime()) {
@@ -153,7 +151,16 @@ export const computeBundleCapacityPlans = async (bundleIds: string[], horizonWee
         if (existing) {
           existing.demandPoints += perBucket;
         } else {
-          drivers.push({ milestoneId, name, demandPoints: perBucket });
+          drivers.push({
+            milestoneId,
+            name,
+            demandPoints: perBucket,
+            endDate: endDate.toISOString(),
+            p50: mc?.p50,
+            p80: mc?.p80,
+            p90: mc?.p90,
+            hitProbability: mc?.hitProbability
+          });
         }
       }
 
@@ -240,6 +247,25 @@ export const computeBundleCapacityPlans = async (bundleIds: string[], horizonWee
         });
       }
     }
+
+    bundleMilestones.forEach((milestone) => {
+      const milestoneId = buildMilestoneKey(milestone);
+      const rollup = rollupMap.get(milestoneId) || null;
+      const mc = rollup?.forecast?.monteCarlo;
+      if (!mc?.p80 || !milestone?.endDate) return;
+      const p80 = new Date(mc.p80);
+      const end = new Date(milestone.endDate);
+      if (Number.isNaN(p80.getTime()) || Number.isNaN(end.getTime())) return;
+      if (p80.getTime() > end.getTime()) {
+        actions.push({
+          type: 'SLIP_MILESTONE',
+          bundleId,
+          milestoneId,
+          milestoneName: milestone.name || milestone.title || milestoneId,
+          reason: `P80 finish date (${p80.toLocaleDateString()}) exceeds target end date`
+        });
+      }
+    });
   }
 
   const atRiskBundles = plans

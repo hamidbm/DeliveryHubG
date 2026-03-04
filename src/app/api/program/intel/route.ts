@@ -161,7 +161,8 @@ export async function GET(request: Request) {
     bundleRollupsMap.get(bundleId).milestones.push({
       milestoneId: key,
       rollup,
-      readiness
+      readiness,
+      milestone
     });
   }
 
@@ -186,7 +187,10 @@ export async function GET(request: Request) {
       blockedDerived += rollup?.totals?.blockedDerived || 0;
       highCriticalRisks += (rollup?.risks?.openBySeverity?.high || 0) + (rollup?.risks?.openBySeverity?.critical || 0);
       overdueOpen += rollup?.totals?.overdueOpen || 0;
-      if (rollup?.schedule?.isLate) isLateCount += 1;
+      const endDate = entry?.milestone?.endDate ? new Date(entry.milestone.endDate) : null;
+      const p80 = rollup?.forecast?.monteCarlo?.p80 ? new Date(rollup.forecast.monteCarlo.p80) : null;
+      const p80Late = endDate && p80 && !Number.isNaN(endDate.getTime()) && !Number.isNaN(p80.getTime()) && p80.getTime() > endDate.getTime();
+      if (rollup?.schedule?.isLate || p80Late) isLateCount += 1;
     });
 
     const confidenceAvg = Number((confidenceSum / count).toFixed(2));
@@ -291,6 +295,9 @@ export async function GET(request: Request) {
       const policyRef = await getEffectivePolicyForMilestone(key);
       const readiness = rollup ? await evaluateMilestoneReadiness(rollup, policyRef.effective) : null;
       const highCriticalRisks = (rollup?.risks?.openBySeverity?.high || 0) + (rollup?.risks?.openBySeverity?.critical || 0);
+      const p80 = rollup?.forecast?.monteCarlo?.p80 ? new Date(rollup.forecast.monteCarlo.p80) : null;
+      const endDate = milestone?.endDate ? new Date(milestone.endDate) : null;
+      const p80Slip = p80 && endDate && !Number.isNaN(p80.getTime()) && !Number.isNaN(endDate.getTime()) && p80.getTime() > endDate.getTime();
       return {
         milestoneId: key,
         milestoneName: milestone.name,
@@ -300,12 +307,13 @@ export async function GET(request: Request) {
         confidenceScore: rollup?.confidence?.score || 0,
         readinessBand: readiness?.band || 'low',
         isLate: rollup?.schedule?.isLate || false,
-        slipDays: rollup?.schedule?.slipDays || 0
+        slipDays: rollup?.schedule?.slipDays || 0,
+        p80Slip
       };
     }));
     lists.topAtRiskMilestones = topAtRiskRaw.sort((a, b) => {
-        const scoreA = b.blockedDerived + b.highCriticalRisks + b.overdueOpen - b.confidenceScore * 0.05;
-        const scoreB = a.blockedDerived + a.highCriticalRisks + a.overdueOpen - a.confidenceScore * 0.05;
+        const scoreA = b.blockedDerived + b.highCriticalRisks + b.overdueOpen + (b.p80Slip ? 5 : 0) - b.confidenceScore * 0.05;
+        const scoreB = a.blockedDerived + a.highCriticalRisks + a.overdueOpen + (a.p80Slip ? 5 : 0) - a.confidenceScore * 0.05;
         return scoreA - scoreB;
       })
       .slice(0, limit);

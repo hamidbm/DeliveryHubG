@@ -24,6 +24,8 @@ export const computeBundleVelocity = async (bundleId: string, windowSprints = 5)
   let items: any[] = [];
   let sampleSize = 0;
   let divisor = sprintWindow;
+  let weeklySamples: number[] = [];
+  let sprintLengthDays = DEFAULT_SPRINT_LENGTH_DAYS;
 
   if (sprints.length) {
     const sprintIds = sprints.map((s: any) => String(s._id || s.id || '')).filter(Boolean);
@@ -33,6 +35,16 @@ export const computeBundleVelocity = async (bundleId: string, windowSprints = 5)
       sprintId: { $in: sprintIds },
       status: WorkItemStatus.DONE
     }).toArray();
+    weeklySamples = sprints.map((s: any) => {
+      const start = s.startDate ? new Date(s.startDate) : null;
+      const end = s.endDate ? new Date(s.endDate) : null;
+      const spanDays = start && end ? Math.max(1, Math.round((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000))) : DEFAULT_SPRINT_LENGTH_DAYS;
+      sprintLengthDays = spanDays;
+      const sprintItems = items.filter((i: any) => String(i.sprintId) === String(s._id || s.id || ''));
+      const sprintPoints = sprintItems.reduce((sum, i) => sum + (typeof i.storyPoints === 'number' ? i.storyPoints : 0), 0);
+      const weeks = spanDays / 7;
+      return weeks > 0 ? Number((sprintPoints / weeks).toFixed(2)) : 0;
+    }).filter((v: number) => Number.isFinite(v) && v > 0);
   } else {
     const since = new Date(now - sprintWindow * 7 * 24 * 60 * 60 * 1000).toISOString();
     items = await db.collection('workitems').find({
@@ -40,6 +52,15 @@ export const computeBundleVelocity = async (bundleId: string, windowSprints = 5)
       status: WorkItemStatus.DONE,
       updatedAt: { $gte: since }
     }).toArray();
+    const buckets = new Map<string, number>();
+    items.forEach((item: any) => {
+      const updated = item.updatedAt ? new Date(item.updatedAt) : null;
+      if (!updated || Number.isNaN(updated.getTime())) return;
+      const key = updated.toISOString().slice(0, 10);
+      const points = typeof item.storyPoints === 'number' ? item.storyPoints : 0;
+      buckets.set(key, (buckets.get(key) || 0) + points);
+    });
+    weeklySamples = Array.from(buckets.values()).map((v) => Number(v.toFixed(2))).filter((v) => v > 0);
   }
 
   let pointsTotal = 0;
@@ -55,7 +76,7 @@ export const computeBundleVelocity = async (bundleId: string, windowSprints = 5)
   const avgVelocityPoints = divisor > 0 ? Number((pointsTotal / divisor).toFixed(2)) : 0;
   const avgVelocityHours = divisor > 0 ? Number((hoursTotal / divisor).toFixed(2)) : 0;
 
-  return { avgVelocityPoints, avgVelocityHours, sampleSize, sprintLengthDays: DEFAULT_SPRINT_LENGTH_DAYS };
+  return { avgVelocityPoints, avgVelocityHours, sampleSize, sprintLengthDays, weeklySamples };
 };
 
 export const forecastMilestoneCompletion = async (

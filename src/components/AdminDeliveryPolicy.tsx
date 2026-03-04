@@ -38,6 +38,13 @@ type DeliveryPolicy = {
     atRiskPct: number;
     offTrackPct: number;
     minSampleSize: number;
+    monteCarlo: {
+      enabled: boolean;
+      iterations: number;
+      useCriticalPath: boolean;
+      minSampleSize: number;
+      pLevels: number[];
+    };
   };
   criticalPath: {
     nearCriticalSlackPct: number;
@@ -110,7 +117,14 @@ const DEFAULT_POLICY: DeliveryPolicy = {
   forecasting: {
     atRiskPct: 0.15,
     offTrackPct: 0.3,
-    minSampleSize: 3
+    minSampleSize: 3,
+    monteCarlo: {
+      enabled: false,
+      iterations: 2000,
+      useCriticalPath: true,
+      minSampleSize: 3,
+      pLevels: [0.5, 0.8, 0.9]
+    }
   },
   criticalPath: {
     nearCriticalSlackPct: 0.1,
@@ -240,7 +254,14 @@ const AdminDeliveryPolicy: React.FC = () => {
         weights: { ...policy.dataQuality.weights, ...(patch.dataQuality?.weights || {}) },
         caps: { ...policy.dataQuality.caps, ...(patch.dataQuality?.caps || {}) }
       },
-      forecasting: { ...policy.forecasting, ...(patch.forecasting || {}) },
+      forecasting: {
+        ...policy.forecasting,
+        ...(patch.forecasting || {}),
+        monteCarlo: {
+          ...policy.forecasting.monteCarlo,
+          ...(patch.forecasting?.monteCarlo || {})
+        }
+      },
       criticalPath: { ...policy.criticalPath, ...(patch.criticalPath || {}) },
       staleness: {
         thresholdsDays: { ...policy.staleness.thresholdsDays, ...(patch.staleness?.thresholdsDays || {}) },
@@ -525,6 +546,62 @@ const AdminDeliveryPolicy: React.FC = () => {
                 onChange={(e) => update({ forecasting: { ...policy.forecasting, minSampleSize: Number(e.target.value) } })}
                 className="mt-2 w-full px-3 py-2 border border-slate-200 rounded-xl text-sm"
               />
+            </label>
+          </div>
+          <div className="border-t border-slate-100 pt-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <h5 className="text-xs font-black uppercase tracking-widest text-slate-500">Monte Carlo</h5>
+              <label className="flex items-center gap-2 text-xs text-slate-600">
+                <input
+                  type="checkbox"
+                  checked={policy.forecasting.monteCarlo.enabled}
+                  onChange={(e) => update({ forecasting: { ...policy.forecasting, monteCarlo: { ...policy.forecasting.monteCarlo, enabled: e.target.checked } } })}
+                />
+                Enabled
+              </label>
+            </div>
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+              <label className="text-xs font-semibold text-slate-500">
+                Iterations
+                <input
+                  type="number"
+                  value={policy.forecasting.monteCarlo.iterations}
+                  onChange={(e) => update({ forecasting: { ...policy.forecasting, monteCarlo: { ...policy.forecasting.monteCarlo, iterations: Number(e.target.value) } } })}
+                  className="mt-2 w-full px-3 py-2 border border-slate-200 rounded-xl text-sm"
+                />
+              </label>
+              <label className="text-xs font-semibold text-slate-500">
+                Min sample size
+                <input
+                  type="number"
+                  value={policy.forecasting.monteCarlo.minSampleSize}
+                  onChange={(e) => update({ forecasting: { ...policy.forecasting, monteCarlo: { ...policy.forecasting.monteCarlo, minSampleSize: Number(e.target.value) } } })}
+                  className="mt-2 w-full px-3 py-2 border border-slate-200 rounded-xl text-sm"
+                />
+              </label>
+              <label className="text-xs font-semibold text-slate-500">
+                Percentiles (comma)
+                <input
+                  type="text"
+                  value={policy.forecasting.monteCarlo.pLevels.join(', ')}
+                  onChange={(e) => {
+                    const next = e.target.value
+                      .split(',')
+                      .map((v) => Number(v.trim()))
+                      .filter((v) => Number.isFinite(v));
+                    update({ forecasting: { ...policy.forecasting, monteCarlo: { ...policy.forecasting.monteCarlo, pLevels: next } } });
+                  }}
+                  className="mt-2 w-full px-3 py-2 border border-slate-200 rounded-xl text-sm"
+                />
+              </label>
+            </div>
+            <label className="flex items-center gap-2 text-xs text-slate-600">
+              <input
+                type="checkbox"
+                checked={policy.forecasting.monteCarlo.useCriticalPath}
+                onChange={(e) => update({ forecasting: { ...policy.forecasting, monteCarlo: { ...policy.forecasting.monteCarlo, useCriticalPath: e.target.checked } } })}
+              />
+              Use critical path remaining points when available
             </label>
           </div>
         </section>

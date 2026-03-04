@@ -21,8 +21,8 @@ Problem: roadmap and rollup queries can be heavy at scale. Value: early detectio
 1. Sprint execution integration.
 Problem: sprint execution is not tied to milestone scope. Value: alignment between team execution and milestone readiness. Dependencies: sprint data model and milestone rollups. Deliverables: sprint capacity tied to milestone scope and burn-up. Verify: sprint updates change milestone readiness signals.
 
-2. Forecasting v1.
-Problem: no forward-looking ETA per milestone. Value: early schedule risk visibility. Dependencies: historical completion data. Deliverables: velocity-based ETA per milestone and confidence calibration. Verify: compare predicted vs actual on recent milestones.
+2. Forecasting v1 (Monte Carlo).
+Problem: single-point ETA misses distribution and hit probability. Value: P50/P80/P90 finish dates and probability of hitting endDate. Dependencies: historical throughput distribution. Deliverables: Monte Carlo ETA in rollups, roadmap, and capacity planning; Admin policy toggle. Verify: P80 chips render and policy can enable/disable.
 
 3. Notification routing v2.
 Problem: no watcher/subscription model. Value: targeted delivery of notifications. Dependencies: current notification policy and prefs. Deliverables: watchers for bundles/milestones and cron-ready digest automation. Verify: watcher receives targeted notifications; digest can be scheduled.

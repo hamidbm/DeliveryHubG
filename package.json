@@ -43,6 +43,7 @@
     "test:staleness": "NODE_ENV=test tsx scripts/test-staleness.ts",
     "test:staleness-policy": "NODE_ENV=test tsx scripts/test-staleness-policy.ts",
     "test:backup": "NODE_ENV=test tsx scripts/test-backup.ts",
+    "test:monte-carlo": "NODE_ENV=test tsx scripts/test-monte-carlo.ts",
     "test:scope-requests": "NODE_ENV=test tsx scripts/test-scope-requests.ts",
     "test:jira": "NODE_ENV=test tsx scripts/test-jira-mapping.ts",
     "test:feed": "NODE_ENV=test tsx scripts/test-feed.ts",

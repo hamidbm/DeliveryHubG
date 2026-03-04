@@ -514,6 +514,17 @@ export interface MilestoneRollup {
     sprintsRemaining: number;
     varianceDays: number;
     band: 'on-track' | 'at-risk' | 'off-track';
+    monteCarlo?: {
+      enabled: boolean;
+      iterations: number;
+      remainingPointsUsed: number;
+      p50: string;
+      p80: string;
+      p90: string;
+      hitProbability: number;
+      mean?: number;
+      stdDev?: number;
+    } | null;
   } | null;
   totals: {
     items: number;
@@ -654,11 +665,38 @@ export interface DeliveryPolicy {
     atRiskPct: number;
     offTrackPct: number;
     minSampleSize: number;
+    monteCarlo: {
+      enabled: boolean;
+      iterations: number;
+      useCriticalPath: boolean;
+      minSampleSize: number;
+      pLevels: number[];
+    };
   };
   criticalPath: {
     nearCriticalSlackPct: number;
     defaultIncludeExternal: boolean;
     defaultExternalDepth: number;
+  };
+  staleness: {
+    thresholdsDays: {
+      workItemStale: number;
+      criticalStale: number;
+      blockedStale: number;
+      unassignedStale: number;
+      githubStale: number;
+      inProgressNoPrStale: number;
+    };
+    nudges: {
+      enabled: boolean;
+      allowedRoles: Array<'ADMIN' | 'CMO' | 'BUNDLE_OWNER' | 'WATCHER'>;
+      cooldownHoursPerItem: number;
+      maxNudgesPerUserPerDay: number;
+    };
+    digest: {
+      includeStaleSummary: boolean;
+      minCriticalStaleToInclude: number;
+    };
   };
 }
 

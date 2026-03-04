@@ -584,6 +584,14 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
                     ETA {new Date(forecast.estimatedCompletionDate).toLocaleDateString()} {forecast.varianceDays ? `${forecast.varianceDays > 0 ? '+' : ''}${forecast.varianceDays}d` : ''}
                   </span>
                 )}
+                {forecast?.monteCarlo?.p80 && (
+                  <span
+                    className="px-2 py-1 rounded-full bg-slate-900 text-white"
+                    title={`P50 ${new Date(forecast.monteCarlo.p50).toLocaleDateString()} • P80 ${new Date(forecast.monteCarlo.p80).toLocaleDateString()} • P90 ${new Date(forecast.monteCarlo.p90).toLocaleDateString()} • Hit ${Math.round((forecast.monteCarlo.hitProbability || 0) * 100)}%`}
+                  >
+                    P80 {new Date(forecast.monteCarlo.p80).toLocaleDateString()} ({Math.round((forecast.monteCarlo.hitProbability || 0) * 100)}%)
+                  </span>
+                )}
                 {expandedMilestones[milestoneId] ? (
                   burnupStatus[milestoneId]?.loading ? (
                     <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-400">Burn-up loading…</span>

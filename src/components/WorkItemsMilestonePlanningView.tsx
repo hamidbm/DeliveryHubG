@@ -213,6 +213,14 @@ const MilestoneColumn: React.FC<{
                 ETA {new Date(forecast.estimatedCompletionDate).toLocaleDateString()} {forecast.varianceDays ? `${forecast.varianceDays > 0 ? '+' : ''}${forecast.varianceDays}d` : ''}
               </span>
             )}
+            {forecast?.monteCarlo?.p80 && (
+              <span
+                className="px-2 py-1 rounded-full text-[8px] font-black uppercase tracking-widest bg-slate-900 text-white"
+                title={`P50 ${new Date(forecast.monteCarlo.p50).toLocaleDateString()} • P80 ${new Date(forecast.monteCarlo.p80).toLocaleDateString()} • P90 ${new Date(forecast.monteCarlo.p90).toLocaleDateString()} • Hit ${Math.round((forecast.monteCarlo.hitProbability || 0) * 100)}%`}
+              >
+                P80 {new Date(forecast.monteCarlo.p80).toLocaleDateString()} ({Math.round((forecast.monteCarlo.hitProbability || 0) * 100)}%)
+              </span>
+            )}
             {velocityHint && (
               <span className={`px-2 py-1 rounded-full text-[8px] font-black uppercase tracking-widest ${
                 velocityHint === 'up' ? 'bg-emerald-50 text-emerald-700' :
@@ -998,6 +1006,14 @@ const WorkItemsMilestonePlanningView: React.FC<WorkItemsMilestonePlanningViewPro
                      'bg-red-50 text-red-600'
                    }`}>
                      ETA {new Date(rollups[sprintMilestoneId].forecast.estimatedCompletionDate).toLocaleDateString()}
+                   </span>
+                 )}
+                 {rollups[sprintMilestoneId]?.forecast?.monteCarlo?.p80 && (
+                   <span
+                     className="px-2 py-1 rounded-full bg-slate-900 text-white"
+                     title={`P50 ${new Date(rollups[sprintMilestoneId].forecast.monteCarlo.p50).toLocaleDateString()} • P80 ${new Date(rollups[sprintMilestoneId].forecast.monteCarlo.p80).toLocaleDateString()} • P90 ${new Date(rollups[sprintMilestoneId].forecast.monteCarlo.p90).toLocaleDateString()} • Hit ${Math.round((rollups[sprintMilestoneId].forecast.monteCarlo.hitProbability || 0) * 100)}%`}
+                   >
+                     P80 {new Date(rollups[sprintMilestoneId].forecast.monteCarlo.p80).toLocaleDateString()} ({Math.round((rollups[sprintMilestoneId].forecast.monteCarlo.hitProbability || 0) * 100)}%)
                    </span>
                  )}
                  <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-600">

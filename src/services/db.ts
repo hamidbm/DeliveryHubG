@@ -2,6 +2,7 @@ import getMongoClientPromise from '../lib/mongodb';
 import { ObjectId } from 'mongodb';
 import { WikiPage, WikiSpace, WikiTheme, WikiTemplate, CommentThread, CommentMessage, EventRecord, ReviewRecord, ReviewCycle, ReviewReviewer, FeedbackPackage, UserEventState, Bundle, Application, TaxonomyCategory, TaxonomyDocumentType, WorkItem, WorkItemType, WorkItemStatus, WorkItemActivity, Sprint, Milestone, Notification, ArchitectureDiagram, BusinessCapability, AppInterface, WikiAsset, BundleAssignment, AssignmentType, BundleProfile, AttachmentRef, CommentAuthor } from '../types';
 import { computeBundleVelocity, forecastMilestoneCompletion } from './forecasting';
+import { runMonteCarloForecast } from './monteCarlo';
 import { normalizeEventType } from './eventsTaxonomy';
 import { getDeliveryPolicy, getEffectivePolicyForBundle, getStrictestPolicyForBundles } from './policy';
 import { evaluateWorkItemStaleness } from '../lib/staleness';
@@ -3325,12 +3326,16 @@ export const computeMilestoneRollups = async (milestoneIds: string[]) => {
       const riskCounts = { low: 0, medium: 0, high: 0, critical: 0 };
 
       const criticalIdSet = new Set<string>();
+      let criticalRemainingPoints: number | null = null;
       try {
         const critical = await computeMilestoneCriticalPath(milestoneKey);
         (critical?.criticalPath?.nodes || []).forEach((node: any) => {
           if (node?.id) criticalIdSet.add(String(node.id));
           if (node?.key) criticalIdSet.add(String(node.key));
         });
+        if (typeof critical?.criticalPath?.remainingPoints === 'number') {
+          criticalRemainingPoints = critical.criticalPath.remainingPoints;
+        }
       } catch {}
 
       const bundleId = milestone.bundleId ? String(milestone.bundleId) : '';
@@ -3472,6 +3477,37 @@ export const computeMilestoneRollups = async (milestoneIds: string[]) => {
         capacity: { remainingPoints },
         schedule: { endDate: milestone.endDate }
       }, velocity || { avgVelocityPoints: 0, sampleSize: 0 }, policy);
+      const highCriticalRisks = riskCounts.high + riskCounts.critical;
+      const monteCarloConfig = policy.forecasting?.monteCarlo;
+      const weeklySamples = (velocity as any)?.weeklySamples || [];
+      const remainingForMonteCarlo = monteCarloConfig?.useCriticalPath && typeof criticalRemainingPoints === 'number'
+        ? criticalRemainingPoints
+        : remainingPoints;
+      const riskMultiplier = 1
+        + (blockedDerived > 0 ? 0.1 : 0)
+        + (highCriticalRisks > 0 ? 0.1 : 0)
+        + (criticalStaleCount > 0 ? 0.05 : 0);
+      const monteCarlo = monteCarloConfig?.enabled && weeklySamples.length >= (monteCarloConfig.minSampleSize || 0) && remainingForMonteCarlo > 0
+        ? runMonteCarloForecast({
+          remainingPoints: remainingForMonteCarlo,
+          weeklySamples,
+          iterations: monteCarloConfig.iterations,
+          pLevels: monteCarloConfig.pLevels,
+          endDate: milestone.endDate,
+          riskMultiplier
+        })
+        : null;
+      const forecastWithMonteCarlo = forecast || monteCarlo
+        ? {
+          ...(forecast || {
+            estimatedCompletionDate: monteCarlo?.p50 || new Date().toISOString(),
+            sprintsRemaining: 0,
+            varianceDays: 0,
+            band: 'on-track' as const
+          }),
+          monteCarlo
+        }
+        : null;
 
       let qualityScore = 100;
       qualityScore -= Math.min(dqCaps.missingStoryPoints, missingStoryPoints * dqWeights.missingStoryPoints);
@@ -3548,7 +3584,7 @@ export const computeMilestoneRollups = async (milestoneIds: string[]) => {
           unassignedStaleCount,
           githubStaleCount
         },
-        forecast
+        forecast: forecastWithMonteCarlo
       };
     }));
   } catch (err) {

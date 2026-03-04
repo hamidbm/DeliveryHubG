@@ -38,6 +38,13 @@ export type DeliveryPolicy = {
     atRiskPct: number;
     offTrackPct: number;
     minSampleSize: number;
+    monteCarlo: {
+      enabled: boolean;
+      iterations: number;
+      useCriticalPath: boolean;
+      minSampleSize: number;
+      pLevels: number[];
+    };
   };
   criticalPath: {
     nearCriticalSlackPct: number;
@@ -131,7 +138,14 @@ const DEFAULT_POLICY: DeliveryPolicy = {
   forecasting: {
     atRiskPct: 0.15,
     offTrackPct: 0.3,
-    minSampleSize: 3
+    minSampleSize: 3,
+    monteCarlo: {
+      enabled: false,
+      iterations: 2000,
+      useCriticalPath: true,
+      minSampleSize: 3,
+      pLevels: [0.5, 0.8, 0.9]
+    }
   },
   criticalPath: {
     nearCriticalSlackPct: 0.1,
@@ -196,12 +210,26 @@ export const validateDeliveryPolicy = (policy: any) => {
   const atRiskPct = coerceNumber(policy.forecasting?.atRiskPct, DEFAULT_POLICY.forecasting.atRiskPct);
   const offTrackPct = coerceNumber(policy.forecasting?.offTrackPct, DEFAULT_POLICY.forecasting.offTrackPct);
   const minSampleSize = coerceNumber(policy.forecasting?.minSampleSize, DEFAULT_POLICY.forecasting.minSampleSize);
+  const mcIterations = coerceNumber(policy.forecasting?.monteCarlo?.iterations, DEFAULT_POLICY.forecasting.monteCarlo.iterations);
+  const mcMinSampleSize = coerceNumber(policy.forecasting?.monteCarlo?.minSampleSize, DEFAULT_POLICY.forecasting.monteCarlo.minSampleSize);
+  const mcPLevels = Array.isArray(policy.forecasting?.monteCarlo?.pLevels)
+    ? policy.forecasting.monteCarlo.pLevels.map((v: any) => Number(v)).filter((v: number) => Number.isFinite(v))
+    : DEFAULT_POLICY.forecasting.monteCarlo.pLevels;
 
   if (!inRange(atRiskPct, 0, 1) || !inRange(offTrackPct, 0, 1) || atRiskPct > offTrackPct) {
     return { ok: false, error: 'Forecast thresholds must be between 0 and 1 (atRisk <= offTrack).' };
   }
   if (!inRange(minSampleSize, 0, 100)) {
     return { ok: false, error: 'Forecast min sample size must be between 0 and 100.' };
+  }
+  if (!inRange(mcIterations, 100, 10000)) {
+    return { ok: false, error: 'Monte Carlo iterations must be between 100 and 10000.' };
+  }
+  if (!inRange(mcMinSampleSize, 0, 100)) {
+    return { ok: false, error: 'Monte Carlo min sample size must be between 0 and 100.' };
+  }
+  if (!mcPLevels.length || mcPLevels.some((v: number) => !inRange(v, 0.1, 0.99))) {
+    return { ok: false, error: 'Monte Carlo p-levels must be between 0.1 and 0.99.' };
   }
 
   const slack = coerceNumber(policy.criticalPath?.nearCriticalSlackPct, DEFAULT_POLICY.criticalPath.nearCriticalSlackPct);
@@ -269,7 +297,18 @@ export const normalizeDeliveryPolicy = (policy: any): DeliveryPolicy => {
     forecasting: {
       atRiskPct: coerceNumber(policy?.forecasting?.atRiskPct, DEFAULT_POLICY.forecasting.atRiskPct),
       offTrackPct: coerceNumber(policy?.forecasting?.offTrackPct, DEFAULT_POLICY.forecasting.offTrackPct),
-      minSampleSize: coerceNumber(policy?.forecasting?.minSampleSize, DEFAULT_POLICY.forecasting.minSampleSize)
+      minSampleSize: coerceNumber(policy?.forecasting?.minSampleSize, DEFAULT_POLICY.forecasting.minSampleSize),
+      monteCarlo: {
+        enabled: policy?.forecasting?.monteCarlo?.enabled ?? DEFAULT_POLICY.forecasting.monteCarlo.enabled,
+        iterations: coerceNumber(policy?.forecasting?.monteCarlo?.iterations, DEFAULT_POLICY.forecasting.monteCarlo.iterations),
+        useCriticalPath: policy?.forecasting?.monteCarlo?.useCriticalPath ?? DEFAULT_POLICY.forecasting.monteCarlo.useCriticalPath,
+        minSampleSize: coerceNumber(policy?.forecasting?.monteCarlo?.minSampleSize, DEFAULT_POLICY.forecasting.monteCarlo.minSampleSize),
+        pLevels: (() => {
+          if (!Array.isArray(policy?.forecasting?.monteCarlo?.pLevels)) return DEFAULT_POLICY.forecasting.monteCarlo.pLevels;
+          const next = policy.forecasting.monteCarlo.pLevels.map((v: any) => Number(v)).filter((v: number) => Number.isFinite(v));
+          return next.length ? next : DEFAULT_POLICY.forecasting.monteCarlo.pLevels;
+        })()
+      }
     },
     criticalPath: {
       nearCriticalSlackPct: coerceNumber(policy?.criticalPath?.nearCriticalSlackPct, DEFAULT_POLICY.criticalPath.nearCriticalSlackPct),
@@ -457,7 +496,19 @@ export const getStrictestPolicyForBundles = async (bundleIds: string[]) => {
     forecasting: {
       atRiskPct: pickMin(policies.map((p) => p.forecasting.atRiskPct)) || DEFAULT_POLICY.forecasting.atRiskPct,
       offTrackPct: pickMin(policies.map((p) => p.forecasting.offTrackPct)) || DEFAULT_POLICY.forecasting.offTrackPct,
-      minSampleSize: pickMax(policies.map((p) => p.forecasting.minSampleSize)) || DEFAULT_POLICY.forecasting.minSampleSize
+      minSampleSize: pickMax(policies.map((p) => p.forecasting.minSampleSize)) || DEFAULT_POLICY.forecasting.minSampleSize,
+      monteCarlo: {
+        enabled: policies.some((p) => p.forecasting?.monteCarlo?.enabled),
+        iterations: pickMax(policies.map((p) => p.forecasting?.monteCarlo?.iterations || 0)) || DEFAULT_POLICY.forecasting.monteCarlo.iterations,
+        useCriticalPath: policies.some((p) => p.forecasting?.monteCarlo?.useCriticalPath),
+        minSampleSize: pickMax(policies.map((p) => p.forecasting?.monteCarlo?.minSampleSize || 0)) || DEFAULT_POLICY.forecasting.monteCarlo.minSampleSize,
+        pLevels: (() => {
+          const lists = policies.map((p) => p.forecasting?.monteCarlo?.pLevels || []).filter((p) => p.length);
+          if (!lists.length) return DEFAULT_POLICY.forecasting.monteCarlo.pLevels;
+          const longest = lists.sort((a, b) => b.length - a.length)[0];
+          return longest.length ? longest : DEFAULT_POLICY.forecasting.monteCarlo.pLevels;
+        })()
+      }
     },
     criticalPath: {
       nearCriticalSlackPct: pickMin(policies.map((p) => p.criticalPath.nearCriticalSlackPct)) || DEFAULT_POLICY.criticalPath.nearCriticalSlackPct,

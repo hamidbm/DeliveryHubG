@@ -53,7 +53,7 @@ type CapacityPlan = {
     capacityPoints: number;
     demandPoints: number;
     overBy: number;
-    drivers: Array<{ milestoneId: string; name: string; demandPoints: number }>;
+    drivers: Array<{ milestoneId: string; name: string; demandPoints: number; endDate?: string; p50?: string; p80?: string; p90?: string; hitProbability?: number }>;
   }>;
   summary: { totalCapacity: number; totalDemand: number; isOvercommitted: boolean; maxOverBy: number };
 };
@@ -175,6 +175,13 @@ const ProgramCoordination: React.FC = () => {
     if (band === 'high') return 'bg-emerald-50 text-emerald-700';
     if (band === 'medium') return 'bg-amber-50 text-amber-700';
     return 'bg-red-50 text-red-700';
+  };
+
+  const formatDate = (value?: string) => {
+    if (!value) return '—';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '—';
+    return date.toLocaleDateString();
   };
 
   const summary = intel?.summary;
@@ -313,6 +320,12 @@ const ProgramCoordination: React.FC = () => {
               <div>
                 <div className="text-sm font-semibold text-slate-800">{driver.name}</div>
                 <div className="text-[11px] text-slate-400">{driver.demandPoints} pts in this bucket</div>
+                <div
+                  className={`mt-1 text-[10px] font-semibold ${driver.p80 && driver.endDate && new Date(driver.p80) > new Date(driver.endDate) ? 'text-red-600' : 'text-slate-500'}`}
+                  title={`P50 ${formatDate(driver.p50)} • P80 ${formatDate(driver.p80)} • P90 ${formatDate(driver.p90)}`}
+                >
+                  P80 {formatDate(driver.p80)} • Target {formatDate(driver.endDate)} • Hit {(driver.hitProbability ?? 0) ? `${Math.round((driver.hitProbability || 0) * 100)}%` : '—'}
+                </div>
               </div>
               <button
                 onClick={() => router.push('/?tab=work-items&view=milestone-plan')}

@@ -9,6 +9,7 @@ const tests = [
   () => import('./test-staleness').then((m) => m.run()),
   () => import('./test-staleness-policy').then((m) => m.run()),
   () => import('./test-backup').then((m) => m.run()),
+  () => import('./test-monte-carlo').then((m) => m.run()),
   () => import('./test-capacity-plan').then((m) => m.run()),
   () => import('./test-program-intel').then((m) => m.run()),
   () => import('./test-rbac-critical-actions').then((m) => m.run()),
