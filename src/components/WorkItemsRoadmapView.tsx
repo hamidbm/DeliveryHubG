@@ -36,6 +36,7 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
   const [intelLoading, setIntelLoading] = useState(false);
   const [intelError, setIntelError] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<any | null>(null);
+  const [commitPolicy, setCommitPolicy] = useState<any | null>(null);
   const [expandedMilestones, setExpandedMilestones] = useState<Record<string, boolean>>({});
   const [burnupCache, setBurnupCache] = useState<Record<string, any>>({});
   const [sprintCache, setSprintCache] = useState<Record<string, any[]>>({});
@@ -222,6 +223,13 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
       .then((r) => r.json())
       .then((data) => setCurrentUser(data?.user || null))
       .catch(() => setCurrentUser(null));
+  }, []);
+
+  useEffect(() => {
+    fetch('/api/admin/delivery-policy')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => setCommitPolicy(data?.policy || null))
+      .catch(() => setCommitPolicy(null));
   }, []);
 
   useEffect(() => {
@@ -490,6 +498,15 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
           const staleness = rollup?.staleness || {};
           const staleTotal = staleness.staleCount || 0;
           const criticalStale = staleness.criticalStaleCount || 0;
+          const commitReviewEnabled = commitPolicy?.commitReview?.enabled;
+          const mc = forecast?.monteCarlo;
+          const endDate = milestone.endDate ? new Date(milestone.endDate) : null;
+          const p80 = mc?.p80 ? new Date(mc.p80) : null;
+          const isCommitted = String(milestone.status || '').toUpperCase() === 'COMMITTED';
+          const commitReviewFail = commitReviewEnabled && !isCommitted && (
+            (mc?.hitProbability !== undefined && mc.hitProbability < (commitPolicy?.commitReview?.minHitProbability ?? 0)) ||
+            (commitPolicy?.commitReview?.blockIfP80AfterEndDate && p80 && endDate && p80.getTime() > endDate.getTime())
+          );
           const groups = groupedItems[milestoneId] || {
             TODO: [],
             IN_PROGRESS: [],
@@ -590,6 +607,11 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
                     title={`P50 ${new Date(forecast.monteCarlo.p50).toLocaleDateString()} • P80 ${new Date(forecast.monteCarlo.p80).toLocaleDateString()} • P90 ${new Date(forecast.monteCarlo.p90).toLocaleDateString()} • Hit ${Math.round((forecast.monteCarlo.hitProbability || 0) * 100)}%`}
                   >
                     P80 {new Date(forecast.monteCarlo.p80).toLocaleDateString()} ({Math.round((forecast.monteCarlo.hitProbability || 0) * 100)}%)
+                  </span>
+                )}
+                {commitReviewFail && (
+                  <span className="px-2 py-1 rounded-full bg-rose-50 text-rose-700">
+                    Commit review
                   </span>
                 )}
                 {expandedMilestones[milestoneId] ? (

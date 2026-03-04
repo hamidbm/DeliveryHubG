@@ -1338,6 +1338,10 @@ const ensureReviewIndexes = async (db: any) => {
   await db.collection('reviews').createIndex({ 'resource.title': 'text' });
 };
 
+const ensureCommitReviewIndexes = async (db: any) => {
+  await db.collection('commitment_reviews').createIndex({ milestoneId: 1, evaluatedAt: -1 });
+};
+
 const ensureFeedbackPackageIndexes = async (db: any) => {
   await db.collection('feedback_packages').createIndex({ 'resource.type': 1, 'resource.id': 1, createdAt: -1 });
   await db.collection('feedback_packages').createIndex({ status: 1, createdAt: -1 });

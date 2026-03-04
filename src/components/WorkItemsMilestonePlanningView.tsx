@@ -263,6 +263,11 @@ const WorkItemsMilestonePlanningView: React.FC<WorkItemsMilestonePlanningViewPro
   const [draggedItem, setDraggedItem] = useState<WorkItem | null>(null);
   const [currentUser, setCurrentUser] = useState<any | null>(null);
   const [commitError, setCommitError] = useState<string | null>(null);
+  const [commitReviewModal, setCommitReviewModal] = useState<{
+    milestoneId: string;
+    review: any;
+  } | null>(null);
+  const [commitOverrideReason, setCommitOverrideReason] = useState('');
   const [readinessPrompt, setReadinessPrompt] = useState<{
     milestoneId: string;
     nextStatus: string;
@@ -602,6 +607,17 @@ const WorkItemsMilestonePlanningView: React.FC<WorkItemsMilestonePlanningViewPro
 
   const handleCommitMilestone = async (milestoneId: string) => {
     setCommitError(null);
+    try {
+      const reviewRes = await fetch(`/api/milestones/${encodeURIComponent(milestoneId)}/commit-review`);
+      if (reviewRes.ok) {
+        const data = await reviewRes.json();
+        if (data?.enabled) {
+          setCommitReviewModal({ milestoneId, review: data.review });
+          return;
+        }
+      }
+    } catch {}
+
     const res = await fetch(`/api/milestones/${milestoneId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -612,6 +628,10 @@ const WorkItemsMilestonePlanningView: React.FC<WorkItemsMilestonePlanningViewPro
       return;
     }
     const err = await res.json().catch(() => ({}));
+    if (err?.error === 'COMMIT_REVIEW_REQUIRED' && err?.review) {
+      setCommitReviewModal({ milestoneId, review: err.review });
+      return;
+    }
     setCommitError(err.error || 'Unable to commit milestone.');
     alert(err.error || 'Unable to commit milestone.');
   };
@@ -654,6 +674,30 @@ const WorkItemsMilestonePlanningView: React.FC<WorkItemsMilestonePlanningViewPro
     }
     const err = await res.json().catch(() => ({}));
     alert(err.error || 'Override failed.');
+  };
+
+  const submitCommitReview = async (decision: 'COMMIT' | 'OVERRIDE') => {
+    if (!commitReviewModal) return;
+    const res = await fetch(`/api/milestones/${encodeURIComponent(commitReviewModal.milestoneId)}/commit-review/submit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        decision,
+        overrideReason: decision === 'OVERRIDE' ? commitOverrideReason.trim() : undefined
+      })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      if (err?.review) {
+        setCommitReviewModal({ milestoneId: commitReviewModal.milestoneId, review: err.review });
+        return;
+      }
+      alert(err?.error || 'Commit review failed.');
+      return;
+    }
+    setCommitReviewModal(null);
+    setCommitOverrideReason('');
+    await fetchData();
   };
 
   const submitScopeRequest = async () => {
@@ -1765,6 +1809,95 @@ const WorkItemsMilestonePlanningView: React.FC<WorkItemsMilestonePlanningViewPro
                     )}
                   </div>
                 ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {commitReviewModal && (
+          <div className="absolute inset-0 bg-slate-900/30 flex items-center justify-center z-50">
+            <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl p-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-[9px] font-black uppercase tracking-widest text-slate-400">Commitment Review</div>
+                  <h4 className="text-sm font-black uppercase tracking-widest text-slate-600">Commit Gate</h4>
+                </div>
+                <button onClick={() => { setCommitReviewModal(null); setCommitOverrideReason(''); }} className="text-slate-400 hover:text-slate-600"><i className="fas fa-times"></i></button>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${
+                  commitReviewModal.review?.band === 'GREEN' ? 'bg-emerald-50 text-emerald-700' :
+                  commitReviewModal.review?.band === 'YELLOW' ? 'bg-amber-50 text-amber-700' :
+                  'bg-rose-50 text-rose-700'
+                }`}>
+                  {commitReviewModal.review?.band || 'RED'}
+                </span>
+                <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Score {commitReviewModal.review?.score ?? 0}</span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 text-[10px] font-semibold text-slate-600">
+                <span className="px-3 py-2 rounded-xl bg-slate-50">P80 {commitReviewModal.review?.snapshot?.monteCarlo?.p80 ? new Date(commitReviewModal.review.snapshot.monteCarlo.p80).toLocaleDateString() : '—'}</span>
+                <span className="px-3 py-2 rounded-xl bg-slate-50">Hit {commitReviewModal.review?.snapshot?.monteCarlo?.hitProbability !== undefined ? `${Math.round(commitReviewModal.review.snapshot.monteCarlo.hitProbability * 100)}%` : '—'}</span>
+                <span className="px-3 py-2 rounded-xl bg-slate-50">Data quality {commitReviewModal.review?.snapshot?.rollup?.dataQuality?.score ?? '—'}</span>
+                <span className="px-3 py-2 rounded-xl bg-slate-50">Capacity over {commitReviewModal.review?.snapshot?.capacitySignal?.overcommitMax ?? '—'} pts</span>
+                <span className="px-3 py-2 rounded-xl bg-slate-50">External blockers {commitReviewModal.review?.snapshot?.criticalPath?.externalCount ?? 0}</span>
+                <span className="px-3 py-2 rounded-xl bg-slate-50">Critical stale {commitReviewModal.review?.snapshot?.staleness?.criticalStaleCount ?? 0}</span>
+              </div>
+
+              <div className="space-y-2 max-h-[260px] overflow-y-auto custom-scrollbar pr-2">
+                {(commitReviewModal.review?.checks || []).map((check: any) => (
+                  <div key={check.key} className="flex items-center justify-between border border-slate-100 rounded-xl px-4 py-3">
+                    <div>
+                      <div className="text-xs font-semibold text-slate-700">{check.key}</div>
+                      <div className="text-[11px] text-slate-400">{check.detail}</div>
+                    </div>
+                    <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-full ${
+                      check.status === 'PASS' ? 'bg-emerald-50 text-emerald-700' :
+                      check.status === 'WARN' ? 'bg-amber-50 text-amber-700' :
+                      'bg-rose-50 text-rose-700'
+                    }`}>
+                      {check.status}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              {!commitReviewModal.review?.canCommit && isAdminCmoRole(currentUser?.role) && (
+                <div className="flex flex-col gap-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Override Reason</label>
+                  <input
+                    value={commitOverrideReason}
+                    onChange={(e) => setCommitOverrideReason(e.target.value)}
+                    className="px-3 py-2 text-sm border border-slate-200 rounded-xl"
+                    placeholder="Why are we overriding this commit gate?"
+                  />
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-3">
+                <button
+                  onClick={() => { setCommitReviewModal(null); setCommitOverrideReason(''); }}
+                  className="px-4 py-2 text-[10px] font-black uppercase rounded-xl border border-slate-200 text-slate-500"
+                >
+                  Cancel
+                </button>
+                {commitReviewModal.review?.canCommit && (
+                  <button
+                    onClick={() => submitCommitReview('COMMIT')}
+                    className="px-4 py-2 text-[10px] font-black uppercase rounded-xl bg-blue-600 text-white"
+                  >
+                    Commit
+                  </button>
+                )}
+                {!commitReviewModal.review?.canCommit && isAdminCmoRole(currentUser?.role) && (
+                  <button
+                    onClick={() => submitCommitReview('OVERRIDE')}
+                    className="px-4 py-2 text-[10px] font-black uppercase rounded-xl bg-slate-900 text-white"
+                  >
+                    Override
+                  </button>
+                )}
               </div>
             </div>
           </div>

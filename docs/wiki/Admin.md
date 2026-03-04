@@ -49,7 +49,9 @@ Admins/CMO can configure global governance thresholds in Admin → Settings → 
 - readiness thresholds for milestones and sprints
 - data quality scoring weights and caps
 - forecasting band thresholds
+- Monte Carlo forecasting controls (P50/P80/P90 + hit probability)
 - critical path slack and external defaults
+- commitment review gate (P80 + hit probability + capacity + quality)
 - staleness thresholds and nudge/digest behavior
 
 ### Bundle Policy Overrides

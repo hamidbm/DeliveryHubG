@@ -9,6 +9,7 @@ import { evaluateMilestoneReadiness } from '../../../../services/milestoneGovern
 import { getEffectivePolicyForMilestone } from '../../../../services/policy';
 import { createNotificationsForEvent } from '../../../../services/notifications';
 import { resolveMilestoneBundleScope } from '../../../../services/ownership';
+import { evaluateMilestoneCommitReview } from '../../../../services/commitmentReview';
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
 
@@ -54,6 +55,14 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       ? await db.collection('milestones').findOne({ _id: new ObjectId(id) })
       : await db.collection('milestones').findOne({ $or: [{ id }, { name: id }] });
     if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
+    if (nextStatus && String(nextStatus).toUpperCase() === 'COMMITTED') {
+      const policyRef = await getEffectivePolicyForMilestone(String(existing._id || existing.id || existing.name || id));
+      if (policyRef.effective.commitReview?.enabled) {
+        const review = await evaluateMilestoneCommitReview(String(existing._id || existing.id || existing.name || id));
+        return NextResponse.json({ error: 'COMMIT_REVIEW_REQUIRED', review }, { status: 409 });
+      }
+    }
 
     if (nextStatus && ['IN_PROGRESS', 'DONE'].includes(String(nextStatus).toUpperCase())) {
       const upper = String(nextStatus).toUpperCase();

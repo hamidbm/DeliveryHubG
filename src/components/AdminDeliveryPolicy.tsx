@@ -51,6 +51,15 @@ type DeliveryPolicy = {
     defaultIncludeExternal: boolean;
     defaultExternalDepth: number;
   };
+  commitReview: {
+    enabled: boolean;
+    minHitProbability: number;
+    blockIfP80AfterEndDate: boolean;
+    blockOnExternalBlockers: boolean;
+    maxCriticalStale: number;
+    maxHighRisks: number;
+    capacityOvercommitThreshold: number;
+  };
   staleness: {
     thresholdsDays: {
       workItemStale: number;
@@ -130,6 +139,15 @@ const DEFAULT_POLICY: DeliveryPolicy = {
     nearCriticalSlackPct: 0.1,
     defaultIncludeExternal: false,
     defaultExternalDepth: 3
+  },
+  commitReview: {
+    enabled: false,
+    minHitProbability: 0.5,
+    blockIfP80AfterEndDate: true,
+    blockOnExternalBlockers: false,
+    maxCriticalStale: 2,
+    maxHighRisks: 3,
+    capacityOvercommitThreshold: 20
   },
   staleness: {
     thresholdsDays: {
@@ -263,6 +281,7 @@ const AdminDeliveryPolicy: React.FC = () => {
         }
       },
       criticalPath: { ...policy.criticalPath, ...(patch.criticalPath || {}) },
+      commitReview: { ...policy.commitReview, ...(patch.commitReview || {}) },
       staleness: {
         thresholdsDays: { ...policy.staleness.thresholdsDays, ...(patch.staleness?.thresholdsDays || {}) },
         nudges: { ...policy.staleness.nudges, ...(patch.staleness?.nudges || {}) },
@@ -303,6 +322,7 @@ const AdminDeliveryPolicy: React.FC = () => {
       dataQuality: DEFAULT_POLICY.dataQuality,
       forecasting: DEFAULT_POLICY.forecasting,
       criticalPath: DEFAULT_POLICY.criticalPath,
+      commitReview: DEFAULT_POLICY.commitReview,
       staleness: DEFAULT_POLICY.staleness
     });
     setMessage('Defaults restored. Save to apply.');
@@ -635,6 +655,73 @@ const AdminDeliveryPolicy: React.FC = () => {
                 onChange={(e) => update({ criticalPath: { ...policy.criticalPath, defaultIncludeExternal: e.target.checked } })}
               />
               Include external blockers by default
+            </label>
+          </div>
+        </section>
+
+        <section className="border border-slate-100 rounded-3xl p-6 space-y-4">
+          <h4 className="text-sm font-black uppercase tracking-widest text-slate-600">Commit Review</h4>
+          <label className="flex items-center gap-2 text-xs text-slate-600">
+            <input
+              type="checkbox"
+              checked={policy.commitReview.enabled}
+              onChange={(e) => update({ commitReview: { ...policy.commitReview, enabled: e.target.checked } })}
+            />
+            Enable commitment review gate for COMMITTED milestones
+          </label>
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+            <label className="text-xs font-semibold text-slate-500">
+              Min hit probability
+              <input
+                type="number"
+                step="0.01"
+                value={policy.commitReview.minHitProbability}
+                onChange={(e) => update({ commitReview: { ...policy.commitReview, minHitProbability: Number(e.target.value) } })}
+                className="mt-2 w-full px-3 py-2 border border-slate-200 rounded-xl text-sm"
+              />
+            </label>
+            <label className="text-xs font-semibold text-slate-500">
+              Max critical stale
+              <input
+                type="number"
+                value={policy.commitReview.maxCriticalStale}
+                onChange={(e) => update({ commitReview: { ...policy.commitReview, maxCriticalStale: Number(e.target.value) } })}
+                className="mt-2 w-full px-3 py-2 border border-slate-200 rounded-xl text-sm"
+              />
+            </label>
+            <label className="text-xs font-semibold text-slate-500">
+              Max high risks
+              <input
+                type="number"
+                value={policy.commitReview.maxHighRisks}
+                onChange={(e) => update({ commitReview: { ...policy.commitReview, maxHighRisks: Number(e.target.value) } })}
+                className="mt-2 w-full px-3 py-2 border border-slate-200 rounded-xl text-sm"
+              />
+            </label>
+            <label className="text-xs font-semibold text-slate-500">
+              Capacity overcommit (pts)
+              <input
+                type="number"
+                value={policy.commitReview.capacityOvercommitThreshold}
+                onChange={(e) => update({ commitReview: { ...policy.commitReview, capacityOvercommitThreshold: Number(e.target.value) } })}
+                className="mt-2 w-full px-3 py-2 border border-slate-200 rounded-xl text-sm"
+              />
+            </label>
+            <label className="flex items-center gap-2 text-xs text-slate-600 mt-6">
+              <input
+                type="checkbox"
+                checked={policy.commitReview.blockIfP80AfterEndDate}
+                onChange={(e) => update({ commitReview: { ...policy.commitReview, blockIfP80AfterEndDate: e.target.checked } })}
+              />
+              Block if P80 exceeds end date
+            </label>
+            <label className="flex items-center gap-2 text-xs text-slate-600 mt-6">
+              <input
+                type="checkbox"
+                checked={policy.commitReview.blockOnExternalBlockers}
+                onChange={(e) => update({ commitReview: { ...policy.commitReview, blockOnExternalBlockers: e.target.checked } })}
+              />
+              Block on external blockers
             </label>
           </div>
         </section>

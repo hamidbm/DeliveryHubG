@@ -65,6 +65,7 @@ Each item can have a parent and children to form a delivery hierarchy.
 - Evaluate workload and sequencing
 - Rollups show capacity, blocked items, risks, overdue, and slip
 - COMMITTED enforcement (estimates required, capacity guardrails)
+- Commitment Review gate for COMMITTED milestones (Monte Carlo + capacity + quality)
 - Readiness gates (canStart/canComplete) with override + reason
 - Sprint view for a milestone (sprint rollups tied to milestone scope)
 - Burn-up table by sprint with cumulative and remaining points
@@ -97,6 +98,7 @@ Each item can have a parent and children to form a delivery hierarchy.
 - Rollups: capacity, blocked, risks, overdue, slip
 - Confidence scoring based on readiness + rollup signals
 - COMMITTED enforcement: estimates required, capacity guardrails
+- Commitment Review: P80 and hit probability gate with override + audit trail
 - Readiness gates: canStart/canComplete with override + reason
 - Audit events emitted for milestone status/override/readiness and notifications sent
 - COMMITTED scope changes require approval via scope change requests

@@ -51,6 +51,15 @@ export type DeliveryPolicy = {
     defaultIncludeExternal: boolean;
     defaultExternalDepth: number;
   };
+  commitReview: {
+    enabled: boolean;
+    minHitProbability: number;
+    blockIfP80AfterEndDate: boolean;
+    blockOnExternalBlockers: boolean;
+    maxCriticalStale: number;
+    maxHighRisks: number;
+    capacityOvercommitThreshold: number;
+  };
   staleness: {
     thresholdsDays: {
       workItemStale: number;
@@ -152,6 +161,15 @@ const DEFAULT_POLICY: DeliveryPolicy = {
     defaultIncludeExternal: false,
     defaultExternalDepth: 3
   },
+  commitReview: {
+    enabled: false,
+    minHitProbability: 0.5,
+    blockIfP80AfterEndDate: true,
+    blockOnExternalBlockers: false,
+    maxCriticalStale: 2,
+    maxHighRisks: 3,
+    capacityOvercommitThreshold: 20
+  },
   staleness: {
     thresholdsDays: {
       workItemStale: 7,
@@ -230,6 +248,20 @@ export const validateDeliveryPolicy = (policy: any) => {
   }
   if (!mcPLevels.length || mcPLevels.some((v: number) => !inRange(v, 0.1, 0.99))) {
     return { ok: false, error: 'Monte Carlo p-levels must be between 0.1 and 0.99.' };
+  }
+
+  const minHitProbability = coerceNumber(policy.commitReview?.minHitProbability, DEFAULT_POLICY.commitReview.minHitProbability);
+  const maxCriticalStale = coerceNumber(policy.commitReview?.maxCriticalStale, DEFAULT_POLICY.commitReview.maxCriticalStale);
+  const maxHighRisks = coerceNumber(policy.commitReview?.maxHighRisks, DEFAULT_POLICY.commitReview.maxHighRisks);
+  const capacityOvercommitThreshold = coerceNumber(policy.commitReview?.capacityOvercommitThreshold, DEFAULT_POLICY.commitReview.capacityOvercommitThreshold);
+  if (!inRange(minHitProbability, 0, 1)) {
+    return { ok: false, error: 'Commit review min hit probability must be between 0 and 1.' };
+  }
+  if (!inRange(maxCriticalStale, 0, 1000) || !inRange(maxHighRisks, 0, 1000)) {
+    return { ok: false, error: 'Commit review thresholds must be between 0 and 1000.' };
+  }
+  if (!inRange(capacityOvercommitThreshold, 0, 100000)) {
+    return { ok: false, error: 'Commit review capacity threshold must be between 0 and 100000.' };
   }
 
   const slack = coerceNumber(policy.criticalPath?.nearCriticalSlackPct, DEFAULT_POLICY.criticalPath.nearCriticalSlackPct);
@@ -314,6 +346,15 @@ export const normalizeDeliveryPolicy = (policy: any): DeliveryPolicy => {
       nearCriticalSlackPct: coerceNumber(policy?.criticalPath?.nearCriticalSlackPct, DEFAULT_POLICY.criticalPath.nearCriticalSlackPct),
       defaultIncludeExternal: policy?.criticalPath?.defaultIncludeExternal ?? DEFAULT_POLICY.criticalPath.defaultIncludeExternal,
       defaultExternalDepth: coerceNumber(policy?.criticalPath?.defaultExternalDepth, DEFAULT_POLICY.criticalPath.defaultExternalDepth)
+    },
+    commitReview: {
+      enabled: policy?.commitReview?.enabled ?? DEFAULT_POLICY.commitReview.enabled,
+      minHitProbability: coerceNumber(policy?.commitReview?.minHitProbability, DEFAULT_POLICY.commitReview.minHitProbability),
+      blockIfP80AfterEndDate: policy?.commitReview?.blockIfP80AfterEndDate ?? DEFAULT_POLICY.commitReview.blockIfP80AfterEndDate,
+      blockOnExternalBlockers: policy?.commitReview?.blockOnExternalBlockers ?? DEFAULT_POLICY.commitReview.blockOnExternalBlockers,
+      maxCriticalStale: coerceNumber(policy?.commitReview?.maxCriticalStale, DEFAULT_POLICY.commitReview.maxCriticalStale),
+      maxHighRisks: coerceNumber(policy?.commitReview?.maxHighRisks, DEFAULT_POLICY.commitReview.maxHighRisks),
+      capacityOvercommitThreshold: coerceNumber(policy?.commitReview?.capacityOvercommitThreshold, DEFAULT_POLICY.commitReview.capacityOvercommitThreshold)
     },
     staleness: {
       thresholdsDays: {
@@ -514,6 +555,15 @@ export const getStrictestPolicyForBundles = async (bundleIds: string[]) => {
       nearCriticalSlackPct: pickMin(policies.map((p) => p.criticalPath.nearCriticalSlackPct)) || DEFAULT_POLICY.criticalPath.nearCriticalSlackPct,
       defaultIncludeExternal: policies.every((p) => p.criticalPath.defaultIncludeExternal),
       defaultExternalDepth: pickMin(policies.map((p) => p.criticalPath.defaultExternalDepth)) || DEFAULT_POLICY.criticalPath.defaultExternalDepth
+    },
+    commitReview: {
+      enabled: policies.some((p) => p.commitReview?.enabled),
+      minHitProbability: pickMax(policies.map((p) => p.commitReview?.minHitProbability || 0)) || DEFAULT_POLICY.commitReview.minHitProbability,
+      blockIfP80AfterEndDate: policies.some((p) => p.commitReview?.blockIfP80AfterEndDate),
+      blockOnExternalBlockers: policies.some((p) => p.commitReview?.blockOnExternalBlockers),
+      maxCriticalStale: pickMin(policies.map((p) => p.commitReview?.maxCriticalStale || DEFAULT_POLICY.commitReview.maxCriticalStale)) || DEFAULT_POLICY.commitReview.maxCriticalStale,
+      maxHighRisks: pickMin(policies.map((p) => p.commitReview?.maxHighRisks || DEFAULT_POLICY.commitReview.maxHighRisks)) || DEFAULT_POLICY.commitReview.maxHighRisks,
+      capacityOvercommitThreshold: pickMin(policies.map((p) => p.commitReview?.capacityOvercommitThreshold || DEFAULT_POLICY.commitReview.capacityOvercommitThreshold)) || DEFAULT_POLICY.commitReview.capacityOvercommitThreshold
     },
     staleness: {
       thresholdsDays: {

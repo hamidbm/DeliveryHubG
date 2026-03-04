@@ -678,6 +678,15 @@ export interface DeliveryPolicy {
     defaultIncludeExternal: boolean;
     defaultExternalDepth: number;
   };
+  commitReview: {
+    enabled: boolean;
+    minHitProbability: number;
+    blockIfP80AfterEndDate: boolean;
+    blockOnExternalBlockers: boolean;
+    maxCriticalStale: number;
+    maxHighRisks: number;
+    capacityOvercommitThreshold: number;
+  };
   staleness: {
     thresholdsDays: {
       workItemStale: number;
@@ -697,6 +706,21 @@ export interface DeliveryPolicy {
       includeStaleSummary: boolean;
       minCriticalStaleToInclude: number;
     };
+  };
+}
+
+export interface CommitmentReview {
+  milestoneId: string;
+  canCommit: boolean;
+  score: number;
+  band: 'GREEN' | 'YELLOW' | 'RED';
+  checks: Array<{ key: string; status: 'PASS' | 'WARN' | 'FAIL'; detail: string }>;
+  snapshot: {
+    rollup: MilestoneRollup;
+    monteCarlo?: MilestoneRollup['forecast'] extends infer F ? F extends { monteCarlo?: infer M } ? M : undefined : undefined;
+    capacitySignal?: { overcommitMax: number; horizonWeeks: number };
+    criticalPath?: { externalCount: number; remainingPoints: number };
+    staleness?: { criticalStaleCount: number };
   };
 }
 
