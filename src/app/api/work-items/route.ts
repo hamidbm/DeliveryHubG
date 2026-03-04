@@ -3,13 +3,17 @@ import { NextResponse } from 'next/server';
 import { fetchWorkItems, saveWorkItem } from '../../../services/db';
 import { jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
+import { createVisibilityContext, getAuthUserFromCookies } from '../../../services/visibility';
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const cookieStore = await cookies();
-  const token = cookieStore.get('nexus_auth_token')?.value;
+  const authUser = await getAuthUserFromCookies();
+  if (!authUser?.userId) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
+  const testToken = process.env.NODE_ENV === 'test' ? (globalThis as any).__testToken : null;
+  const cookieStore = testToken ? null : await cookies();
+  const token = testToken || cookieStore?.get('nexus_auth_token')?.value;
   
   let currentUser = null;
   let currentUserId = null;
@@ -31,6 +35,7 @@ export async function GET(request: Request) {
     bundleId: searchParams.get('bundleId'),
     applicationId: searchParams.get('applicationId'),
     milestoneId: searchParams.get('milestoneId'),
+    sprintId: searchParams.get('sprintId'),
     parentId: searchParams.get('parentId'),
     epicId: searchParams.get('epicId'),
     q: searchParams.get('q'),
@@ -46,7 +51,10 @@ export async function GET(request: Request) {
     currentUsername
   };
   const items = await fetchWorkItems(filters);
-  return NextResponse.json(items);
+  const visibility = createVisibilityContext(authUser);
+  const visible = await visibility.filterVisibleWorkItems(items as any[]);
+  await visibility.redactWorkItemLinks(visible);
+  return NextResponse.json(visible);
 }
 
 export async function POST(request: Request) {

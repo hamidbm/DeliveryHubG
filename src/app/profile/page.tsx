@@ -17,10 +17,29 @@ export default function ProfilePage() {
   const [role, setRole] = useState<Role | string>('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [availableNotifTypes, setAvailableNotifTypes] = useState<string[]>([]);
+  const [mutedTypes, setMutedTypes] = useState<string[]>([]);
+  const [digestOptIn, setDigestOptIn] = useState(false);
+  const [prefsSaving, setPrefsSaving] = useState(false);
+  const [prefsMessage, setPrefsMessage] = useState('');
 
   const router = useRouter();
 
   useEffect(() => {
+    async function fetchPrefs() {
+      try {
+        const res = await fetch('/api/user/notification-prefs');
+        if (res.ok) {
+          const data = await res.json();
+          setAvailableNotifTypes(Array.isArray(data?.availableTypes) ? data.availableTypes : []);
+          setMutedTypes(Array.isArray(data?.prefs?.mutedTypes) ? data.prefs.mutedTypes : []);
+          setDigestOptIn(Boolean(data?.prefs?.digestOptIn));
+        }
+      } catch {
+        setAvailableNotifTypes([]);
+      }
+    }
+
     async function fetchUser() {
       try {
         const res = await fetch('/api/auth/me');
@@ -28,6 +47,7 @@ export default function ProfilePage() {
           const data = await res.json();
           setUser(data.user);
           setRole(data.user.role);
+          await fetchPrefs();
         } else {
           router.push('/login');
         }
@@ -88,6 +108,37 @@ export default function ProfilePage() {
   const handleLogout = async () => {
     await fetch('/api/auth/logout', { method: 'POST' });
     router.push('/login');
+  };
+
+  const toggleMuteType = (type: string) => {
+    setMutedTypes((prev) => {
+      if (prev.includes(type)) return prev.filter((t) => t !== type);
+      return [...prev, type];
+    });
+  };
+
+  const savePrefs = async () => {
+    setPrefsSaving(true);
+    setPrefsMessage('');
+    try {
+      const res = await fetch('/api/user/notification-prefs', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mutedTypes, digestOptIn })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setMutedTypes(Array.isArray(data?.prefs?.mutedTypes) ? data.prefs.mutedTypes : mutedTypes);
+        setDigestOptIn(Boolean(data?.prefs?.digestOptIn));
+        setPrefsMessage('Notification preferences saved.');
+      } else {
+        setPrefsMessage(data?.error || 'Failed to save notification preferences.');
+      }
+    } catch (err: any) {
+      setPrefsMessage(err?.message || 'Failed to save notification preferences.');
+    } finally {
+      setPrefsSaving(false);
+    }
   };
 
   if (loading) {
@@ -234,6 +285,44 @@ export default function ProfilePage() {
                   <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest pl-2">
                     System Warning: Role changes affect delivery pod authorization.
                   </p>
+                </div>
+
+                {/* Notification Preferences */}
+                <div className="space-y-6">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-2xl bg-slate-900 text-white flex items-center justify-center shadow-lg shadow-slate-900/20">
+                      <i className="fas fa-bell"></i>
+                    </div>
+                    <h4 className="font-black text-slate-800 uppercase tracking-widest text-sm">Notification Preferences</h4>
+                  </div>
+
+                  <div className="bg-slate-50 border border-slate-100 rounded-2xl p-5 space-y-4">
+                    <label className="flex items-center gap-3 text-sm text-slate-600">
+                      <input type="checkbox" checked={digestOptIn} onChange={(e) => setDigestOptIn(e.target.checked)} />
+                      Receive digest instead of immediate notifications (eligible types)
+                    </label>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      {availableNotifTypes.length ? availableNotifTypes.map((type) => (
+                        <label key={type} className="flex items-center justify-between bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-600">
+                          <span className="truncate">{type}</span>
+                          <input type="checkbox" checked={mutedTypes.includes(type)} onChange={() => toggleMuteType(type)} title="Mute this notification type" />
+                        </label>
+                      )) : (
+                        <div className="text-xs text-slate-400">No notification types available.</div>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={savePrefs}
+                        disabled={prefsSaving}
+                        className="px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-xl bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-50"
+                      >
+                        {prefsSaving ? 'Saving…' : 'Save Notification Preferences'}
+                      </button>
+                      {prefsMessage && <span className="text-xs text-slate-500">{prefsMessage}</span>}
+                    </div>
+                  </div>
                 </div>
 
                 {/* Security Sector */}

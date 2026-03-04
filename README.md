@@ -51,6 +51,7 @@ Steps
 1. Install dependencies: `npm install`
 2. Set environment variables in `.env.local`
 3. Run the app: `npm run dev`
+4. Run lint (CI-safe): `npm run lint:ci`
 
 ## Environment Variables
 - `AUTH_MODE`

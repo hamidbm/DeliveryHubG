@@ -4,6 +4,7 @@ import { Application, Bundle, BundleAssignment, BundleProfile, BundleProfileMile
 import { usePathname, useRouter, useSearchParams } from '../App';
 import { canEditBundleProfileClient } from '../lib/authzClient';
 import CreateWorkItemModal from './CreateWorkItemModal';
+import ChangeFeed from './ChangeFeed';
 
 interface ApplicationsProps {
   filterBundle: string;
@@ -426,6 +427,7 @@ const BundleProfileView: React.FC<{
   const [canEdit, setCanEdit] = useState(false);
   const [user, setUser] = useState<any>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [showAllActivity, setShowAllActivity] = useState(false);
 
   const loadProfile = async () => {
     setLoading(true);
@@ -442,6 +444,21 @@ const BundleProfileView: React.FC<{
 
   useEffect(() => {
     loadProfile();
+  }, [bundleId]);
+
+  useEffect(() => {
+    const loadWatch = async () => {
+      try {
+        const res = await fetch('/api/watchers?scopeType=BUNDLE');
+        if (!res.ok) return;
+        const data = await res.json();
+        const match = (data?.items || []).some((w: any) => String(w.scopeId) === String(bundleId));
+        setIsWatching(Boolean(match));
+      } catch {
+        setIsWatching(false);
+      }
+    };
+    loadWatch();
   }, [bundleId]);
 
   useEffect(() => {
@@ -467,6 +484,26 @@ const BundleProfileView: React.FC<{
   const updateProfile = (updates: Partial<BundleProfile>) => {
     if (!profile) return;
     setProfile({ ...profile, ...updates });
+  };
+
+  const toggleBundleWatch = async () => {
+    try {
+      const res = await fetch('/api/watchers', {
+        method: isWatching ? 'DELETE' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scopeType: 'BUNDLE', scopeId: bundleId })
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setWatchMessage(data?.error || 'Failed to update watch');
+        return;
+      }
+      setIsWatching(!isWatching);
+      setWatchMessage(isWatching ? 'Bundle un-watched.' : 'Bundle watched.');
+      setTimeout(() => setWatchMessage(null), 2000);
+    } catch (err: any) {
+      setWatchMessage(err?.message || 'Failed to update watch');
+    }
   };
 
   const updateSchedule = (updates: Partial<BundleProfile['schedule']>) => {
@@ -527,6 +564,11 @@ const BundleProfileView: React.FC<{
   const [depsItems, setDepsItems] = useState<WorkItem[]>([]);
   const [riskLoading, setRiskLoading] = useState(false);
   const [localHealth, setLocalHealth] = useState<any | null>(health);
+  const [programIntel, setProgramIntel] = useState<any | null>(null);
+  const [programLists, setProgramLists] = useState<any | null>(null);
+  const [intelModal, setIntelModal] = useState<{ title: string; content: React.ReactNode } | null>(null);
+  const [isWatching, setIsWatching] = useState(false);
+  const [watchMessage, setWatchMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (activeTab !== 'risks') return;
@@ -566,6 +608,35 @@ const BundleProfileView: React.FC<{
     loadHealth();
   }, [health, bundleId]);
 
+  useEffect(() => {
+    const loadIntel = async () => {
+      try {
+        const res = await fetch(`/api/program/intel?bundleIds=${encodeURIComponent(bundleId)}&includeLists=false`);
+        if (!res.ok) return;
+        const data = await res.json();
+        setProgramIntel(data);
+      } catch {
+        setProgramIntel(null);
+      }
+    };
+    loadIntel();
+  }, [bundleId]);
+
+  const ensureProgramLists = async () => {
+    if (programLists) return programLists;
+    const res = await fetch(`/api/program/intel?bundleIds=${encodeURIComponent(bundleId)}&includeLists=true&limit=10`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    setProgramLists(data?.lists || null);
+    return data?.lists || null;
+  };
+
+  const bandBadge = (band: string) => {
+    if (band === 'high') return 'bg-emerald-50 text-emerald-700';
+    if (band === 'medium') return 'bg-amber-50 text-amber-700';
+    return 'bg-red-50 text-red-700';
+  };
+
   return (
     <div className="space-y-8">
       <div className="flex items-end justify-between">
@@ -604,6 +675,172 @@ const BundleProfileView: React.FC<{
       {loading && <div className="text-sm text-slate-400">Loading profile...</div>}
       {!loading && profile && (
         <>
+          {activeTab === 'overview' && (
+            <div className="bg-white border border-slate-200 rounded-2xl p-6 space-y-5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Delivery Intelligence</div>
+                  <div className="text-sm font-semibold text-slate-700">Bundle-scoped roadmap confidence</div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={toggleBundleWatch}
+                    className={`px-3 py-2 text-[9px] font-black uppercase tracking-widest rounded-lg border transition-all ${
+                      isWatching ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-white border-slate-200 text-slate-500'
+                    }`}
+                  >
+                    {isWatching ? 'Watching' : 'Watch Bundle'}
+                  </button>
+                  <button
+                    onClick={() => router.push('/?tab=work-items&view=roadmap')}
+                    className="px-3 py-2 text-[9px] font-black uppercase tracking-widest rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  >
+                    Open Roadmap
+                  </button>
+                  <button
+                    onClick={() => router.push(`/program?bundleIds=${encodeURIComponent(bundleId)}`)}
+                    className="px-3 py-2 text-[9px] font-black uppercase tracking-widest rounded-lg bg-slate-900 text-white hover:bg-blue-600"
+                  >
+                    Open Program
+                  </button>
+                </div>
+              </div>
+
+              {watchMessage && (
+                <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">{watchMessage}</div>
+              )}
+
+              <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+                {[
+                  { label: 'Blocked', value: programIntel?.summary?.blockedDerived ?? 0 },
+                  { label: 'High/Critical', value: programIntel?.summary?.highCriticalRisks ?? 0 },
+                  { label: 'Overdue', value: programIntel?.summary?.overdueOpen ?? 0 },
+                  { label: 'Avg Confidence', value: programIntel?.bundleRollups?.[0]?.aggregated?.confidenceAvg ?? 0 },
+                  { label: 'Avg Readiness', value: programIntel?.bundleRollups?.[0]?.aggregated?.readinessAvg ?? 0 },
+                  { label: 'Late Milestones', value: programIntel?.bundleRollups?.[0]?.aggregated?.isLateCount ?? 0 }
+                ].map((chip) => (
+                  <div key={chip.label} className="border border-slate-100 rounded-xl p-3">
+                    <div className="text-[9px] font-black uppercase tracking-widest text-slate-400">{chip.label}</div>
+                    <div className="text-lg font-black text-slate-800">{chip.value}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={async () => {
+                    const lists = await ensureProgramLists();
+                    const blockers = lists?.topCrossBundleBlockers || [];
+                    setIntelModal({
+                      title: 'Cross-bundle blockers',
+                      content: (
+                        <div className="space-y-3">
+                          {blockers.map((b: any) => (
+                            <div key={b.blockerId} className="border border-slate-100 rounded-xl p-4">
+                              <div className="text-sm font-semibold text-slate-800">{b.blockerKey || b.blockerTitle || b.blockerId}</div>
+                              <div className="text-[11px] text-slate-400">Blocked {b.blockedCount} • Status {b.blockerStatus || '—'}</div>
+                            </div>
+                          ))}
+                          {blockers.length === 0 && <div className="text-sm text-slate-400">No cross-bundle blockers.</div>}
+                        </div>
+                      )
+                    });
+                  }}
+                  className="px-3 py-2 text-[9px] font-black uppercase tracking-widest rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200"
+                >
+                  View cross-bundle blockers
+                </button>
+                <button
+                  onClick={async () => {
+                    const lists = await ensureProgramLists();
+                    const milestones = lists?.topAtRiskMilestones || [];
+                    setIntelModal({
+                      title: 'At-risk milestones',
+                      content: (
+                        <div className="space-y-3">
+                          {milestones.map((m: any) => (
+                            <div key={m.milestoneId} className="border border-slate-100 rounded-xl p-4 flex items-center justify-between">
+                              <div>
+                                <div className="text-sm font-semibold text-slate-800">{m.milestoneName || m.milestoneId}</div>
+                                <div className="text-[11px] text-slate-400">Blocked {m.blockedDerived} • Risks {m.highCriticalRisks} • Overdue {m.overdueOpen}</div>
+                              </div>
+                              <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded ${bandBadge(m.readinessBand)}`}>{m.readinessBand}</span>
+                            </div>
+                          ))}
+                          {milestones.length === 0 && <div className="text-sm text-slate-400">No at-risk milestones.</div>}
+                        </div>
+                      )
+                    });
+                  }}
+                  className="px-3 py-2 text-[9px] font-black uppercase tracking-widest rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200"
+                >
+                  View at-risk milestones
+                </button>
+              </div>
+
+              <div className="overflow-x-auto border border-slate-100 rounded-xl">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-[10px] uppercase tracking-widest text-slate-400">
+                      <th className="text-left py-2 px-3">Milestone</th>
+                      <th className="text-left py-2 px-3">Confidence</th>
+                      <th className="text-left py-2 px-3">Readiness</th>
+                      <th className="text-left py-2 px-3">Capacity</th>
+                      <th className="text-left py-2 px-3">Blocked</th>
+                      <th className="text-left py-2 px-3">High/Critical</th>
+                      <th className="text-left py-2 px-3">Slip</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(programIntel?.bundleRollups?.[0]?.milestones || []).map((m: any) => {
+                      const rollup = m.rollup || {};
+                      const readiness = m.readiness || {};
+                      return (
+                        <tr key={m.milestoneId} className="border-t border-slate-100">
+                          <td className="py-3 px-3 text-slate-700 font-semibold">{m.milestoneId}</td>
+                          <td className="py-3 px-3 text-slate-500">{rollup.confidence?.score ?? '—'}</td>
+                          <td className="py-3 px-3">
+                            <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded ${bandBadge(readiness.band || 'low')}`}>
+                              {readiness.band || 'low'}
+                            </span>
+                          </td>
+                          <td className="py-3 px-3 text-slate-500">{rollup.capacity?.capacityUtilization ?? '—'}</td>
+                          <td className="py-3 px-3 text-slate-500">{rollup.totals?.blockedDerived ?? 0}</td>
+                          <td className="py-3 px-3 text-slate-500">{(rollup.risks?.openBySeverity?.high || 0) + (rollup.risks?.openBySeverity?.critical || 0)}</td>
+                          <td className="py-3 px-3 text-slate-500">{rollup.schedule?.isLate ? `${rollup.schedule?.slipDays || 0}d` : '—'}</td>
+                        </tr>
+                      );
+                    })}
+                    {(programIntel?.bundleRollups?.[0]?.milestones || []).length === 0 && (
+                      <tr>
+                        <td colSpan={7} className="py-6 text-center text-slate-400 text-sm">No milestones found.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="mt-6 border border-slate-100 rounded-2xl p-4 bg-slate-50/60">
+                <ChangeFeed
+                  scopeType="BUNDLE"
+                  scopeId={bundleId}
+                  title="Recent activity"
+                  limit={showAllActivity ? 30 : 10}
+                  compact={!showAllActivity}
+                  showFilters={showAllActivity}
+                  headerAction={
+                    <button
+                      onClick={() => setShowAllActivity((prev) => !prev)}
+                      className="px-3 py-2 text-[9px] font-black uppercase tracking-widest rounded-lg bg-slate-900 text-white hover:bg-blue-600"
+                    >
+                      {showAllActivity ? 'Collapse' : 'View all'}
+                    </button>
+                  }
+                />
+              </div>
+            </div>
+          )}
+
           {activeTab === 'overview' && (
             <div className="bg-white border border-slate-200 rounded-2xl p-6 space-y-4">
               <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Bundle Status</div>
@@ -839,6 +1076,20 @@ const BundleProfileView: React.FC<{
             </div>
           )}
         </>
+      )}
+
+      {intelModal && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-[100] p-6">
+          <div className="bg-white w-full max-w-3xl rounded-[2rem] shadow-2xl border border-slate-100 overflow-hidden">
+            <header className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+              <h4 className="text-sm font-black uppercase tracking-widest text-slate-600">{intelModal.title}</h4>
+              <button onClick={() => setIntelModal(null)} className="text-slate-400 hover:text-slate-600"><i className="fas fa-times"></i></button>
+            </header>
+            <div className="p-6 max-h-[70vh] overflow-y-auto custom-scrollbar">
+              {intelModal.content}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

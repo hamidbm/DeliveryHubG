@@ -3,6 +3,7 @@ import { cookies } from 'next/headers';
 import { jwtVerify } from 'jose';
 import { fetchBundleProfile, upsertBundleProfile } from '../../../../../services/db';
 import { canEditBundleProfile } from '../../../../../services/authz';
+import { createVisibilityContext } from '../../../../../services/visibility';
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
 
@@ -35,6 +36,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ bund
     if (!user?.userId) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
 
     const { bundleId } = await params;
+    const visibility = createVisibilityContext(user);
+    if (!(await visibility.canViewBundle(bundleId))) {
+      return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    }
     const profile = await fetchBundleProfile(bundleId);
     return NextResponse.json(profile || defaultProfile(bundleId));
   } catch (error: any) {
@@ -46,10 +51,14 @@ export async function PUT(request: Request, { params }: { params: Promise<{ bund
   try {
     const user = await getUserFromCookies();
     if (!user?.userId) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
+    const { bundleId } = await params;
+    const visibility = createVisibilityContext(user);
+    if (!(await visibility.canViewBundle(bundleId))) {
+      return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    }
     const allowed = await canEditBundleProfile(user);
     if (!allowed) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
-    const { bundleId } = await params;
     const body = await request.json();
     const payload = {
       bundleId: String(bundleId),

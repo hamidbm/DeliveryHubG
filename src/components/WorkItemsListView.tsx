@@ -102,7 +102,7 @@ const WorkItemsListView: React.FC<WorkItemsListViewProps> = ({
 
   const getItemHealth = (item: WorkItem) => {
     if (item.isFlagged) return { label: 'Flagged', color: 'text-red-600 bg-red-50', icon: 'fa-flag' };
-    const selfBlocked = item.status === WorkItemStatus.BLOCKED || item.links?.some(l => l.type === 'IS_BLOCKED_BY');
+    const selfBlocked = item.status === WorkItemStatus.BLOCKED || item.isBlocked || (item.linkSummary?.openBlockersCount || 0) > 0;
     if (selfBlocked) return { label: 'Blocked', color: 'text-amber-600 bg-amber-50', icon: 'fa-hand' };
     return { label: 'Healthy', color: 'text-emerald-600 bg-emerald-50', icon: 'fa-circle-check' };
   };

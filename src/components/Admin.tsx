@@ -12,8 +12,15 @@ import AdminWorkBlueprints from './AdminWorkBlueprints';
 import AdminWorkGenerators from './AdminWorkGenerators';
 import AdminDiagramTemplates from './AdminDiagramTemplates';
 import AdminSamples from './AdminSamples';
+import AdminAuditEvents from './AdminAuditEvents';
+import AdminAuditNotifications from './AdminAuditNotifications';
+import AdminNotificationPolicy from './AdminNotificationPolicy';
+import AdminJiraIntegration from './AdminJiraIntegration';
+import AdminGitHubIntegration from './AdminGitHubIntegration';
+import AdminDeliveryPolicy from './AdminDeliveryPolicy';
+import AdminBackupRestore from './AdminBackupRestore';
 
-type AdminModuleId = 'home' | 'wiki-themes' | 'wiki-templates' | 'diagram-templates' | 'vendors' | 'roles' | 'bundles' | 'applications' | 'taxonomy' | 'artifact-rules' | 'milestone-templates' | 'users' | 'sharepoint' | 'ai-settings' | 'bundle-assignments' | 'admins' | 'work-blueprints' | 'work-generators' | 'samples';
+type AdminModuleId = 'home' | 'wiki-themes' | 'wiki-templates' | 'diagram-templates' | 'vendors' | 'roles' | 'bundles' | 'applications' | 'taxonomy' | 'artifact-rules' | 'milestone-templates' | 'users' | 'sharepoint' | 'ai-settings' | 'bundle-assignments' | 'admins' | 'work-blueprints' | 'work-generators' | 'samples' | 'audit-events' | 'audit-notifications' | 'notification-settings' | 'delivery-policy' | 'jira' | 'github' | 'backup';
 
 interface AdminModule {
   id: AdminModuleId;
@@ -107,6 +114,29 @@ const Admin: React.FC = () => {
       modules: [
         { id: 'sharepoint', label: 'SharePoint', icon: 'fa-file-export', description: 'Global base URL patterns and mapping settings.', color: 'sky' },
         { id: 'ai-settings', label: 'AI Settings', icon: 'fa-robot', description: 'Configure Gemini API keys and reasoning parameters.', color: 'violet' },
+        { id: 'jira', label: 'Jira', icon: 'fa-diagram-project', description: 'Configure one-way Jira sync for work items.', color: 'blue' },
+        { id: 'github', label: 'GitHub', icon: 'fa-code-branch', description: 'Configure one-way GitHub PR sync for work items.', color: 'slate' },
+      ]
+    },
+    {
+      title: 'Settings',
+      modules: [
+        { id: 'notification-settings', label: 'Notifications', icon: 'fa-bell', description: 'Manage notification policy and digest settings.', color: 'slate' },
+        { id: 'delivery-policy', label: 'Delivery Policy', icon: 'fa-sliders', description: 'Configure governance thresholds for readiness and quality.', color: 'indigo' },
+        { id: 'jira', label: 'Jira', icon: 'fa-diagram-project', description: 'Configure one-way Jira sync for work items.', color: 'blue' },
+      ]
+    },
+    {
+      title: 'Operations',
+      modules: [
+        { id: 'backup', label: 'Backup & Restore', icon: 'fa-database', description: 'Export and restore configuration bundles safely.', color: 'slate' }
+      ]
+    },
+    {
+      title: 'Audit',
+      modules: [
+        { id: 'audit-events', label: 'Events', icon: 'fa-satellite-dish', description: 'Browse the events log across modules.', color: 'slate' },
+        { id: 'audit-notifications', label: 'Notifications', icon: 'fa-bell', description: 'Inspect notifications sent to users.', color: 'slate' },
       ]
     }
   ] : [
@@ -114,6 +144,26 @@ const Admin: React.FC = () => {
       title: 'Architecture',
       modules: [
         { id: 'diagram-templates', label: 'Diagram Templates', icon: 'fa-vector-square', description: 'Reusable architecture diagram templates.', color: 'blue' }
+      ]
+    },
+    {
+      title: 'Settings',
+      modules: [
+        { id: 'notification-settings', label: 'Notifications', icon: 'fa-bell', description: 'Manage notification policy and digest settings.', color: 'slate' },
+        { id: 'delivery-policy', label: 'Delivery Policy', icon: 'fa-sliders', description: 'Configure governance thresholds for readiness and quality.', color: 'indigo' },
+      ]
+    },
+    {
+      title: 'Operations',
+      modules: [
+        { id: 'backup', label: 'Backup & Restore', icon: 'fa-database', description: 'Export and restore configuration bundles safely.', color: 'slate' }
+      ]
+    },
+    {
+      title: 'Audit',
+      modules: [
+        { id: 'audit-events', label: 'Events', icon: 'fa-satellite-dish', description: 'Browse the events log across modules.', color: 'slate' },
+        { id: 'audit-notifications', label: 'Notifications', icon: 'fa-bell', description: 'Inspect notifications sent to users.', color: 'slate' },
       ]
     }
   ];
@@ -200,6 +250,20 @@ const Admin: React.FC = () => {
         return <AdminDiagramTemplates />;
       case 'samples':
         return <AdminSamples />;
+      case 'audit-events':
+        return <AdminAuditEvents />;
+      case 'audit-notifications':
+        return <AdminAuditNotifications />;
+      case 'notification-settings':
+        return <AdminNotificationPolicy />;
+      case 'delivery-policy':
+        return <AdminDeliveryPolicy />;
+      case 'backup':
+        return <AdminBackupRestore />;
+      case 'jira':
+        return <AdminJiraIntegration />;
+      case 'github':
+        return <AdminGitHubIntegration />;
       default:
         return (
           <div className="flex flex-col h-full bg-white relative">

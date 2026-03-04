@@ -52,11 +52,16 @@ export const TEAM_ROLE_OPTIONS: Record<Team, Role[]> = {
 };
 
 export enum MilestoneStatus {
+  DRAFT = 'Draft',
+  COMMITTED = 'Committed',
   PLANNED = 'Planned',
   ACTIVE = 'Active',
+  IN_PROGRESS = 'In Progress',
   RELEASED = 'Released',
+  DONE = 'Done',
   CANCELLED = 'Cancelled',
-  DELAYED = 'Delayed'
+  DELAYED = 'Delayed',
+  ARCHIVED = 'Archived'
 }
 
 export enum HierarchyMode {
@@ -311,6 +316,7 @@ export interface Bundle {
   name: string;
   description?: string;
   isActive: boolean;
+  visibility?: 'PRIVATE' | 'INTERNAL' | 'PUBLIC';
   wipLimits?: Record<string, number>;
   sortOrder?: number;
   createdAt?: string;
@@ -334,6 +340,7 @@ export interface WorkItem {
   sprintId?: string;
   assignedTo?: string;
   assigneeUserIds?: string[];
+  assignedAt?: string;
   watcherUserIds?: string[];
   dueAt?: string;
   context?: { bundleId: string; appId?: string };
@@ -346,11 +353,24 @@ export interface WorkItem {
   reviewCycleStatus?: string;
   reviewRequestedBy?: { userId?: string; displayName?: string; email?: string };
   reviewNotes?: string;
+  jira?: { host: string; key: string; issueId?: string; url?: string; lastSyncedAt?: string };
   reviewVendorResponse?: string;
   reviewVendorResponseAt?: string;
   reviewVendorResponseBy?: { userId?: string; displayName?: string; email?: string };
   reviewReviewerNote?: string;
   reviewFeedbackAttachments?: Array<{ assetId?: string; filename?: string; mimeType?: string; sizeBytes?: number }>;
+  github?: {
+    repo?: string;
+    prs?: Array<{
+      number: number;
+      title: string;
+      url: string;
+      state: 'open' | 'closed' | 'merged';
+      updatedAt: string;
+      author?: string;
+    }>;
+    lastSyncedAt?: string;
+  };
   dedupKey?: string;
   resolution?: string;
   createdBy?: string;
@@ -360,18 +380,22 @@ export interface WorkItem {
   links?: WorkItemLink[];
   rank?: number;
   storyPoints?: number;
+  timeEstimateHours?: number;
   timeEstimate?: number;
   timeLogged?: number;
   isFlagged?: boolean;
   isArchived?: boolean;
   archivedAt?: string;
   archivedBy?: string;
+  completedAt?: string;
   watchers?: string[];
   labels?: string[];
   comments?: WorkItemComment[];
   activity?: WorkItemActivity[];
   attachments?: WorkItemAttachment[];
   checklists?: ChecklistItem[]; 
+  isBlocked?: boolean;
+  linkSummary?: WorkItemLinkSummary;
   risk?: {
     probability: 1 | 2 | 3 | 4 | 5;
     impact: 1 | 2 | 3 | 4 | 5;
@@ -387,10 +411,54 @@ export interface WorkItem {
 
 export interface ChecklistItem { id: string; label: string; isCompleted: boolean; createdAt: string; }
 export interface WorkItemComment { _id?: string; author: string; body: string; createdAt: string; }
-export interface WorkItemLink { type: 'BLOCKS' | 'IS_BLOCKED_BY' | 'RELATES_TO' | 'DUPLICATES' | 'IS_DUPLICATED_BY'; targetId: string; targetKey?: string; targetTitle?: string; }
+export interface WorkItemLink { type: 'BLOCKS' | 'RELATES_TO' | 'DUPLICATES'; targetId: string; targetKey?: string; targetTitle?: string; }
+export type WorkItemLinkDerivedType = 'BLOCKS' | 'BLOCKED_BY' | 'RELATES_TO' | 'DUPLICATES' | 'DUPLICATED_BY';
+export interface WorkItemLinkSummaryItem {
+  type: WorkItemLinkDerivedType;
+  targetId: string;
+  targetKey?: string;
+  targetTitle?: string;
+  targetStatus?: WorkItemStatus;
+}
+export interface WorkItemLinkSummary {
+  blocks: WorkItemLinkSummaryItem[];
+  blockedBy: WorkItemLinkSummaryItem[];
+  duplicates: WorkItemLinkSummaryItem[];
+  duplicatedBy: WorkItemLinkSummaryItem[];
+  relatesTo: WorkItemLinkSummaryItem[];
+  openBlockersCount: number;
+}
 export interface WorkItemActivity { _id?: string; user: string; action: string; field?: string; from?: any; to?: any; createdAt: string; }
 export interface WorkItemAttachment { assetId?: string; name: string; size: number; type: string; url: string; uploadedBy: string; createdAt: string; }
-export interface Notification { _id?: string; recipient: string; sender: string; type: 'MENTION' | 'IMPEDIMENT' | 'ASSIGNMENT' | 'SYSTEM'; message: string; link?: string; read: boolean; createdAt: string; }
+
+export interface ScopeChangeRequest {
+  _id?: string;
+  milestoneId: string;
+  action: 'ADD_ITEMS' | 'REMOVE_ITEMS';
+  workItemIds: string[];
+  requestedBy: string;
+  requestedAt: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
+  decidedBy?: string;
+  decidedAt?: string;
+  decisionReason?: string;
+  before?: { committedPoints: number; targetCapacity?: number };
+  after?: { committedPoints: number; targetCapacity?: number };
+  allowOverCapacity?: boolean;
+}
+export interface Notification {
+  _id?: string;
+  recipient: string;
+  sender: string;
+  type: string;
+  message: string;
+  title?: string;
+  body?: string;
+  severity?: 'info' | 'warn' | 'critical';
+  link?: string;
+  read: boolean;
+  createdAt: string;
+}
 export interface Sprint { _id?: string; id?: string; name: string; startDate?: string; endDate?: string; goal?: string; status: 'PLANNED' | 'ACTIVE' | 'CLOSED'; bundleId?: string; applicationId?: string; createdAt?: string; }
 
 export interface Milestone {
@@ -401,6 +469,8 @@ export interface Milestone {
   bundleId?: string;
   vendorCompany?: string;
   status: MilestoneStatus;
+  ownerUserId?: string;
+  ownerEmail?: string;
   goal?: string;
   dueDate: string;
   startDate: string;
@@ -408,6 +478,177 @@ export interface Milestone {
   targetCapacity?: number;
   createdAt?: string;
   updatedAt?: string;
+}
+
+export interface MilestoneRollup {
+  milestoneId: string;
+  policy?: {
+    strategy: 'global' | 'bundle' | 'strictest';
+    globalVersion: number;
+    bundleVersions?: Array<{ bundleId: string; version: number }>;
+  };
+  dataQuality?: {
+    score: number;
+    issues: Array<{ key: string; count: number; detail: string }>;
+  };
+  staleness?: {
+    staleCount: number;
+    criticalStaleCount: number;
+    blockedStaleCount: number;
+    unassignedStaleCount: number;
+    githubStaleCount: number;
+  };
+  forecast?: {
+    estimatedCompletionDate: string;
+    sprintsRemaining: number;
+    varianceDays: number;
+    band: 'on-track' | 'at-risk' | 'off-track';
+  } | null;
+  totals: {
+    items: number;
+    openItems: number;
+    doneItems: number;
+    blockedDerived: number;
+    blockedStatus: number;
+    overdueOpen: number;
+  };
+  warnings?: string[];
+  capacity: {
+    targetCapacity?: number;
+    committedPoints: number;
+    completedPoints: number;
+    remainingPoints: number;
+    committedHours: number;
+    completedHours: number;
+    remainingHours: number;
+    isOverCapacity: boolean;
+    capacityUtilization: number | null;
+  };
+  risks: {
+    openBySeverity: { low: number; medium: number; high: number; critical: number };
+    openTotal: number;
+  };
+  dependencies: {
+    openBlockingDependencies: number;
+  };
+  schedule: {
+    startDate?: string;
+    endDate?: string;
+    isLate: boolean;
+    slipDays: number;
+  };
+  confidence: {
+    score: number;
+    band: 'high' | 'medium' | 'low';
+    drivers: Array<{ key: string; detail: string }>;
+  };
+}
+
+export interface CriticalPathResult {
+  milestoneId: string;
+  policy?: {
+    strategy: 'global' | 'bundle' | 'strictest';
+    globalVersion: number;
+    bundleVersions?: Array<{ bundleId: string; version: number }>;
+  };
+  cycleDetected: boolean;
+  cycleNodes?: Array<{ id: string; key?: string; title?: string }>;
+  criticalPath: {
+    nodes: Array<{
+      id: string;
+      key?: string;
+      title?: string;
+      status?: string;
+      remainingPoints: number;
+      sprintId?: string;
+      bundleId?: string;
+      milestoneIds?: string[];
+      assignee?: string;
+      watchersCount?: number;
+      scope: 'IN_MILESTONE' | 'EXTERNAL';
+    }>;
+    remainingPoints: number;
+  };
+  nearCritical: Array<{ id: string; key?: string; title?: string; slackPoints: number }>;
+  externalBlockers: Array<{
+    blockerId: string;
+    blockerKey?: string;
+    blockerTitle?: string;
+    blockedId: string;
+    blockedKey?: string;
+    blockedTitle?: string;
+    blockerMilestoneId?: string;
+    blockerBundleId?: string;
+  }>;
+  external: { includedNodes: number; depthUsed: number };
+  nodesByScope: { inMilestone: number; external: number };
+  nodes?: Array<{
+    id: string;
+    key?: string;
+    title?: string;
+    status?: string;
+    bundleId?: string;
+    milestoneIds?: string[];
+    remainingPoints: number;
+    scope: 'IN_MILESTONE' | 'EXTERNAL';
+    isCritical: boolean;
+    isNearCritical: boolean;
+  }>;
+  edges?: Array<{ fromId: string; toId: string }>;
+  topActions: Array<{
+    type: 'UNBLOCK' | 'ASSIGN' | 'SET_ESTIMATE' | 'REQUEST_ESTIMATE' | 'NOTIFY_OWNER' | 'SCOPE_REDUCE';
+    itemId: string;
+    key?: string;
+    title?: string;
+    bundleId?: string;
+    milestoneIds?: string[];
+    reason: string;
+  }>;
+}
+
+export interface DeliveryPolicy {
+  _id: 'global';
+  version: number;
+  updatedAt: string;
+  updatedBy: string;
+  readiness: {
+    milestone: {
+      warnScoreBelow: number;
+      blockScoreBelow: number;
+      blockOnBlockedItems: boolean;
+      blockOnHighCriticalRisks: boolean;
+    };
+    sprint: {
+      warnScoreBelow: number;
+      blockScoreBelow: number;
+      blockOnBlockedItems: boolean;
+      blockOnHighCriticalRisks: boolean;
+    };
+  };
+  dataQuality: {
+    weights: {
+      missingStoryPoints: number;
+      missingAssignee: number;
+      missingDueAt: number;
+      missingRiskSeverity: number;
+    };
+    caps: {
+      missingStoryPoints: number;
+      missingAssignee: number;
+      missingDueAt: number;
+      missingRiskSeverity: number;
+    };
+  };
+  forecasting: {
+    atRiskPct: number;
+    offTrackPct: number;
+    minSampleSize: number;
+  };
+  criticalPath: {
+    nearCriticalSlackPct: number;
+    defaultIncludeExternal: boolean;
+    defaultExternalDepth: number;
+  };
 }
 
 export interface WikiPage { id?: string; _id?: string; slug?: string; title: string; content: string; summary?: string; parentId?: string; spaceId: string; bundleId?: string; applicationId?: string; milestoneId?: string; documentTypeId?: string; createdAt?: string; updatedAt?: string; author?: string; lastModifiedBy?: string; version?: number; status?: 'Draft' | 'Published' | 'Archived'; themeKey?: string; }
@@ -501,12 +742,30 @@ export interface EventRecord {
   _id?: string;
   ts: string;
   type: string;
+  canonicalType?: string;
+  category?: string;
+  modulePrefix?: string;
   actor: CommentAuthor;
   resource: { type: string; id: string; title?: string };
   context?: { bundleId?: string; appId?: string; milestoneId?: string; documentTypeId?: string; docType?: string };
   payload?: any;
   visibility?: { scope: string; teamIds?: string[] };
   correlationId?: string;
+}
+export type FeedSeverity = 'info' | 'warn' | 'critical';
+export interface FeedItem {
+  id: string;
+  occurredAt: string;
+  actor?: { userId?: string; email?: string; name?: string };
+  title: string;
+  summary: string;
+  severity: FeedSeverity;
+  links: Array<{ label: string; href: string }>;
+  rawType: string;
+  canonicalType?: string;
+  category?: string;
+  modulePrefix?: string;
+  raw?: any;
 }
 export interface ReviewReviewer {
   userId: string;

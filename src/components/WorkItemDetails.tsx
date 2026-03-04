@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef, useMemo, Suspense } from 'react';
-import { WorkItem, WorkItemType, WorkItemStatus, Bundle, Application, WorkItemLink, WorkItemAttachment, WorkItemActivity, WorkItemComment, Milestone, ChecklistItem } from '../types';
+import { WorkItem, WorkItemType, WorkItemStatus, Bundle, Application, WorkItemLinkDerivedType, WorkItemAttachment, WorkItemActivity, WorkItemComment, Milestone, ChecklistItem } from '../types';
 import AssigneeSearch from './AssigneeSearch';
 import CommentsDrawer from './CommentsDrawer';
 import { useRouter } from '../App';
@@ -29,7 +29,7 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
   const [newChecklistItem, setNewChecklistItem] = useState('');
   const [uploading, setUploading] = useState(false);
   const [closureError, setClosureError] = useState<string | null>(null);
-  const [linkType, setLinkType] = useState<WorkItemLink['type']>('RELATES_TO');
+  const [linkType, setLinkType] = useState<WorkItemLinkDerivedType>('RELATES_TO');
   const [linkKey, setLinkKey] = useState('');
   const [currentUser, setCurrentUser] = useState<{ name?: string; email?: string } | null>(null);
   const [resolvedLinks, setResolvedLinks] = useState<Record<string, { title?: string; type?: string; status?: string; key?: string }>>({});
@@ -341,60 +341,100 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
     }
   };
 
-  const handleAddLink = async (targetKey: string, type: WorkItemLink['type']) => {
+  const handleAddLink = async (targetKey: string, type: WorkItemLinkDerivedType) => {
     const key = String(targetKey || '').trim();
     if (!key) return;
     try {
-      const res = await fetch(`/api/work-items/lookup?key=${encodeURIComponent(key)}`);
-      if (!res.ok) {
-        alert('Target not found. Check the key and try again.');
+      const res = await fetch(`/api/work-items/${item._id || item.id}/links`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetKey: key, type })
+      });
+      if (res.ok) {
+        setLinkKey('');
+        await loadFullDetails();
         return;
       }
-      const target = await res.json();
-      const targetId = (target._id || target.id) as string;
-      if (String(targetId) === String(item._id || item.id)) {
-        alert('You cannot link an item to itself.');
-        return;
-      }
-      const exists = (item.links || []).some(l => l.type === type && String(l.targetId) === String(targetId));
-      if (exists) {
-        alert('This link already exists.');
-        return;
-      }
-      const link: WorkItemLink = {
-        type,
-        targetId,
-        targetKey: target.key,
-        targetTitle: target.title
-      };
-      await handleUpdateItem({ links: [...(item.links || []), link] });
-      setLinkKey('');
+      const err = await res.json().catch(() => ({}));
+      alert(err.error || 'Link creation failed.');
     } catch {
-      alert('Link lookup failed. Please try again.');
+      alert('Link creation failed. Please try again.');
+    }
+  };
+
+  const handleRemoveLink = async (targetId: string, type: WorkItemLinkDerivedType) => {
+    try {
+      const res = await fetch(`/api/work-items/${item._id || item.id}/links`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetId, type })
+      });
+      if (res.ok) {
+        await loadFullDetails();
+        return;
+      }
+      const err = await res.json().catch(() => ({}));
+      alert(err.error || 'Link removal failed.');
+    } catch {
+      alert('Link removal failed.');
     }
   };
 
   useEffect(() => {
     const resolve = async () => {
-      const links = item.links || [];
-      if (links.length === 0) return;
+      const linkEntries = [
+        ...(item.linkSummary?.blocks || []),
+        ...(item.linkSummary?.blockedBy || []),
+        ...(item.linkSummary?.duplicates || []),
+        ...(item.linkSummary?.duplicatedBy || []),
+        ...(item.linkSummary?.relatesTo || []),
+        ...(item.links || [])
+      ];
+      if (linkEntries.length === 0) return;
       const next: Record<string, { title?: string; type?: string; status?: string; key?: string }> = {};
       await Promise.all(
-        links.map(async (link) => {
-          const key = String(link.targetId);
-          if (resolvedLinks[key]) return;
+        linkEntries.map(async (link: any) => {
+          const targetId = String(link.targetId);
+          if (resolvedLinks[targetId]) return;
           try {
-            const res = await fetch(`/api/work-items/lookup?key=${encodeURIComponent(link.targetId)}`);
+            const res = await fetch(`/api/work-items/lookup?key=${encodeURIComponent(targetId)}`);
             if (!res.ok) return;
             const data = await res.json();
-            next[key] = { title: data.title, type: data.type, status: data.status, key: data.key };
+            next[targetId] = { title: data.title, type: data.type, status: data.status, key: data.key };
           } catch {}
         })
       );
       if (Object.keys(next).length) setResolvedLinks(prev => ({ ...prev, ...next }));
     };
     resolve();
-  }, [item.links]);
+  }, [item.links, item.linkSummary]);
+
+  const linkGroups = useMemo(() => {
+    const groups = [
+      { key: 'blocks', label: 'Blocks', type: 'BLOCKS' as WorkItemLinkDerivedType, items: [] as any[] },
+      { key: 'blockedBy', label: 'Blocked By', type: 'BLOCKED_BY' as WorkItemLinkDerivedType, items: [] as any[] },
+      { key: 'relatesTo', label: 'Relates To', type: 'RELATES_TO' as WorkItemLinkDerivedType, items: [] as any[] },
+      { key: 'duplicates', label: 'Duplicates', type: 'DUPLICATES' as WorkItemLinkDerivedType, items: [] as any[] },
+      { key: 'duplicatedBy', label: 'Duplicated By', type: 'DUPLICATED_BY' as WorkItemLinkDerivedType, items: [] as any[] }
+    ];
+
+    if (item.linkSummary) {
+      groups[0].items = item.linkSummary.blocks || [];
+      groups[1].items = item.linkSummary.blockedBy || [];
+      groups[2].items = item.linkSummary.relatesTo || [];
+      groups[3].items = item.linkSummary.duplicates || [];
+      groups[4].items = item.linkSummary.duplicatedBy || [];
+      return groups;
+    }
+
+    const links = item.links || [];
+    groups[0].items = links.filter((l: any) => l.type === 'BLOCKS');
+    groups[2].items = links.filter((l: any) => l.type === 'RELATES_TO');
+    groups[3].items = links.filter((l: any) => l.type === 'DUPLICATES');
+    groups[1].items = links.filter((l: any) => l.type === 'IS_BLOCKED_BY').map((l: any) => ({ ...l, type: 'BLOCKED_BY' }));
+    groups[4].items = links.filter((l: any) => l.type === 'IS_DUPLICATED_BY').map((l: any) => ({ ...l, type: 'DUPLICATED_BY' }));
+    return groups;
+  }, [item.linkSummary, item.links]);
 
   const runAiTool = async (endpoint: string) => {
     setIsAiProcessing(true);
@@ -455,6 +495,23 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
                   </button>
                 ) : (
                   <span>{item.linkedResource.title || item.linkedResource.id} ({item.linkedResource.type})</span>
+                )}
+              </div>
+            )}
+            {item.jira?.key && (
+              <div className="mt-1 text-[11px] font-semibold text-slate-500 truncate">
+                {item.jira.url ? (
+                  <a
+                    href={item.jira.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-blue-600 hover:text-blue-800 underline decoration-dotted"
+                    title="Open Jira issue"
+                  >
+                    Jira {item.jira.key}
+                  </a>
+                ) : (
+                  <span>Jira {item.jira.key}</span>
                 )}
               </div>
             )}
@@ -761,6 +818,49 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
                 </div>
               )}
 
+              <div className="bg-slate-50 border border-slate-100 rounded-2xl p-6 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">GitHub Pull Requests</div>
+                  {item.github?.lastSyncedAt && (
+                    <div className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+                      Synced {new Date(item.github.lastSyncedAt).toLocaleString()}
+                    </div>
+                  )}
+                </div>
+                {Array.isArray(item.github?.prs) && item.github.prs.length > 0 ? (
+                  <div className="space-y-3">
+                    {[...item.github.prs]
+                      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+                      .map((pr) => (
+                        <a
+                          key={`${item.github?.repo || 'repo'}-${pr.number}`}
+                          href={pr.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex items-center justify-between gap-4 bg-white border border-slate-100 rounded-xl px-4 py-3 text-sm text-slate-700 hover:border-blue-200"
+                        >
+                          <div>
+                            <div className="text-xs font-black text-slate-500 uppercase tracking-widest">
+                              #{pr.number} • {item.github?.repo || 'Repo'}
+                            </div>
+                            <div className="font-semibold text-slate-800">{pr.title}</div>
+                            <div className="text-[10px] text-slate-400">
+                              {pr.author || 'Unknown'} • Updated {new Date(pr.updatedAt).toLocaleString()}
+                            </div>
+                          </div>
+                          <span className={`px-2 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${
+                            pr.state === 'merged' ? 'bg-emerald-100 text-emerald-700' : pr.state === 'open' ? 'bg-blue-100 text-blue-700' : 'bg-slate-200 text-slate-600'
+                          }`}>
+                            {pr.state}
+                          </span>
+                        </a>
+                      ))}
+                  </div>
+                ) : (
+                  <div className="text-sm text-slate-400">No GitHub pull requests linked yet.</div>
+                )}
+              </div>
+
               {parentCandidates.length > 0 && (
                 <div className="space-y-2">
                   <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Parent</label>
@@ -927,14 +1027,14 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
                         <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Type</label>
                         <select
                           value={linkType}
-                          onChange={(e) => setLinkType(e.target.value as WorkItemLink['type'])}
+                          onChange={(e) => setLinkType(e.target.value as WorkItemLinkDerivedType)}
                           className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-[10px] font-bold"
                         >
                           <option value="RELATES_TO">Relates To</option>
                           <option value="BLOCKS">Blocks</option>
-                          <option value="IS_BLOCKED_BY">Is Blocked By</option>
+                          <option value="BLOCKED_BY">Blocked By</option>
                           <option value="DUPLICATES">Duplicates</option>
-                          <option value="IS_DUPLICATED_BY">Is Duplicated By</option>
+                          <option value="DUPLICATED_BY">Duplicated By</option>
                         </select>
                       </div>
                       <div className="flex-1 min-w-[220px] flex flex-col gap-2">
@@ -953,30 +1053,33 @@ const WorkItemDetails: React.FC<WorkItemDetailsProps> = ({ item: initialItem, bu
                         Add Link
                       </button>
                    </div>
-                   {(item.links || []).map((link, i) => {
-                     const meta = resolvedLinks[String(link.targetId)] || {};
-                     return (
-                     <div key={i} className="flex items-center justify-between p-5 bg-slate-50 rounded-2xl border border-slate-100 group">
-                        <div className="flex items-center gap-4">
-                           <div className="w-10 h-10 rounded-xl bg-white border border-slate-100 flex items-center justify-center text-slate-400 shadow-sm">
-                              <i className="fas fa-link text-xs"></i>
+                   {linkGroups.flatMap(group =>
+                     group.items.map((link: any, i: number) => {
+                       const meta = resolvedLinks[String(link.targetId)] || {};
+                       return (
+                         <div key={`${group.key}-${String(link.targetId)}-${i}`} className="flex items-center justify-between p-5 bg-slate-50 rounded-2xl border border-slate-100 group">
+                           <div className="flex items-center gap-4">
+                             <div className="w-10 h-10 rounded-xl bg-white border border-slate-100 flex items-center justify-center text-slate-400 shadow-sm">
+                               <i className="fas fa-link text-xs"></i>
+                             </div>
+                             <div>
+                               <span className="text-[8px] font-black text-blue-600 uppercase tracking-widest block mb-0.5">{group.label}</span>
+                               <h5 className="text-sm font-bold text-slate-700">
+                                 {meta.key || link.targetKey || 'Linking...'}: {meta.title || link.targetTitle || 'Fetching status...'}
+                               </h5>
+                               {(meta.type || meta.status) && (
+                                 <div className="text-[9px] font-bold text-slate-400 uppercase">
+                                   {meta.type ? meta.type.replace('_', ' ') : ''}{meta.type && meta.status ? ' • ' : ''}{meta.status || ''}
+                                 </div>
+                               )}
+                             </div>
                            </div>
-                           <div>
-                              <span className="text-[8px] font-black text-blue-600 uppercase tracking-widest block mb-0.5">{link.type.replace(/_/g, ' ')}</span>
-                              <h5 className="text-sm font-bold text-slate-700">
-                                {meta.key || link.targetKey || 'Linking...'}: {meta.title || link.targetTitle || 'Fetching status...'}
-                              </h5>
-                              {(meta.type || meta.status) && (
-                                <div className="text-[9px] font-bold text-slate-400 uppercase">
-                                  {meta.type ? meta.type.replace('_', ' ') : ''}{meta.type && meta.status ? ' • ' : ''}{meta.status || ''}
-                                </div>
-                              )}
-                           </div>
-                        </div>
-                        <button onClick={() => handleUpdateItem({ links: item.links?.filter((_, idx) => idx !== i) })} className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 transition-all"><i className="fas fa-unlink text-xs"></i></button>
-                     </div>
-                   )})}
-                   {(!item.links || item.links.length === 0) && (
+                           <button onClick={() => handleRemoveLink(String(link.targetId), group.type)} className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 transition-all"><i className="fas fa-unlink text-xs"></i></button>
+                         </div>
+                       );
+                     })
+                   )}
+                   {linkGroups.every(group => group.items.length === 0) && (
                      <div className="py-20 text-center flex flex-col items-center opacity-30">
                         <i className="fas fa-network-wired text-4xl mb-4"></i>
                         <p className="text-[10px] font-black uppercase tracking-widest">No links established</p>

@@ -18,6 +18,7 @@ export const NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboards', icon: 'fa-chart-pie' },
   { id: 'applications', label: 'Applications', icon: 'fa-cubes' },
   { id: 'work-items', label: 'Work Items', icon: 'fa-tasks' },
+  { id: 'program', label: 'Program', icon: 'fa-layer-group' },
   { id: 'architecture', label: 'Architecture', icon: 'fa-sitemap' },
   { id: 'wiki', label: 'Wiki', icon: 'fa-book' },
   { id: 'activities', label: 'Activities', icon: 'fa-bolt' },

@@ -14,6 +14,25 @@ This section describes how to work on DeliveryHub safely and consistently.
 - `npm run build`
 - `npm run start`
 - `npm run lint`
+- `npm run lint:ci`
+- `npm run test:api`
+- `npm run db:bootstrap`
+- `npm run db:seed-sample`
+- `npm run db:reset-sample`
+- `npm run db:export-baseline`
+- `npm run seed:export`
+
+## API Regression Tests
+Run the API regression suite with:
+- `npm run test:api`
+
+Required environment:
+- `MONGODB_URI` (test harness will create isolated test DBs)
+- `JWT_SECRET` (optional; defaults to dev secret if omitted)
+
+Notes:
+- Tests create temporary databases and drop them after completion.
+- If running in CI, ensure MongoDB is reachable and `MONGODB_URI` is set.
 
 ## Source Layout
 - `src/app`: Next.js routes and API handlers

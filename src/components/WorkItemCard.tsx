@@ -10,9 +10,11 @@ interface WorkItemCardProps {
   onClick?: () => void;
   isOverlay?: boolean;
   disableDrag?: boolean;
+  enableInlinePointsEdit?: boolean;
+  onItemUpdated?: (id: string, patch: Partial<WorkItem>) => void;
 }
 
-const WorkItemCard: React.FC<WorkItemCardProps> = ({ item, onClick, isOverlay, disableDrag }) => {
+const WorkItemCard: React.FC<WorkItemCardProps> = ({ item, onClick, isOverlay, disableDrag, enableInlinePointsEdit, onItemUpdated }) => {
   const {
     attributes,
     listeners,
@@ -50,7 +52,25 @@ const WorkItemCard: React.FC<WorkItemCardProps> = ({ item, onClick, isOverlay, d
     }
   };
 
-  const isBlocked = item.links?.some(l => l.type === 'IS_BLOCKED_BY');
+  const isBlocked = item.status === WorkItemStatus.BLOCKED || item.isBlocked || (item.linkSummary?.openBlockersCount || 0) > 0;
+  const [isEditingPoints, setIsEditingPoints] = React.useState(false);
+  const [pointsValue, setPointsValue] = React.useState<number | ''>(item.storyPoints ?? '');
+  const [pointsError, setPointsError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    setPointsValue(item.storyPoints ?? '');
+  }, [item.storyPoints]);
+
+  const dependencyTooltip = useMemo(() => {
+    const blocks = item.linkSummary?.blocks || [];
+    const blockedBy = item.linkSummary?.blockedBy || [];
+    const topBlocks = blocks.slice(0, 2).map((b) => b.targetKey || b.targetId).filter(Boolean);
+    const topBlockedBy = blockedBy.slice(0, 2).map((b) => b.targetKey || b.targetId).filter(Boolean);
+    const parts: string[] = [];
+    if (topBlocks.length) parts.push(`Blocks: ${topBlocks.join(', ')}`);
+    if (topBlockedBy.length) parts.push(`Blocked by: ${topBlockedBy.join(', ')}`);
+    return parts.join(' • ');
+  }, [item.linkSummary]);
   
   // Logic: Staleness Detection (> 3 days without update)
   const isStale = useMemo(() => {
@@ -96,9 +116,50 @@ const WorkItemCard: React.FC<WorkItemCardProps> = ({ item, onClick, isOverlay, d
       <h4 className="text-sm font-bold text-slate-800 leading-snug mb-4 group-hover:text-blue-600 transition-colors">
         {item.title}
       </h4>
-      {item.links && item.links.length > 0 && (
+
+      <div className="flex flex-wrap items-center gap-2 mb-3 text-[8px] font-black uppercase tracking-widest">
+        {item.jira?.key && (
+          <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-600">Jira {item.jira.key}</span>
+        )}
+        {(item.linkSummary?.blocks?.length || item.linkSummary?.blockedBy?.length) ? (
+          <span
+            className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 flex items-center gap-1"
+            title={dependencyTooltip || undefined}
+          >
+            <i className="fas fa-link text-[7px]"></i>
+            {item.linkSummary?.blocks?.length ? `B:${item.linkSummary.blocks.length}` : ''}
+            {item.linkSummary?.blockedBy?.length ? ` • BB:${item.linkSummary.blockedBy.length}` : ''}
+          </span>
+        ) : null}
+        {item.sprintId && (
+          <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">Sprint</span>
+        )}
+        {item.risk?.severity && ['high', 'critical'].includes(String(item.risk.severity).toLowerCase()) && (
+          <span className="px-1.5 py-0.5 rounded bg-rose-50 text-rose-600">Risk {String(item.risk.severity).toUpperCase()}</span>
+        )}
+        {(item.watcherUserIds?.length || item.watchers?.length) ? (
+          <span className="px-1.5 py-0.5 rounded bg-slate-50 text-slate-400">
+            <i className="fas fa-eye text-[7px]"></i> {item.watcherUserIds?.length || item.watchers?.length}
+          </span>
+        ) : null}
+      </div>
+      {(() => {
+        const summaryCount = (item.linkSummary?.blocks?.length || 0)
+          + (item.linkSummary?.blockedBy?.length || 0)
+          + (item.linkSummary?.duplicates?.length || 0)
+          + (item.linkSummary?.duplicatedBy?.length || 0)
+          + (item.linkSummary?.relatesTo?.length || 0);
+        return (item.links && item.links.length > 0) || summaryCount > 0;
+      })() && (
         <div className="flex items-center gap-1 flex-wrap mb-3">
-          {Array.from(new Set(item.links.map(l => l.type))).slice(0, 3).map(t => (
+          {Array.from(new Set([
+            ...(item.links || []).map(l => l.type),
+            ...((item.linkSummary?.blocks || []).map(() => 'BLOCKS')),
+            ...((item.linkSummary?.blockedBy || []).map(() => 'BLOCKED_BY')),
+            ...((item.linkSummary?.duplicates || []).map(() => 'DUPLICATES')),
+            ...((item.linkSummary?.duplicatedBy || []).map(() => 'DUPLICATED_BY')),
+            ...((item.linkSummary?.relatesTo || []).map(() => 'RELATES_TO'))
+          ].filter(Boolean))).slice(0, 3).map(t => (
             <span key={t} className="text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded border bg-slate-50 text-slate-500 border-slate-100">
               {t.replace(/_/g, ' ')}
             </span>
@@ -108,10 +169,83 @@ const WorkItemCard: React.FC<WorkItemCardProps> = ({ item, onClick, isOverlay, d
 
       <div className="flex items-center justify-between mt-auto pt-3 border-t border-slate-50">
         <div className="flex items-center gap-2">
-           {item.storyPoints && (
-             <span className="w-5 h-5 bg-slate-100 rounded-full flex items-center justify-center text-[10px] font-bold text-slate-500">
-               {item.storyPoints}
-             </span>
+           {item.storyPoints !== undefined && item.storyPoints !== null && (
+             <div className="relative">
+               <button
+                 onClick={(e) => {
+                   if (!enableInlinePointsEdit) return;
+                   e.stopPropagation();
+                   setIsEditingPoints((prev) => !prev);
+                   setPointsError(null);
+                 }}
+                 className={`w-6 h-6 bg-slate-100 rounded-full flex items-center justify-center text-[10px] font-bold text-slate-500 ${enableInlinePointsEdit ? 'hover:bg-slate-200' : ''}`}
+                 title={enableInlinePointsEdit ? 'Edit story points' : undefined}
+               >
+                 {item.storyPoints}
+               </button>
+               {isEditingPoints && enableInlinePointsEdit && (
+                 <div className="absolute left-0 top-full mt-2 w-36 bg-white border border-slate-200 shadow-xl rounded-xl p-2 z-40">
+                   <div className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">Story Points</div>
+                   <input
+                     type="number"
+                     value={pointsValue}
+                     onClick={(e) => e.stopPropagation()}
+                     onChange={(e) => {
+                       const value = e.target.value === '' ? '' : Number(e.target.value);
+                       setPointsValue(Number.isNaN(value) ? '' : value);
+                     }}
+                     className="w-full px-2 py-1 text-xs border border-slate-200 rounded-lg"
+                     min={0}
+                   />
+                   {pointsError && <div className="text-[9px] text-rose-600 mt-1">{pointsError}</div>}
+                   <div className="flex items-center justify-end gap-2 mt-2">
+                     <button
+                       onClick={(e) => {
+                         e.stopPropagation();
+                         setIsEditingPoints(false);
+                         setPointsError(null);
+                       }}
+                       className="text-[9px] font-black uppercase tracking-widest text-slate-400"
+                     >
+                       Cancel
+                     </button>
+                     <button
+                       onClick={async (e) => {
+                         e.stopPropagation();
+                         const numeric = typeof pointsValue === 'number' ? pointsValue : 0;
+                         if (numeric < 0) {
+                           setPointsError('Must be >= 0');
+                           return;
+                         }
+                         const previous = item.storyPoints;
+                         onItemUpdated?.(String(item._id || item.id), { storyPoints: numeric });
+                         try {
+                           const res = await fetch(`/api/work-items/${item._id || item.id}`, {
+                             method: 'PATCH',
+                             headers: { 'Content-Type': 'application/json' },
+                             body: JSON.stringify({ storyPoints: numeric })
+                           });
+                           if (!res.ok) {
+                             const err = await res.json().catch(() => ({}));
+                             onItemUpdated?.(String(item._id || item.id), { storyPoints: previous as any });
+                             setPointsError(err.error || 'Update failed');
+                             return;
+                           }
+                           setIsEditingPoints(false);
+                           setPointsError(null);
+                         } catch (err: any) {
+                           onItemUpdated?.(String(item._id || item.id), { storyPoints: previous as any });
+                           setPointsError(err?.message || 'Update failed');
+                         }
+                       }}
+                       className="text-[9px] font-black uppercase tracking-widest text-blue-600"
+                     >
+                       Save
+                     </button>
+                   </div>
+                 </div>
+               )}
+             </div>
            )}
            {item.timeLogged && item.timeLogged > 0 ? (
              <span className="text-[9px] font-bold text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded flex items-center gap-1">

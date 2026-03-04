@@ -1,5 +1,5 @@
 import { Role } from '../types';
-import { isAdmin } from './db';
+import { fetchBundleAssignments, isAdmin } from './db';
 
 type AuthUser = {
   userId?: string;
@@ -30,6 +30,41 @@ const VENDOR_ROLES = new Set<Role>([
 
 export const isEngineeringRole = (role?: string) => ENGINEERING_ROLES.has(role as Role);
 export const isVendorRole = (role?: string) => VENDOR_ROLES.has(role as Role);
+
+const isAdminOrCmoRole = (role?: string) => {
+  const roleName = String(role || '');
+  if (!roleName) return false;
+  const lower = roleName.toLowerCase();
+  if (lower.includes('admin')) return true;
+  if (lower.includes('cmo')) return true;
+  const privilegedRoles = new Set([
+    'CMO Architect',
+    'CMO Member'
+  ]);
+  return privilegedRoles.has(roleName);
+};
+
+export const getBundleOwnership = async (userId?: string) => {
+  const uid = String(userId || '');
+  if (!uid) return [];
+  const assignments = await fetchBundleAssignments({ userId: uid, assignmentType: 'bundle_owner', active: true });
+  return assignments.map((a) => String(a.bundleId)).filter(Boolean);
+};
+
+const isBundleOwner = async (user?: AuthUser, bundleId?: string) => {
+  const userId = String(user?.userId || user?.id || '');
+  if (!userId || !bundleId) return false;
+  const ownership = await getBundleOwnership(userId);
+  return ownership.includes(String(bundleId));
+};
+
+export const isAdminOrCmo = async (user?: AuthUser) => {
+  if (!user) return false;
+  if (isAdminOrCmoRole(user.role)) return true;
+  const userId = String(user.userId || user.id || '');
+  if (!userId) return false;
+  return await isAdmin(userId);
+};
 
 export const canSubmitForReview = (user?: AuthUser) => {
   if (!user) return false;
@@ -63,4 +98,79 @@ export const canEditBundleProfile = async (user?: AuthUser) => {
   const userId = String(user.userId || user.id || '');
   if (!userId) return false;
   return await isAdmin(userId);
+};
+
+export const isPrivilegedMilestoneRole = (role?: string) => {
+  const roleName = String(role || '');
+  if (!roleName) return false;
+  if (roleName.toLowerCase().includes('admin')) return true;
+  if (roleName.toLowerCase().includes('cmo')) return true;
+  const privilegedRoles = new Set([
+    'CMO Architect',
+    'CMO Member',
+    'SVP Architect',
+    'Director',
+    'VP',
+    'CIO'
+  ]);
+  return privilegedRoles.has(roleName);
+};
+
+export const canCommitMilestone = async (user?: AuthUser) => {
+  return await isAdminOrCmo(user);
+};
+
+export const canStartMilestone = async (user?: AuthUser) => {
+  return await isAdminOrCmo(user);
+};
+
+export const canCompleteMilestone = async (user?: AuthUser) => {
+  return await isAdminOrCmo(user);
+};
+
+export const canOverrideMilestoneReadiness = async (user?: AuthUser) => {
+  return await isAdminOrCmo(user);
+};
+
+export const canOverrideCapacity = async (user?: AuthUser) => {
+  return await isAdminOrCmo(user);
+};
+
+export const canManageSprints = async (user?: AuthUser) => {
+  return await isAdminOrCmo(user);
+};
+
+export const canEditCommittedMilestoneScope = async (user?: AuthUser, milestone?: any) => {
+  if (!user || !milestone?.bundleId) return false;
+  if (await isAdminOrCmo(user)) return true;
+  return await isBundleOwner(user, String(milestone.bundleId));
+};
+
+export const canEditMilestoneOwner = async (user?: AuthUser, bundleIds: string[] = []) => {
+  if (!user) return false;
+  if (await isAdminOrCmo(user)) return true;
+  const userId = String(user.userId || user.id || '');
+  if (!userId) return false;
+  const ownership = await getBundleOwnership(userId);
+  return bundleIds.some((id) => ownership.includes(String(id)));
+};
+
+export const canCreateBlocksDependency = async (user?: AuthUser, sourceItem?: any, targetItem?: any) => {
+  if (!user) return false;
+  if (await isAdminOrCmo(user)) return true;
+  if (!sourceItem || !targetItem) return false;
+  const sourceBundle = sourceItem.bundleId ? String(sourceItem.bundleId) : '';
+  const targetBundle = targetItem.bundleId ? String(targetItem.bundleId) : '';
+  if (!sourceBundle || !targetBundle || sourceBundle !== targetBundle) return false;
+  return await isBundleOwner(user, sourceBundle);
+};
+
+export const canRemoveBlocksDependency = async (user?: AuthUser, sourceItem?: any, targetItem?: any) => {
+  return await canCreateBlocksDependency(user, sourceItem, targetItem);
+};
+
+export const canEditRiskSeverity = async (user?: AuthUser, item?: any) => {
+  if (!user || !item?.bundleId) return false;
+  if (await isAdminOrCmo(user)) return true;
+  return await isBundleOwner(user, String(item.bundleId));
 };

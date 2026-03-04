@@ -3,11 +3,14 @@ import { NextResponse } from 'next/server';
 import { fetchWorkItemTree } from '../../../../services/db';
 import { jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
+import { createVisibilityContext, getAuthUserFromCookies } from '../../../../services/visibility';
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
+  const authUser = await getAuthUserFromCookies();
+  if (!authUser?.userId) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
   const cookieStore = await cookies();
   const token = cookieStore.get('nexus_auth_token')?.value;
   
@@ -47,5 +50,24 @@ export async function GET(request: Request) {
     currentUsername
   };
   const tree = await fetchWorkItemTree(filters);
-  return NextResponse.json(tree);
+  const visibility = createVisibilityContext(authUser);
+  const filterNodes = async (nodes: any[]): Promise<any[]> => {
+    const results: any[] = [];
+    for (const node of nodes || []) {
+      if (node?.type === 'MILESTONE') {
+        const canView = await visibility.canViewBundle(String(node.bundleId || ''));
+        if (!canView) continue;
+        const children = await filterNodes(node.children || []);
+        results.push({ ...node, children });
+        continue;
+      }
+      const canView = await visibility.canViewBundle(String(node.bundleId || ''));
+      if (!canView) continue;
+      const children = await filterNodes(node.children || []);
+      results.push({ ...node, children });
+    }
+    return results;
+  };
+  const filtered = await filterNodes(Array.isArray(tree) ? tree : []);
+  return NextResponse.json(filtered);
 }

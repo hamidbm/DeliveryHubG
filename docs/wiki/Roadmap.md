@@ -1,18 +1,55 @@
 # Roadmap
 
-This section captures known gaps and likely next steps.
+This section captures known gaps and likely next steps. The backbone is milestone readiness + rollups, with roadmap intelligence as the derived surface, and program coordination + notifications/audit as the operational layer.
 
-## Near-Term
-- Expand repository pattern into per-domain repositories
-- Improve automated tests for API handlers
-- Extend RBAC enforcement for critical actions
-- Harden markdown sanitization and hydration behavior
+## Work Items Roadmap
 
-## Mid-Term
-- Add notification subsystem and UI
-- Add advanced reporting and export options
-- Improve AI governance dashboards in Admin
+### Near-term (next 2–4 weeks)
+1. Inline storyPoints edits in planning surfaces.
+Problem: editing storyPoints requires opening the detail drawer. Value: faster planning and fewer context switches. Dependencies: existing milestone planning and roadmap views. Deliverables: inline edit controls in planning and roadmap rows, with optimistic update + validation. Verify: edit storyPoints inline and see rollups update without page reload.
 
-## Long-Term
-- Full multi-environment configuration
-- External integrations for ticketing and CMDBs
+2. Error and warning UX consistency across planning/roadmap/program.
+Problem: governance errors surface inconsistently. Value: predictable resolution paths and fewer user errors. Dependencies: existing readiness/override error codes. Deliverables: shared error banner pattern and standardized messaging for readiness/capacity/override. Verify: readiness blocked and capacity override show the same UX treatment across views.
+
+3. Data consistency and schema validation pass.
+Problem: historical migrations left mixed shapes. Value: safer analytics and fewer edge-case bugs. Dependencies: current schema and migration scripts. Deliverables: explicit validation for core fields, migration checklist in docs. Verify: validation script passes against baseline + sample DB.
+
+4. Performance sampling for heavy endpoints.
+Problem: roadmap and rollup queries can be heavy at scale. Value: early detection of regressions. Dependencies: existing perf logging pattern. Deliverables: optional query explain sampling and timing logs. Verify: enable sampling and capture explain summaries without breaking API.
+
+### Mid-term (next 1–3 months)
+1. Sprint execution integration.
+Problem: sprint execution is not tied to milestone scope. Value: alignment between team execution and milestone readiness. Dependencies: sprint data model and milestone rollups. Deliverables: sprint capacity tied to milestone scope and burn-up. Verify: sprint updates change milestone readiness signals.
+
+2. Forecasting v1.
+Problem: no forward-looking ETA per milestone. Value: early schedule risk visibility. Dependencies: historical completion data. Deliverables: velocity-based ETA per milestone and confidence calibration. Verify: compare predicted vs actual on recent milestones.
+
+3. Notification routing v2.
+Problem: no watcher/subscription model. Value: targeted delivery of notifications. Dependencies: current notification policy and prefs. Deliverables: watchers for bundles/milestones and cron-ready digest automation. Verify: watcher receives targeted notifications; digest can be scheduled.
+
+### Long-term
+1. External integrations.
+Problem: manual sync with external tools. Value: reduce dual entry and stale data. Dependencies: stable API contracts and mapping rules. Deliverables: Jira sync and calendar release milestones. Verify: changes propagate between systems without drift.
+
+2. Advanced governance.
+Problem: COMMITTED scope changes are not formally approved. Value: enforce governance and auditability. Dependencies: existing readiness + override workflow. Deliverables: approval workflow for committed scope changes and policy-as-config thresholds. Verify: scope change requires approval and is fully auditable.
+
+3. Advanced analytics.
+Problem: limited critical path visibility. Value: improved program prioritization. Dependencies: accurate dependency graph and milestone rollups. Deliverables: critical path visualization and Monte Carlo forecasting (optional). Verify: critical path highlights matches actual blockers over time.
+
+## Platform Roadmap
+
+### Near-term
+1. Expand repository pattern into per-domain repositories.
+Problem: DB access is still centralized. Value: clearer ownership and safer changes. Dependencies: current services/db.ts. Deliverables: repo modules for work items, milestones, notifications. Verify: routes use repositories consistently.
+
+2. Improve automated API tests coverage.
+Problem: regression detection is limited. Value: safer releases. Dependencies: test harness. Deliverables: coverage for notifications policy + digest and audit console. Verify: `npm run test:api` passes with meaningful scenarios.
+
+### Mid-term
+1. Improve AI governance dashboards in Admin.
+Problem: AI controls are not auditable enough. Value: better oversight. Dependencies: ai_settings + events. Deliverables: usage and policy dashboards with audit logs. Verify: admins can see usage trends and policy changes.
+
+### Long-term
+1. Multi-environment configuration.
+Problem: env separation is manual. Value: safer deployments. Dependencies: environment config patterns. Deliverables: environment-aware config and seeded baselines. Verify: dev/stage/prod configs differ without code changes.

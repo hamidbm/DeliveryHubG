@@ -14,9 +14,11 @@ interface KanbanColumnProps {
   wipLimit?: number;
   hideHeader?: boolean;
   disableDrag?: boolean;
+  enableInlinePointsEdit?: boolean;
+  onItemUpdated?: (id: string, patch: any) => void;
 }
 
-const KanbanColumn: React.FC<KanbanColumnProps> = ({ column, onItemClick, wipLimit, hideHeader, disableDrag }) => {
+const KanbanColumn: React.FC<KanbanColumnProps> = ({ column, onItemClick, wipLimit, hideHeader, disableDrag, enableInlinePointsEdit, onItemUpdated }) => {
   const { setNodeRef } = useDroppable({
     id: column.statusId,
   });
@@ -63,7 +65,14 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({ column, onItemClick, wipLim
           strategy={verticalListSortingStrategy}
         >
           {column.items.map(item => (
-            <WorkItemCard key={item._id || item.id} item={item} onClick={() => onItemClick(item)} disableDrag={disableDrag} />
+            <WorkItemCard
+              key={item._id || item.id}
+              item={item}
+              onClick={() => onItemClick(item)}
+              disableDrag={disableDrag}
+              enableInlinePointsEdit={enableInlinePointsEdit}
+              onItemUpdated={onItemUpdated}
+            />
           ))}
         </SortableContext>
         

@@ -4,6 +4,8 @@ Welcome to the DeliveryHub product documentation. DeliveryHub is an internal Sof
 
 Use this wiki to understand what the app does today, how it is structured, and how to extend it safely.
 
+Baseline bootstrap runs automatically on startup to install required reference data (taxonomy, themes, templates, bundles/apps). Sample data is optional and may change during development.
+
 ## Quick Navigation
 - Architecture and structure: see `docs/wiki/Architecture.md`
 - Modules overview: see `docs/wiki/Modules-Overview.md`
@@ -35,3 +37,6 @@ Key principles:
 - BFF architecture (no separate backend service)
 - Assistive AI only, with explicit user actions
 - Strong focus on governance and auditability
+
+User preferences:
+- Notification preferences are managed under Profile Settings (mute types + opt into daily digest).

@@ -9,6 +9,7 @@ import WorkItemsAnalyticsView from './WorkItemsAnalyticsView';
 import WorkItemsBacklogView from './WorkItemsBacklogView';
 import WorkItemsRoadmapView from './WorkItemsRoadmapView';
 import WorkItemsMilestonePlanningView from './WorkItemsMilestonePlanningView';
+import WorkItemsSprintsView from './WorkItemsSprintsView';
 import Milestones from './Milestones';
 import WorkPlanIntakeModal from './WorkPlanIntakeModal';
 
@@ -72,6 +73,7 @@ const WorkItems: React.FC<WorkItemsProps> = (props) => {
               { id: 'tree', label: 'Hierarchy', icon: 'fa-sitemap' },
               { id: 'backlog', label: 'Backlog', icon: 'fa-layer-group' },
               { id: 'milestone-plan', label: 'Cycle Planning', icon: 'fa-map-signs' },
+              { id: 'sprints', label: 'Sprints', icon: 'fa-stopwatch' },
               { id: 'milestones', label: 'Milestones', icon: 'fa-flag-checkered' },
               { id: 'board', label: 'Board', icon: 'fa-chalkboard' },
               { id: 'list', label: 'List View', icon: 'fa-list' },
@@ -193,6 +195,8 @@ const WorkItems: React.FC<WorkItemsProps> = (props) => {
         <div className="animate-fadeIn">
           {activeView === 'roadmap' ? (
             <WorkItemsRoadmapView {...sanitizedProps} />
+          ) : activeView === 'sprints' ? (
+            <WorkItemsSprintsView {...sanitizedProps} />
           ) : activeView === 'board' ? (
             <WorkItemsBoardView {...sanitizedProps} />
           ) : activeView === 'list' ? (

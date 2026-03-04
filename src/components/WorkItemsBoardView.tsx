@@ -172,6 +172,17 @@ const WorkItemsBoardView: React.FC<WorkItemsBoardViewProps> = ({
     } catch (err) { fetchBoard(); }
   };
 
+  const updateItem = (id: string, patch: Partial<WorkItem>) => {
+    setItems(prev => prev.map((item) => String(item._id || item.id) === String(id) ? { ...item, ...patch } : item));
+    setBoardData(prev => ({
+      ...prev,
+      columns: prev.columns.map((col: any) => ({
+        ...col,
+        items: col.items.map((item: any) => String(item._id || item.id) === String(id) ? { ...item, ...patch } : item)
+      }))
+    }));
+  };
+
   const buildGroupedColumns = (data: WorkItem[], mode: 'status' | 'assignee' | 'epic') => {
     if (mode === 'assignee') {
       const groups = new Map<string, WorkItem[]>();
@@ -243,6 +254,8 @@ const WorkItemsBoardView: React.FC<WorkItemsBoardViewProps> = ({
                 onItemClick={setActiveItem} 
                 wipLimit={wipLimits[col.statusId]}
                 disableDrag={groupBy !== 'status'}
+                enableInlinePointsEdit
+                onItemUpdated={updateItem}
               />
             ))}
           </div>

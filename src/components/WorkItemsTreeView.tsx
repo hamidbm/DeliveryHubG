@@ -213,9 +213,15 @@ const WorkItemsTreeView: React.FC<WorkItemsTreeViewProps> = ({
     const hasChildren = node.children && node.children.length > 0;
     const nodeKey = node.nodeType === 'WORK_ITEM' ? String(node.workItemId) : String(node.id);
     const isActive = selectedNodeId ? selectedNodeId === nodeKey : (activeItem && (activeItem._id === node.workItemId || activeItem.id === node.workItemId));
-    const linkBadges = Array.from(
-      new Set((node.links || []).map((l: any) => String(l.type)).filter(Boolean))
-    ).slice(0, 3) as string[];
+    const linkTypes = [
+      ...(node.links || []).map((l: any) => String(l.type)).filter(Boolean),
+      ...(node.linkSummary?.blocks?.length ? ['BLOCKS'] : []),
+      ...(node.linkSummary?.blockedBy?.length ? ['BLOCKED_BY'] : []),
+      ...(node.linkSummary?.duplicates?.length ? ['DUPLICATES'] : []),
+      ...(node.linkSummary?.duplicatedBy?.length ? ['DUPLICATED_BY'] : []),
+      ...(node.linkSummary?.relatesTo?.length ? ['RELATES_TO'] : [])
+    ];
+    const linkBadges = Array.from(new Set(linkTypes)).slice(0, 3) as string[];
 
     return (
       <div key={node.id} className="flex flex-col">

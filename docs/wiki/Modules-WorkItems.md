@@ -14,16 +14,21 @@ Each item can have a parent and children to form a delivery hierarchy.
 
 ## Core Features
 - Hierarchical work items with parent-child relationships
-- Tree view, list view, board view (Kanban), backlog, and roadmap
-- Drag-and-drop status changes on board/backlog
-- Sprint planning and milestone planning
+- Tree view, list view, board view (Kanban), backlog, roadmap, and milestone planning
+- Drag-and-drop status and milestone changes on board/backlog
 - Activity history per item (status changes, assignments, links)
-- Assignment, watchers, and ownership tracking
 - Priority, due dates, health, and metadata fields
-- Dependencies and cross-item links
 - Attachments and comments
 - Linked resources (e.g., wiki pages, architecture diagrams)
 - Review-driven work items (auto-created from review requests)
+- Governance-driven planning (readiness gates, capacity guardrails, and overrides)
+- Ownership model: milestone owner + assignee consistency with suggestions
+
+## Ownership (RACI-lite)
+- Milestones have an owner (accountable).
+- Work items use assignee as responsible; `assignedAt` is tracked when set.
+- Milestone Planning shows owner status with a “Set owner” control.
+- Critical path actions suggest owners for unassigned items (bundle owners, recent assignees, watchers).
 
 ## Views
 
@@ -50,12 +55,30 @@ Each item can have a parent and children to form a delivery hierarchy.
 
 ### Roadmap View
 - Timeline-style visualization
-- Organize items by milestones and dates
-- Identify delivery gaps and dependencies
+- Milestone intelligence row (capacity, readiness, blocked, risks)
+- Cross-milestone dependency indicators
+- Drilldown modals for milestone and dependency details
+- Lazy list fetching with list counts to keep performance responsive
 
 ### Milestone Planning
 - Assign or move items between milestones
 - Evaluate workload and sequencing
+- Rollups show capacity, blocked items, risks, overdue, and slip
+- COMMITTED enforcement (estimates required, capacity guardrails)
+- Readiness gates (canStart/canComplete) with override + reason
+- Sprint view for a milestone (sprint rollups tied to milestone scope)
+- Burn-up table by sprint with cumulative and remaining points
+- Velocity calibration hints based on recent sprint completion trends
+- Activity feed for the selected milestone (governance, scope, dependency changes)
+
+### QA Checklist (Manual)
+1. Roadmap deep link restores expanded milestone + filters
+2. Expand milestone lazy loads burn-up + sprint rollups
+3. Add blocker from roadmap card (BLOCKS link created)
+4. Inline edit story points on a card
+5. Resolve blocker via “Mark DONE” in blockers modal
+6. Scope request flow still works (create → approve/reject)
+7. Data quality score shows and “Fix now” updates items
 
 ## Statuses
 - TODO
@@ -64,11 +87,86 @@ Each item can have a parent and children to form a delivery hierarchy.
 - DONE
 - BLOCKED
 
+## Dependencies (Canonical Links)
+- Canonical link types: BLOCKS, RELATES_TO, DUPLICATES
+- Inverse links derived at read time (blockedBy, duplicatedBy, relatesTo)
+- Cycle prevention for BLOCKS
+- Derived isBlocked semantics based on link + target state
+
+## Milestones + Governance
+- Rollups: capacity, blocked, risks, overdue, slip
+- Confidence scoring based on readiness + rollup signals
+- COMMITTED enforcement: estimates required, capacity guardrails
+- Readiness gates: canStart/canComplete with override + reason
+- Audit events emitted for milestone status/override/readiness and notifications sent
+- COMMITTED scope changes require approval via scope change requests
+
+## Data Quality (Planning Hygiene)
+- Data quality score computed per milestone and sprint
+- Issues include missing story points, due dates, assignees, and risk severity
+- Scores <70 warn; <50 require override for governance transitions
+- “Fix now” bulk edit flows for top issues
+
+## Staleness Signals (v1)
+- Stale thresholds:
+  - Stale: no update > 7 days (not DONE)
+  - Critical stale: critical path item no update > 3 days
+  - Blocked stale: blocked item no update > 5 days
+  - Unassigned stale: no assignee > 2 days since creation
+  - GitHub stale: open PR inactive > 5 days (or IN_PROGRESS with no PR > 5 days)
+- Roadmap + Milestone Planning surface a “Stale” chip with total and critical counts
+- Drilldown list via `GET /api/work-items/stale`
+- Stale list includes “Nudge owner” to notify assignees/owners/watchers
+- Digest can include `workitem.stale.summary`
+
+## Critical Path (Dependency-Aware)
+- Computes critical path per milestone based on BLOCKS links + remaining estimates
+- Highlights critical chain with remaining points and blocked items
+- Surfaces top actions (unblock, estimate, assign) in Milestone Planning
+- Roadmap shows critical path chip and critical badges on cards
+- Optional cross-scope mode can include external blockers (bounded depth) for complex chains
+- Actions: request estimate, set estimate, assign owner, notify external blocker owners
+- Dependency graph view available in Milestone Planning (Graph tab)
+
+## Sprints + Governance
+- Sprint lifecycle: DRAFT → ACTIVE → CLOSED → ARCHIVED
+- ACTIVE sprints enforce capacity on assignment (estimate required, over-capacity blocks unless override)
+- Close readiness gates block close when scope remains, blocked items exist, or high/critical risks remain
+- Admin/CMO can override close with a reason
+- Events + notifications emitted for status changes, close blocks, and capacity overrides
+
+## Roadmap Intelligence
+- Milestone intelligence row aggregates capacity/readiness/risks
+- Cross-milestone dependency indicators
+- Drilldown modals for blockers and readiness
+- Lazy list fetching and listCounts for performance
+
+## Program Coordination + Portfolio Integration
+- `/program` view summarizes at-risk bundles and cross-bundle blockers
+- Bundle Profile “Delivery Intelligence” strip surfaces status and risks
+- Dashboard “Program Health” widget shows program-level rollups
+
+## Notifications + Preferences
+- Notification types: milestone.status.changed, milestone.status.override, milestone.readiness.blocked, milestone.capacity.override, dependency.crossbundle.created, workitem.stale.nudge, workitem.stale.summary, digest.daily
+- Admin policy: enable/disable types + routing (admins, bundle owners, actor on blocked)
+- User preferences: mute types + digest opt-in
+- Digest queue with manual send endpoint
+- Watchers: users can subscribe to bundles and milestones; watchers receive relevant notifications
+
+## RBAC + Audit
+- Centralized policy functions for critical actions
+- 403 error codes for forbidden updates (commit/start/complete, overrides, cross-bundle blockers, etc.)
+- Admin audit console for events + notifications
+
 ## Reviews Integration
 - Review requests (wiki or architecture) can generate user stories automatically.
 - Review cycles can be synced back into the work item.
 - Review attachments and reviewer responses are linked into the work item activity.
 - See `docs/wiki/Reviews.md` for the shared workflow.
+
+## Jira Integration (v1)
+- Jira-linked work items show Jira key + link in the details panel.
+- One-way sync is configured in Admin → Integrations → Jira.
 
 ## Activity and History
 - Every update is logged as activity
@@ -98,3 +196,19 @@ Supported AI workflows:
 - Attachments stored in `workitems_attachments`
 - Sprint planning in `workitems_sprints`
 - Historical snapshots tracked alongside items
+- Notifications stored in `notifications`
+- Notification policy in `notification_settings`
+- User notification prefs in `notification_user_prefs`
+- Digest queue in `notification_digest_queue`
+- Watchers stored in `notification_watchers`
+
+## Key APIs
+- `GET /api/work-items`, `PATCH /api/work-items/:id`, `POST /api/work-items/bulk`
+- `GET /api/work-items/stale`
+- `GET /api/work-items/roadmap-intel`, `GET /api/work-items/roadmap-intel/lists`
+- `GET /api/milestones/rollups`, `PATCH /api/milestones/:id`
+- `GET /api/program/intel`
+- `GET /api/admin/events`, `GET /api/admin/notifications`
+- `GET/PUT /api/admin/notification-settings`
+- `GET/PUT /api/user/notification-prefs`
+- `POST /api/notifications/digest/send`

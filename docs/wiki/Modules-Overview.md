@@ -19,3 +19,4 @@ DeliveryHub is organized into functional modules that map to delivery governance
 - AI assistance with explicit user approval
 - Sticky, structured headers and consistent action placement
 - Markdown rendering with rich diagrams and syntax highlighting
+- Baseline bootstrap installs required reference data at startup

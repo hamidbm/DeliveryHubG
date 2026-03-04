@@ -9,6 +9,7 @@ import WorkItems from './components/WorkItems';
 import Wiki from './components/Wiki';
 import Activities from './components/Activities';
 import ActivitiesContainer from './components/ActivitiesContainer';
+import ProgramCoordination from './components/ProgramCoordination';
 // Fix: Corrected import path for Milestones component as it is located in the components directory
 import Milestones from './components/Milestones';
 import Admin from './components/Admin';
@@ -212,6 +213,9 @@ function HomeContent() {
     if (pathname.startsWith('/applications')) {
       setActiveTab('applications');
     }
+    if (pathname.startsWith('/program')) {
+      setActiveTab('program');
+    }
   }, [pathname]);
 
   useEffect(() => {
@@ -249,6 +253,8 @@ function HomeContent() {
     switch (activeTab) {
       case 'dashboard':
         return <Dashboard applications={applications} bundles={bundles} />;
+      case 'program':
+        return <ProgramCoordination />;
       case 'applications':
         return (
           <Applications
@@ -322,6 +328,10 @@ function HomeContent() {
     }
     if (tab === 'applications') {
       router.push('/applications');
+      return;
+    }
+    if (tab === 'program') {
+      router.push('/program');
       return;
     }
     const params = new URLSearchParams(searchParams.toString());
