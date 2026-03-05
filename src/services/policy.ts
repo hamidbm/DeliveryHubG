@@ -59,6 +59,14 @@ export type DeliveryPolicy = {
     maxCriticalStale: number;
     maxHighRisks: number;
     capacityOvercommitThreshold: number;
+    drift: {
+      enabled: boolean;
+      majorSlipDays: number;
+      majorHitProbDrop: number;
+      majorDataQualityDrop: number;
+      majorExternalBlockersIncrease: number;
+      requireReReviewOnMajor: boolean;
+    };
   };
   staleness: {
     thresholdsDays: {
@@ -168,7 +176,15 @@ const DEFAULT_POLICY: DeliveryPolicy = {
     blockOnExternalBlockers: false,
     maxCriticalStale: 2,
     maxHighRisks: 3,
-    capacityOvercommitThreshold: 20
+    capacityOvercommitThreshold: 20,
+    drift: {
+      enabled: true,
+      majorSlipDays: 7,
+      majorHitProbDrop: 0.2,
+      majorDataQualityDrop: 15,
+      majorExternalBlockersIncrease: 1,
+      requireReReviewOnMajor: false
+    }
   },
   staleness: {
     thresholdsDays: {
@@ -254,6 +270,10 @@ export const validateDeliveryPolicy = (policy: any) => {
   const maxCriticalStale = coerceNumber(policy.commitReview?.maxCriticalStale, DEFAULT_POLICY.commitReview.maxCriticalStale);
   const maxHighRisks = coerceNumber(policy.commitReview?.maxHighRisks, DEFAULT_POLICY.commitReview.maxHighRisks);
   const capacityOvercommitThreshold = coerceNumber(policy.commitReview?.capacityOvercommitThreshold, DEFAULT_POLICY.commitReview.capacityOvercommitThreshold);
+  const majorSlipDays = coerceNumber(policy.commitReview?.drift?.majorSlipDays, DEFAULT_POLICY.commitReview.drift.majorSlipDays);
+  const majorHitProbDrop = coerceNumber(policy.commitReview?.drift?.majorHitProbDrop, DEFAULT_POLICY.commitReview.drift.majorHitProbDrop);
+  const majorDataQualityDrop = coerceNumber(policy.commitReview?.drift?.majorDataQualityDrop, DEFAULT_POLICY.commitReview.drift.majorDataQualityDrop);
+  const majorExternalBlockersIncrease = coerceNumber(policy.commitReview?.drift?.majorExternalBlockersIncrease, DEFAULT_POLICY.commitReview.drift.majorExternalBlockersIncrease);
   if (!inRange(minHitProbability, 0, 1)) {
     return { ok: false, error: 'Commit review min hit probability must be between 0 and 1.' };
   }
@@ -262,6 +282,18 @@ export const validateDeliveryPolicy = (policy: any) => {
   }
   if (!inRange(capacityOvercommitThreshold, 0, 100000)) {
     return { ok: false, error: 'Commit review capacity threshold must be between 0 and 100000.' };
+  }
+  if (!inRange(majorSlipDays, 0, 365)) {
+    return { ok: false, error: 'Commit review drift slip days must be between 0 and 365.' };
+  }
+  if (!inRange(majorHitProbDrop, 0, 1)) {
+    return { ok: false, error: 'Commit review drift hit probability drop must be between 0 and 1.' };
+  }
+  if (!inRange(majorDataQualityDrop, 0, 100)) {
+    return { ok: false, error: 'Commit review drift data quality drop must be between 0 and 100.' };
+  }
+  if (!inRange(majorExternalBlockersIncrease, 0, 100)) {
+    return { ok: false, error: 'Commit review drift external blockers increase must be between 0 and 100.' };
   }
 
   const slack = coerceNumber(policy.criticalPath?.nearCriticalSlackPct, DEFAULT_POLICY.criticalPath.nearCriticalSlackPct);
@@ -354,7 +386,15 @@ export const normalizeDeliveryPolicy = (policy: any): DeliveryPolicy => {
       blockOnExternalBlockers: policy?.commitReview?.blockOnExternalBlockers ?? DEFAULT_POLICY.commitReview.blockOnExternalBlockers,
       maxCriticalStale: coerceNumber(policy?.commitReview?.maxCriticalStale, DEFAULT_POLICY.commitReview.maxCriticalStale),
       maxHighRisks: coerceNumber(policy?.commitReview?.maxHighRisks, DEFAULT_POLICY.commitReview.maxHighRisks),
-      capacityOvercommitThreshold: coerceNumber(policy?.commitReview?.capacityOvercommitThreshold, DEFAULT_POLICY.commitReview.capacityOvercommitThreshold)
+      capacityOvercommitThreshold: coerceNumber(policy?.commitReview?.capacityOvercommitThreshold, DEFAULT_POLICY.commitReview.capacityOvercommitThreshold),
+      drift: {
+        enabled: policy?.commitReview?.drift?.enabled ?? DEFAULT_POLICY.commitReview.drift.enabled,
+        majorSlipDays: coerceNumber(policy?.commitReview?.drift?.majorSlipDays, DEFAULT_POLICY.commitReview.drift.majorSlipDays),
+        majorHitProbDrop: coerceNumber(policy?.commitReview?.drift?.majorHitProbDrop, DEFAULT_POLICY.commitReview.drift.majorHitProbDrop),
+        majorDataQualityDrop: coerceNumber(policy?.commitReview?.drift?.majorDataQualityDrop, DEFAULT_POLICY.commitReview.drift.majorDataQualityDrop),
+        majorExternalBlockersIncrease: coerceNumber(policy?.commitReview?.drift?.majorExternalBlockersIncrease, DEFAULT_POLICY.commitReview.drift.majorExternalBlockersIncrease),
+        requireReReviewOnMajor: policy?.commitReview?.drift?.requireReReviewOnMajor ?? DEFAULT_POLICY.commitReview.drift.requireReReviewOnMajor
+      }
     },
     staleness: {
       thresholdsDays: {
@@ -563,7 +603,15 @@ export const getStrictestPolicyForBundles = async (bundleIds: string[]) => {
       blockOnExternalBlockers: policies.some((p) => p.commitReview?.blockOnExternalBlockers),
       maxCriticalStale: pickMin(policies.map((p) => p.commitReview?.maxCriticalStale || DEFAULT_POLICY.commitReview.maxCriticalStale)) || DEFAULT_POLICY.commitReview.maxCriticalStale,
       maxHighRisks: pickMin(policies.map((p) => p.commitReview?.maxHighRisks || DEFAULT_POLICY.commitReview.maxHighRisks)) || DEFAULT_POLICY.commitReview.maxHighRisks,
-      capacityOvercommitThreshold: pickMin(policies.map((p) => p.commitReview?.capacityOvercommitThreshold || DEFAULT_POLICY.commitReview.capacityOvercommitThreshold)) || DEFAULT_POLICY.commitReview.capacityOvercommitThreshold
+      capacityOvercommitThreshold: pickMin(policies.map((p) => p.commitReview?.capacityOvercommitThreshold || DEFAULT_POLICY.commitReview.capacityOvercommitThreshold)) || DEFAULT_POLICY.commitReview.capacityOvercommitThreshold,
+      drift: {
+        enabled: policies.some((p) => p.commitReview?.drift?.enabled),
+        majorSlipDays: pickMin(policies.map((p) => p.commitReview?.drift?.majorSlipDays || DEFAULT_POLICY.commitReview.drift.majorSlipDays)) || DEFAULT_POLICY.commitReview.drift.majorSlipDays,
+        majorHitProbDrop: pickMax(policies.map((p) => p.commitReview?.drift?.majorHitProbDrop || 0)) || DEFAULT_POLICY.commitReview.drift.majorHitProbDrop,
+        majorDataQualityDrop: pickMax(policies.map((p) => p.commitReview?.drift?.majorDataQualityDrop || 0)) || DEFAULT_POLICY.commitReview.drift.majorDataQualityDrop,
+        majorExternalBlockersIncrease: pickMax(policies.map((p) => p.commitReview?.drift?.majorExternalBlockersIncrease || 0)) || DEFAULT_POLICY.commitReview.drift.majorExternalBlockersIncrease,
+        requireReReviewOnMajor: policies.some((p) => p.commitReview?.drift?.requireReReviewOnMajor)
+      }
     },
     staleness: {
       thresholdsDays: {

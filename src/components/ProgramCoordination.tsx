@@ -18,6 +18,7 @@ type ProgramIntel = {
       milestoneId: string;
       rollup: any;
       readiness: any;
+      milestone?: any;
     }>;
     aggregated: {
       confidenceAvg: number;
@@ -92,6 +93,8 @@ const ProgramCoordination: React.FC = () => {
   const [capacityData, setCapacityData] = useState<CapacityResponse | null>(null);
   const [capacityError, setCapacityError] = useState<string | null>(null);
   const [horizonWeeks, setHorizonWeeks] = useState(8);
+  const [driftList, setDriftList] = useState<any[]>([]);
+  const [driftLoading, setDriftLoading] = useState(false);
 
   const fetchIntel = async (includeLists = false) => {
     const params = new URLSearchParams();
@@ -122,6 +125,52 @@ const ProgramCoordination: React.FC = () => {
   useEffect(() => {
     setListsCache(null);
   }, [bundleIdsParam, milestoneIdsParam]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadDrift = async () => {
+      if (!intel?.bundleRollups?.length) {
+        if (isMounted) setDriftList([]);
+        return;
+      }
+      setDriftLoading(true);
+      const candidates: Array<{ milestoneId: string; name: string; bundleName?: string; status?: string }> = [];
+      intel.bundleRollups.forEach((bundle) => {
+        (bundle.milestones || []).forEach((entry) => {
+          const milestone = entry.milestone || {};
+          const milestoneId = String(entry.milestoneId || milestone._id || milestone.id || milestone.name || '');
+          if (!milestoneId) return;
+          const status = String(milestone.status || '');
+          if (!['COMMITTED', 'IN_PROGRESS'].includes(status.toUpperCase())) return;
+          candidates.push({
+            milestoneId,
+            name: milestone.name || milestone.title || entry.milestoneId,
+            bundleName: bundle.bundleName,
+            status
+          });
+        });
+      });
+      const unique = Array.from(new Map(candidates.map((c) => [c.milestoneId, c])).values()).slice(0, 12);
+      try {
+        const results = await Promise.all(unique.map(async (c) => {
+          const res = await fetch(`/api/milestones/${encodeURIComponent(c.milestoneId)}/commit-drift`);
+          if (!res.ok) return null;
+          const data = await res.json();
+          if (!data?.enabled || data?.drift?.driftBand !== 'MAJOR') return null;
+          return { ...c, drift: data.drift };
+        }));
+        if (isMounted) {
+          setDriftList(results.filter(Boolean));
+        }
+      } catch {
+        if (isMounted) setDriftList([]);
+      } finally {
+        if (isMounted) setDriftLoading(false);
+      }
+    };
+    loadDrift();
+    return () => { isMounted = false; };
+  }, [intel]);
 
   const setPanel = (next: string) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -443,6 +492,61 @@ const ProgramCoordination: React.FC = () => {
                 </tbody>
               </table>
             </div>
+          </div>
+
+          <div className="bg-white border border-slate-100 rounded-[2rem] p-6 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-black uppercase tracking-widest text-slate-500">Drifting Commitments</h3>
+              <button
+                onClick={() => router.push('/?tab=work-items&view=milestone-plan')}
+                className="px-3 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200"
+              >
+                Open planning
+              </button>
+            </div>
+            {driftLoading && <div className="text-sm text-slate-400">Scanning drift signals…</div>}
+            {!driftLoading && driftList.length === 0 && (
+              <div className="text-sm text-slate-400">No major drift detected.</div>
+            )}
+            {!driftLoading && driftList.length > 0 && (
+              <div className="space-y-3">
+                {driftList.map((entry) => (
+                  <div key={entry.milestoneId} className="border border-slate-100 rounded-2xl p-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-sm font-semibold text-slate-700">{entry.name}</div>
+                        <div className="text-[10px] uppercase tracking-widest text-slate-400">{entry.bundleName || 'Bundle'}</div>
+                      </div>
+                      <span className="px-2 py-1 rounded-full text-[9px] font-black uppercase tracking-widest bg-rose-50 text-rose-700">
+                        Major drift
+                      </span>
+                    </div>
+                    <div className="mt-2 text-[11px] text-slate-500">
+                      Baseline {entry.drift?.baselineAt ? formatDate(entry.drift.baselineAt) : '—'}
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {(entry.drift?.deltas || []).slice(0, 3).map((delta: any) => (
+                        <span
+                          key={delta.key}
+                          className="px-2 py-1 rounded-full bg-slate-100 text-[9px] font-black uppercase tracking-widest text-slate-500"
+                          title={delta.detail}
+                        >
+                          {delta.key}
+                        </span>
+                      ))}
+                    </div>
+                    <div className="mt-3">
+                      <button
+                        onClick={() => router.push(`/?tab=work-items&view=milestone-plan&milestoneId=${encodeURIComponent(entry.milestoneId)}`)}
+                        className="px-3 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg bg-slate-900 text-white hover:bg-blue-600"
+                      >
+                        Review milestone
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

@@ -59,6 +59,14 @@ type DeliveryPolicy = {
     maxCriticalStale: number;
     maxHighRisks: number;
     capacityOvercommitThreshold: number;
+    drift: {
+      enabled: boolean;
+      majorSlipDays: number;
+      majorHitProbDrop: number;
+      majorDataQualityDrop: number;
+      majorExternalBlockersIncrease: number;
+      requireReReviewOnMajor: boolean;
+    };
   };
   staleness: {
     thresholdsDays: {
@@ -147,7 +155,15 @@ const DEFAULT_POLICY: DeliveryPolicy = {
     blockOnExternalBlockers: false,
     maxCriticalStale: 2,
     maxHighRisks: 3,
-    capacityOvercommitThreshold: 20
+    capacityOvercommitThreshold: 20,
+    drift: {
+      enabled: true,
+      majorSlipDays: 7,
+      majorHitProbDrop: 0.2,
+      majorDataQualityDrop: 15,
+      majorExternalBlockersIncrease: 1,
+      requireReReviewOnMajor: false
+    }
   },
   staleness: {
     thresholdsDays: {
@@ -281,7 +297,14 @@ const AdminDeliveryPolicy: React.FC = () => {
         }
       },
       criticalPath: { ...policy.criticalPath, ...(patch.criticalPath || {}) },
-      commitReview: { ...policy.commitReview, ...(patch.commitReview || {}) },
+      commitReview: {
+        ...policy.commitReview,
+        ...(patch.commitReview || {}),
+        drift: {
+          ...policy.commitReview.drift,
+          ...(patch.commitReview?.drift || {})
+        }
+      },
       staleness: {
         thresholdsDays: { ...policy.staleness.thresholdsDays, ...(patch.staleness?.thresholdsDays || {}) },
         nudges: { ...policy.staleness.nudges, ...(patch.staleness?.nudges || {}) },
@@ -723,6 +746,66 @@ const AdminDeliveryPolicy: React.FC = () => {
               />
               Block on external blockers
             </label>
+          </div>
+          <div className="border-t border-slate-100 pt-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <h5 className="text-xs font-black uppercase tracking-widest text-slate-500">Drift Detection</h5>
+              <label className="flex items-center gap-2 text-xs text-slate-600">
+                <input
+                  type="checkbox"
+                  checked={policy.commitReview.drift.enabled}
+                  onChange={(e) => update({ commitReview: { ...policy.commitReview, drift: { ...policy.commitReview.drift, enabled: e.target.checked } } })}
+                />
+                Enabled
+              </label>
+            </div>
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+              <label className="text-xs font-semibold text-slate-500">
+                Major slip days
+                <input
+                  type="number"
+                  value={policy.commitReview.drift.majorSlipDays}
+                  onChange={(e) => update({ commitReview: { ...policy.commitReview, drift: { ...policy.commitReview.drift, majorSlipDays: Number(e.target.value) } } })}
+                  className="mt-2 w-full px-3 py-2 border border-slate-200 rounded-xl text-sm"
+                />
+              </label>
+              <label className="text-xs font-semibold text-slate-500">
+                Major hit prob drop
+                <input
+                  type="number"
+                  step="0.01"
+                  value={policy.commitReview.drift.majorHitProbDrop}
+                  onChange={(e) => update({ commitReview: { ...policy.commitReview, drift: { ...policy.commitReview.drift, majorHitProbDrop: Number(e.target.value) } } })}
+                  className="mt-2 w-full px-3 py-2 border border-slate-200 rounded-xl text-sm"
+                />
+              </label>
+              <label className="text-xs font-semibold text-slate-500">
+                Major quality drop
+                <input
+                  type="number"
+                  value={policy.commitReview.drift.majorDataQualityDrop}
+                  onChange={(e) => update({ commitReview: { ...policy.commitReview, drift: { ...policy.commitReview.drift, majorDataQualityDrop: Number(e.target.value) } } })}
+                  className="mt-2 w-full px-3 py-2 border border-slate-200 rounded-xl text-sm"
+                />
+              </label>
+              <label className="text-xs font-semibold text-slate-500">
+                External blockers inc
+                <input
+                  type="number"
+                  value={policy.commitReview.drift.majorExternalBlockersIncrease}
+                  onChange={(e) => update({ commitReview: { ...policy.commitReview, drift: { ...policy.commitReview.drift, majorExternalBlockersIncrease: Number(e.target.value) } } })}
+                  className="mt-2 w-full px-3 py-2 border border-slate-200 rounded-xl text-sm"
+                />
+              </label>
+              <label className="flex items-center gap-2 text-xs text-slate-600 mt-6">
+                <input
+                  type="checkbox"
+                  checked={policy.commitReview.drift.requireReReviewOnMajor}
+                  onChange={(e) => update({ commitReview: { ...policy.commitReview, drift: { ...policy.commitReview.drift, requireReReviewOnMajor: e.target.checked } } })}
+                />
+                Require re-review on major drift
+              </label>
+            </div>
           </div>
         </section>
 

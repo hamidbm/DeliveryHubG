@@ -1340,6 +1340,7 @@ const ensureReviewIndexes = async (db: any) => {
 
 const ensureCommitReviewIndexes = async (db: any) => {
   await db.collection('commitment_reviews').createIndex({ milestoneId: 1, evaluatedAt: -1 });
+  await db.collection('commitment_drift_snapshots').createIndex({ milestoneId: 1, evaluatedAt: -1 });
 };
 
 const ensureFeedbackPackageIndexes = async (db: any) => {

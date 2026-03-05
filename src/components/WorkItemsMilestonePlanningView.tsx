@@ -268,6 +268,8 @@ const WorkItemsMilestonePlanningView: React.FC<WorkItemsMilestonePlanningViewPro
     review: any;
   } | null>(null);
   const [commitOverrideReason, setCommitOverrideReason] = useState('');
+  const [commitDrift, setCommitDrift] = useState<any | null>(null);
+  const [commitDriftLoading, setCommitDriftLoading] = useState(false);
   const [readinessPrompt, setReadinessPrompt] = useState<{
     milestoneId: string;
     nextStatus: string;
@@ -587,6 +589,34 @@ const WorkItemsMilestonePlanningView: React.FC<WorkItemsMilestonePlanningViewPro
     loadScopeRequests();
   }, [sprintMilestoneId]);
 
+  useEffect(() => {
+    const loadDrift = async () => {
+      if (!sprintMilestoneId || sprintMilestoneId === 'all') {
+        setCommitDrift(null);
+        return;
+      }
+      setCommitDriftLoading(true);
+      try {
+        const res = await fetch(`/api/milestones/${encodeURIComponent(sprintMilestoneId)}/commit-drift`);
+        if (!res.ok) {
+          setCommitDrift(null);
+          return;
+        }
+        const data = await res.json();
+        if (data?.enabled) {
+          setCommitDrift(data.drift || null);
+        } else {
+          setCommitDrift(null);
+        }
+      } catch {
+        setCommitDrift(null);
+      } finally {
+        setCommitDriftLoading(false);
+      }
+    };
+    loadDrift();
+  }, [sprintMilestoneId]);
+
   const isPrivilegedRole = (role?: string) => {
     const roleName = String(role || '');
     if (!roleName) return false;
@@ -605,17 +635,24 @@ const WorkItemsMilestonePlanningView: React.FC<WorkItemsMilestonePlanningViewPro
     return false;
   };
 
+  const openCommitReview = async (milestoneId: string) => {
+    try {
+      const reviewRes = await fetch(`/api/milestones/${encodeURIComponent(milestoneId)}/commit-review`);
+      if (!reviewRes.ok) return false;
+      const data = await reviewRes.json();
+      if (data?.enabled) {
+        setCommitReviewModal({ milestoneId, review: data.review });
+        return true;
+      }
+    } catch {}
+    return false;
+  };
+
   const handleCommitMilestone = async (milestoneId: string) => {
     setCommitError(null);
     try {
-      const reviewRes = await fetch(`/api/milestones/${encodeURIComponent(milestoneId)}/commit-review`);
-      if (reviewRes.ok) {
-        const data = await reviewRes.json();
-        if (data?.enabled) {
-          setCommitReviewModal({ milestoneId, review: data.review });
-          return;
-        }
-      }
+      const opened = await openCommitReview(milestoneId);
+      if (opened) return;
     } catch {}
 
     const res = await fetch(`/api/milestones/${milestoneId}`, {
@@ -985,6 +1022,7 @@ const WorkItemsMilestonePlanningView: React.FC<WorkItemsMilestonePlanningViewPro
   };
   const staleTotal = staleness.staleCount || 0;
   const criticalStale = staleness.criticalStaleCount || 0;
+  const driftBand = commitDrift?.driftBand || 'NONE';
 
   return (
     <DndContext sensors={sensors} onDragStart={(e) => setDraggedItem(e.active.data.current?.item)} onDragEnd={handleDragEnd}>
@@ -1594,10 +1632,70 @@ const WorkItemsMilestonePlanningView: React.FC<WorkItemsMilestonePlanningViewPro
                            >
                              Cancel
                            </button>
-                         )}
-                       </div>
-                     )}
-                   </div>
+                 )}
+               </div>
+             )}
+            {commitDriftLoading && (
+              <div className="mt-4 p-4 bg-white border border-slate-100 rounded-2xl text-[10px] font-black uppercase tracking-widest text-slate-400">
+                Drift signal loading…
+              </div>
+            )}
+            {!commitDriftLoading && commitDrift && (
+              <div className="mt-4 p-4 bg-white border border-slate-100 rounded-2xl">
+                <div className="flex items-center justify-between">
+                  <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Commitment Drift</div>
+                  <span className={`px-2 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${
+                    driftBand === 'MAJOR' ? 'bg-rose-50 text-rose-700' :
+                    driftBand === 'MINOR' ? 'bg-amber-50 text-amber-700' :
+                    'bg-emerald-50 text-emerald-700'
+                  }`}>
+                    {driftBand}
+                  </span>
+                </div>
+                <div className="mt-1 text-[11px] text-slate-500">
+                  Baseline {commitDrift.baselineAt ? new Date(commitDrift.baselineAt).toLocaleDateString() : '—'}
+                </div>
+                <div className="mt-3 space-y-2">
+                  {commitDrift.deltas?.length ? (
+                    commitDrift.deltas.map((delta: any) => (
+                      <div key={delta.key} className="flex items-start justify-between gap-3 text-[11px]">
+                        <div>
+                          <div className="font-semibold text-slate-600">{delta.detail}</div>
+                          <div className="text-[10px] uppercase tracking-widest text-slate-400">{delta.key}</div>
+                        </div>
+                        <span className={`px-2 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${
+                          delta.severity === 'critical' ? 'bg-rose-50 text-rose-700' :
+                          delta.severity === 'warn' ? 'bg-amber-50 text-amber-700' :
+                          'bg-slate-100 text-slate-500'
+                        }`}>
+                          {delta.status}
+                        </span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-[11px] text-slate-400">No material drift detected.</div>
+                  )}
+                </div>
+                <div className="mt-4 flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={() => sprintMilestoneId !== 'all' && openCommitReview(sprintMilestoneId)}
+                    className="px-3 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg bg-slate-900 text-white hover:bg-blue-600"
+                  >
+                    Run re-review
+                  </button>
+                  {commitDrift.recommendedActions?.map((action: any, idx: number) => (
+                    <span
+                      key={`${action.type}-${idx}`}
+                      className="px-2 py-1 rounded-full bg-slate-100 text-[9px] font-black uppercase tracking-widest text-slate-500"
+                      title={action.reason}
+                    >
+                      {action.type}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+           </div>
                  );
                }) : (
                  <div className="text-[11px] text-slate-400">No scope change requests for this milestone.</div>

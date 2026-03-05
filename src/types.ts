@@ -686,6 +686,14 @@ export interface DeliveryPolicy {
     maxCriticalStale: number;
     maxHighRisks: number;
     capacityOvercommitThreshold: number;
+    drift: {
+      enabled: boolean;
+      majorSlipDays: number;
+      majorHitProbDrop: number;
+      majorDataQualityDrop: number;
+      majorExternalBlockersIncrease: number;
+      requireReReviewOnMajor: boolean;
+    };
   };
   staleness: {
     thresholdsDays: {

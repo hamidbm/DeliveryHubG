@@ -49,6 +49,9 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
   const [burnupStatus, setBurnupStatus] = useState<Record<string, { loading: boolean; error?: string }>>({});
   const [sprintStatus, setSprintStatus] = useState<Record<string, { loading: boolean; error?: string }>>({});
   const [criticalStatus, setCriticalStatus] = useState<Record<string, { loading: boolean; error?: string }>>({});
+  const [commitDrift, setCommitDrift] = useState<Record<string, any>>({});
+  const [commitDriftStatus, setCommitDriftStatus] = useState<Record<string, { loading: boolean; error?: string }>>({});
+  const [driftModal, setDriftModal] = useState<{ milestoneId: string; drift: any } | null>(null);
   const [linkToast, setLinkToast] = useState<string | null>(null);
   const [dependencyModal, setDependencyModal] = useState<{ source: WorkItem; targetKey: string; target?: any; error?: string } | null>(null);
   const burnupInflight = useRef<Record<string, Promise<void>>>({});
@@ -231,6 +234,36 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
       .then((data) => setCommitPolicy(data?.policy || null))
       .catch(() => setCommitPolicy(null));
   }, []);
+
+  const fetchCommitDrift = async (milestoneId: string) => {
+    if (commitDriftStatus[milestoneId]?.loading) return;
+    setCommitDriftStatus((prev) => ({ ...prev, [milestoneId]: { loading: true } }));
+    try {
+      const res = await fetch(`/api/milestones/${encodeURIComponent(milestoneId)}/commit-drift`);
+      if (!res.ok) {
+        setCommitDriftStatus((prev) => ({ ...prev, [milestoneId]: { loading: false, error: 'Failed to load drift.' } }));
+        return;
+      }
+      const data = await res.json();
+      if (data?.enabled) {
+        setCommitDrift((prev) => ({ ...prev, [milestoneId]: data.drift || null }));
+      } else {
+        setCommitDrift((prev) => ({ ...prev, [milestoneId]: null }));
+      }
+      setCommitDriftStatus((prev) => ({ ...prev, [milestoneId]: { loading: false } }));
+    } catch {
+      setCommitDriftStatus((prev) => ({ ...prev, [milestoneId]: { loading: false, error: 'Failed to load drift.' } }));
+    }
+  };
+
+  useEffect(() => {
+    if (!milestones.length) return;
+    setCommitDrift({});
+    setCommitDriftStatus({});
+    milestones
+      .filter((m) => ['COMMITTED', 'IN_PROGRESS'].includes(String(m.status || '').toUpperCase()))
+      .forEach((m) => fetchCommitDrift(String(m._id || m.id || m.name)));
+  }, [milestones]);
 
   useEffect(() => {
     if (!criticalModalMessage) return;
@@ -442,6 +475,8 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
     setSprintStatus({});
     setCriticalStatus({});
     setIncludeExternalCritical({});
+    setCommitDrift({});
+    setCommitDriftStatus({});
     setRoadmapIntel([]);
     loadIntel();
   };
@@ -507,6 +542,8 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
             (mc?.hitProbability !== undefined && mc.hitProbability < (commitPolicy?.commitReview?.minHitProbability ?? 0)) ||
             (commitPolicy?.commitReview?.blockIfP80AfterEndDate && p80 && endDate && p80.getTime() > endDate.getTime())
           );
+          const drift = commitDrift[milestoneId];
+          const driftBand = drift?.driftBand;
           const groups = groupedItems[milestoneId] || {
             TODO: [],
             IN_PROGRESS: [],
@@ -613,6 +650,21 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
                   <span className="px-2 py-1 rounded-full bg-rose-50 text-rose-700">
                     Commit review
                   </span>
+                )}
+                {commitDriftStatus[milestoneId]?.loading && (
+                  <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-400">
+                    Drift…
+                  </span>
+                )}
+                {driftBand && driftBand !== 'NONE' && (
+                  <button
+                    onClick={() => setDriftModal({ milestoneId, drift })}
+                    className={`px-2 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${
+                      driftBand === 'MAJOR' ? 'bg-rose-50 text-rose-700' : 'bg-amber-50 text-amber-700'
+                    }`}
+                  >
+                    Drift {driftBand.toLowerCase()}
+                  </button>
                 )}
                 {expandedMilestones[milestoneId] ? (
                   burnupStatus[milestoneId]?.loading ? (
@@ -743,6 +795,78 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
           title="Stale Work Items"
           onClose={() => setStaleModal(null)}
         />
+      )}
+
+      {driftModal && (
+        <div className="absolute inset-0 bg-slate-900/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl shadow-2xl w-[520px] p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Commitment Drift</div>
+                <div className="text-xs text-slate-500">Milestone {driftModal.milestoneId}</div>
+              </div>
+              <button onClick={() => setDriftModal(null)} className="text-slate-400 hover:text-slate-600">
+                <i className="fas fa-times"></i>
+              </button>
+            </div>
+            <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest">
+              <span className={`px-2 py-1 rounded-full ${
+                driftModal.drift?.driftBand === 'MAJOR' ? 'bg-rose-50 text-rose-700' :
+                driftModal.drift?.driftBand === 'MINOR' ? 'bg-amber-50 text-amber-700' :
+                'bg-emerald-50 text-emerald-700'
+              }`}>
+                {driftModal.drift?.driftBand || 'NONE'}
+              </span>
+              <span className="text-slate-400">
+                Baseline {driftModal.drift?.baselineAt ? new Date(driftModal.drift.baselineAt).toLocaleDateString() : '—'}
+              </span>
+            </div>
+            <div className="space-y-2">
+              {driftModal.drift?.deltas?.length ? (
+                driftModal.drift.deltas.map((delta: any) => (
+                  <div key={delta.key} className="flex items-start justify-between gap-3 text-[11px]">
+                    <div>
+                      <div className="font-semibold text-slate-600">{delta.detail}</div>
+                      <div className="text-[10px] uppercase tracking-widest text-slate-400">{delta.key}</div>
+                    </div>
+                    <span className={`px-2 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${
+                      delta.severity === 'critical' ? 'bg-rose-50 text-rose-700' :
+                      delta.severity === 'warn' ? 'bg-amber-50 text-amber-700' :
+                      'bg-slate-100 text-slate-500'
+                    }`}>
+                      {delta.status}
+                    </span>
+                  </div>
+                ))
+              ) : (
+                <div className="text-sm text-slate-400">No material drift detected.</div>
+              )}
+            </div>
+            {driftModal.drift?.recommendedActions?.length ? (
+              <div className="flex flex-wrap gap-2">
+                {driftModal.drift.recommendedActions.map((action: any, idx: number) => (
+                  <span
+                    key={`${action.type}-${idx}`}
+                    className="px-2 py-1 rounded-full bg-slate-100 text-[9px] font-black uppercase tracking-widest text-slate-500"
+                    title={action.reason}
+                  >
+                    {action.type}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => {
+                  window.location.assign(`/work-items?view=milestone-plan&milestoneId=${encodeURIComponent(driftModal.milestoneId)}`);
+                }}
+                className="px-3 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg bg-slate-900 text-white hover:bg-blue-600"
+              >
+                Open planning
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {dependencyModal && (

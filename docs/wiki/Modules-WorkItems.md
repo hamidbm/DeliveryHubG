@@ -58,6 +58,7 @@ Each item can have a parent and children to form a delivery hierarchy.
 - Milestone intelligence row (capacity, readiness, blocked, risks)
 - Cross-milestone dependency indicators
 - Drilldown modals for milestone and dependency details
+- Commitment Drift chips for COMMITTED/IN_PROGRESS milestones with delta modal
 - Lazy list fetching with list counts to keep performance responsive
 
 ### Milestone Planning
@@ -66,6 +67,7 @@ Each item can have a parent and children to form a delivery hierarchy.
 - Rollups show capacity, blocked items, risks, overdue, and slip
 - COMMITTED enforcement (estimates required, capacity guardrails)
 - Commitment Review gate for COMMITTED milestones (Monte Carlo + capacity + quality)
+- Commitment Drift panel showing baseline + deltas and “Run re-review”
 - Readiness gates (canStart/canComplete) with override + reason
 - Sprint view for a milestone (sprint rollups tied to milestone scope)
 - Burn-up table by sprint with cumulative and remaining points
@@ -99,6 +101,7 @@ Each item can have a parent and children to form a delivery hierarchy.
 - Confidence scoring based on readiness + rollup signals
 - COMMITTED enforcement: estimates required, capacity guardrails
 - Commitment Review: P80 and hit probability gate with override + audit trail
+- Commitment Drift: compares current rollup vs last PASS/OVERRIDDEN review and flags MAJOR/MINOR drift
 - Readiness gates: canStart/canComplete with override + reason
 - Audit events emitted for milestone status/override/readiness and notifications sent
 - COMMITTED scope changes require approval via scope change requests

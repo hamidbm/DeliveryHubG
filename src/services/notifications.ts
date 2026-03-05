@@ -283,7 +283,8 @@ const buildNotification = (input: {
 const DIGEST_ELIGIBLE = new Set([
   'milestone.status.changed',
   'dependency.crossbundle.created',
-  'workitem.stale.summary'
+  'workitem.stale.summary',
+  'milestone.commitment.drift'
 ]);
 
 const filterRecipientsByPrefs = async (db: any, recipients: Recipient[], type: string, settings: any) => {
@@ -454,6 +455,28 @@ export const createNotificationsForEvent = async (input: {
     const title = `Capacity override used`;
     const body = `${item.key || item.title || 'Work item'} in ${milestone.name || milestone.id || milestone._id} • ${details.currentCommittedPoints || 0}/${details.targetCapacity || '—'} +${details.incomingItemPoints || 0}`;
     const link = `/work-items?view=milestone-plan`;
+    await routeRecipients(recipients, title, body, link, 'warn');
+  }
+
+  if (input.type === 'milestone.commitment.drift') {
+    const milestone = input.payload?.milestone || {};
+    const drift = input.payload?.drift || {};
+    const watcherRecipients = await resolveWatchersByScopes([{ scopeType: 'MILESTONE', scopeId: String(milestone._id || milestone.id || milestone.name || '') }]);
+    const ownerRecipient: Recipient | null = milestone.ownerUserId ? {
+      userId: String(milestone.ownerUserId),
+      email: milestone.ownerEmail ? String(milestone.ownerEmail) : undefined,
+      name: milestone.ownerEmail || milestone.ownerUserId
+    } : (milestone.ownerEmail ? { email: String(milestone.ownerEmail), name: String(milestone.ownerEmail) } : null);
+    let recipients = uniqueRecipients([
+      ...(settings.routing.includeAdmins ? await resolveAdminCmoRecipients(db) : []),
+      ...(settings.routing.includeBundleOwners ? await resolveBundleOwners(db, milestone.bundleId) : []),
+      ...(ownerRecipient ? [ownerRecipient] : []),
+      ...watcherRecipients
+    ]);
+    recipients = await filterRecipientsByVisibility(recipients, { bundleIds: [String(milestone.bundleId || '')], milestoneId: String(milestone._id || milestone.id || milestone.name || '') });
+    const title = `Commitment drift detected`;
+    const body = `${milestone.name || milestone.id || milestone._id} • ${drift.driftBand || 'MAJOR'} drift`;
+    const link = `/work-items?view=roadmap`;
     await routeRecipients(recipients, title, body, link, 'warn');
   }
 

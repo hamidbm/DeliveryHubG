@@ -45,6 +45,7 @@
     "test:backup": "NODE_ENV=test tsx scripts/test-backup.ts",
     "test:monte-carlo": "NODE_ENV=test tsx scripts/test-monte-carlo.ts",
     "test:commit-review": "NODE_ENV=test tsx scripts/test-commit-review.ts",
+    "test:commit-drift": "NODE_ENV=test tsx scripts/test-commit-drift.ts",
     "test:scope-requests": "NODE_ENV=test tsx scripts/test-scope-requests.ts",
     "test:jira": "NODE_ENV=test tsx scripts/test-jira-mapping.ts",
     "test:feed": "NODE_ENV=test tsx scripts/test-feed.ts",
