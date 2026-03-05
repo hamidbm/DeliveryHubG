@@ -47,6 +47,7 @@
     "test:commit-review": "NODE_ENV=test tsx scripts/test-commit-review.ts",
     "test:commit-drift": "NODE_ENV=test tsx scripts/test-commit-drift.ts",
     "test:drift-scheduler": "NODE_ENV=test tsx scripts/test-drift-scheduler.ts",
+    "test:baseline-delta": "NODE_ENV=test tsx scripts/test-baseline-delta.ts",
     "test:scope-requests": "NODE_ENV=test tsx scripts/test-scope-requests.ts",
     "test:jira": "NODE_ENV=test tsx scripts/test-jira-mapping.ts",
     "test:feed": "NODE_ENV=test tsx scripts/test-feed.ts",

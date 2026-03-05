@@ -68,6 +68,7 @@ Each item can have a parent and children to form a delivery hierarchy.
 - COMMITTED enforcement (estimates required, capacity guardrails)
 - Commitment Review gate for COMMITTED milestones (Monte Carlo + capacity + quality)
 - Commitment Drift panel showing baseline + deltas and “Run re-review”
+- Baseline & Scope Delta panel (added/removed/estimate changes since commit)
 - Readiness gates (canStart/canComplete) with override + reason
 - Sprint view for a milestone (sprint rollups tied to milestone scope)
 - Burn-up table by sprint with cumulative and remaining points
@@ -102,6 +103,7 @@ Each item can have a parent and children to form a delivery hierarchy.
 - COMMITTED enforcement: estimates required, capacity guardrails
 - Commitment Review: P80 and hit probability gate with override + audit trail
 - Commitment Drift: compares current rollup vs last PASS/OVERRIDDEN review and flags MAJOR/MINOR drift
+- Baseline snapshots are created at commit time; deltas track scope added/removed and estimate changes
 - Readiness gates: canStart/canComplete with override + reason
 - Audit events emitted for milestone status/override/readiness and notifications sent
 - COMMITTED scope changes require approval via scope change requests

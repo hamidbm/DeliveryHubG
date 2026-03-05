@@ -6,6 +6,7 @@ import { emitEvent, getDb } from '../../../../../../services/db';
 import { canCommitMilestone, isAdminOrCmo } from '../../../../../../services/authz';
 import { evaluateMilestoneCommitReview } from '../../../../../../services/commitmentReview';
 import { getEffectivePolicyForMilestone } from '../../../../../../services/policy';
+import { ensureMilestoneBaseline } from '../../../../../../services/baselineDelta';
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
 
@@ -93,6 +94,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       overrideReason: decision === 'OVERRIDE' ? overrideReason : undefined,
       review
     });
+
+    try {
+      await ensureMilestoneBaseline(String(milestone._id || milestone.id || milestone.name || id), String(authUser.userId || ''));
+    } catch {}
 
     await emitEvent({
       ts: now,

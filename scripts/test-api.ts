@@ -13,6 +13,7 @@ const tests = [
   () => import('./test-commit-review').then((m) => m.run()),
   () => import('./test-commit-drift').then((m) => m.run()),
   () => import('./test-drift-scheduler').then((m) => m.run()),
+  () => import('./test-baseline-delta').then((m) => m.run()),
   () => import('./test-capacity-plan').then((m) => m.run()),
   () => import('./test-program-intel').then((m) => m.run()),
   () => import('./test-rbac-critical-actions').then((m) => m.run()),

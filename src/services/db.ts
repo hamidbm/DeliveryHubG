@@ -1343,6 +1343,10 @@ const ensureCommitReviewIndexes = async (db: any) => {
   await db.collection('commitment_drift_snapshots').createIndex({ milestoneId: 1, evaluatedAt: -1 });
 };
 
+const ensureMilestoneBaselineIndexes = async (db: any) => {
+  await db.collection('milestone_baselines').createIndex({ milestoneId: 1 }, { unique: true });
+};
+
 const ensureFeedbackPackageIndexes = async (db: any) => {
   await db.collection('feedback_packages').createIndex({ 'resource.type': 1, 'resource.id': 1, createdAt: -1 });
   await db.collection('feedback_packages').createIndex({ status: 1, createdAt: -1 });

@@ -270,6 +270,8 @@ const WorkItemsMilestonePlanningView: React.FC<WorkItemsMilestonePlanningViewPro
   const [commitOverrideReason, setCommitOverrideReason] = useState('');
   const [commitDrift, setCommitDrift] = useState<any | null>(null);
   const [commitDriftLoading, setCommitDriftLoading] = useState(false);
+  const [baselineDelta, setBaselineDelta] = useState<any | null>(null);
+  const [baselineDeltaLoading, setBaselineDeltaLoading] = useState(false);
   const [readinessPrompt, setReadinessPrompt] = useState<{
     milestoneId: string;
     nextStatus: string;
@@ -615,6 +617,30 @@ const WorkItemsMilestonePlanningView: React.FC<WorkItemsMilestonePlanningViewPro
       }
     };
     loadDrift();
+  }, [sprintMilestoneId]);
+
+  useEffect(() => {
+    const loadBaselineDelta = async () => {
+      if (!sprintMilestoneId || sprintMilestoneId === 'all') {
+        setBaselineDelta(null);
+        return;
+      }
+      setBaselineDeltaLoading(true);
+      try {
+        const res = await fetch(`/api/milestones/${encodeURIComponent(sprintMilestoneId)}/baseline/delta`);
+        if (!res.ok) {
+          setBaselineDelta(null);
+          return;
+        }
+        const data = await res.json();
+        setBaselineDelta(data?.delta || null);
+      } catch {
+        setBaselineDelta(null);
+      } finally {
+        setBaselineDeltaLoading(false);
+      }
+    };
+    loadBaselineDelta();
   }, [sprintMilestoneId]);
 
   const isPrivilegedRole = (role?: string) => {
@@ -1695,7 +1721,59 @@ const WorkItemsMilestonePlanningView: React.FC<WorkItemsMilestonePlanningViewPro
                 </div>
               </div>
             )}
-           </div>
+            {baselineDeltaLoading && (
+              <div className="mt-4 p-4 bg-white border border-slate-100 rounded-2xl text-[10px] font-black uppercase tracking-widest text-slate-400">
+                Baseline delta loading…
+              </div>
+            )}
+            {!baselineDeltaLoading && baselineDelta && (
+              <div className="mt-4 p-4 bg-white border border-slate-100 rounded-2xl">
+                <div className="flex items-center justify-between">
+                  <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Baseline &amp; Scope Delta</div>
+                  <span className="px-2 py-1 rounded-full text-[9px] font-black uppercase tracking-widest bg-slate-100 text-slate-500">
+                    {baselineDelta.netScopeDeltaPoints > 0 ? '+' : ''}{baselineDelta.netScopeDeltaPoints} pts
+                  </span>
+                </div>
+                <div className="mt-1 text-[11px] text-slate-500">
+                  Baseline {baselineDelta.baselineAt ? new Date(baselineDelta.baselineAt).toLocaleDateString() : '—'}
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-slate-600">
+                  <div className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2">
+                    <span>Added</span>
+                    <span className="font-semibold">{baselineDelta.added.count} / {baselineDelta.added.points} pts</span>
+                  </div>
+                  <div className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2">
+                    <span>Removed</span>
+                    <span className="font-semibold">{baselineDelta.removed.count} / {baselineDelta.removed.points} pts</span>
+                  </div>
+                  <div className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2">
+                    <span>Estimate delta</span>
+                    <span className="font-semibold">{baselineDelta.estimateChanges.count} / {baselineDelta.estimateChanges.pointsDelta} pts</span>
+                  </div>
+                  <div className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2">
+                    <span>Open points</span>
+                    <span className="font-semibold">{baselineDelta.currentTotals.pointsOpen}</span>
+                  </div>
+                </div>
+                <div className="mt-3 space-y-2">
+                  {(baselineDelta.topChanges || []).length ? (
+                    baselineDelta.topChanges.map((change: any, idx: number) => (
+                      <div key={`${change.type}-${idx}`} className="flex items-center justify-between text-[11px] text-slate-600">
+                        <div className="truncate">
+                          <span className="font-semibold">{change.type.replace('_', ' ')}</span> {change.key || 'Item'}
+                        </div>
+                        <span className="text-[10px] uppercase tracking-widest text-slate-400">
+                          {change.before !== undefined ? change.before : '—'} → {change.after !== undefined ? change.after : '—'}
+                        </span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-[11px] text-slate-400">No scope changes since baseline.</div>
+                  )}
+                </div>
+              </div>
+            )}
+            </div>
                  );
                }) : (
                  <div className="text-[11px] text-slate-400">No scope change requests for this milestone.</div>

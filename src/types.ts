@@ -732,6 +732,42 @@ export interface CommitmentReview {
   };
 }
 
+export interface MilestoneBaseline {
+  milestoneId: string;
+  baselineAt: string;
+  baselineBy: string;
+  policy: {
+    strategy: string;
+    globalVersion?: number;
+    bundleVersions?: Array<{ bundleId: string; version: number }>;
+  };
+  items: Array<{
+    workItemId: string;
+    key?: string;
+    title?: string;
+    storyPoints: number;
+    status: string;
+    bundleId?: string;
+  }>;
+  totals: {
+    itemCount: number;
+    pointsTotal: number;
+    pointsOpen: number;
+  };
+}
+
+export interface BaselineDelta {
+  milestoneId: string;
+  baselineAt: string;
+  baselineTotals: { count: number; pointsOpen: number };
+  currentTotals: { count: number; pointsOpen: number };
+  added: { count: number; points: number };
+  removed: { count: number; points: number };
+  estimateChanges: { count: number; pointsDelta: number };
+  netScopeDeltaPoints: number;
+  topChanges: Array<{ type: 'ADDED' | 'REMOVED' | 'ESTIMATE_CHANGED'; key?: string; title?: string; before?: number; after?: number }>;
+}
+
 export interface WikiPage { id?: string; _id?: string; slug?: string; title: string; content: string; summary?: string; parentId?: string; spaceId: string; bundleId?: string; applicationId?: string; milestoneId?: string; documentTypeId?: string; createdAt?: string; updatedAt?: string; author?: string; lastModifiedBy?: string; version?: number; status?: 'Draft' | 'Published' | 'Archived'; themeKey?: string; }
 
 export interface WikiAsset {

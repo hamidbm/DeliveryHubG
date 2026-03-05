@@ -24,7 +24,10 @@ Problem: sprint execution is not tied to milestone scope. Value: alignment betwe
 2. Forecasting v1 (Monte Carlo).
 Problem: single-point ETA misses distribution and hit probability. Value: P50/P80/P90 finish dates and probability of hitting endDate. Dependencies: historical throughput distribution. Deliverables: Monte Carlo ETA in rollups, roadmap, and capacity planning; Admin policy toggle. Verify: P80 chips render and policy can enable/disable.
 
-3. Notification routing v2.
+3. Baseline + Scope Delta accounting.
+Problem: drift lacks attribution. Value: explain drift via added/removed scope and estimate changes since commit. Dependencies: commitment review snapshots + scope tracking. Deliverables: baseline snapshots, delta computation, UI panels and drift attribution. Verify: delta panel shows added/removed/estimate changes and drift includes scope summary.
+
+4. Notification routing v2.
 Problem: no watcher/subscription model. Value: targeted delivery of notifications. Dependencies: current notification policy and prefs. Deliverables: watchers for bundles/milestones and cron-ready digest automation. Verify: watcher receives targeted notifications; digest can be scheduled.
 
 ### Long-term

@@ -860,6 +860,18 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
                 Baseline {driftModal.drift?.baselineAt ? new Date(driftModal.drift.baselineAt).toLocaleDateString() : '—'}
               </span>
             </div>
+            {(() => {
+              const scopeDelta = driftModal.drift?.deltas?.find((d: any) => d.key === 'scopeDelta');
+              const estimateDelta = driftModal.drift?.deltas?.find((d: any) => d.key === 'estimateDelta');
+              if (!scopeDelta && !estimateDelta) return null;
+              return (
+                <div className="text-[11px] text-slate-500">
+                  {scopeDelta ? scopeDelta.detail : ''}
+                  {scopeDelta && estimateDelta ? ' • ' : ''}
+                  {estimateDelta ? estimateDelta.detail : ''}
+                </div>
+              );
+            })()}
             <div className="space-y-2">
               {driftModal.drift?.deltas?.length ? (
                 driftModal.drift.deltas.map((delta: any) => (

@@ -10,6 +10,7 @@ import { getEffectivePolicyForMilestone } from '../../../../services/policy';
 import { createNotificationsForEvent } from '../../../../services/notifications';
 import { resolveMilestoneBundleScope } from '../../../../services/ownership';
 import { evaluateMilestoneCommitReview } from '../../../../services/commitmentReview';
+import { ensureMilestoneBaseline } from '../../../../services/baselineDelta';
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
 
@@ -234,6 +235,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     }
 
     if (nextStatus && String(nextStatus).toUpperCase() === 'COMMITTED' && String(existing.status) !== String(nextStatus)) {
+      try {
+        await ensureMilestoneBaseline(String(existing._id || existing.id || existing.name || id), authUser.userId);
+      } catch {}
       try {
         await emitEvent({
           ts: now,

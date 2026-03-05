@@ -2,6 +2,7 @@ import { ObjectId } from 'mongodb';
 import { getDb } from './db';
 import { evaluateMilestoneCommitReview } from './commitmentReview';
 import { getEffectivePolicyForMilestone } from './policy';
+import { computeMilestoneBaselineDelta } from './baselineDelta';
 
 type DriftDelta = {
   key: string;
@@ -246,6 +247,34 @@ export const evaluateMilestoneCommitmentDrift = async (milestoneId: string): Pro
     });
   }
 
+  const baselineDelta = await computeMilestoneBaselineDelta(String(milestone._id || milestone.id || milestone.name || id), { includeHidden: true });
+  if (baselineDelta) {
+    if (baselineDelta.netScopeDeltaPoints !== 0) {
+      const absDelta = Math.abs(baselineDelta.netScopeDeltaPoints);
+      const severity: DriftDelta['severity'] = absDelta >= 15 ? 'critical' : absDelta >= 5 ? 'warn' : 'info';
+      deltas.push({
+        key: 'scopeDelta',
+        before: baselineDelta.baselineTotals.pointsOpen,
+        after: baselineDelta.currentTotals.pointsOpen,
+        status: baselineDelta.netScopeDeltaPoints > 0 ? 'WORSENED' : 'IMPROVED',
+        severity,
+        detail: `Scope ${baselineDelta.netScopeDeltaPoints > 0 ? '+' : ''}${baselineDelta.netScopeDeltaPoints} pts since commit`
+      });
+    }
+    if (baselineDelta.estimateChanges.pointsDelta !== 0) {
+      const absDelta = Math.abs(baselineDelta.estimateChanges.pointsDelta);
+      const severity: DriftDelta['severity'] = absDelta >= 15 ? 'critical' : absDelta >= 5 ? 'warn' : 'info';
+      deltas.push({
+        key: 'estimateDelta',
+        before: null,
+        after: baselineDelta.estimateChanges.pointsDelta,
+        status: baselineDelta.estimateChanges.pointsDelta > 0 ? 'WORSENED' : 'IMPROVED',
+        severity,
+        detail: `Estimates ${baselineDelta.estimateChanges.pointsDelta > 0 ? '+' : ''}${baselineDelta.estimateChanges.pointsDelta} pts since commit`
+      });
+    }
+  }
+
   const hasCritical = deltas.some((d) => d.severity === 'critical');
   const hasWarn = deltas.some((d) => d.severity === 'warn');
   const driftBand: DriftResult['driftBand'] = hasCritical ? 'MAJOR' : hasWarn ? 'MINOR' : 'NONE';
@@ -259,6 +288,9 @@ export const evaluateMilestoneCommitmentDrift = async (milestoneId: string): Pro
   }
   if (deltas.some((d) => d.key === 'capacityOvercommit' && d.status === 'WORSENED')) {
     recommendedActions.push({ type: 'SCOPE_REDUCE', reason: 'Capacity overcommit increased' });
+  }
+  if (baselineDelta && baselineDelta.netScopeDeltaPoints > 0) {
+    recommendedActions.push({ type: 'SCOPE_REDUCE', reason: 'Scope increased since commit' });
   }
   if (deltas.some((d) => d.key === 'externalBlockers' && d.status === 'WORSENED')) {
     recommendedActions.push({ type: 'UNBLOCK', reason: 'External blockers increased' });
