@@ -40,3 +40,11 @@ Key principles:
 
 User preferences:
 - Notification preferences are managed under Profile Settings (mute types + opt into daily digest).
+
+## Guided Onboarding
+DeliveryHub includes a role-based “Start Here” card on the dashboard to reduce time-to-value for new users. It provides:
+- Role selector (PM / Engineer / Exec / Admin)
+- Progress checklist with direct links into the relevant modules
+- Embedded metric explanations (P80, drift, data quality, critical path, overcommit, staleness)
+
+Progress and dismissals are stored per user in the `user_onboarding` collection.

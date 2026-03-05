@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { Application, Bundle } from '../types';
 import { useRouter } from '../App';
+import OnboardingStartHere from './OnboardingStartHere';
 
 interface DashboardProps {
   applications: Application[];
@@ -55,6 +56,8 @@ const Dashboard: React.FC<DashboardProps> = ({ applications = [], bundles = [] }
         <h1 className="text-2xl font-bold text-slate-800">Portfolio Executive View</h1>
         <p className="text-slate-500">Real-time KPIs and delivery metrics across all business clusters.</p>
       </header>
+
+      <OnboardingStartHere />
 
       <div className="bg-white border border-slate-200 rounded-2xl p-6 space-y-4">
         <div className="flex items-center justify-between">

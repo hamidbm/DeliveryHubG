@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from '../App';
 import ChangeFeed from './ChangeFeed';
+import OnboardingTip from './OnboardingTip';
+import { useOnboarding } from '../lib/onboardingClient';
 
 type ProgramIntel = {
   summary: {
@@ -103,6 +105,8 @@ const ProgramCoordination: React.FC = () => {
   const [decisions, setDecisions] = useState<any[]>([]);
   const [decisionsLoading, setDecisionsLoading] = useState(false);
   const [decisionsError, setDecisionsError] = useState<string | null>(null);
+  const { onboarding, content, dismissTip } = useOnboarding();
+  const [showProgramHelp, setShowProgramHelp] = useState(false);
 
   const fetchIntel = async (includeLists = false) => {
     const params = new URLSearchParams();
@@ -133,6 +137,12 @@ const ProgramCoordination: React.FC = () => {
   useEffect(() => {
     setListsCache(null);
   }, [bundleIdsParam, milestoneIdsParam]);
+
+  useEffect(() => {
+    if (!content?.programHelp) return;
+    const dismissed = onboarding?.dismissedTips?.includes('program_help');
+    setShowProgramHelp(!dismissed);
+  }, [content?.programHelp, onboarding?.dismissedTips]);
 
   useEffect(() => {
     let isMounted = true;
@@ -544,6 +554,9 @@ const ProgramCoordination: React.FC = () => {
     { label: 'Overdue', value: summary?.overdueOpen ?? 0 }
   ]), [summary]);
 
+  const programHelp = content?.programHelp;
+  const programHelpDismissed = onboarding?.dismissedTips?.includes('program_help');
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
@@ -568,6 +581,41 @@ const ProgramCoordination: React.FC = () => {
           ))}
         </div>
       </div>
+
+      {programHelp && !programHelpDismissed && (
+        <div className="bg-white border border-slate-100 rounded-[2rem] p-6 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">{programHelp.title}</div>
+              <div className="text-sm font-semibold text-slate-700">{programHelp.subtitle}</div>
+            </div>
+            <button
+              onClick={() => setShowProgramHelp((prev) => !prev)}
+              className="px-3 py-2 text-[9px] font-black uppercase tracking-widest rounded-lg border border-slate-200 text-slate-500 hover:text-slate-700"
+            >
+              {showProgramHelp ? 'Collapse' : 'Expand'}
+            </button>
+          </div>
+          {showProgramHelp && (
+            <>
+              <ul className="mt-4 list-disc pl-5 text-sm text-slate-600 space-y-1">
+                {programHelp.bullets.map((b, idx) => (
+                  <li key={`${b}-${idx}`}>{b}</li>
+                ))}
+              </ul>
+              <button
+                onClick={() => {
+                  dismissTip('program_help');
+                  setShowProgramHelp(false);
+                }}
+                className="mt-4 text-[9px] font-black uppercase tracking-widest text-blue-600 hover:underline"
+              >
+                Got it
+              </button>
+            </>
+          )}
+        </div>
+      )}
 
       {panel === 'overview' && (
         <>
@@ -886,14 +934,17 @@ const ProgramCoordination: React.FC = () => {
                         <td className="py-3 pr-4 font-semibold text-slate-700">{plan.bundleName || plan.bundleId}</td>
                         {plan.buckets.map((bucket) => (
                           <td key={bucket.key} className="py-3 pr-4">
-                            <button
-                              onClick={() => openCapacityCell(plan.bundleName || plan.bundleId, bucket)}
-                              className={`px-2 py-1 rounded-lg text-[10px] font-semibold ${
-                                bucket.overBy > 0 ? 'bg-red-50 text-red-600' : 'bg-slate-50 text-slate-600'
-                              }`}
-                            >
-                              {bucket.demandPoints}/{bucket.capacityPoints}
-                            </button>
+                            <div className="inline-flex items-center gap-1">
+                              <button
+                                onClick={() => openCapacityCell(plan.bundleName || plan.bundleId, bucket)}
+                                className={`px-2 py-1 rounded-lg text-[10px] font-semibold ${
+                                  bucket.overBy > 0 ? 'bg-red-50 text-red-600' : 'bg-slate-50 text-slate-600'
+                                }`}
+                              >
+                                {bucket.demandPoints}/{bucket.capacityPoints}
+                              </button>
+                              {bucket.overBy > 0 && <OnboardingTip tipId="overcommit" />}
+                            </div>
                           </td>
                         ))}
                       </tr>

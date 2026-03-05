@@ -3,6 +3,7 @@ import { WorkItem, Application, Bundle, Milestone, WorkItemStatus } from '../typ
 import WorkItemDetails from './WorkItemDetails';
 import WorkItemsStaleModal from './WorkItemsStaleModal';
 import { WorkItemType } from '../types';
+import OnboardingTip from './OnboardingTip';
 
 interface WorkItemsRoadmapViewProps {
   applications: Application[];
@@ -623,13 +624,16 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
                   Readiness {readiness.band || '—'}
                 </span>
                 {rollup?.dataQuality && (
-                  <span className={`px-2 py-1 rounded-full ${
-                    rollup.dataQuality.score < 50 ? 'bg-rose-50 text-rose-700' :
-                    rollup.dataQuality.score < 70 ? 'bg-amber-50 text-amber-700' :
-                    'bg-emerald-50 text-emerald-700'
-                  }`}>
-                    Quality {rollup.dataQuality.score}
-                  </span>
+                  <div className="inline-flex items-center gap-1">
+                    <span className={`px-2 py-1 rounded-full ${
+                      rollup.dataQuality.score < 50 ? 'bg-rose-50 text-rose-700' :
+                      rollup.dataQuality.score < 70 ? 'bg-amber-50 text-amber-700' :
+                      'bg-emerald-50 text-emerald-700'
+                    }`}>
+                      Quality {rollup.dataQuality.score}
+                    </span>
+                    <OnboardingTip tipId="data_quality" />
+                  </div>
                 )}
                 <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-600">
                   Confidence {confidence?.score ?? '—'} {confidence?.band ? `(${confidence.band})` : ''}
@@ -640,17 +644,20 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
                 <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-600">
                   Blocked {rollup?.totals?.blockedDerived ?? 0}
                 </span>
-                <button
-                  onClick={() => setStaleModal({ milestoneId })}
-                  className={`px-2 py-1 rounded-full ${
-                    criticalStale > 0 ? 'bg-rose-50 text-rose-700' :
-                    staleTotal > 0 ? 'bg-amber-50 text-amber-700' :
-                    'bg-slate-100 text-slate-400'
-                  }`}
-                >
-                  Stale {staleTotal}
-                  {criticalStale > 0 ? ` • Critical ${criticalStale}` : ''}
-                </button>
+                <div className="inline-flex items-center gap-1">
+                  <button
+                    onClick={() => setStaleModal({ milestoneId })}
+                    className={`px-2 py-1 rounded-full ${
+                      criticalStale > 0 ? 'bg-rose-50 text-rose-700' :
+                      staleTotal > 0 ? 'bg-amber-50 text-amber-700' :
+                      'bg-slate-100 text-slate-400'
+                    }`}
+                  >
+                    Stale {staleTotal}
+                    {criticalStale > 0 ? ` • Critical ${criticalStale}` : ''}
+                  </button>
+                  <OnboardingTip tipId="staleness" />
+                </div>
                 <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-600">
                   Risks {highRisks}
                 </span>
@@ -669,12 +676,15 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
                   </span>
                 )}
                 {forecast?.monteCarlo?.p80 && (
-                  <span
-                    className="px-2 py-1 rounded-full bg-slate-900 text-white"
-                    title={`P50 ${new Date(forecast.monteCarlo.p50).toLocaleDateString()} • P80 ${new Date(forecast.monteCarlo.p80).toLocaleDateString()} • P90 ${new Date(forecast.monteCarlo.p90).toLocaleDateString()} • Hit ${Math.round((forecast.monteCarlo.hitProbability || 0) * 100)}%`}
-                  >
-                    P80 {new Date(forecast.monteCarlo.p80).toLocaleDateString()} ({Math.round((forecast.monteCarlo.hitProbability || 0) * 100)}%)
-                  </span>
+                  <div className="inline-flex items-center gap-1">
+                    <span
+                      className="px-2 py-1 rounded-full bg-slate-900 text-white"
+                      title={`P50 ${new Date(forecast.monteCarlo.p50).toLocaleDateString()} • P80 ${new Date(forecast.monteCarlo.p80).toLocaleDateString()} • P90 ${new Date(forecast.monteCarlo.p90).toLocaleDateString()} • Hit ${Math.round((forecast.monteCarlo.hitProbability || 0) * 100)}%`}
+                    >
+                      P80 {new Date(forecast.monteCarlo.p80).toLocaleDateString()} ({Math.round((forecast.monteCarlo.hitProbability || 0) * 100)}%)
+                    </span>
+                    <OnboardingTip tipId="p80_hit" />
+                  </div>
                 )}
                 {commitReviewFail && (
                   <span className="px-2 py-1 rounded-full bg-rose-50 text-rose-700">
@@ -696,14 +706,17 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
                   </button>
                 )}
                 {driftEligible && !driftUnknown && driftBand && driftBand !== 'NONE' && (
-                  <button
-                    onClick={() => setDriftModal({ milestoneId, drift })}
-                    className={`px-2 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${
-                      driftBand === 'MAJOR' ? 'bg-rose-50 text-rose-700' : 'bg-amber-50 text-amber-700'
-                    }`}
-                  >
-                    Drift {driftBand.toLowerCase()}
-                  </button>
+                  <div className="inline-flex items-center gap-1">
+                    <button
+                      onClick={() => setDriftModal({ milestoneId, drift })}
+                      className={`px-2 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${
+                        driftBand === 'MAJOR' ? 'bg-rose-50 text-rose-700' : 'bg-amber-50 text-amber-700'
+                      }`}
+                    >
+                      Drift {driftBand.toLowerCase()}
+                    </button>
+                    <OnboardingTip tipId="drift" />
+                  </div>
                 )}
                 {expandedMilestones[milestoneId] ? (
                   burnupStatus[milestoneId]?.loading ? (
@@ -741,13 +754,16 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
                   ) : criticalStatus[criticalKey]?.error ? (
                     <button onClick={() => fetchCriticalPath(milestoneId)} className="px-2 py-1 rounded-full bg-rose-50 text-rose-600">Retry critical path</button>
                   ) : critical?.criticalPath?.nodes?.length ? (
-                    <button
-                      onClick={() => setCriticalModal({ milestoneId, cacheKey: criticalKey })}
-                      className="px-2 py-1 rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200"
-                    >
-                      Critical {critical.criticalPath.remainingPoints} pts • {critical.criticalPath.nodes.length} items
-                      {includeExternal && critical?.external?.includedNodes ? ` • ext ${critical.external.includedNodes}` : ''}
-                    </button>
+                    <div className="inline-flex items-center gap-1">
+                      <button
+                        onClick={() => setCriticalModal({ milestoneId, cacheKey: criticalKey })}
+                        className="px-2 py-1 rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200"
+                      >
+                        Critical {critical.criticalPath.remainingPoints} pts • {critical.criticalPath.nodes.length} items
+                        {includeExternal && critical?.external?.includedNodes ? ` • ext ${critical.external.includedNodes}` : ''}
+                      </button>
+                      <OnboardingTip tipId="critical_path" />
+                    </div>
                   ) : (
                     <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-400">Critical —</span>
                   )

@@ -27,6 +27,18 @@ export enum Role {
   BUSINESS = 'Business'
 }
 
+export type OnboardingRole = 'PM' | 'ENGINEER' | 'EXEC' | 'ADMIN';
+
+export interface UserOnboarding {
+  _id?: string;
+  userId: string;
+  role: OnboardingRole;
+  createdAt: string;
+  updatedAt: string;
+  completedSteps: string[];
+  dismissedTips: string[];
+}
+
 export const TEAM_ROLE_OPTIONS: Record<Team, Role[]> = {
   [Team.ENGINEERING]: [
     Role.ENGG_LEADER,

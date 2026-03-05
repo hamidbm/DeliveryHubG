@@ -22,6 +22,7 @@ const tests = [
   () => import('./test-events-notifications').then((m) => m.run()),
   () => import('./test-admin-audit').then((m) => m.run()),
   () => import('./test-ops-metrics').then((m) => m.run()),
+  () => import('./test-onboarding').then((m) => m.run()),
   () => import('./test-notification-prefs').then((m) => m.run()),
   () => import('./test-forecasting').then((m) => m.run()),
   () => import('./test-watchers').then((m) => m.run()),

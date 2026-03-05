@@ -17,6 +17,7 @@ import WorkItemsStaleModal from './WorkItemsStaleModal';
 import AssigneeSearch from './AssigneeSearch';
 import DependencyGraph from './DependencyGraph';
 import ChangeFeed from './ChangeFeed';
+import OnboardingTip from './OnboardingTip';
 
 interface WorkItemsMilestonePlanningViewProps {
   applications: Application[];
@@ -214,12 +215,15 @@ const MilestoneColumn: React.FC<{
               </span>
             )}
             {forecast?.monteCarlo?.p80 && (
-              <span
-                className="px-2 py-1 rounded-full text-[8px] font-black uppercase tracking-widest bg-slate-900 text-white"
-                title={`P50 ${new Date(forecast.monteCarlo.p50).toLocaleDateString()} • P80 ${new Date(forecast.monteCarlo.p80).toLocaleDateString()} • P90 ${new Date(forecast.monteCarlo.p90).toLocaleDateString()} • Hit ${Math.round((forecast.monteCarlo.hitProbability || 0) * 100)}%`}
-              >
-                P80 {new Date(forecast.monteCarlo.p80).toLocaleDateString()} ({Math.round((forecast.monteCarlo.hitProbability || 0) * 100)}%)
-              </span>
+              <div className="inline-flex items-center gap-1">
+                <span
+                  className="px-2 py-1 rounded-full text-[8px] font-black uppercase tracking-widest bg-slate-900 text-white"
+                  title={`P50 ${new Date(forecast.monteCarlo.p50).toLocaleDateString()} • P80 ${new Date(forecast.monteCarlo.p80).toLocaleDateString()} • P90 ${new Date(forecast.monteCarlo.p90).toLocaleDateString()} • Hit ${Math.round((forecast.monteCarlo.hitProbability || 0) * 100)}%`}
+                >
+                  P80 {new Date(forecast.monteCarlo.p80).toLocaleDateString()} ({Math.round((forecast.monteCarlo.hitProbability || 0) * 100)}%)
+                </span>
+                <OnboardingTip tipId="p80_hit" />
+              </div>
             )}
             {velocityHint && (
               <span className={`px-2 py-1 rounded-full text-[8px] font-black uppercase tracking-widest ${
@@ -1323,14 +1327,17 @@ const WorkItemsMilestonePlanningView: React.FC<WorkItemsMilestonePlanningViewPro
                      ETA {new Date(rollups[sprintMilestoneId].forecast.estimatedCompletionDate).toLocaleDateString()}
                    </span>
                  )}
-                 {rollups[sprintMilestoneId]?.forecast?.monteCarlo?.p80 && (
-                   <span
-                     className="px-2 py-1 rounded-full bg-slate-900 text-white"
-                     title={`P50 ${new Date(rollups[sprintMilestoneId].forecast.monteCarlo.p50).toLocaleDateString()} • P80 ${new Date(rollups[sprintMilestoneId].forecast.monteCarlo.p80).toLocaleDateString()} • P90 ${new Date(rollups[sprintMilestoneId].forecast.monteCarlo.p90).toLocaleDateString()} • Hit ${Math.round((rollups[sprintMilestoneId].forecast.monteCarlo.hitProbability || 0) * 100)}%`}
-                   >
-                     P80 {new Date(rollups[sprintMilestoneId].forecast.monteCarlo.p80).toLocaleDateString()} ({Math.round((rollups[sprintMilestoneId].forecast.monteCarlo.hitProbability || 0) * 100)}%)
-                   </span>
-                 )}
+                {rollups[sprintMilestoneId]?.forecast?.monteCarlo?.p80 && (
+                  <div className="inline-flex items-center gap-1">
+                    <span
+                      className="px-2 py-1 rounded-full bg-slate-900 text-white"
+                      title={`P50 ${new Date(rollups[sprintMilestoneId].forecast.monteCarlo.p50).toLocaleDateString()} • P80 ${new Date(rollups[sprintMilestoneId].forecast.monteCarlo.p80).toLocaleDateString()} • P90 ${new Date(rollups[sprintMilestoneId].forecast.monteCarlo.p90).toLocaleDateString()} • Hit ${Math.round((rollups[sprintMilestoneId].forecast.monteCarlo.hitProbability || 0) * 100)}%`}
+                    >
+                      P80 {new Date(rollups[sprintMilestoneId].forecast.monteCarlo.p80).toLocaleDateString()} ({Math.round((rollups[sprintMilestoneId].forecast.monteCarlo.hitProbability || 0) * 100)}%)
+                    </span>
+                    <OnboardingTip tipId="p80_hit" />
+                  </div>
+                )}
                  <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-600">
                    Capacity {rollups[sprintMilestoneId]?.capacity?.committedPoints ?? 0}/{rollups[sprintMilestoneId]?.capacity?.targetCapacity ?? '∞'}
                  </span>
@@ -1347,25 +1354,31 @@ const WorkItemsMilestonePlanningView: React.FC<WorkItemsMilestonePlanningViewPro
                 <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-600">
                   Scope requests {scopeRequests.filter((r) => r.status === 'PENDING').length}
                 </span>
-                <button
-                  onClick={() => sprintMilestoneId !== 'all' && setStaleModal({ milestoneId: sprintMilestoneId })}
-                  className={`px-2 py-1 rounded-full ${
-                    criticalStale > 0 ? 'bg-rose-50 text-rose-700' :
-                    staleTotal > 0 ? 'bg-amber-50 text-amber-700' :
-                    'bg-slate-100 text-slate-400'
-                  }`}
-                >
-                  Stale {staleTotal}
-                  {criticalStale > 0 ? ` • Critical ${criticalStale}` : ''}
-                </button>
+                <div className="inline-flex items-center gap-1">
+                  <button
+                    onClick={() => sprintMilestoneId !== 'all' && setStaleModal({ milestoneId: sprintMilestoneId })}
+                    className={`px-2 py-1 rounded-full ${
+                      criticalStale > 0 ? 'bg-rose-50 text-rose-700' :
+                      staleTotal > 0 ? 'bg-amber-50 text-amber-700' :
+                      'bg-slate-100 text-slate-400'
+                    }`}
+                  >
+                    Stale {staleTotal}
+                    {criticalStale > 0 ? ` • Critical ${criticalStale}` : ''}
+                  </button>
+                  <OnboardingTip tipId="staleness" />
+                </div>
                 {rollups[sprintMilestoneId]?.dataQuality && (
-                  <span className={`px-2 py-1 rounded-full ${
-                    rollups[sprintMilestoneId].dataQuality.score < 50 ? 'bg-rose-50 text-rose-700' :
-                     rollups[sprintMilestoneId].dataQuality.score < 70 ? 'bg-amber-50 text-amber-700' :
-                     'bg-emerald-50 text-emerald-700'
-                   }`}>
-                     Data quality {rollups[sprintMilestoneId].dataQuality.score}
-                   </span>
+                  <div className="inline-flex items-center gap-1">
+                    <span className={`px-2 py-1 rounded-full ${
+                      rollups[sprintMilestoneId].dataQuality.score < 50 ? 'bg-rose-50 text-rose-700' :
+                       rollups[sprintMilestoneId].dataQuality.score < 70 ? 'bg-amber-50 text-amber-700' :
+                       'bg-emerald-50 text-emerald-700'
+                     }`}>
+                       Data quality {rollups[sprintMilestoneId].dataQuality.score}
+                     </span>
+                    <OnboardingTip tipId="data_quality" />
+                  </div>
                  )}
                </div>
              </div>
@@ -1445,7 +1458,10 @@ const WorkItemsMilestonePlanningView: React.FC<WorkItemsMilestonePlanningViewPro
            <div className="border border-slate-100 rounded-2xl p-4 bg-white">
              <div className="flex items-center justify-between gap-3">
                <div>
-                 <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Critical Path</div>
+                 <div className="flex items-center gap-2">
+                   <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Critical Path</div>
+                   <OnboardingTip tipId="critical_path" />
+                 </div>
                  <div className="text-xs text-slate-500">Dependency-driven chain impacting the milestone ETA.</div>
                </div>
                {criticalPath?.criticalPath?.nodes?.length ? (
@@ -1454,7 +1470,7 @@ const WorkItemsMilestonePlanningView: React.FC<WorkItemsMilestonePlanningViewPro
                  </div>
                ) : null}
              </div>
-               <div className="mt-3 flex items-center gap-3 text-[9px] font-black uppercase tracking-widest text-slate-500">
+             <div className="mt-3 flex items-center gap-3 text-[9px] font-black uppercase tracking-widest text-slate-500">
                <label className="flex items-center gap-2">
                  <input
                    type="checkbox"
