@@ -39,7 +39,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     const now = new Date().toISOString();
     await db.collection('commitment_drift_snapshots').updateOne(
       { milestoneId: drift.milestoneId },
-      { $set: { milestoneId: drift.milestoneId, evaluatedAt: now, driftBand: drift.driftBand, deltas: drift.deltas, baselineAt: drift.baselineAt || null } },
+      { $set: { milestoneId: drift.milestoneId, evaluatedAt: now, driftBand: drift.driftBand, deltas: drift.deltas, baselineAt: drift.baselineAt || null, hasBaseline: drift.hasBaseline } },
       { upsert: true }
     );
 
@@ -76,7 +76,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       });
     }
 
-    return NextResponse.json({ enabled: true, drift });
+    return NextResponse.json({ enabled: true, drift: { ...drift, evaluatedAt: now } });
   } catch (err: any) {
     return NextResponse.json({ error: err?.message || 'Failed to compute drift' }, { status: 500 });
   }

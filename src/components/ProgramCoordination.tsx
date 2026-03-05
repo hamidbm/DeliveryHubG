@@ -150,17 +150,31 @@ const ProgramCoordination: React.FC = () => {
           });
         });
       });
-      const unique = Array.from(new Map(candidates.map((c) => [c.milestoneId, c])).values()).slice(0, 12);
+      const unique = Array.from(new Map(candidates.map((c) => [c.milestoneId, c])).values()).slice(0, 50);
+      const ids = unique.map((c) => c.milestoneId);
+      if (!ids.length) {
+        if (isMounted) setDriftList([]);
+        setDriftLoading(false);
+        return;
+      }
       try {
-        const results = await Promise.all(unique.map(async (c) => {
-          const res = await fetch(`/api/milestones/${encodeURIComponent(c.milestoneId)}/commit-drift`);
-          if (!res.ok) return null;
-          const data = await res.json();
-          if (!data?.enabled || data?.drift?.driftBand !== 'MAJOR') return null;
-          return { ...c, drift: data.drift };
-        }));
+        const res = await fetch(`/api/milestones/commit-drift/snapshots?milestoneIds=${encodeURIComponent(ids.join(','))}`);
+        if (!res.ok) {
+          if (isMounted) setDriftList([]);
+          return;
+        }
+        const data = await res.json();
+        const snapshotMap = new Map<string, any>();
+        (data?.items || []).forEach((item: any) => snapshotMap.set(String(item.milestoneId), item));
+        const results = unique
+          .map((c) => {
+            const snap = snapshotMap.get(String(c.milestoneId));
+            if (!snap || snap.driftBand !== 'MAJOR') return null;
+            return { ...c, drift: snap };
+          })
+          .filter(Boolean);
         if (isMounted) {
-          setDriftList(results.filter(Boolean));
+          setDriftList(results);
         }
       } catch {
         if (isMounted) setDriftList([]);

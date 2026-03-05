@@ -235,7 +235,34 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
       .catch(() => setCommitPolicy(null));
   }, []);
 
-  const fetchCommitDrift = async (milestoneId: string) => {
+  const fetchCommitDriftSnapshots = async (milestoneList: Milestone[]) => {
+    if (!milestoneList.length) return;
+    const ids = milestoneList.map((m) => String(m._id || m.id || m.name)).filter(Boolean);
+    if (!ids.length) return;
+    const statusMap: Record<string, { loading: boolean; error?: string }> = {};
+    ids.forEach((id) => {
+      statusMap[id] = { loading: true };
+    });
+    setCommitDriftStatus(statusMap);
+    try {
+      const res = await fetch(`/api/milestones/commit-drift/snapshots?milestoneIds=${encodeURIComponent(ids.join(','))}`);
+      if (!res.ok) {
+        setCommitDriftStatus((prev) => Object.fromEntries(ids.map((id) => [id, { loading: false, error: 'Failed to load drift.' }])));
+        return;
+      }
+      const data = await res.json();
+      const map: Record<string, any> = {};
+      (data?.items || []).forEach((item: any) => {
+        map[String(item.milestoneId)] = item;
+      });
+      setCommitDrift(map);
+      setCommitDriftStatus((prev) => Object.fromEntries(ids.map((id) => [id, { loading: false }])));
+    } catch {
+      setCommitDriftStatus((prev) => Object.fromEntries(ids.map((id) => [id, { loading: false, error: 'Failed to load drift.' }])));
+    }
+  };
+
+  const refreshCommitDrift = async (milestoneId: string) => {
     if (commitDriftStatus[milestoneId]?.loading) return;
     setCommitDriftStatus((prev) => ({ ...prev, [milestoneId]: { loading: true } }));
     try {
@@ -260,9 +287,8 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
     if (!milestones.length) return;
     setCommitDrift({});
     setCommitDriftStatus({});
-    milestones
-      .filter((m) => ['COMMITTED', 'IN_PROGRESS'].includes(String(m.status || '').toUpperCase()))
-      .forEach((m) => fetchCommitDrift(String(m._id || m.id || m.name)));
+    const candidates = milestones.filter((m) => ['COMMITTED', 'IN_PROGRESS'].includes(String(m.status || '').toUpperCase()));
+    fetchCommitDriftSnapshots(candidates);
   }, [milestones]);
 
   useEffect(() => {
@@ -538,12 +564,16 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
           const endDate = milestone.endDate ? new Date(milestone.endDate) : null;
           const p80 = mc?.p80 ? new Date(mc.p80) : null;
           const isCommitted = String(milestone.status || '').toUpperCase() === 'COMMITTED';
+          const driftEligible = ['COMMITTED', 'IN_PROGRESS'].includes(String(milestone.status || '').toUpperCase());
           const commitReviewFail = commitReviewEnabled && !isCommitted && (
             (mc?.hitProbability !== undefined && mc.hitProbability < (commitPolicy?.commitReview?.minHitProbability ?? 0)) ||
             (commitPolicy?.commitReview?.blockIfP80AfterEndDate && p80 && endDate && p80.getTime() > endDate.getTime())
           );
           const drift = commitDrift[milestoneId];
           const driftBand = drift?.driftBand;
+          const driftEvaluatedAt = drift?.evaluatedAt ? new Date(drift.evaluatedAt).getTime() : null;
+          const driftStale = !driftEvaluatedAt || Number.isNaN(driftEvaluatedAt) || (Date.now() - driftEvaluatedAt) > 24 * 60 * 60 * 1000;
+          const driftUnknown = driftEligible && (!drift || drift?.hasBaseline === false || driftStale);
           const groups = groupedItems[milestoneId] || {
             TODO: [],
             IN_PROGRESS: [],
@@ -651,12 +681,21 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
                     Commit review
                   </span>
                 )}
-                {commitDriftStatus[milestoneId]?.loading && (
+                {driftEligible && commitDriftStatus[milestoneId]?.loading && (
                   <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-400">
                     Drift…
                   </span>
                 )}
-                {driftBand && driftBand !== 'NONE' && (
+                {driftEligible && driftUnknown && !commitDriftStatus[milestoneId]?.loading && (
+                  <button
+                    onClick={() => refreshCommitDrift(milestoneId)}
+                    className="px-2 py-1 rounded-full text-[9px] font-black uppercase tracking-widest bg-slate-100 text-slate-500"
+                    title="Snapshot missing or stale. Click to refresh."
+                  >
+                    Drift unknown
+                  </button>
+                )}
+                {driftEligible && !driftUnknown && driftBand && driftBand !== 'NONE' && (
                   <button
                     onClick={() => setDriftModal({ milestoneId, drift })}
                     className={`px-2 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${

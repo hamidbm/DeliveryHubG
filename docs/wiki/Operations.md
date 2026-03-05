@@ -42,6 +42,7 @@ CLI helpers:
 - `HUGGINGFACE_API_KEY`
 - `COHERE_API_KEY`
 - `DIGEST_CRON_SECRET`
+- `COMMIT_DRIFT_CRON_SECRET`
 - `ADMIN_EXPORT_SECRET`
 
 ## Digest Automation
@@ -58,6 +59,21 @@ Digest enrichment:
 
 Staleness nudges:
 - Nudge activity is stored in `staleness_nudges` for cooldown and rate limiting.
+
+## Commitment Drift Scheduler
+Commitment drift can be batch-evaluated on a schedule to avoid per-milestone UI calls.
+
+Endpoint:
+- `POST /api/admin/commit-drift/run`
+- Header: `X-Cron-Secret: <COMMIT_DRIFT_CRON_SECRET>`
+- Optional query: `dryRun=true`, `force=true`, `batchSize`, `maxMilestones`
+
+Recommended cadence:
+- Hourly or daily (hourly for active programs, daily for small pilots)
+
+UI behavior:
+- Roadmap/Program surfaces use cached drift snapshots.
+- If a snapshot is missing or stale, the UI shows “Drift unknown” with a manual refresh.
 
 ## Backup & Restore (Admin/CMO)
 DeliveryHub supports export/import of configuration and planning metadata to promote between environments.
