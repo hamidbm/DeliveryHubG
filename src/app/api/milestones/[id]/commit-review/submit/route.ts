@@ -7,6 +7,7 @@ import { canCommitMilestone, isAdminOrCmo } from '../../../../../../services/aut
 import { evaluateMilestoneCommitReview } from '../../../../../../services/commitmentReview';
 import { getEffectivePolicyForMilestone } from '../../../../../../services/policy';
 import { ensureMilestoneBaseline } from '../../../../../../services/baselineDelta';
+import { createDecision } from '../../../../../../services/decisionLog';
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
 
@@ -98,6 +99,26 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     try {
       await ensureMilestoneBaseline(String(milestone._id || milestone.id || milestone.name || id), String(authUser.userId || ''));
     } catch {}
+
+    if (decision === 'OVERRIDE') {
+      try {
+        await createDecision({
+          createdAt: now,
+          createdBy: { userId: String(authUser.userId || ''), email: String((payload as any).email || ''), name: (payload as any).name },
+          scopeType: 'MILESTONE',
+          scopeId: String(milestone._id || milestone.id || milestone.name || id),
+          decisionType: 'COMMIT_OVERRIDE',
+          title: `Commit override for ${milestone.name || milestone.id || id}`,
+          rationale: overrideReason,
+          outcome: 'APPROVED',
+          severity: 'warn',
+          related: {
+            milestoneId: String(milestone._id || milestone.id || milestone.name || id),
+            bundleId: milestone.bundleId ? String(milestone.bundleId) : undefined
+          }
+        });
+      } catch {}
+    }
 
     await emitEvent({
       ts: now,

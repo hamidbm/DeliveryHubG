@@ -92,6 +92,15 @@ Top-level fields:
 Observed indexes:
 - `{ _id: 1 }`
 
+### `decision_log`
+Top-level fields:
+- `_id`, `createdAt`, `createdBy`, `scopeType`, `scopeId`, `decisionType`, `title`, `rationale`, `alternatives`, `outcome`, `severity`, `related`, `tags`
+
+Observed indexes:
+- `{ scopeType: 1, scopeId: 1, createdAt: -1 }`
+- `{ related.milestoneId: 1, createdAt: -1 }`
+- `{ decisionType: 1, createdAt: -1 }`
+
 ### `interfaces`
 Top-level fields:
 - `_id`, `dataCriticality`, `sourceAppId`, `status`, `targetAppId`, `type`

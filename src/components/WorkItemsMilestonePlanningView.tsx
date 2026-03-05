@@ -272,6 +272,20 @@ const WorkItemsMilestonePlanningView: React.FC<WorkItemsMilestonePlanningViewPro
   const [commitDriftLoading, setCommitDriftLoading] = useState(false);
   const [baselineDelta, setBaselineDelta] = useState<any | null>(null);
   const [baselineDeltaLoading, setBaselineDeltaLoading] = useState(false);
+  const [decisions, setDecisions] = useState<any[]>([]);
+  const [decisionsLoading, setDecisionsLoading] = useState(false);
+  const [decisionsError, setDecisionsError] = useState<string | null>(null);
+  const [decisionDraft, setDecisionDraft] = useState({
+    decisionType: 'OTHER',
+    outcome: 'ACKNOWLEDGED',
+    severity: 'info',
+    title: '',
+    rationale: '',
+    alternatives: ''
+  });
+  const [decisionSaving, setDecisionSaving] = useState(false);
+  const [decisionError, setDecisionError] = useState<string | null>(null);
+  const [showDecisionForm, setShowDecisionForm] = useState(false);
   const [briefWeek, setBriefWeek] = useState('');
   const [brief, setBrief] = useState<any | null>(null);
   const [briefLoading, setBriefLoading] = useState(false);
@@ -322,6 +336,7 @@ const WorkItemsMilestonePlanningView: React.FC<WorkItemsMilestonePlanningViewPro
   const [graphCache, setGraphCache] = useState<Record<string, any>>({});
   const [graphLoading, setGraphLoading] = useState(false);
   const [graphError, setGraphError] = useState<string | null>(null);
+  const [isBundleOwner, setIsBundleOwner] = useState(false);
   const { setNodeRef: setBacklogRef, isOver: isOverBacklog } = useDroppable({ id: 'backlog' });
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
@@ -414,6 +429,33 @@ const WorkItemsMilestonePlanningView: React.FC<WorkItemsMilestonePlanningViewPro
   }, [milestones, sprintMilestoneId]);
 
   useEffect(() => {
+    const bundleId = activeMilestone?.bundleId ? String(activeMilestone.bundleId) : '';
+    const userId = String(currentUser?._id || currentUser?.id || currentUser?.userId || '');
+    if (!bundleId || !userId) {
+      setIsBundleOwner(false);
+      return;
+    }
+    let isMounted = true;
+    const loadOwners = async () => {
+      try {
+        const res = await fetch(`/api/bundle-assignments?bundleId=${encodeURIComponent(bundleId)}&type=bundle_owner&active=true`);
+        if (!res.ok) {
+          if (isMounted) setIsBundleOwner(false);
+          return;
+        }
+        const data = await res.json();
+        const owners = Array.isArray(data) ? data : [];
+        const match = owners.some((entry: any) => String(entry.userId || entry?.user?._id || '') === userId);
+        if (isMounted) setIsBundleOwner(match);
+      } catch {
+        if (isMounted) setIsBundleOwner(false);
+      }
+    };
+    loadOwners();
+    return () => { isMounted = false; };
+  }, [activeMilestone?.bundleId, currentUser]);
+
+  useEffect(() => {
     if (!sprintMilestoneId || sprintMilestoneId === 'all') return;
     const loadSuggestions = async () => {
       try {
@@ -425,6 +467,41 @@ const WorkItemsMilestonePlanningView: React.FC<WorkItemsMilestonePlanningViewPro
       }
     };
     loadSuggestions();
+  }, [sprintMilestoneId]);
+
+  useEffect(() => {
+    if (!sprintMilestoneId || sprintMilestoneId === 'all') {
+      setDecisions([]);
+      return;
+    }
+    let isMounted = true;
+    const loadDecisions = async () => {
+      setDecisionsLoading(true);
+      setDecisionsError(null);
+      try {
+        const res = await fetch(`/api/decisions?scopeType=MILESTONE&scopeId=${encodeURIComponent(sprintMilestoneId)}&limit=10`);
+        if (!res.ok) {
+          if (isMounted) {
+            setDecisions([]);
+            setDecisionsError('Failed to load decisions.');
+          }
+          return;
+        }
+        const data = await res.json();
+        if (isMounted) {
+          setDecisions(Array.isArray(data?.items) ? data.items : []);
+        }
+      } catch {
+        if (isMounted) {
+          setDecisions([]);
+          setDecisionsError('Failed to load decisions.');
+        }
+      } finally {
+        if (isMounted) setDecisionsLoading(false);
+      }
+    };
+    loadDecisions();
+    return () => { isMounted = false; };
   }, [sprintMilestoneId]);
 
   useEffect(() => {
@@ -1103,6 +1180,72 @@ const WorkItemsMilestonePlanningView: React.FC<WorkItemsMilestonePlanningViewPro
   const staleTotal = staleness.staleCount || 0;
   const criticalStale = staleness.criticalStaleCount || 0;
   const driftBand = commitDrift?.driftBand || 'NONE';
+  const canAddDecision = isAdminCmoRole(currentUser?.role) || isBundleOwner;
+
+  const decisionSeverityClass = (severity: string) => {
+    switch (String(severity || '').toLowerCase()) {
+      case 'critical':
+        return 'bg-rose-50 text-rose-700';
+      case 'warn':
+        return 'bg-amber-50 text-amber-700';
+      default:
+        return 'bg-slate-100 text-slate-500';
+    }
+  };
+
+  const handleSaveDecision = async () => {
+    if (!activeMilestone || sprintMilestoneId === 'all') return;
+    const title = decisionDraft.title.trim();
+    const rationale = decisionDraft.rationale.trim();
+    if (!title || !rationale) {
+      setDecisionError('Title and rationale are required.');
+      return;
+    }
+    setDecisionSaving(true);
+    setDecisionError(null);
+    try {
+      const res = await fetch('/api/decisions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          scopeType: 'MILESTONE',
+          scopeId: String(activeMilestone._id || activeMilestone.id || sprintMilestoneId),
+          decisionType: decisionDraft.decisionType,
+          title,
+          rationale,
+          alternatives: decisionDraft.alternatives?.trim() || undefined,
+          outcome: decisionDraft.outcome,
+          severity: decisionDraft.severity,
+          related: {
+            milestoneId: String(activeMilestone._id || activeMilestone.id || sprintMilestoneId),
+            bundleId: activeMilestone.bundleId ? String(activeMilestone.bundleId) : undefined
+          }
+        })
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setDecisionError(data?.error || 'Failed to save decision.');
+        return;
+      }
+      const data = await res.json();
+      if (data?.decision) {
+        setDecisions((prev) => [data.decision, ...prev].slice(0, 10));
+      }
+      setDecisionDraft({
+        decisionType: 'OTHER',
+        outcome: 'ACKNOWLEDGED',
+        severity: 'info',
+        title: '',
+        rationale: '',
+        alternatives: ''
+      });
+      setShowDecisionForm(false);
+    } catch {
+      setDecisionError('Failed to save decision.');
+    } finally {
+      setDecisionSaving(false);
+    }
+  };
 
   return (
     <DndContext sensors={sensors} onDragStart={(e) => setDraggedItem(e.active.data.current?.item)} onDragEnd={handleDragEnd}>
@@ -1883,10 +2026,134 @@ const WorkItemsMilestonePlanningView: React.FC<WorkItemsMilestonePlanningViewPro
                   </ul>
                 </div>
               )}
-              {!briefLoading && !brief && !briefError && (
-                <div className="text-sm text-slate-400">No brief available.</div>
+            {!briefLoading && !brief && !briefError && (
+              <div className="text-sm text-slate-400">No brief available.</div>
+            )}
+          </div>
+          <div className="mt-4 p-4 bg-white border border-slate-100 rounded-2xl">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Decisions</div>
+                <div className="text-xs text-slate-500">Key overrides and approvals for this milestone.</div>
+              </div>
+              {canAddDecision && (
+                <button
+                  onClick={() => { setShowDecisionForm((prev) => !prev); setDecisionError(null); }}
+                  className="px-3 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg bg-slate-900 text-white hover:bg-blue-600"
+                >
+                  {showDecisionForm ? 'Close' : 'Add decision'}
+                </button>
               )}
             </div>
+            {showDecisionForm && (
+              <div className="mb-4 space-y-2">
+                <input
+                  value={decisionDraft.title}
+                  onChange={(e) => setDecisionDraft((prev) => ({ ...prev, title: e.target.value }))}
+                  placeholder="Decision title"
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200"
+                />
+                <textarea
+                  value={decisionDraft.rationale}
+                  onChange={(e) => setDecisionDraft((prev) => ({ ...prev, rationale: e.target.value }))}
+                  placeholder="Rationale"
+                  rows={3}
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200"
+                />
+                <textarea
+                  value={decisionDraft.alternatives}
+                  onChange={(e) => setDecisionDraft((prev) => ({ ...prev, alternatives: e.target.value }))}
+                  placeholder="Alternatives (optional)"
+                  rows={2}
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200"
+                />
+                <div className="grid grid-cols-3 gap-2">
+                  <select
+                    value={decisionDraft.decisionType}
+                    onChange={(e) => setDecisionDraft((prev) => ({ ...prev, decisionType: e.target.value }))}
+                    className="px-2 py-2 text-xs rounded-lg border border-slate-200 bg-white"
+                  >
+                    {[
+                      'COMMIT_OVERRIDE',
+                      'READINESS_OVERRIDE',
+                      'CAPACITY_OVERRIDE',
+                      'SCOPE_APPROVAL',
+                      'RISK_ACCEPTED',
+                      'DATE_SLIP_ACCEPTED',
+                      'OTHER'
+                    ].map((value) => (
+                      <option key={value} value={value}>{value.replace('_', ' ')}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={decisionDraft.outcome}
+                    onChange={(e) => setDecisionDraft((prev) => ({ ...prev, outcome: e.target.value }))}
+                    className="px-2 py-2 text-xs rounded-lg border border-slate-200 bg-white"
+                  >
+                    {['APPROVED', 'REJECTED', 'ACKNOWLEDGED'].map((value) => (
+                      <option key={value} value={value}>{value}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={decisionDraft.severity}
+                    onChange={(e) => setDecisionDraft((prev) => ({ ...prev, severity: e.target.value }))}
+                    className="px-2 py-2 text-xs rounded-lg border border-slate-200 bg-white"
+                  >
+                    {['info', 'warn', 'critical'].map((value) => (
+                      <option key={value} value={value}>{value.toUpperCase()}</option>
+                    ))}
+                  </select>
+                </div>
+                {decisionError && <div className="text-[11px] text-rose-500">{decisionError}</div>}
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleSaveDecision}
+                    disabled={decisionSaving}
+                    className="px-3 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60"
+                  >
+                    {decisionSaving ? 'Saving…' : 'Save'}
+                  </button>
+                  <button
+                    onClick={() => { setShowDecisionForm(false); setDecisionError(null); }}
+                    className="px-3 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+            {decisionsLoading && <div className="text-sm text-slate-400">Loading decisions…</div>}
+            {decisionsError && <div className="text-sm text-rose-500">{decisionsError}</div>}
+            {!decisionsLoading && !decisionsError && (
+              <div className="space-y-2">
+                {(decisions || []).length ? (
+                  decisions.map((entry: any) => (
+                    <div key={entry._id || entry.id} className="border border-slate-100 rounded-xl p-3 bg-slate-50/40">
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="text-xs font-semibold text-slate-700 truncate">{entry.title}</div>
+                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest ${decisionSeverityClass(entry.severity)}`}>
+                          {entry.severity || 'info'}
+                        </span>
+                      </div>
+                      <div className="text-[10px] uppercase tracking-widest text-slate-400">
+                        {String(entry.decisionType || 'OTHER').replace('_', ' ')} • {entry.outcome || 'ACKNOWLEDGED'}
+                      </div>
+                      {entry.rationale && (
+                        <div className="mt-2 text-[11px] text-slate-600">
+                          {String(entry.rationale).length > 140 ? `${String(entry.rationale).slice(0, 140)}…` : entry.rationale}
+                        </div>
+                      )}
+                      <div className="mt-2 text-[10px] text-slate-400">
+                        {entry.createdBy?.name || entry.createdBy?.email || 'Unknown'} • {entry.createdAt ? new Date(entry.createdAt).toLocaleDateString() : '—'}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-sm text-slate-400">No decisions logged yet.</div>
+                )}
+              </div>
+            )}
+          </div>
             </div>
                  );
                }) : (

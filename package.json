@@ -49,6 +49,7 @@
     "test:drift-scheduler": "NODE_ENV=test tsx scripts/test-drift-scheduler.ts",
     "test:baseline-delta": "NODE_ENV=test tsx scripts/test-baseline-delta.ts",
     "test:weekly-brief": "NODE_ENV=test tsx scripts/test-weekly-brief.ts",
+    "test:decisions": "NODE_ENV=test tsx scripts/test-decision-log.ts",
     "test:scope-requests": "NODE_ENV=test tsx scripts/test-scope-requests.ts",
     "test:jira": "NODE_ENV=test tsx scripts/test-jira-mapping.ts",
     "test:feed": "NODE_ENV=test tsx scripts/test-feed.ts",

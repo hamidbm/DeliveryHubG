@@ -15,6 +15,7 @@ const tests = [
   () => import('./test-drift-scheduler').then((m) => m.run()),
   () => import('./test-baseline-delta').then((m) => m.run()),
   () => import('./test-weekly-brief').then((m) => m.run()),
+  () => import('./test-decision-log').then((m) => m.run()),
   () => import('./test-capacity-plan').then((m) => m.run()),
   () => import('./test-program-intel').then((m) => m.run()),
   () => import('./test-rbac-critical-actions').then((m) => m.run()),

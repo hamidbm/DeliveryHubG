@@ -6,6 +6,7 @@ import { getDb, computeMilestoneRollup, ensureScopeChangeRequestIndexes, emitEve
 import { canOverrideCapacity, isAdminOrCmo } from '../../../../../../../services/authz';
 import { evaluateCapacity } from '../../../../../../../services/milestoneGovernance';
 import { createNotificationsForEvent } from '../../../../../../../services/notifications';
+import { createDecision } from '../../../../../../../services/decisionLog';
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
 
@@ -100,6 +101,27 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           payload: { milestone, requester }
         });
       } catch {}
+
+      if (status === 'REJECTED') {
+        try {
+          await createDecision({
+            createdAt: now,
+            createdBy: { userId: user.userId, email: user.email || '', name: user.name },
+            scopeType: 'MILESTONE',
+            scopeId: String(milestone._id || milestone.id || id),
+            decisionType: 'SCOPE_APPROVAL',
+            title: `Scope change rejected for ${milestone.name || milestone.id || id}`,
+            rationale: reason || 'Scope change rejected.',
+            outcome: 'REJECTED',
+            severity: 'warn',
+            related: {
+              milestoneId: String(milestone._id || milestone.id || id),
+              bundleId: milestone.bundleId ? String(milestone.bundleId) : undefined,
+              scopeRequestId: String(scopeRequest._id)
+            }
+          });
+        } catch {}
+      }
 
       return NextResponse.json({ request: { ...scopeRequest, status, decidedBy: user.userId, decidedAt: now, decisionReason: reason } });
     }
@@ -207,6 +229,25 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         type: 'milestone.scope.approved',
         actor,
         payload: { milestone, requester }
+      });
+    } catch {}
+
+    try {
+      await createDecision({
+        createdAt: now,
+        createdBy: { userId: user.userId, email: user.email || '', name: user.name },
+        scopeType: 'MILESTONE',
+        scopeId: String(milestone._id || milestone.id || id),
+        decisionType: 'SCOPE_APPROVAL',
+        title: `Scope change approved for ${milestone.name || milestone.id || id}`,
+        rationale: reason || 'Scope change approved.',
+        outcome: 'APPROVED',
+        severity: 'info',
+        related: {
+          milestoneId: String(milestone._id || milestone.id || id),
+          bundleId: milestone.bundleId ? String(milestone.bundleId) : undefined,
+          scopeRequestId: String(scopeRequest._id)
+        }
       });
     } catch {}
 

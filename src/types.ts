@@ -768,6 +768,37 @@ export interface BaselineDelta {
   topChanges: Array<{ type: 'ADDED' | 'REMOVED' | 'ESTIMATE_CHANGED'; key?: string; title?: string; before?: number; after?: number }>;
 }
 
+export interface DecisionLogEntry {
+  _id?: string;
+  createdAt: string;
+  createdBy: { userId: string; email: string; name?: string };
+  scopeType: 'PROGRAM' | 'BUNDLE' | 'MILESTONE' | 'WORK_ITEM';
+  scopeId?: string;
+  decisionType:
+    | 'COMMIT_OVERRIDE'
+    | 'READINESS_OVERRIDE'
+    | 'CAPACITY_OVERRIDE'
+    | 'SCOPE_APPROVAL'
+    | 'RISK_ACCEPTED'
+    | 'DATE_SLIP_ACCEPTED'
+    | 'OTHER';
+  title: string;
+  rationale: string;
+  alternatives?: string;
+  outcome: 'APPROVED' | 'REJECTED' | 'ACKNOWLEDGED';
+  severity: 'info' | 'warn' | 'critical';
+  related?: {
+    milestoneId?: string;
+    bundleId?: string;
+    workItemIds?: string[];
+    scopeRequestId?: string;
+    commitReviewId?: string;
+    driftSnapshotId?: string;
+    policyRef?: { globalVersion: number; bundleVersions?: any[] };
+  };
+  tags?: string[];
+}
+
 export interface WikiPage { id?: string; _id?: string; slug?: string; title: string; content: string; summary?: string; parentId?: string; spaceId: string; bundleId?: string; applicationId?: string; milestoneId?: string; documentTypeId?: string; createdAt?: string; updatedAt?: string; author?: string; lastModifiedBy?: string; version?: number; status?: 'Draft' | 'Published' | 'Archived'; themeKey?: string; }
 
 export interface WikiAsset {

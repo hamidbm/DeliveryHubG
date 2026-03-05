@@ -100,6 +100,9 @@ const ProgramCoordination: React.FC = () => {
   const [briefLoading, setBriefLoading] = useState(false);
   const [briefError, setBriefError] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<any | null>(null);
+  const [decisions, setDecisions] = useState<any[]>([]);
+  const [decisionsLoading, setDecisionsLoading] = useState(false);
+  const [decisionsError, setDecisionsError] = useState<string | null>(null);
 
   const fetchIntel = async (includeLists = false) => {
     const params = new URLSearchParams();
@@ -212,6 +215,20 @@ const ProgramCoordination: React.FC = () => {
     return `${year}-W${String(week).padStart(2, '0')}`;
   };
 
+  const getWeekRange = (weekKey: string) => {
+    const match = weekKey.match(/^(\d{4})-W(\d{2})$/);
+    if (!match) return null;
+    const year = Number(match[1]);
+    const week = Number(match[2]);
+    if (!Number.isFinite(year) || !Number.isFinite(week)) return null;
+    const jan4 = new Date(Date.UTC(year, 0, 4));
+    const dayNr = (jan4.getUTCDay() + 6) % 7;
+    const weekStart = new Date(Date.UTC(year, 0, 4 - dayNr + (week - 1) * 7));
+    const weekEnd = new Date(weekStart);
+    weekEnd.setUTCDate(weekStart.getUTCDate() + 7);
+    return { start: weekStart.getTime(), end: weekEnd.getTime() };
+  };
+
   const weekOptions = useMemo(() => {
     const now = new Date();
     return Array.from({ length: 4 }).map((_, idx) => {
@@ -246,6 +263,39 @@ const ProgramCoordination: React.FC = () => {
       }
     };
     loadBrief();
+  }, [briefWeek]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadDecisions = async () => {
+      setDecisionsLoading(true);
+      setDecisionsError(null);
+      try {
+        const res = await fetch('/api/decisions?scopeType=PROGRAM&limit=30');
+        if (!res.ok) {
+          if (isMounted) setDecisionsError('Failed to load decisions.');
+          return;
+        }
+        const data = await res.json();
+        let items = Array.isArray(data?.items) ? data.items : [];
+        if (briefWeek) {
+          const range = getWeekRange(briefWeek);
+          if (range) {
+            items = items.filter((entry: any) => {
+              const ts = entry?.createdAt ? new Date(entry.createdAt).getTime() : 0;
+              return ts >= range.start && ts < range.end;
+            });
+          }
+        }
+        if (isMounted) setDecisions(items.slice(0, 10));
+      } catch {
+        if (isMounted) setDecisionsError('Failed to load decisions.');
+      } finally {
+        if (isMounted) setDecisionsLoading(false);
+      }
+    };
+    loadDecisions();
+    return () => { isMounted = false; };
   }, [briefWeek]);
 
   useEffect(() => {
@@ -474,6 +524,17 @@ const ProgramCoordination: React.FC = () => {
     });
   };
 
+  const decisionSeverityClass = (severity: string) => {
+    switch (String(severity || '').toLowerCase()) {
+      case 'critical':
+        return 'bg-rose-50 text-rose-700';
+      case 'warn':
+        return 'bg-amber-50 text-amber-700';
+      default:
+        return 'bg-slate-100 text-slate-500';
+    }
+  };
+
   const summaryCards = useMemo(() => ([
     { label: 'Bundles', value: summary?.bundles ?? 0 },
     { label: 'Milestones', value: summary?.milestones ?? 0 },
@@ -577,6 +638,51 @@ const ProgramCoordination: React.FC = () => {
             )}
             {!briefLoading && !brief && !briefError && (
               <div className="text-sm text-slate-400">No brief available.</div>
+            )}
+          </div>
+
+          <div className="bg-white border border-slate-100 rounded-[2rem] p-6 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-sm font-black uppercase tracking-widest text-slate-500">Key Decisions This Week</h3>
+                <p className="text-xs text-slate-400 mt-1">Overrides and approvals recorded for the program.</p>
+              </div>
+              {briefWeek && (
+                <span className="px-2 py-1 rounded-full text-[9px] font-black uppercase tracking-widest bg-slate-100 text-slate-500">
+                  {briefWeek}
+                </span>
+              )}
+            </div>
+            {decisionsLoading && <div className="text-sm text-slate-400">Loading decisions…</div>}
+            {decisionsError && <div className="text-sm text-rose-500">{decisionsError}</div>}
+            {!decisionsLoading && !decisionsError && (
+              <div className="space-y-2">
+                {(decisions || []).length ? (
+                  decisions.map((entry: any) => (
+                    <div key={entry._id || entry.id} className="border border-slate-100 rounded-xl p-3 bg-slate-50/40">
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="text-sm font-semibold text-slate-700 truncate">{entry.title}</div>
+                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest ${decisionSeverityClass(entry.severity)}`}>
+                          {entry.severity || 'info'}
+                        </span>
+                      </div>
+                      <div className="text-[10px] uppercase tracking-widest text-slate-400">
+                        {String(entry.decisionType || 'OTHER').replace('_', ' ')} • {entry.outcome || 'ACKNOWLEDGED'}
+                      </div>
+                      {entry.rationale && (
+                        <div className="mt-2 text-xs text-slate-600">
+                          {String(entry.rationale).length > 160 ? `${String(entry.rationale).slice(0, 160)}…` : entry.rationale}
+                        </div>
+                      )}
+                      <div className="mt-2 text-[10px] text-slate-400">
+                        {entry.createdBy?.name || entry.createdBy?.email || 'Unknown'} • {entry.createdAt ? new Date(entry.createdAt).toLocaleDateString() : '—'}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-sm text-slate-400">No decisions recorded yet.</div>
+                )}
+              </div>
             )}
           </div>
 

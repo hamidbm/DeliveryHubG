@@ -11,6 +11,7 @@ import { createNotificationsForEvent } from '../../../../services/notifications'
 import { resolveMilestoneBundleScope } from '../../../../services/ownership';
 import { evaluateMilestoneCommitReview } from '../../../../services/commitmentReview';
 import { ensureMilestoneBaseline } from '../../../../services/baselineDelta';
+import { createDecision } from '../../../../services/decisionLog';
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
 
@@ -166,6 +167,27 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
               readiness
             }
           });
+          try {
+            await createDecision({
+              createdAt: now,
+              createdBy: {
+                userId: String((payload as any).id || (payload as any).userId || ''),
+                email: (payload as any).email ? String((payload as any).email) : '',
+                name: (payload as any).name ? String((payload as any).name) : undefined
+              },
+              scopeType: 'MILESTONE',
+              scopeId: String(existing._id || existing.id || id),
+              decisionType: 'READINESS_OVERRIDE',
+              title: `Readiness override for ${existing.name || existing.id || id}`,
+              rationale: overrideReason,
+              outcome: 'APPROVED',
+              severity: 'warn',
+              related: {
+                milestoneId: String(existing._id || existing.id || id),
+                bundleId: existing.bundleId ? String(existing.bundleId) : undefined
+              }
+            });
+          } catch {}
         }
       } catch {}
 

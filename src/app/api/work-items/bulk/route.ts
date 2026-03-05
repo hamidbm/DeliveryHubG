@@ -6,6 +6,7 @@ import { jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
 import { evaluateCapacity } from '../../../../services/milestoneGovernance';
 import { createNotificationsForEvent } from '../../../../services/notifications';
+import { createDecision } from '../../../../services/decisionLog';
 import { canOverrideCapacity, canCreateBlocksDependency, isAdminOrCmo, canEditRiskSeverity } from '../../../../services/authz';
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
@@ -332,6 +333,22 @@ export async function PATCH(request: Request) {
               milestone: entry.milestone,
               item: entry.item,
               details: entry.details
+            }
+          });
+          await createDecision({
+            createdAt: now,
+            createdBy: { userId: actor.userId || '', email: actor.email || '', name: actor.displayName },
+            scopeType: 'MILESTONE',
+            scopeId: String(entry.milestone?._id || entry.milestone?.id || entry.milestone?.name || entry.details?.milestoneId || ''),
+            decisionType: 'CAPACITY_OVERRIDE',
+            title: `Capacity override for ${entry.milestone?.name || entry.details?.milestoneId || 'milestone'}`,
+            rationale: `Capacity override accepted for ${entry.item?.key || entry.item?.title || 'work item'}.`,
+            outcome: 'APPROVED',
+            severity: 'warn',
+            related: {
+              milestoneId: String(entry.milestone?._id || entry.milestone?.id || entry.milestone?.name || entry.details?.milestoneId || ''),
+              bundleId: entry.milestone?.bundleId ? String(entry.milestone.bundleId) : undefined,
+              workItemIds: [String(entry.item?._id || entry.item?.id || '')].filter(Boolean)
             }
           });
         } catch {}

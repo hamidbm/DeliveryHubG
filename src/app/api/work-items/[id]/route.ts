@@ -7,6 +7,7 @@ import { ObjectId } from 'mongodb';
 import { evaluateCapacity } from '../../../../services/milestoneGovernance';
 import { canCreateBlocksDependency, canEditRiskSeverity, canOverrideCapacity, canRemoveBlocksDependency, isAdminOrCmo } from '../../../../services/authz';
 import { createNotificationsForEvent } from '../../../../services/notifications';
+import { createDecision } from '../../../../services/decisionLog';
 import { createVisibilityContext, getAuthUserFromCookies } from '../../../../services/visibility';
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
@@ -394,6 +395,22 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
               milestone: entry.milestone,
               item: { ...originalItem, ...itemData },
               details: entry.details
+            }
+          });
+          await createDecision({
+            createdAt: new Date().toISOString(),
+            createdBy: { userId: actor.userId || '', email: actor.email || '', name: actor.displayName },
+            scopeType: 'MILESTONE',
+            scopeId: String(entry.milestone?._id || entry.milestone?.id || entry.milestone?.name || entry.details?.milestoneId || ''),
+            decisionType: 'CAPACITY_OVERRIDE',
+            title: `Capacity override for ${entry.milestone?.name || entry.details?.milestoneId || 'milestone'}`,
+            rationale: `Capacity override accepted for ${originalItem.key || originalItem.title || 'work item'}.`,
+            outcome: 'APPROVED',
+            severity: 'warn',
+            related: {
+              milestoneId: String(entry.milestone?._id || entry.milestone?.id || entry.milestone?.name || entry.details?.milestoneId || ''),
+              bundleId: entry.milestone?.bundleId ? String(entry.milestone.bundleId) : undefined,
+              workItemIds: [String(originalItem._id || originalItem.id || '')].filter(Boolean)
             }
           });
         } catch {}

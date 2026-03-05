@@ -21,6 +21,7 @@ type WeeklyBrief = {
     capacity?: { overcommitMax?: number; drivers?: string[] };
     blockers?: { top?: Array<{ key: string; title: string; owner?: string }> };
     actions?: { top?: Array<{ text: string; owner?: string; link?: string }> };
+    decisions?: { top?: Array<{ title: string; outcome: string; severity: string }> };
   };
   links: Array<{ label: string; href: string }>;
 };
@@ -53,6 +54,44 @@ const getWeekKey = (date = new Date()) => {
   const week = 1 + Math.round(diff / (7 * 24 * 60 * 60 * 1000));
   const year = target.getUTCFullYear();
   return `${year}-W${String(week).padStart(2, '0')}`;
+};
+
+const weekKeyToRange = (weekKey: string) => {
+  const match = /^(\d{4})-W(\d{2})$/.exec(weekKey);
+  if (!match) {
+    const now = new Date();
+    return { start: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000), end: now };
+  }
+  const year = Number(match[1]);
+  const week = Number(match[2]);
+  const simple = new Date(Date.UTC(year, 0, 1 + (week - 1) * 7));
+  const day = simple.getUTCDay();
+  const start = new Date(simple);
+  if (day <= 4) {
+    start.setUTCDate(simple.getUTCDate() - simple.getUTCDay() + 1);
+  } else {
+    start.setUTCDate(simple.getUTCDate() + 8 - simple.getUTCDay());
+  }
+  const end = new Date(start.getTime() + 7 * 24 * 60 * 60 * 1000);
+  return { start, end };
+};
+
+const fetchDecisionsForScope = async (scopeType: WeeklyBrief['scopeType'], scopeId: string | undefined, weekKey: string) => {
+  const db = await getDb();
+  const { start, end } = weekKeyToRange(weekKey);
+  const query: any = {
+    scopeType,
+    createdAt: { $gte: start.toISOString(), $lt: end.toISOString() }
+  };
+  if (scopeType !== 'PROGRAM') {
+    query.scopeId = scopeId || null;
+  }
+  const items = await db.collection('decision_log').find(query).sort({ createdAt: -1 }).limit(5).toArray();
+  return items.map((d: any) => ({
+    title: d.title,
+    outcome: d.outcome,
+    severity: d.severity
+  }));
 };
 
 const bandFromSignals = (inputs: { hasMajor?: boolean; hasMinor?: boolean; hitProbability?: number; p80PastEnd?: boolean }) => {
@@ -148,6 +187,10 @@ export const generateMilestoneBrief = async (
   if (delta?.estimateChanges?.pointsDelta) {
     bullets.push(`Estimates changed by ${delta.estimateChanges.pointsDelta > 0 ? '+' : ''}${delta.estimateChanges.pointsDelta} pts`);
   }
+  const decisions = await fetchDecisionsForScope('MILESTONE', String(milestone._id || milestone.id || milestone.name || milestoneId), weekKey);
+  if (decisions.length) {
+    bullets.push(`Decisions logged: ${decisions.length}`);
+  }
 
   const actions: WeeklyBrief['sections']['actions'] = {
     top: []
@@ -186,7 +229,8 @@ export const generateMilestoneBrief = async (
           : undefined
       } : undefined,
       blockers: { top: blockers },
-      actions
+      actions,
+      decisions: { top: decisions }
     },
     links: [
       { label: 'Milestone Plan', href: `/work-items?view=milestone-plan&milestoneId=${encodeURIComponent(String(milestone._id || milestone.id || milestone.name))}` },
@@ -234,6 +278,10 @@ export const generateBundleBrief = async (
     `${major.length} major drift / ${minor.length} minor drift milestones`,
     `Net scope change ${netScopeDelta > 0 ? '+' : ''}${Math.round(netScopeDelta)} pts (top 10 milestones)`
   ];
+  const decisions = await fetchDecisionsForScope('BUNDLE', String(bundleId), weekKey);
+  if (decisions.length) {
+    bullets.push(`Decisions logged: ${decisions.length}`);
+  }
 
   const capacity = await computeBundleCapacityPlans([String(bundleId)], 8);
   const plan = capacity.bundlePlans?.[0];
@@ -252,7 +300,8 @@ export const generateBundleBrief = async (
     },
     sections: {
       scope: { netDeltaPoints: Number(netScopeDelta.toFixed(2)) },
-      capacity: { overcommitMax }
+      capacity: { overcommitMax },
+      decisions: { top: decisions }
     },
     links: [
       { label: 'Bundle Profile', href: `/applications/bundles/${encodeURIComponent(String(bundleId))}` },
@@ -297,6 +346,10 @@ export const generateProgramBrief = async (
     `${rollups.length} active milestones tracked`,
     `${bundleIds.length} bundles in scope`
   ];
+  const decisions = await fetchDecisionsForScope('PROGRAM', 'program', weekKey);
+  if (decisions.length) {
+    bullets.push(`Decisions logged: ${decisions.length}`);
+  }
 
   return {
     scopeType: 'PROGRAM',
@@ -309,7 +362,7 @@ export const generateProgramBrief = async (
       band,
       bullets
     },
-    sections: {},
+    sections: { decisions: { top: decisions } },
     links: [
       { label: 'Program', href: '/program' },
       { label: 'Roadmap', href: '/?tab=work-items&view=roadmap' }

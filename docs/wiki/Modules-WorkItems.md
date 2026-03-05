@@ -70,6 +70,7 @@ Each item can have a parent and children to form a delivery hierarchy.
 - Commitment Drift panel showing baseline + deltas and “Run re-review”
 - Baseline & Scope Delta panel (added/removed/estimate changes since commit)
 - Weekly Executive Brief panel (deterministic narrative for the milestone)
+- Decisions panel (manual log + auto entries from overrides)
 - Readiness gates (canStart/canComplete) with override + reason
 - Sprint view for a milestone (sprint rollups tied to milestone scope)
 - Burn-up table by sprint with cumulative and remaining points
@@ -209,6 +210,7 @@ Supported AI workflows:
 - User notification prefs in `notification_user_prefs`
 - Digest queue in `notification_digest_queue`
 - Watchers stored in `notification_watchers`
+- Decision log stored in `decision_log`
 
 ## Key APIs
 - `GET /api/work-items`, `PATCH /api/work-items/:id`, `POST /api/work-items/bulk`
@@ -216,6 +218,7 @@ Supported AI workflows:
 - `GET /api/work-items/roadmap-intel`, `GET /api/work-items/roadmap-intel/lists`
 - `GET /api/milestones/rollups`, `PATCH /api/milestones/:id`
 - `GET /api/program/intel`
+- `GET /api/decisions`, `POST /api/decisions`
 - `GET /api/admin/events`, `GET /api/admin/notifications`
 - `GET/PUT /api/admin/notification-settings`
 - `GET/PUT /api/user/notification-prefs`
