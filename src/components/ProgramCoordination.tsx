@@ -95,6 +95,11 @@ const ProgramCoordination: React.FC = () => {
   const [horizonWeeks, setHorizonWeeks] = useState(8);
   const [driftList, setDriftList] = useState<any[]>([]);
   const [driftLoading, setDriftLoading] = useState(false);
+  const [briefWeek, setBriefWeek] = useState('');
+  const [brief, setBrief] = useState<any | null>(null);
+  const [briefLoading, setBriefLoading] = useState(false);
+  const [briefError, setBriefError] = useState<string | null>(null);
+  const [currentUser, setCurrentUser] = useState<any | null>(null);
 
   const fetchIntel = async (includeLists = false) => {
     const params = new URLSearchParams();
@@ -194,6 +199,69 @@ const ProgramCoordination: React.FC = () => {
       params.set('panel', next);
     }
     router.push(`/program?${params.toString()}`);
+  };
+
+  const getWeekKey = (date: Date) => {
+    const target = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+    const dayNr = (target.getUTCDay() + 6) % 7;
+    target.setUTCDate(target.getUTCDate() - dayNr + 3);
+    const firstThursday = new Date(Date.UTC(target.getUTCFullYear(), 0, 4));
+    const diff = target.getTime() - firstThursday.getTime();
+    const week = 1 + Math.round(diff / (7 * 24 * 60 * 60 * 1000));
+    const year = target.getUTCFullYear();
+    return `${year}-W${String(week).padStart(2, '0')}`;
+  };
+
+  const weekOptions = useMemo(() => {
+    const now = new Date();
+    return Array.from({ length: 4 }).map((_, idx) => {
+      const date = new Date(now.getTime() - idx * 7 * 24 * 60 * 60 * 1000);
+      return getWeekKey(date);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!briefWeek && weekOptions.length) setBriefWeek(weekOptions[0]);
+  }, [briefWeek, weekOptions]);
+
+  useEffect(() => {
+    const loadBrief = async () => {
+      if (!briefWeek) return;
+      setBriefLoading(true);
+      setBriefError(null);
+      try {
+        const res = await fetch(`/api/briefs/weekly?scopeType=PROGRAM&weekKey=${encodeURIComponent(briefWeek)}`);
+        if (!res.ok) {
+          setBriefError('Failed to load brief.');
+          setBrief(null);
+          return;
+        }
+        const data = await res.json();
+        setBrief(data?.brief || null);
+      } catch {
+        setBriefError('Failed to load brief.');
+        setBrief(null);
+      } finally {
+        setBriefLoading(false);
+      }
+    };
+    loadBrief();
+  }, [briefWeek]);
+
+  useEffect(() => {
+    fetch('/api/auth/me')
+      .then((r) => r.json())
+      .then((data) => setCurrentUser(data?.user || null))
+      .catch(() => setCurrentUser(null));
+  }, []);
+
+  const isAdminCmoRole = (role?: string) => {
+    const roleName = String(role || '');
+    if (!roleName) return false;
+    const lower = roleName.toLowerCase();
+    if (lower.includes('admin')) return true;
+    if (lower.includes('cmo')) return true;
+    return false;
   };
 
   const fetchCapacity = async () => {
@@ -449,6 +517,67 @@ const ProgramCoordination: React.FC = () => {
                 <p className="text-2xl font-black text-slate-900">{card.value}</p>
               </div>
             ))}
+          </div>
+
+          <div className="bg-white border border-slate-100 rounded-[2rem] p-6 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-sm font-black uppercase tracking-widest text-slate-500">Weekly Executive Brief</h3>
+                <p className="text-xs text-slate-400 mt-1">Program-level narrative and key drivers.</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <select
+                  value={briefWeek}
+                  onChange={(e) => setBriefWeek(e.target.value)}
+                  className="px-3 py-2 text-xs rounded-lg border border-slate-200 bg-white"
+                >
+                  {weekOptions.map((wk) => (
+                    <option key={wk} value={wk}>{wk}</option>
+                  ))}
+                </select>
+                {isAdminCmoRole(currentUser?.role) && (
+                  <button
+                    onClick={async () => {
+                      if (!briefWeek) return;
+                      setBriefLoading(true);
+                      try {
+                        const res = await fetch(`/api/briefs/weekly?scopeType=PROGRAM&weekKey=${encodeURIComponent(briefWeek)}&force=true`);
+                        const data = await res.json();
+                        setBrief(data?.brief || null);
+                      } catch {}
+                      setBriefLoading(false);
+                    }}
+                    className="px-3 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg bg-slate-900 text-white hover:bg-blue-600"
+                  >
+                    Regenerate
+                  </button>
+                )}
+              </div>
+            </div>
+            {briefLoading && <div className="text-sm text-slate-400">Generating brief…</div>}
+            {briefError && <div className="text-sm text-rose-500">{briefError}</div>}
+            {!briefLoading && brief && (
+              <div className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <span className={`px-2 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${
+                    brief.summary?.band === 'RED' ? 'bg-rose-50 text-rose-700' :
+                    brief.summary?.band === 'YELLOW' ? 'bg-amber-50 text-amber-700' :
+                    'bg-emerald-50 text-emerald-700'
+                  }`}>
+                    {brief.summary?.band || 'GREEN'}
+                  </span>
+                  <div className="text-sm font-semibold text-slate-700">{brief.summary?.headline}</div>
+                </div>
+                <ul className="list-disc pl-5 text-sm text-slate-600">
+                  {(brief.summary?.bullets || []).map((b: string, idx: number) => (
+                    <li key={`${b}-${idx}`}>{b}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {!briefLoading && !brief && !briefError && (
+              <div className="text-sm text-slate-400">No brief available.</div>
+            )}
           </div>
 
           <div className="bg-white border border-slate-100 rounded-[2rem] p-6 shadow-sm">

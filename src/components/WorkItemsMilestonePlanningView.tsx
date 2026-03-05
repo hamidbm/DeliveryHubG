@@ -272,6 +272,10 @@ const WorkItemsMilestonePlanningView: React.FC<WorkItemsMilestonePlanningViewPro
   const [commitDriftLoading, setCommitDriftLoading] = useState(false);
   const [baselineDelta, setBaselineDelta] = useState<any | null>(null);
   const [baselineDeltaLoading, setBaselineDeltaLoading] = useState(false);
+  const [briefWeek, setBriefWeek] = useState('');
+  const [brief, setBrief] = useState<any | null>(null);
+  const [briefLoading, setBriefLoading] = useState(false);
+  const [briefError, setBriefError] = useState<string | null>(null);
   const [readinessPrompt, setReadinessPrompt] = useState<{
     milestoneId: string;
     nextStatus: string;
@@ -642,6 +646,56 @@ const WorkItemsMilestonePlanningView: React.FC<WorkItemsMilestonePlanningViewPro
     };
     loadBaselineDelta();
   }, [sprintMilestoneId]);
+
+  const getWeekKey = (date: Date) => {
+    const target = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+    const dayNr = (target.getUTCDay() + 6) % 7;
+    target.setUTCDate(target.getUTCDate() - dayNr + 3);
+    const firstThursday = new Date(Date.UTC(target.getUTCFullYear(), 0, 4));
+    const diff = target.getTime() - firstThursday.getTime();
+    const week = 1 + Math.round(diff / (7 * 24 * 60 * 60 * 1000));
+    const year = target.getUTCFullYear();
+    return `${year}-W${String(week).padStart(2, '0')}`;
+  };
+
+  const briefWeekOptions = useMemo(() => {
+    const now = new Date();
+    return Array.from({ length: 4 }).map((_, idx) => {
+      const date = new Date(now.getTime() - idx * 7 * 24 * 60 * 60 * 1000);
+      return getWeekKey(date);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!briefWeek && briefWeekOptions.length) setBriefWeek(briefWeekOptions[0]);
+  }, [briefWeek, briefWeekOptions]);
+
+  useEffect(() => {
+    const loadBrief = async () => {
+      if (!sprintMilestoneId || sprintMilestoneId === 'all' || !briefWeek) {
+        setBrief(null);
+        return;
+      }
+      setBriefLoading(true);
+      setBriefError(null);
+      try {
+        const res = await fetch(`/api/briefs/weekly?scopeType=MILESTONE&scopeId=${encodeURIComponent(sprintMilestoneId)}&weekKey=${encodeURIComponent(briefWeek)}`);
+        if (!res.ok) {
+          setBriefError('Failed to load brief.');
+          setBrief(null);
+          return;
+        }
+        const data = await res.json();
+        setBrief(data?.brief || null);
+      } catch {
+        setBriefError('Failed to load brief.');
+        setBrief(null);
+      } finally {
+        setBriefLoading(false);
+      }
+    };
+    loadBrief();
+  }, [sprintMilestoneId, briefWeek]);
 
   const isPrivilegedRole = (role?: string) => {
     const roleName = String(role || '');
@@ -1773,6 +1827,66 @@ const WorkItemsMilestonePlanningView: React.FC<WorkItemsMilestonePlanningViewPro
                 </div>
               </div>
             )}
+            <div className="mt-4 p-4 bg-white border border-slate-100 rounded-2xl">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Weekly Brief</div>
+                  <div className="text-xs text-slate-500">Milestone-level narrative for leadership.</div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={briefWeek}
+                    onChange={(e) => setBriefWeek(e.target.value)}
+                    className="px-3 py-2 text-xs rounded-lg border border-slate-200 bg-white"
+                  >
+                    {briefWeekOptions.map((wk) => (
+                      <option key={wk} value={wk}>{wk}</option>
+                    ))}
+                  </select>
+                  {isAdminCmoRole(currentUser?.role) && (
+                    <button
+                      onClick={async () => {
+                        if (!sprintMilestoneId || sprintMilestoneId === 'all' || !briefWeek) return;
+                        setBriefLoading(true);
+                        try {
+                          const res = await fetch(`/api/briefs/weekly?scopeType=MILESTONE&scopeId=${encodeURIComponent(sprintMilestoneId)}&weekKey=${encodeURIComponent(briefWeek)}&force=true`);
+                          const data = await res.json();
+                          setBrief(data?.brief || null);
+                        } catch {}
+                        setBriefLoading(false);
+                      }}
+                      className="px-3 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg bg-slate-900 text-white hover:bg-blue-600"
+                    >
+                      Regenerate
+                    </button>
+                  )}
+                </div>
+              </div>
+              {briefLoading && <div className="text-sm text-slate-400">Generating brief…</div>}
+              {briefError && <div className="text-sm text-rose-500">{briefError}</div>}
+              {!briefLoading && brief && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-3">
+                    <span className={`px-2 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${
+                      brief.summary?.band === 'RED' ? 'bg-rose-50 text-rose-700' :
+                      brief.summary?.band === 'YELLOW' ? 'bg-amber-50 text-amber-700' :
+                      'bg-emerald-50 text-emerald-700'
+                    }`}>
+                      {brief.summary?.band || 'GREEN'}
+                    </span>
+                    <div className="text-sm font-semibold text-slate-700">{brief.summary?.headline}</div>
+                  </div>
+                  <ul className="list-disc pl-5 text-sm text-slate-600">
+                    {(brief.summary?.bullets || []).map((b: string, idx: number) => (
+                      <li key={`${b}-${idx}`}>{b}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {!briefLoading && !brief && !briefError && (
+                <div className="text-sm text-slate-400">No brief available.</div>
+              )}
+            </div>
             </div>
                  );
                }) : (

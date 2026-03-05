@@ -552,3 +552,10 @@ Top-level fields:
 
 Observed indexes:
 - `{ _id: 1 }`
+
+### `weekly_briefs`
+Top-level fields:
+- `_id`, `scopeType`, `scopeId`, `weekKey`, `generatedAt`, `generatedBy`, `summary`, `sections`, `links`
+
+Observed indexes:
+- `{ scopeType: 1, scopeId: 1, weekKey: 1 }` (unique)

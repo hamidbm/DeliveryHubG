@@ -7,6 +7,8 @@ const aliasMap: Record<string, string> = {
 
 const categoryRules: Array<{ prefix: RegExp; category: EventCategory }> = [
   { prefix: /^milestones\.milestone\./, category: 'governance' },
+  { prefix: /^milestones\.commitdrift\./, category: 'governance' },
+  { prefix: /^milestones\.baseline\./, category: 'scope' },
   { prefix: /^sprints\.sprint\./, category: 'governance' },
   { prefix: /^milestones\.scope\./, category: 'scope' },
   { prefix: /^dependency\./, category: 'dependency' },

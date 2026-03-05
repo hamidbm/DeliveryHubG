@@ -69,6 +69,7 @@ Each item can have a parent and children to form a delivery hierarchy.
 - Commitment Review gate for COMMITTED milestones (Monte Carlo + capacity + quality)
 - Commitment Drift panel showing baseline + deltas and “Run re-review”
 - Baseline & Scope Delta panel (added/removed/estimate changes since commit)
+- Weekly Executive Brief panel (deterministic narrative for the milestone)
 - Readiness gates (canStart/canComplete) with override + reason
 - Sprint view for a milestone (sprint rollups tied to milestone scope)
 - Burn-up table by sprint with cumulative and remaining points

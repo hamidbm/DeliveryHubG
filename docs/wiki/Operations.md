@@ -43,6 +43,7 @@ CLI helpers:
 - `COHERE_API_KEY`
 - `DIGEST_CRON_SECRET`
 - `COMMIT_DRIFT_CRON_SECRET`
+- `WEEKLY_BRIEF_CRON_SECRET`
 - `ADMIN_EXPORT_SECRET`
 
 ## Digest Automation
@@ -74,6 +75,16 @@ Recommended cadence:
 UI behavior:
 - Roadmap/Program surfaces use cached drift snapshots.
 - If a snapshot is missing or stale, the UI shows “Drift unknown” with a manual refresh.
+
+## Weekly Brief Scheduler
+Weekly executive briefs can be generated via cron:
+
+- `POST /api/admin/briefs/weekly/run`
+- Header: `X-Cron-Secret: <WEEKLY_BRIEF_CRON_SECRET>`
+- Optional query: `weekKey=YYYY-WW`, `includeMilestones=true`, `force=true`
+
+Recommended cadence:
+- Weekly (Monday morning), optionally daily during heavy change windows.
 
 ## Backup & Restore (Admin/CMO)
 DeliveryHub supports export/import of configuration and planning metadata to promote between environments.

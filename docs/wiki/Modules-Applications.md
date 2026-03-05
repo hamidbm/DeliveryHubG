@@ -14,6 +14,7 @@ The Applications module is the portfolio inventory for systems and services, wit
 - Ownership and executive accountability (driven by Admin → Bundle Assignments)
 - Milestone status rollups
 - Recent activity feed for bundle-scoped governance, scope, and dependency changes
+- Weekly Executive Brief card (bundle-level narrative and drivers)
 - Risks & Dependencies tab (read-only summary from Work Items)
   - Open risks count
   - High severity risks
