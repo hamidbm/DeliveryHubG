@@ -6,6 +6,7 @@ import { cookies } from 'next/headers';
 import { jwtVerify } from 'jose';
 import { createVisibilityContext, getAuthUserFromCookies } from '../../../../services/visibility';
 import { getEffectivePolicyForMilestone } from '../../../../services/policy';
+import { snapshotCacheStats, diffCacheStats, summarizeCacheStats } from '../../../../services/perfStats';
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
 
@@ -272,6 +273,7 @@ const computeListCounts = async (milestones: any[], visibility: ReturnType<typeo
 
 export async function GET(request: Request) {
   const startTime = Date.now();
+  const cacheBefore = snapshotCacheStats();
   const authUser = await getAuthUserFromCookies();
   if (!authUser?.userId) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
   const visibility = createVisibilityContext(authUser);
@@ -339,6 +341,9 @@ export async function GET(request: Request) {
   }));
 
   const durationMs = Date.now() - startTime;
+  const cacheAfter = snapshotCacheStats();
+  const cacheDelta = diffCacheStats(cacheBefore, cacheAfter);
+  const cacheSummary = summarizeCacheStats(cacheDelta);
   console.info('[perf] roadmap-intel', {
     durationMs,
     milestones: milestones.length,
@@ -358,16 +363,25 @@ export async function GET(request: Request) {
     }
     await emitEvent({
       ts: new Date().toISOString(),
-      type: 'perf.roadmapIntel',
+      type: 'perf.roadmap.intel',
       actor,
       resource: { type: 'workitems.roadmap', id: 'roadmap-intel', title: 'Roadmap Intel' },
       payload: {
+        name: 'api.work-items.roadmap-intel',
+        at: new Date().toISOString(),
         durationMs,
-        milestonesCount: milestones.length,
-        includeLists,
-        milestoneIdsCount: milestoneIds ? milestoneIds.split(',').filter(Boolean).length : milestones.length,
-        bundleId: searchParams.get('bundleId'),
-        applicationId: searchParams.get('applicationId')
+        ok: true,
+        scope: {
+          bundleId: searchParams.get('bundleId') || undefined,
+          applicationId: searchParams.get('applicationId') || undefined
+        },
+        counts: {
+          milestones: milestones.length,
+          milestoneIdsCount: milestoneIds ? milestoneIds.split(',').filter(Boolean).length : milestones.length,
+          includeLists: includeLists ? 1 : 0
+        },
+        cache: cacheSummary,
+        cacheByName: cacheDelta
       }
     });
   } catch {}

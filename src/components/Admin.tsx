@@ -20,8 +20,9 @@ import AdminGitHubIntegration from './AdminGitHubIntegration';
 import AdminDeliveryPolicy from './AdminDeliveryPolicy';
 import AdminBackupRestore from './AdminBackupRestore';
 import AdminBundleCapacity from './AdminBundleCapacity';
+import AdminOpsDashboard from './AdminOpsDashboard';
 
-type AdminModuleId = 'home' | 'wiki-themes' | 'wiki-templates' | 'diagram-templates' | 'vendors' | 'roles' | 'bundles' | 'applications' | 'taxonomy' | 'artifact-rules' | 'milestone-templates' | 'users' | 'sharepoint' | 'ai-settings' | 'bundle-assignments' | 'admins' | 'work-blueprints' | 'work-generators' | 'samples' | 'audit-events' | 'audit-notifications' | 'notification-settings' | 'delivery-policy' | 'jira' | 'github' | 'backup' | 'bundle-capacity';
+type AdminModuleId = 'home' | 'wiki-themes' | 'wiki-templates' | 'diagram-templates' | 'vendors' | 'roles' | 'bundles' | 'applications' | 'taxonomy' | 'artifact-rules' | 'milestone-templates' | 'users' | 'sharepoint' | 'ai-settings' | 'bundle-assignments' | 'admins' | 'work-blueprints' | 'work-generators' | 'samples' | 'audit-events' | 'audit-notifications' | 'notification-settings' | 'delivery-policy' | 'jira' | 'github' | 'backup' | 'bundle-capacity' | 'ops-dashboard';
 
 interface AdminModule {
   id: AdminModuleId;
@@ -40,6 +41,8 @@ const Admin: React.FC = () => {
   const [activeModule, setActiveModule] = useState<AdminModuleId>('home');
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [isCmo, setIsCmo] = useState(false);
+  const [auditFilters, setAuditFilters] = useState<{ typePrefix?: string; search?: string; range?: string } | null>(null);
+  const [notificationFilters, setNotificationFilters] = useState<{ type?: string; range?: string } | null>(null);
 
   React.useEffect(() => {
     const check = async () => {
@@ -130,6 +133,7 @@ const Admin: React.FC = () => {
     {
       title: 'Operations',
       modules: [
+        { id: 'ops-dashboard', label: 'Ops Dashboard', icon: 'fa-gauge', description: 'Monitor jobs, latency, cache hit rates, and notifications.', color: 'slate' },
         { id: 'bundle-capacity', label: 'Bundle Capacity', icon: 'fa-gauge-high', description: 'Configure bundle-level story point capacity planning.', color: 'slate' },
         { id: 'backup', label: 'Backup & Restore', icon: 'fa-database', description: 'Export and restore configuration bundles safely.', color: 'slate' }
       ]
@@ -158,6 +162,7 @@ const Admin: React.FC = () => {
     {
       title: 'Operations',
       modules: [
+        { id: 'ops-dashboard', label: 'Ops Dashboard', icon: 'fa-gauge', description: 'Monitor jobs, latency, cache hit rates, and notifications.', color: 'slate' },
         { id: 'bundle-capacity', label: 'Bundle Capacity', icon: 'fa-gauge-high', description: 'Configure bundle-level story point capacity planning.', color: 'slate' },
         { id: 'backup', label: 'Backup & Restore', icon: 'fa-database', description: 'Export and restore configuration bundles safely.', color: 'slate' }
       ]
@@ -254,9 +259,9 @@ const Admin: React.FC = () => {
       case 'samples':
         return <AdminSamples />;
       case 'audit-events':
-        return <AdminAuditEvents />;
+        return <AdminAuditEvents initialTypePrefix={auditFilters?.typePrefix} initialRange={auditFilters?.range} initialSearch={auditFilters?.search} />;
       case 'audit-notifications':
-        return <AdminAuditNotifications />;
+        return <AdminAuditNotifications initialType={notificationFilters?.type} initialRange={notificationFilters?.range} />;
       case 'notification-settings':
         return <AdminNotificationPolicy />;
       case 'delivery-policy':
@@ -265,6 +270,13 @@ const Admin: React.FC = () => {
         return <AdminBackupRestore />;
       case 'bundle-capacity':
         return <AdminBundleCapacity />;
+      case 'ops-dashboard':
+        return (
+          <AdminOpsDashboard
+            onOpenEvents={(filters) => { setAuditFilters(filters); setActiveModule('audit-events'); }}
+            onOpenNotifications={(filters) => { setNotificationFilters(filters); setActiveModule('audit-notifications'); }}
+          />
+        );
       case 'jira':
         return <AdminJiraIntegration />;
       case 'github':

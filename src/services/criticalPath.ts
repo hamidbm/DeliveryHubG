@@ -2,6 +2,7 @@ import { ObjectId } from 'mongodb';
 import { getDb } from './db';
 import { getDeliveryPolicy, getEffectivePolicyForBundle, getStrictestPolicyForBundles } from './policy';
 import { WorkItemStatus, WorkItemType } from '../types';
+import { recordCacheHit, recordCacheMiss } from './perfStats';
 
 const HOURS_PER_POINT = 4;
 const CACHE_TTL_MS = 30_000;
@@ -169,8 +170,10 @@ export const computeMilestoneCriticalPath = async (
   const cacheKey = `${milestoneId}:${includeExternal ? '1' : '0'}:${maxExternalDepth}:${limit}:${policyKey}`;
   const cached = criticalPathCache.get(cacheKey);
   if (cached && Date.now() - cached.ts < CACHE_TTL_MS) {
+    recordCacheHit('criticalPath');
     return cached.result;
   }
+  recordCacheMiss('criticalPath');
   const nodeMap = new Map<string, any>();
   const keyMap = new Map<string, string>();
   const scopeMap = new Map<string, 'IN_MILESTONE' | 'EXTERNAL'>();

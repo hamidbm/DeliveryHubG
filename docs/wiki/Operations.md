@@ -86,6 +86,23 @@ Weekly executive briefs can be generated via cron:
 Recommended cadence:
 - Weekly (Monday morning), optionally daily during heavy change windows.
 
+## Ops Dashboard (SLO + Performance)
+Admin → Operations → Ops Dashboard surfaces operational health without external tooling.
+
+What you can monitor:
+- Job health (digest runs, drift scheduler, weekly briefs, GitHub sync)
+- API latency (p50/p95) for core endpoints
+- Cache effectiveness (policy, critical path, and other expensive computations)
+- Notification volume by type/day
+
+Filters:
+- Window: 1d / 7d / 30d (controls aggregation window)
+
+Troubleshooting:
+- High p95 latency: open Admin → Audit → Events filtered by the perf event type to inspect recent payloads.
+- Rising cache misses: verify caches are enabled and request patterns are stable.
+- Job failures: compare failuresLast7d and lastOk to identify recurring errors.
+
 ## Backup & Restore (Admin/CMO)
 DeliveryHub supports export/import of configuration and planning metadata to promote between environments.
 

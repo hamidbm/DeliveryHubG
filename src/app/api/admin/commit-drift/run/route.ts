@@ -55,6 +55,7 @@ export async function POST(request: Request) {
   }
 
   const runId = force ? `${runKey}:${Date.now()}` : runKey;
+  const startMs = Date.now();
   const startedAt = new Date().toISOString();
 
   if (!dryRun) {
@@ -165,6 +166,7 @@ export async function POST(request: Request) {
   }
 
   const completedAt = new Date().toISOString();
+  const durationMs = Date.now() - startMs;
 
   if (!dryRun) {
     await driftRuns.updateOne(
@@ -179,7 +181,18 @@ export async function POST(request: Request) {
       type: 'perf.commitdrift.run',
       actor: { userId: 'system', displayName: 'System' },
       resource: { type: 'milestones.commitdrift', id: runId, title: 'Commit drift run' },
-      payload: { runId, counts, dryRun, maxMilestones, batchSize }
+      payload: {
+        name: 'job.commitdrift',
+        at: completedAt,
+        durationMs,
+        ok: counts.errors === 0,
+        counts,
+        scope: {
+          maxMilestones,
+          batchSize,
+          dryRun
+        }
+      }
     });
   } catch {}
 

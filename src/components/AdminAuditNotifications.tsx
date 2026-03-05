@@ -7,10 +7,15 @@ const ranges = [
   { label: 'All time', value: 'all' }
 ];
 
-const AdminAuditNotifications: React.FC = () => {
+interface AdminAuditNotificationsProps {
+  initialType?: string;
+  initialRange?: string;
+}
+
+const AdminAuditNotifications: React.FC<AdminAuditNotificationsProps> = ({ initialType, initialRange }) => {
   const [recipient, setRecipient] = React.useState('');
-  const [type, setType] = React.useState('');
-  const [range, setRange] = React.useState('7d');
+  const [type, setType] = React.useState(initialType || '');
+  const [range, setRange] = React.useState(initialRange || '7d');
   const [unreadOnly, setUnreadOnly] = React.useState(false);
   const [items, setItems] = React.useState<any[]>([]);
   const [loading, setLoading] = React.useState(false);
@@ -54,6 +59,14 @@ const AdminAuditNotifications: React.FC = () => {
     setCursorStack([]);
     fetchNotifications(null);
   }, [recipient, type, range, unreadOnly]);
+
+  React.useEffect(() => {
+    if (initialType !== undefined) setType(initialType);
+  }, [initialType]);
+
+  React.useEffect(() => {
+    if (initialRange !== undefined) setRange(initialRange);
+  }, [initialRange]);
 
   const handleNext = () => {
     if (!nextCursor) return;

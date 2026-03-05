@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
 import { ObjectId } from 'mongodb';
-import { computeMilestoneRollups, getDb } from '../../../../services/db';
+import { computeMilestoneRollups, getDb, emitEvent } from '../../../../services/db';
 import { evaluateMilestoneReadiness } from '../../../../services/milestoneGovernance';
 import { createVisibilityContext, getAuthUserFromCookies } from '../../../../services/visibility';
 import { getEffectivePolicyForMilestone } from '../../../../services/policy';
+import { snapshotCacheStats, diffCacheStats, summarizeCacheStats } from '../../../../services/perfStats';
 
 const parseList = (value: string | null) =>
   value ? value.split(',').map((v) => v.trim()).filter(Boolean) : [];
@@ -21,6 +22,8 @@ const getMilestoneCandidates = (m: any) => {
 const bandForScore = (score: number) => (score >= 80 ? 'high' : score >= 60 ? 'medium' : 'low');
 
 export async function GET(request: Request) {
+  const startTime = Date.now();
+  const cacheBefore = snapshotCacheStats();
   const authUser = await getAuthUserFromCookies();
   if (!authUser?.userId) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
   const visibility = createVisibilityContext(authUser);
@@ -326,6 +329,37 @@ export async function GET(request: Request) {
     topAtRiskBundles: includeLists ? lists.topAtRiskBundles.length : Math.min(limit, bundleRollups.length),
     topAtRiskMilestones: includeLists ? lists.topAtRiskMilestones.length : Math.min(limit, milestones.length)
   };
+
+  const durationMs = Date.now() - startTime;
+  const cacheAfter = snapshotCacheStats();
+  const cacheDelta = diffCacheStats(cacheBefore, cacheAfter);
+  const cacheSummary = summarizeCacheStats(cacheDelta);
+  try {
+    await emitEvent({
+      ts: new Date().toISOString(),
+      type: 'perf.program.intel',
+      actor: { userId: authUser.userId, email: authUser.email, displayName: authUser.userId },
+      resource: { type: 'program.intel', id: 'program-intel', title: 'Program Intel' },
+      payload: {
+        name: 'api.program.intel',
+        at: new Date().toISOString(),
+        durationMs,
+        ok: true,
+        scope: {
+          bundleId: bundleIdsRaw.length ? bundleIdsRaw.join(',') : undefined,
+          milestoneId: milestoneIds.length ? milestoneIds.join(',') : undefined
+        },
+        counts: {
+          bundles: summary.bundles,
+          milestones: summary.milestones,
+          workItems: summary.workItems,
+          includeLists: includeLists ? 1 : 0
+        },
+        cache: cacheSummary,
+        cacheByName: cacheDelta
+      }
+    });
+  } catch {}
 
   return NextResponse.json({
     summary,

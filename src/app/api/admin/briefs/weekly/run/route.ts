@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { ObjectId } from 'mongodb';
-import { getDb } from '../../../../../../services/db';
+import { getDb, emitEvent } from '../../../../../../services/db';
 import { generateBundleBrief, generateMilestoneBrief, generateProgramBrief, resolveWeekKey, upsertWeeklyBrief, queueWeeklyBriefDigest } from '../../../../../../services/weeklyBrief';
 
 const resolveFlag = (value: string | null, defaultValue = false) => {
@@ -9,6 +9,7 @@ const resolveFlag = (value: string | null, defaultValue = false) => {
 };
 
 export async function POST(request: Request) {
+  const startMs = Date.now();
   const cronSecret = process.env.WEEKLY_BRIEF_CRON_SECRET;
   if (!cronSecret) return NextResponse.json({ error: 'Missing WEEKLY_BRIEF_CRON_SECRET' }, { status: 500 });
   const header = request.headers.get('x-cron-secret') || request.headers.get('X-Cron-Secret');
@@ -59,6 +60,24 @@ export async function POST(request: Request) {
       }
     }
   }
+
+  const durationMs = Date.now() - startMs;
+  try {
+    await emitEvent({
+      ts: new Date().toISOString(),
+      type: 'perf.weeklybrief.run',
+      actor: { userId: 'system', displayName: 'System' },
+      resource: { type: 'briefs.weekly', id: weekKey, title: 'Weekly Brief Run' },
+      payload: {
+        name: 'job.weeklybrief',
+        at: new Date().toISOString(),
+        durationMs,
+        ok: true,
+        counts,
+        scope: { weekKey, includeMilestones, force }
+      }
+    });
+  } catch {}
 
   return NextResponse.json({ weekKey, force, includeMilestones, counts });
 }

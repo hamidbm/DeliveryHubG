@@ -3,6 +3,7 @@ import { computeMilestoneRollups, fetchMilestones, emitEvent } from '../../../..
 import { cookies } from 'next/headers';
 import { jwtVerify } from 'jose';
 import { createVisibilityContext, getAuthUserFromCookies } from '../../../../services/visibility';
+import { snapshotCacheStats, diffCacheStats, summarizeCacheStats } from '../../../../services/perfStats';
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
 
@@ -13,6 +14,7 @@ export async function GET(request: Request) {
   const visibility = createVisibilityContext(authUser);
   const { searchParams } = new URL(request.url);
   const milestoneIds = searchParams.get('milestoneIds');
+  const cacheBefore = snapshotCacheStats();
 
   let ids: string[] = [];
   if (milestoneIds) {
@@ -38,6 +40,9 @@ export async function GET(request: Request) {
 
   const rollups = await computeMilestoneRollups(ids);
   const durationMs = Date.now() - startTime;
+  const cacheAfter = snapshotCacheStats();
+  const cacheDelta = diffCacheStats(cacheBefore, cacheAfter);
+  const cacheSummary = summarizeCacheStats(cacheDelta);
   console.info('[perf] milestone-rollups', { durationMs, milestones: ids.length });
   try {
     const cookieStore = await cookies();
@@ -53,14 +58,21 @@ export async function GET(request: Request) {
     }
     await emitEvent({
       ts: new Date().toISOString(),
-      type: 'perf.milestoneRollups',
+      type: 'perf.milestone.rollups',
       actor,
       resource: { type: 'milestones.rollups', id: 'milestone-rollups', title: 'Milestone Rollups' },
       payload: {
+        name: 'api.milestones.rollups',
+        at: new Date().toISOString(),
         durationMs,
-        milestonesCount: ids.length,
-        bundleId: searchParams.get('bundleId'),
-        applicationId: searchParams.get('applicationId')
+        ok: true,
+        scope: {
+          bundleId: searchParams.get('bundleId') || undefined,
+          applicationId: searchParams.get('applicationId') || undefined
+        },
+        counts: { milestones: ids.length },
+        cache: cacheSummary,
+        cacheByName: cacheDelta
       }
     });
   } catch {}

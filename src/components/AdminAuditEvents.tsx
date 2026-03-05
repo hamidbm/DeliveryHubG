@@ -52,10 +52,16 @@ const resolveDeepLink = (event: any) => {
   return null;
 };
 
-const AdminAuditEvents: React.FC = () => {
-  const [typePrefix, setTypePrefix] = React.useState('');
-  const [range, setRange] = React.useState('7d');
-  const [search, setSearch] = React.useState('');
+interface AdminAuditEventsProps {
+  initialTypePrefix?: string;
+  initialRange?: string;
+  initialSearch?: string;
+}
+
+const AdminAuditEvents: React.FC<AdminAuditEventsProps> = ({ initialTypePrefix, initialRange, initialSearch }) => {
+  const [typePrefix, setTypePrefix] = React.useState(initialTypePrefix || '');
+  const [range, setRange] = React.useState(initialRange || '7d');
+  const [search, setSearch] = React.useState(initialSearch || '');
   const [items, setItems] = React.useState<any[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -97,6 +103,18 @@ const AdminAuditEvents: React.FC = () => {
     setCursorStack([]);
     fetchEvents(null);
   }, [typePrefix, range, search]);
+
+  React.useEffect(() => {
+    if (initialTypePrefix !== undefined) setTypePrefix(initialTypePrefix);
+  }, [initialTypePrefix]);
+
+  React.useEffect(() => {
+    if (initialRange !== undefined) setRange(initialRange);
+  }, [initialRange]);
+
+  React.useEffect(() => {
+    if (initialSearch !== undefined) setSearch(initialSearch);
+  }, [initialSearch]);
 
   const handleNext = () => {
     if (!nextCursor) return;

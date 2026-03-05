@@ -1,13 +1,16 @@
 import { NextResponse } from 'next/server';
-import { getDb } from '../../../../services/db';
+import { getDb, emitEvent } from '../../../../services/db';
 import { computeBundleCapacityPlans } from '../../../../services/capacityPlanning';
 import { createVisibilityContext, getAuthUserFromCookies } from '../../../../services/visibility';
+import { snapshotCacheStats, diffCacheStats, summarizeCacheStats } from '../../../../services/perfStats';
 
 const parseList = (value: string | null) =>
   value ? value.split(',').map((v) => v.trim()).filter(Boolean) : [];
 
 export async function GET(request: Request) {
   try {
+    const startTime = Date.now();
+    const cacheBefore = snapshotCacheStats();
     const authUser = await getAuthUserFromCookies();
     if (!authUser?.userId) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
     const visibility = createVisibilityContext(authUser);
@@ -39,6 +42,33 @@ export async function GET(request: Request) {
     }
 
     const data = await computeBundleCapacityPlans(bundleIds, horizonWeeks);
+    const durationMs = Date.now() - startTime;
+    const cacheAfter = snapshotCacheStats();
+    const cacheDelta = diffCacheStats(cacheBefore, cacheAfter);
+    const cacheSummary = summarizeCacheStats(cacheDelta);
+    try {
+      await emitEvent({
+        ts: new Date().toISOString(),
+        type: 'perf.capacity.plan',
+        actor: { userId: authUser.userId, email: authUser.email, displayName: authUser.userId },
+        resource: { type: 'capacity.plan', id: 'capacity-plan', title: 'Capacity Plan' },
+        payload: {
+          name: 'api.capacity.plan',
+          at: new Date().toISOString(),
+          durationMs,
+          ok: true,
+          scope: {
+            bundleId: bundleIds.join(',')
+          },
+          counts: {
+            bundles: bundleIds.length,
+            horizonWeeks
+          },
+          cache: cacheSummary,
+          cacheByName: cacheDelta
+        }
+      });
+    } catch {}
     return NextResponse.json(data);
   } catch (err: any) {
     return NextResponse.json({ error: err?.message || 'Failed to compute capacity plan' }, { status: 500 });

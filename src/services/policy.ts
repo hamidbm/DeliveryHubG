@@ -1,5 +1,6 @@
 import { ObjectId } from 'mongodb';
 import { getMongoClientPromise } from '../lib/mongodb';
+import { recordCacheHit, recordCacheMiss } from './perfStats';
 
 export type DeliveryPolicy = {
   _id: 'global';
@@ -441,8 +442,10 @@ export const mergeDeliveryPolicy = (base: DeliveryPolicy, overrides: DeepPartial
 
 export const getDeliveryPolicy = async (): Promise<DeliveryPolicy> => {
   if (cachedPolicy && Date.now() - cachedPolicy.ts < CACHE_TTL_MS) {
+    recordCacheHit('policy');
     return cachedPolicy.value;
   }
+  recordCacheMiss('policy');
   const db = await getDb();
   const existing = await db.collection('delivery_policies').findOne({ _id: 'global' as any });
   if (!existing) {
@@ -459,7 +462,11 @@ export const getDeliveryPolicyOverride = async (bundleId: string): Promise<Deliv
   const id = String(bundleId || '');
   if (!id) return null;
   const cached = cachedOverrides.get(id);
-  if (cached && Date.now() - cached.ts < CACHE_TTL_MS) return cached.value;
+  if (cached && Date.now() - cached.ts < CACHE_TTL_MS) {
+    recordCacheHit('policy');
+    return cached.value;
+  }
+  recordCacheMiss('policy');
   const db = await getDb();
   await ensureOverrideIndexes(db);
   const doc = await db.collection<DeliveryPolicyOverride>('delivery_policy_overrides').findOne({ bundleId: id });
@@ -506,7 +513,11 @@ export const getEffectivePolicyForBundle = async (bundleId: string): Promise<Eff
     return { effective: global, refs: { globalVersion: global.version }, hasOverrides: false };
   }
   const cached = cachedEffective.get(id);
-  if (cached && Date.now() - cached.ts < CACHE_TTL_MS) return cached.value;
+  if (cached && Date.now() - cached.ts < CACHE_TTL_MS) {
+    recordCacheHit('policy');
+    return cached.value;
+  }
+  recordCacheMiss('policy');
   const global = await getDeliveryPolicy();
   const override = await getDeliveryPolicyOverride(id);
   const merged = override?.overrides ? deepMerge(global, override.overrides) : global;
@@ -672,7 +683,11 @@ export const getEffectivePolicyForMilestone = async (milestoneId: string): Promi
   }
 
   const cached = cachedMilestoneEffective.get(id);
-  if (cached && Date.now() - cached.ts < CACHE_TTL_MS) return cached.value;
+  if (cached && Date.now() - cached.ts < CACHE_TTL_MS) {
+    recordCacheHit('policy');
+    return cached.value;
+  }
+  recordCacheMiss('policy');
 
   const db = await getDb();
   const objectIds = ObjectId.isValid(id) ? [new ObjectId(id)] : [];

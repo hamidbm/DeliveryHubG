@@ -134,10 +134,17 @@ export async function POST(request: Request) {
     try {
       await emitEvent({
         ts: new Date().toISOString(),
-        type: 'perf.digestRun',
+        type: 'perf.digest.run',
         actor: { userId: 'cron', displayName: 'Cron' },
         resource: { type: 'notifications.digest', id: dateKey, title: 'Digest Run' },
-        payload: { usersProcessed, digestsSent, totalItems, durationMs, dryRun }
+        payload: {
+          name: 'job.digest',
+          at: new Date().toISOString(),
+          durationMs,
+          ok: true,
+          counts: { usersProcessed, digestsSent, totalItems },
+          scope: { dryRun }
+        }
       });
     } catch {}
 

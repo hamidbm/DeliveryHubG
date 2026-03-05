@@ -58,6 +58,7 @@ const upsertWorkItemPr = (item: any, pr: any, repo: string) => {
 
 export async function POST(request: Request) {
   try {
+    const startMs = Date.now();
     const auth = await requireAdmin();
     if (!auth.ok) {
       return NextResponse.json({ error: 'Forbidden', code: 'ADMIN_ONLY' }, { status: auth.status });
@@ -173,12 +174,19 @@ export async function POST(request: Request) {
     }
 
     try {
+      const durationMs = Date.now() - startMs;
       await emitEvent({
         ts: new Date().toISOString(),
         type: 'integrations.github.sync.completed',
         actor: { userId: auth.user?.userId, email: auth.user?.email, displayName: auth.user?.name },
         resource: { type: 'integrations.github', id: targetRepos.join(','), title: 'GitHub Sync' },
-        payload: { fetched, linked, updated, skipped, errors }
+        payload: {
+          name: 'job.github.sync',
+          at: new Date().toISOString(),
+          durationMs,
+          ok: errors === 0,
+          counts: { fetched, linked, updated, skipped, errors }
+        }
       });
     } catch {}
 
