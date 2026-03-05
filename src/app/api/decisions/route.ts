@@ -31,6 +31,18 @@ const buildWorkItemQuery = (id: string) => {
   return { $or: [{ id }, { key: id }] };
 };
 
+const DECISION_TYPES = new Set([
+  'COMMIT_OVERRIDE',
+  'READINESS_OVERRIDE',
+  'CAPACITY_OVERRIDE',
+  'SCOPE_APPROVAL',
+  'RISK_ACCEPTED',
+  'DATE_SLIP_ACCEPTED',
+  'OTHER'
+]);
+const DECISION_OUTCOMES = new Set(['APPROVED', 'REJECTED', 'ACKNOWLEDGED']);
+const DECISION_SEVERITIES = new Set(['info', 'warn', 'critical']);
+
 export async function GET(request: Request) {
   const authUser = await getAuthUserFromCookies();
   if (!authUser?.userId) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
@@ -42,8 +54,22 @@ export async function GET(request: Request) {
   const limit = parseLimit(searchParams.get('limit'));
 
   if (!scopeType) return NextResponse.json({ error: 'Missing scopeType' }, { status: 400 });
+  if (scopeType !== 'PROGRAM' && !scopeId) {
+    return NextResponse.json({ error: 'Missing scopeId' }, { status: 400 });
+  }
 
   const db = await getDb();
+  if (scopeType === 'PROGRAM') {
+    const items = await listDecisions({
+      scopeType,
+      scopeId: 'program',
+      limit,
+      cursor
+    });
+    const last = items[items.length - 1];
+    const nextCursor = last?.createdAt && last?._id ? `${last.createdAt}|${last._id}` : null;
+    return NextResponse.json({ items, nextCursor });
+  }
   if (scopeType === 'BUNDLE' && scopeId) {
     const bundle = await db.collection('bundles').findOne(buildBundleQuery(scopeId));
     if (!bundle) return NextResponse.json({ error: 'Not found' }, { status: 404 });
@@ -73,7 +99,9 @@ export async function GET(request: Request) {
     limit,
     cursor
   });
-  return NextResponse.json({ items });
+  const last = items[items.length - 1];
+  const nextCursor = last?.createdAt && last?._id ? `${last.createdAt}|${last._id}` : null;
+  return NextResponse.json({ items, nextCursor });
 }
 
 export async function POST(request: Request) {
@@ -82,15 +110,29 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}));
   const scopeType = String(body?.scopeType || '').toUpperCase();
   let scopeId = body?.scopeId ? String(body.scopeId) : undefined;
-  const decisionType = String(body?.decisionType || 'OTHER');
+  const decisionType = String(body?.decisionType || '').toUpperCase();
   const title = String(body?.title || '').trim();
   const rationale = String(body?.rationale || '').trim();
+  const outcome = String(body?.outcome || '').toUpperCase();
+  const severity = String(body?.severity || 'info').toLowerCase();
   if (!scopeType || !title || !rationale) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+  }
+  if (!DECISION_TYPES.has(decisionType)) {
+    return NextResponse.json({ error: 'Invalid decisionType' }, { status: 400 });
+  }
+  if (!DECISION_OUTCOMES.has(outcome)) {
+    return NextResponse.json({ error: 'Invalid outcome' }, { status: 400 });
+  }
+  if (!DECISION_SEVERITIES.has(severity)) {
+    return NextResponse.json({ error: 'Invalid severity' }, { status: 400 });
   }
 
   const db = await getDb();
   let bundleId: string | undefined;
+  if (scopeType !== 'PROGRAM' && !scopeId) {
+    return NextResponse.json({ error: 'Missing scopeId' }, { status: 400 });
+  }
   if (scopeType === 'BUNDLE' && scopeId) {
     const bundle = await db.collection('bundles').findOne(buildBundleQuery(scopeId));
     if (!bundle) return NextResponse.json({ error: 'Not found' }, { status: 404 });
@@ -121,14 +163,15 @@ export async function POST(request: Request) {
       email: String(authUser.email || ''),
       name: (authUser as any).name ? String((authUser as any).name) : undefined
     },
+    source: 'MANUAL',
     scopeType: scopeType as any,
     scopeId: scopeId,
     decisionType: decisionType as any,
     title,
     rationale,
     alternatives: body?.alternatives ? String(body.alternatives) : undefined,
-    outcome: (body?.outcome || 'ACKNOWLEDGED') as any,
-    severity: (body?.severity || 'info') as any,
+    outcome: outcome as any,
+    severity: severity as any,
     related: body?.related || undefined,
     tags: Array.isArray(body?.tags) ? body.tags.filter(Boolean) : undefined
   });

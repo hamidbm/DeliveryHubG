@@ -94,7 +94,7 @@ Observed indexes:
 
 ### `decision_log`
 Top-level fields:
-- `_id`, `createdAt`, `createdBy`, `scopeType`, `scopeId`, `decisionType`, `title`, `rationale`, `alternatives`, `outcome`, `severity`, `related`, `tags`
+- `_id`, `createdAt`, `createdBy`, `source`, `scopeType`, `scopeId`, `decisionType`, `title`, `rationale`, `alternatives`, `outcome`, `severity`, `related`, `tags`
 
 Observed indexes:
 - `{ scopeType: 1, scopeId: 1, createdAt: -1 }`

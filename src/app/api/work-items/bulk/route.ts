@@ -19,8 +19,9 @@ export async function PATCH(request: Request) {
     if (!token) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
     
     const { payload } = await jwtVerify(token, JWT_SECRET);
-    const { ids, updates, allowOverCapacity } = await request.json();
+    const { ids, updates, allowOverCapacity, overrideReason } = await request.json();
     const allowOver = !!allowOverCapacity;
+    const overrideNote = overrideReason ? String(overrideReason) : '';
     const authUser = {
       userId: String((payload as any).id || (payload as any).userId || ''),
       role: String((payload as any).role || ''),
@@ -313,6 +314,10 @@ export async function PATCH(request: Request) {
       }));
     }
 
+    if (allowOver && capacityOverrides.length && !overrideNote.trim()) {
+      return NextResponse.json({ error: 'OVERRIDE_REASON_REQUIRED' }, { status: 400 });
+    }
+
     if (capacityOverrides.length) {
       const actor = {
         userId: String((payload as any).id || (payload as any).userId || (payload as any).email || ''),
@@ -338,11 +343,12 @@ export async function PATCH(request: Request) {
           await createDecision({
             createdAt: now,
             createdBy: { userId: actor.userId || '', email: actor.email || '', name: actor.displayName },
+            source: 'AUTO',
             scopeType: 'MILESTONE',
             scopeId: String(entry.milestone?._id || entry.milestone?.id || entry.milestone?.name || entry.details?.milestoneId || ''),
             decisionType: 'CAPACITY_OVERRIDE',
             title: `Capacity override for ${entry.milestone?.name || entry.details?.milestoneId || 'milestone'}`,
-            rationale: `Capacity override accepted for ${entry.item?.key || entry.item?.title || 'work item'}.`,
+            rationale: overrideNote?.trim() || `Capacity override accepted for ${entry.item?.key || entry.item?.title || 'work item'}.`,
             outcome: 'APPROVED',
             severity: 'warn',
             related: {

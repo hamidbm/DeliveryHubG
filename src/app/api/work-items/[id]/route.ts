@@ -48,6 +48,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (Object.prototype.hasOwnProperty.call(itemData, 'allowOverCapacity')) {
       delete itemData.allowOverCapacity;
     }
+    const overrideReason = itemData?.overrideReason ? String(itemData.overrideReason) : '';
+    if (Object.prototype.hasOwnProperty.call(itemData, 'overrideReason')) {
+      delete itemData.overrideReason;
+    }
     const authUser = {
       userId: String((payload as any).id || (payload as any).userId || ''),
       role: String((payload as any).role || ''),
@@ -379,6 +383,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       }));
     }
 
+    if (allowOverCapacity && capacityOverrides.length && !overrideReason.trim()) {
+      return NextResponse.json({ error: 'OVERRIDE_REASON_REQUIRED' }, { status: 400 });
+    }
+
     if (capacityOverrides.length) {
       const actor = {
         userId: String((payload as any).id || (payload as any).userId || (payload as any).email || ''),
@@ -400,11 +408,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           await createDecision({
             createdAt: new Date().toISOString(),
             createdBy: { userId: actor.userId || '', email: actor.email || '', name: actor.displayName },
+            source: 'AUTO',
             scopeType: 'MILESTONE',
             scopeId: String(entry.milestone?._id || entry.milestone?.id || entry.milestone?.name || entry.details?.milestoneId || ''),
             decisionType: 'CAPACITY_OVERRIDE',
             title: `Capacity override for ${entry.milestone?.name || entry.details?.milestoneId || 'milestone'}`,
-            rationale: `Capacity override accepted for ${originalItem.key || originalItem.title || 'work item'}.`,
+            rationale: overrideReason?.trim() || `Capacity override accepted for ${originalItem.key || originalItem.title || 'work item'}.`,
             outcome: 'APPROVED',
             severity: 'warn',
             related: {

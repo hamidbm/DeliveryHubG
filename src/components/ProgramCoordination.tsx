@@ -662,13 +662,29 @@ const ProgramCoordination: React.FC = () => {
                     <div key={entry._id || entry.id} className="border border-slate-100 rounded-xl p-3 bg-slate-50/40">
                       <div className="flex items-center justify-between mb-1">
                         <div className="text-sm font-semibold text-slate-700 truncate">{entry.title}</div>
-                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest ${decisionSeverityClass(entry.severity)}`}>
-                          {entry.severity || 'info'}
-                        </span>
+                        <div className="flex items-center gap-1">
+                          {entry.source === 'AUTO' && (
+                            <span className="px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest bg-slate-200 text-slate-600">
+                              Auto
+                            </span>
+                          )}
+                          <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest ${decisionSeverityClass(entry.severity)}`}>
+                            {entry.severity || 'info'}
+                          </span>
+                        </div>
                       </div>
                       <div className="text-[10px] uppercase tracking-widest text-slate-400">
                         {String(entry.decisionType || 'OTHER').replace('_', ' ')} • {entry.outcome || 'ACKNOWLEDGED'}
                       </div>
+                      {(entry.tags || []).length ? (
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {(entry.tags || []).map((tag: string) => (
+                            <span key={tag} className="px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest bg-white border border-slate-200 text-slate-500">
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
                       {entry.rationale && (
                         <div className="mt-2 text-xs text-slate-600">
                           {String(entry.rationale).length > 160 ? `${String(entry.rationale).slice(0, 160)}…` : entry.rationale}

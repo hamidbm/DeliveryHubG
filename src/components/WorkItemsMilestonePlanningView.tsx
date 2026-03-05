@@ -281,7 +281,8 @@ const WorkItemsMilestonePlanningView: React.FC<WorkItemsMilestonePlanningViewPro
     severity: 'info',
     title: '',
     rationale: '',
-    alternatives: ''
+    alternatives: '',
+    tags: ''
   });
   const [decisionSaving, setDecisionSaving] = useState(false);
   const [decisionError, setDecisionError] = useState<string | null>(null);
@@ -314,6 +315,7 @@ const WorkItemsMilestonePlanningView: React.FC<WorkItemsMilestonePlanningViewPro
   } | null>(null);
   const [scopeDecisionPrompt, setScopeDecisionPrompt] = useState<{ request: any; decision: 'APPROVE' | 'REJECT' | 'CANCEL' } | null>(null);
   const [decisionReason, setDecisionReason] = useState('');
+  const [capacityOverrideReason, setCapacityOverrideReason] = useState('');
   const [intelModal, setIntelModal] = useState<{ title: string; items: any[] } | null>(null);
   const [staleModal, setStaleModal] = useState<{ milestoneId?: string; sprintId?: string } | null>(null);
   const [bulkFixIssue, setBulkFixIssue] = useState<'missingStoryPoints' | 'missingDueAt' | 'missingRiskSeverity' | null>(null);
@@ -1147,9 +1149,10 @@ const WorkItemsMilestonePlanningView: React.FC<WorkItemsMilestonePlanningViewPro
     const res = await fetch(`/api/work-items/${itemId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ milestoneIds, allowOverCapacity: true })
+      body: JSON.stringify({ milestoneIds, allowOverCapacity: true, overrideReason: capacityOverrideReason })
     });
     setOverrideRequest(null);
+    setCapacityOverrideReason('');
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       alert(err.message || err.error || 'Override failed.');
@@ -1216,6 +1219,12 @@ const WorkItemsMilestonePlanningView: React.FC<WorkItemsMilestonePlanningViewPro
           alternatives: decisionDraft.alternatives?.trim() || undefined,
           outcome: decisionDraft.outcome,
           severity: decisionDraft.severity,
+          tags: decisionDraft.tags
+            ? String(decisionDraft.tags)
+                .split(',')
+                .map((t) => t.trim())
+                .filter(Boolean)
+            : undefined,
           related: {
             milestoneId: String(activeMilestone._id || activeMilestone.id || sprintMilestoneId),
             bundleId: activeMilestone.bundleId ? String(activeMilestone.bundleId) : undefined
@@ -1237,7 +1246,8 @@ const WorkItemsMilestonePlanningView: React.FC<WorkItemsMilestonePlanningViewPro
         severity: 'info',
         title: '',
         rationale: '',
-        alternatives: ''
+        alternatives: '',
+        tags: ''
       });
       setShowDecisionForm(false);
     } catch {
@@ -2067,6 +2077,12 @@ const WorkItemsMilestonePlanningView: React.FC<WorkItemsMilestonePlanningViewPro
                   rows={2}
                   className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200"
                 />
+                <input
+                  value={decisionDraft.tags}
+                  onChange={(e) => setDecisionDraft((prev) => ({ ...prev, tags: e.target.value }))}
+                  placeholder="Tags (comma-separated)"
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200"
+                />
                 <div className="grid grid-cols-3 gap-2">
                   <select
                     value={decisionDraft.decisionType}
@@ -2131,13 +2147,29 @@ const WorkItemsMilestonePlanningView: React.FC<WorkItemsMilestonePlanningViewPro
                     <div key={entry._id || entry.id} className="border border-slate-100 rounded-xl p-3 bg-slate-50/40">
                       <div className="flex items-center justify-between mb-1">
                         <div className="text-xs font-semibold text-slate-700 truncate">{entry.title}</div>
-                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest ${decisionSeverityClass(entry.severity)}`}>
-                          {entry.severity || 'info'}
-                        </span>
+                        <div className="flex items-center gap-1">
+                          {entry.source === 'AUTO' && (
+                            <span className="px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest bg-slate-200 text-slate-600">
+                              Auto
+                            </span>
+                          )}
+                          <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest ${decisionSeverityClass(entry.severity)}`}>
+                            {entry.severity || 'info'}
+                          </span>
+                        </div>
                       </div>
                       <div className="text-[10px] uppercase tracking-widest text-slate-400">
                         {String(entry.decisionType || 'OTHER').replace('_', ' ')} • {entry.outcome || 'ACKNOWLEDGED'}
                       </div>
+                      {(entry.tags || []).length ? (
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {(entry.tags || []).map((tag: string) => (
+                            <span key={tag} className="px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest bg-white border border-slate-200 text-slate-500">
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
                       {entry.rationale && (
                         <div className="mt-2 text-[11px] text-slate-600">
                           {String(entry.rationale).length > 140 ? `${String(entry.rationale).slice(0, 140)}…` : entry.rationale}
@@ -2203,10 +2235,27 @@ const WorkItemsMilestonePlanningView: React.FC<WorkItemsMilestonePlanningViewPro
               <div className="text-sm text-slate-600 leading-relaxed">
                 Assigning this item exceeds the committed capacity. Current: {overrideRequest.details?.currentCommittedPoints ?? '—'} / {overrideRequest.details?.targetCapacity ?? '—'} pts. Incoming: {overrideRequest.details?.incomingItemPoints ?? '—'} pts.
               </div>
+              <div className="space-y-2">
+                <label className="text-[8px] font-black uppercase tracking-widest text-slate-400">Override reason</label>
+                <textarea
+                  value={capacityOverrideReason}
+                  onChange={(e) => setCapacityOverrideReason(e.target.value)}
+                  className="w-full border border-slate-200 rounded-xl p-2 text-xs"
+                  rows={3}
+                />
+              </div>
               <div className="flex justify-end gap-2">
-                <button onClick={() => setOverrideRequest(null)} className="px-4 py-2 rounded-xl text-[10px] font-black uppercase border border-slate-200 text-slate-500">Cancel</button>
+                <button onClick={() => { setOverrideRequest(null); setCapacityOverrideReason(''); }} className="px-4 py-2 rounded-xl text-[10px] font-black uppercase border border-slate-200 text-slate-500">Cancel</button>
                 {isPrivilegedRole(currentUser?.role) && (
-                  <button onClick={handleOverrideAssign} className="px-4 py-2 rounded-xl text-[10px] font-black uppercase bg-red-600 text-white">Override & Assign</button>
+                  <button
+                    onClick={handleOverrideAssign}
+                    disabled={!capacityOverrideReason.trim()}
+                    className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase ${
+                      capacityOverrideReason.trim() ? 'bg-red-600 text-white' : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                    }`}
+                  >
+                    Override & Assign
+                  </button>
                 )}
               </div>
             </div>
@@ -2289,7 +2338,9 @@ const WorkItemsMilestonePlanningView: React.FC<WorkItemsMilestonePlanningViewPro
                   : 'Cancel this pending request.'}
               </div>
               <div className="space-y-2">
-                <label className="text-[8px] font-black uppercase tracking-widest text-slate-400">Reason (optional)</label>
+                <label className="text-[8px] font-black uppercase tracking-widest text-slate-400">
+                  Reason {scopeDecisionPrompt.decision === 'CANCEL' ? '(optional)' : '(required)'}
+                </label>
                 <textarea
                   value={decisionReason}
                   onChange={(e) => setDecisionReason(e.target.value)}
@@ -2301,11 +2352,12 @@ const WorkItemsMilestonePlanningView: React.FC<WorkItemsMilestonePlanningViewPro
                 <button onClick={() => { setScopeDecisionPrompt(null); setDecisionReason(''); }} className="px-4 py-2 rounded-xl text-[10px] font-black uppercase border border-slate-200 text-slate-500">Cancel</button>
                 <button
                   onClick={decideScopeRequest}
+                  disabled={scopeDecisionPrompt.decision !== 'CANCEL' && !decisionReason.trim()}
                   className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase ${
                     scopeDecisionPrompt.decision === 'APPROVE' ? 'bg-emerald-600 text-white' :
                     scopeDecisionPrompt.decision === 'REJECT' ? 'bg-rose-600 text-white' :
                     'bg-slate-900 text-white'
-                  }`}
+                  } ${scopeDecisionPrompt.decision !== 'CANCEL' && !decisionReason.trim() ? 'opacity-60 cursor-not-allowed' : ''}`}
                 >
                   Confirm
                 </button>

@@ -7,6 +7,7 @@ export type DecisionLogEntry = {
   _id?: string;
   createdAt: string;
   createdBy: { userId: string; email: string; name?: string };
+  source?: 'AUTO' | 'MANUAL';
   scopeType: 'PROGRAM' | 'BUNDLE' | 'MILESTONE' | 'WORK_ITEM';
   scopeId?: string;
   decisionType:
@@ -43,7 +44,7 @@ const ensureDecisionIndexes = async (db: any) => {
 export const createDecision = async (entry: DecisionLogEntry) => {
   const db = await getDb();
   await ensureDecisionIndexes(db);
-  const payload = { ...entry, createdAt: entry.createdAt || new Date().toISOString() };
+  const payload = { ...entry, source: entry.source || 'MANUAL', createdAt: entry.createdAt || new Date().toISOString() };
   const { _id, ...doc } = payload as any;
   const result = await db.collection('decision_log').insertOne(doc);
   try {
@@ -79,10 +80,18 @@ export const listDecisions = async (params: { scopeType?: string; scopeId?: stri
   if (params.scopeId) query.scopeId = params.scopeId;
   if (params.milestoneId) query['related.milestoneId'] = params.milestoneId;
   if (params.cursor) {
-    query.createdAt = { $lt: params.cursor };
+    const [cursorTime, cursorId] = String(params.cursor).split('|');
+    if (cursorTime && cursorId && ObjectId.isValid(cursorId)) {
+      query.$or = [
+        { createdAt: { $lt: cursorTime } },
+        { createdAt: cursorTime, _id: { $lt: new ObjectId(cursorId) } }
+      ];
+    } else if (cursorTime) {
+      query.createdAt = { $lt: cursorTime };
+    }
   }
   const limit = Math.min(Math.max(params.limit || 50, 1), 200);
-  const items = await db.collection('decision_log').find(query).sort({ createdAt: -1 }).limit(limit).toArray();
+  const items = await db.collection('decision_log').find(query).sort({ createdAt: -1, _id: -1 }).limit(limit).toArray();
   return items as unknown as DecisionLogEntry[];
 };
 

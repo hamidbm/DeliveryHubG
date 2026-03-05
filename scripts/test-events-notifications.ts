@@ -95,7 +95,8 @@ export const run = async () => {
       body: JSON.stringify({
         milestoneIds: [String(milestoneCap._id)],
         storyPoints: 10,
-        allowOverCapacity: true
+        allowOverCapacity: true,
+        overrideReason: 'capacity test override'
       })
     });
     const resCapacity = await PATCH_WORKITEM(reqCapacity, { params: Promise.resolve({ id: String(workItem._id) }) });

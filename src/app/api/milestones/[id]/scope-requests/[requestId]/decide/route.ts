@@ -43,6 +43,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (!['APPROVE', 'REJECT', 'CANCEL'].includes(decision)) {
       return NextResponse.json({ error: 'Invalid decision' }, { status: 400 });
     }
+    if ((decision === 'APPROVE' || decision === 'REJECT') && !reason?.trim()) {
+      return NextResponse.json({ error: 'DECISION_REASON_REQUIRED' }, { status: 400 });
+    }
 
     const db = await getDb();
     await ensureScopeChangeRequestIndexes(db);
@@ -107,6 +110,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           await createDecision({
             createdAt: now,
             createdBy: { userId: user.userId, email: user.email || '', name: user.name },
+            source: 'AUTO',
             scopeType: 'MILESTONE',
             scopeId: String(milestone._id || milestone.id || id),
             decisionType: 'SCOPE_APPROVAL',
@@ -117,7 +121,30 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
             related: {
               milestoneId: String(milestone._id || milestone.id || id),
               bundleId: milestone.bundleId ? String(milestone.bundleId) : undefined,
-              scopeRequestId: String(scopeRequest._id)
+              scopeRequestId: String(scopeRequest._id),
+              workItemIds: Array.isArray(scopeRequest.workItemIds) ? scopeRequest.workItemIds.map(String) : []
+            }
+          });
+        } catch {}
+      }
+      if (status === 'CANCELLED') {
+        try {
+          await createDecision({
+            createdAt: now,
+            createdBy: { userId: user.userId, email: user.email || '', name: user.name },
+            source: 'AUTO',
+            scopeType: 'MILESTONE',
+            scopeId: String(milestone._id || milestone.id || id),
+            decisionType: 'SCOPE_APPROVAL',
+            title: `Scope change cancelled for ${milestone.name || milestone.id || id}`,
+            rationale: reason || 'Scope change cancelled by requester.',
+            outcome: 'ACKNOWLEDGED',
+            severity: 'info',
+            related: {
+              milestoneId: String(milestone._id || milestone.id || id),
+              bundleId: milestone.bundleId ? String(milestone.bundleId) : undefined,
+              scopeRequestId: String(scopeRequest._id),
+              workItemIds: Array.isArray(scopeRequest.workItemIds) ? scopeRequest.workItemIds.map(String) : []
             }
           });
         } catch {}
@@ -236,6 +263,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       await createDecision({
         createdAt: now,
         createdBy: { userId: user.userId, email: user.email || '', name: user.name },
+        source: 'AUTO',
         scopeType: 'MILESTONE',
         scopeId: String(milestone._id || milestone.id || id),
         decisionType: 'SCOPE_APPROVAL',
@@ -246,7 +274,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         related: {
           milestoneId: String(milestone._id || milestone.id || id),
           bundleId: milestone.bundleId ? String(milestone.bundleId) : undefined,
-          scopeRequestId: String(scopeRequest._id)
+          scopeRequestId: String(scopeRequest._id),
+          workItemIds
         }
       });
     } catch {}

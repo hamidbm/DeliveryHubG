@@ -36,7 +36,8 @@ export const run = async () => {
     const milestone = await createMilestone({
       name: 'Decision M1',
       bundleId,
-      status: 'Planned',
+      status: 'COMMITTED',
+      targetCapacity: 1,
       startDate: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
       endDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
       dueDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
@@ -64,6 +65,7 @@ export const run = async () => {
     assert.strictEqual(createRes.status, 200, 'Expected decision create');
     const createBody = await createRes.json();
     assert.ok(createBody?.decision?._id, 'Expected decision created');
+    assert.strictEqual(createBody?.decision?.source, 'MANUAL');
 
     setAuthToken(outsiderToken);
     (globalThis as any).__testToken = outsiderToken;
@@ -93,7 +95,7 @@ export const run = async () => {
       bundleId,
       milestoneIds: [String(milestone._id)],
       type: 'STORY',
-      storyPoints: 3,
+      storyPoints: 5,
       status: 'TODO'
     });
 
@@ -112,6 +114,104 @@ export const run = async () => {
       'related.milestoneId': String(milestone._id)
     });
     assert.ok(overrideDecision, 'Expected auto-created decision for commit override');
+    assert.strictEqual(overrideDecision?.source, 'AUTO');
+
+    const workItem = await createWorkItem({
+      key: 'DEC-2',
+      title: 'Capacity test',
+      bundleId,
+      type: 'STORY',
+      storyPoints: 8,
+      status: 'TODO'
+    });
+    const { PATCH: patchWorkItem } = await import('../src/app/api/work-items/[id]/route');
+    const capacityRes = await callRoute(patchWorkItem, `http://localhost/api/work-items/${workItem._id}`, {
+      method: 'PATCH',
+      body: { milestoneIds: [String(milestone._id)], allowOverCapacity: true, overrideReason: 'Need extra scope' },
+      params: { id: String(workItem._id) }
+    });
+    assert.strictEqual(capacityRes.status, 200, 'Expected capacity override');
+    const capacityDecision = await db.collection('decision_log').findOne({
+      decisionType: 'CAPACITY_OVERRIDE',
+      'related.milestoneId': String(milestone._id)
+    });
+    assert.ok(capacityDecision, 'Expected capacity override decision');
+
+    const { PATCH: updateMilestone } = await import('../src/app/api/milestones/[id]/route');
+    const readinessRes = await callRoute(updateMilestone, `http://localhost/api/milestones/${milestone._id}`, {
+      method: 'PATCH',
+      body: { status: 'IN_PROGRESS', allowOverride: true, overrideReason: 'Start despite over-capacity' },
+      params: { id: String(milestone._id) }
+    });
+    assert.strictEqual(readinessRes.status, 200, 'Expected readiness override');
+    const readinessDecision = await db.collection('decision_log').findOne({
+      decisionType: 'READINESS_OVERRIDE',
+      'related.milestoneId': String(milestone._id)
+    });
+    assert.ok(readinessDecision, 'Expected readiness override decision');
+
+    await db.collection('milestones').updateOne(
+      { _id: milestone._id },
+      { $set: { status: 'COMMITTED', targetCapacity: 100 } }
+    );
+
+    const scopeWorkItem = await createWorkItem({
+      key: 'DEC-3',
+      title: 'Scope approve item',
+      bundleId,
+      type: 'STORY',
+      storyPoints: 1,
+      status: 'TODO'
+    });
+
+    const scopeRequestApprove = {
+      _id: new ObjectId(),
+      milestoneId: String(milestone._id),
+      action: 'ADD_ITEMS',
+      workItemIds: [String(scopeWorkItem._id)],
+      allowOverCapacity: false,
+      requestedBy: String(adminUser._id),
+      status: 'PENDING',
+      createdAt: new Date().toISOString()
+    };
+    await db.collection('scope_change_requests').insertOne(scopeRequestApprove);
+    const { POST: decideScope } = await import('../src/app/api/milestones/[id]/scope-requests/[requestId]/decide/route');
+    const scopeApproveRes = await callRoute(decideScope, `http://localhost/api/milestones/${milestone._id}/scope-requests/${scopeRequestApprove._id}/decide`, {
+      method: 'POST',
+      body: { decision: 'APPROVE', reason: 'Approved for priority delivery' },
+      params: { id: String(milestone._id), requestId: String(scopeRequestApprove._id) }
+    });
+    assert.strictEqual(scopeApproveRes.status, 200, 'Expected scope approve');
+    const scopeApproveDecision = await db.collection('decision_log').findOne({
+      decisionType: 'SCOPE_APPROVAL',
+      outcome: 'APPROVED',
+      'related.scopeRequestId': String(scopeRequestApprove._id)
+    });
+    assert.ok(scopeApproveDecision, 'Expected scope approval decision');
+
+    const scopeRequestReject = {
+      _id: new ObjectId(),
+      milestoneId: String(milestone._id),
+      action: 'REMOVE_ITEMS',
+      workItemIds: [String(scopeWorkItem._id)],
+      allowOverCapacity: false,
+      requestedBy: String(adminUser._id),
+      status: 'PENDING',
+      createdAt: new Date().toISOString()
+    };
+    await db.collection('scope_change_requests').insertOne(scopeRequestReject);
+    const scopeRejectRes = await callRoute(decideScope, `http://localhost/api/milestones/${milestone._id}/scope-requests/${scopeRequestReject._id}/decide`, {
+      method: 'POST',
+      body: { decision: 'REJECT', reason: 'Rejected due to capacity' },
+      params: { id: String(milestone._id), requestId: String(scopeRequestReject._id) }
+    });
+    assert.strictEqual(scopeRejectRes.status, 200, 'Expected scope reject');
+    const scopeRejectDecision = await db.collection('decision_log').findOne({
+      decisionType: 'SCOPE_APPROVAL',
+      outcome: 'REJECTED',
+      'related.scopeRequestId': String(scopeRequestReject._id)
+    });
+    assert.ok(scopeRejectDecision, 'Expected scope reject decision');
 
     const { GET: briefGet } = await import('../src/app/api/briefs/weekly/route');
     const briefRes = await callRoute(briefGet, `http://localhost/api/briefs/weekly?scopeType=MILESTONE&scopeId=${milestone._id}`, {

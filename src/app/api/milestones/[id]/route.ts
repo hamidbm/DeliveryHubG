@@ -175,6 +175,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
                 email: (payload as any).email ? String((payload as any).email) : '',
                 name: (payload as any).name ? String((payload as any).name) : undefined
               },
+              source: 'AUTO',
               scopeType: 'MILESTONE',
               scopeId: String(existing._id || existing.id || id),
               decisionType: 'READINESS_OVERRIDE',

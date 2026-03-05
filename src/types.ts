@@ -772,6 +772,7 @@ export interface DecisionLogEntry {
   _id?: string;
   createdAt: string;
   createdBy: { userId: string; email: string; name?: string };
+  source?: 'AUTO' | 'MANUAL';
   scopeType: 'PROGRAM' | 'BUNDLE' | 'MILESTONE' | 'WORK_ITEM';
   scopeId?: string;
   decisionType:

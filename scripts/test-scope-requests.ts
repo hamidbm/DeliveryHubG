@@ -69,7 +69,7 @@ export const run = async () => {
     const approveRes = await callRoute(POST_DECIDE, 'http://localhost/api/milestones/scope/decide', {
       method: 'POST',
       params: { id: String(milestone._id), requestId: String(created.request._id) },
-      body: { decision: 'APPROVE' }
+      body: { decision: 'APPROVE', reason: 'Approved for scope request test' }
     });
     assert.strictEqual(approveRes.status, 200, 'Expected approve to succeed');
     const approveBody = await approveRes.json();
@@ -102,7 +102,7 @@ export const run = async () => {
     const approveOver = await callRoute(POST_DECIDE, 'http://localhost/api/milestones/scope/decide', {
       method: 'POST',
       params: { id: String(milestone._id), requestId: String(createOverBody.request._id) },
-      body: { decision: 'APPROVE' }
+      body: { decision: 'APPROVE', reason: 'Attempt approve over capacity' }
     });
     assert.strictEqual(approveOver.status, 409, 'Expected approval blocked when over capacity');
 

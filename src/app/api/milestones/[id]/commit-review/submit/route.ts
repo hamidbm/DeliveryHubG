@@ -87,7 +87,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const now = new Date().toISOString();
     await db.collection('milestones').updateOne(buildMilestoneQuery(id), { $set: { status: 'COMMITTED', updatedAt: now } });
     await db.collection('commitment_reviews').createIndex({ milestoneId: 1, evaluatedAt: -1 });
-    await db.collection('commitment_reviews').insertOne({
+    const reviewInsert = await db.collection('commitment_reviews').insertOne({
       milestoneId: String(milestone._id || milestone.id || milestone.name || id),
       evaluatedAt: now,
       evaluatedBy: String(authUser.userId || ''),
@@ -105,6 +105,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         await createDecision({
           createdAt: now,
           createdBy: { userId: String(authUser.userId || ''), email: String((payload as any).email || ''), name: (payload as any).name },
+          source: 'AUTO',
           scopeType: 'MILESTONE',
           scopeId: String(milestone._id || milestone.id || milestone.name || id),
           decisionType: 'COMMIT_OVERRIDE',
@@ -114,7 +115,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           severity: 'warn',
           related: {
             milestoneId: String(milestone._id || milestone.id || milestone.name || id),
-            bundleId: milestone.bundleId ? String(milestone.bundleId) : undefined
+            bundleId: milestone.bundleId ? String(milestone.bundleId) : undefined,
+            commitReviewId: reviewInsert?.insertedId ? String(reviewInsert.insertedId) : undefined,
+            policyRef: policyRef?.refs ? policyRef.refs : undefined
           }
         });
       } catch {}
