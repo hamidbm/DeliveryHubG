@@ -1,5 +1,4 @@
 
-import React from 'react';
 import { Bundle, Application, WorkItem, Milestone, WikiPage } from './types';
 
 export const BUNDLES: Bundle[] = [];
@@ -14,14 +13,18 @@ export const WORK_ITEMS: WorkItem[] = [];
 export const MILESTONES: Milestone[] = [];
 export const WIKI_PAGES: WikiPage[] = [];
 
-export const NAV_ITEMS = [
-  { id: 'dashboard', label: 'Dashboards', icon: 'fa-chart-pie' },
-  { id: 'applications', label: 'Applications', icon: 'fa-cubes' },
-  { id: 'work-items', label: 'Work Items', icon: 'fa-tasks' },
-  { id: 'program', label: 'Program', icon: 'fa-layer-group' },
-  { id: 'architecture', label: 'Architecture', icon: 'fa-sitemap' },
-  { id: 'wiki', label: 'Wiki', icon: 'fa-book' },
-  { id: 'activities', label: 'Activities', icon: 'fa-bolt' },
-  { id: 'ai-insights', label: 'AI Insights', icon: 'fa-robot' },
-  { id: 'admin', label: 'Admin', icon: 'fa-user-shield' },
+export const NAV_TOP = [
+  { id: 'delivery', label: 'Delivery', icon: 'fa-gauge', href: '/' },
+  { id: 'applications', label: 'Applications', icon: 'fa-cubes', href: '/applications' },
+  { id: 'work-items', label: 'Work Items', icon: 'fa-tasks', href: '/?tab=work-items' },
+  { id: 'architecture', label: 'Architecture', icon: 'fa-sitemap', href: '/?tab=architecture' },
+  { id: 'wiki', label: 'Knowledge', icon: 'fa-book', href: '/?tab=wiki' },
+  { id: 'admin', label: 'Admin', icon: 'fa-user-shield', href: '/?tab=admin' }
+];
+
+export const NAV_DELIVERY = [
+  { id: 'dashboard', label: 'Dashboards', href: '/' },
+  { id: 'program', label: 'Program', href: '/program' },
+  { id: 'activities', label: 'Activities', href: '/activities/feed' },
+  { id: 'ai-insights', label: 'AI Insights', href: '/?tab=ai-insights' }
 ];

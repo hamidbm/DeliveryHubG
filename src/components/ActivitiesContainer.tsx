@@ -1,5 +1,4 @@
-import React, { useMemo } from 'react';
-import { useRouter } from '../App';
+import React from 'react';
 import { Bundle } from '../types';
 import Activities from './Activities';
 import ReviewsDashboard from './ReviewsDashboard';
@@ -13,18 +12,7 @@ interface ActivitiesContainerProps {
 }
 
 const ActivitiesContainer: React.FC<ActivitiesContainerProps> = ({ bundles }) => {
-  const router = useRouter();
-  const pathname = router ? window.location.pathname : '/activities';
-
-  const tabs = useMemo(() => ([
-    { id: 'feed', label: 'Feed', path: '/activities/feed' },
-    { id: 'reviews', label: 'Reviews', path: '/activities/reviews' },
-    { id: 'comments', label: 'Comments', path: '/activities/comments' },
-    { id: 'work-items', label: 'Work Items', path: '/activities/work-items' },
-    { id: 'architecture', label: 'Architecture', path: '/activities/architecture' }
-  ]), []);
-
-  const isActive = (path: string) => pathname === path || pathname.startsWith(`${path}/`);
+  const pathname = typeof window !== 'undefined' ? window.location.pathname : '/activities';
 
   const renderContent = () => {
     if (pathname === '/activities' || pathname === '/activities/feed') {
@@ -48,27 +36,8 @@ const ActivitiesContainer: React.FC<ActivitiesContainerProps> = ({ bundles }) =>
   };
 
   return (
-    <div className="flex flex-col min-h-0">
-      <div className="sticky top-0 z-30 bg-white border-b border-slate-200">
-        <div className="h-14 px-6 flex items-center gap-4 overflow-x-auto no-scrollbar flex-nowrap">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => router.push(tab.path)}
-              className={`px-3 py-2 text-sm font-semibold border-b-2 whitespace-nowrap ${
-                isActive(tab.path)
-                  ? 'border-slate-900 text-slate-900'
-                  : 'border-transparent text-slate-400 hover:text-slate-600'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-      </div>
-      <div className="min-h-0">
-        {renderContent()}
-      </div>
+    <div className="min-h-0">
+      {renderContent()}
     </div>
   );
 };

@@ -70,7 +70,7 @@ const ArchitectureActivity: React.FC<ArchitectureActivityProps> = ({ bundles }) 
   const resolveAppName = (id?: string) => applications.find((a) => String(a._id || a.id) === String(id))?.name || '—';
 
   return (
-    <div className="p-12 max-w-6xl mx-auto animate-fadeIn">
+    <div className="p-12 w-full animate-fadeIn">
       <div className="sticky top-14 z-20 bg-[#F8FAFC] pb-4">
         <div className="bg-white border border-slate-200 rounded-2xl p-4 flex flex-wrap gap-3 items-center">
           <div className="text-sm font-semibold text-slate-800 mr-2">Architecture Activity</div>

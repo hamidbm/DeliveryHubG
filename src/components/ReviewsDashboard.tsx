@@ -125,7 +125,7 @@ const ReviewsDashboard: React.FC<ReviewsDashboardProps> = ({ bundles }) => {
   };
 
   return (
-    <div className="p-12 max-w-6xl mx-auto animate-fadeIn">
+    <div className="p-12 w-full animate-fadeIn">
       <div className={`sticky top-14 z-30 bg-[#F8FAFC] ${hasStickyShadow ? 'shadow-md' : 'shadow-none'}`}>
         <div className="bg-white/95 backdrop-blur border border-slate-200 rounded-2xl overflow-hidden">
           <div className="px-5 py-4 flex items-center justify-between gap-4 flex-nowrap">

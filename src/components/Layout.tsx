@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { useRouter } from '../App';
-import { NAV_ITEMS } from '../constants';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useRouter, usePathname, useSearchParams } from '../App';
+import { NAV_TOP, NAV_DELIVERY } from '../constants';
 import { WikiSpace, Application, Bundle, WorkItem, Notification } from '../types';
 
 interface LayoutProps {
@@ -41,10 +41,26 @@ const Layout: React.FC<LayoutProps> = ({
   userRole = 'Enterprise Architect', onLogout
 }) => {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [spaces, setSpaces] = useState<WikiSpace[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
+  const deliveryTabs = useMemo(() => new Set(['dashboard', 'program', 'activities', 'ai-insights']), []);
+  const tabParam = searchParams.get('tab');
+  const resolvedTab = tabParam || activeTab;
+
+  const isDeliveryPath = pathname === '/' && (!resolvedTab || deliveryTabs.has(resolvedTab));
+  const isProgramPath = pathname.startsWith('/program');
+  const isActivitiesPath = pathname.startsWith('/activities');
+  const isDeliveryActive = isDeliveryPath || isProgramPath || isActivitiesPath || deliveryTabs.has(resolvedTab);
+
+  const activeDeliveryId = isProgramPath
+    ? 'program'
+    : isActivitiesPath
+      ? 'activities'
+      : (deliveryTabs.has(resolvedTab) ? resolvedTab : 'dashboard');
 
   useEffect(() => {
     fetch('/api/wiki/spaces')
@@ -80,7 +96,20 @@ const Layout: React.FC<LayoutProps> = ({
   };
 
   const filteredApps = (applications || []).filter(a => activeBundle === 'all' || a.bundleId === activeBundle);
-  const showFilterBar = ['dashboard', 'applications', 'work-items', 'wiki', 'reviews', 'documents'].includes(activeTab);
+  const showFilterBar = ['applications', 'work-items', 'wiki', 'reviews', 'documents'].includes(activeTab);
+  const showDeliveryNav = isDeliveryActive;
+  const deliveryRows = showDeliveryNav ? (isActivitiesPath ? 2 : 1) : 0;
+  const deliveryHeight = deliveryRows * 48;
+  const filterTop = 64 + deliveryHeight;
+  const mainTop = filterTop + (showFilterBar ? 56 : 0);
+  const activitiesTabs = [
+    { id: 'feed', label: 'Feed', path: '/activities/feed' },
+    { id: 'reviews', label: 'Reviews', path: '/activities/reviews' },
+    { id: 'comments', label: 'Comments', path: '/activities/comments' },
+    { id: 'work-items', label: 'Work Items', path: '/activities/work-items' },
+    { id: 'architecture', label: 'Architecture', path: '/activities/architecture' }
+  ];
+  const isActivityTabActive = (path: string) => pathname === path || pathname.startsWith(`${path}/`);
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -96,12 +125,24 @@ const Layout: React.FC<LayoutProps> = ({
         </a>
 
         <div className="flex space-x-1 h-full overflow-x-auto no-scrollbar">
-          {NAV_ITEMS.map((item) => (
+          {NAV_TOP.map((item) => {
+            const isActive = item.id === 'delivery'
+              ? isDeliveryActive
+              : activeTab === item.id;
+            return (
             <button
               key={item.id}
-              onClick={() => setActiveTab(item.id)}
+              onClick={() => {
+                if (item.id === 'delivery') {
+                  setActiveTab('dashboard');
+                  router.push('/');
+                  return;
+                }
+                setActiveTab(item.id);
+                if (item.href) router.push(item.href);
+              }}
               className={`px-4 h-full flex items-center space-x-2 text-sm font-medium transition-colors border-b-2 shrink-0 ${
-                activeTab === item.id 
+                isActive 
                 ? 'border-blue-500 bg-slate-800 text-white' 
                 : 'border-transparent text-slate-400 hover:text-white hover:bg-slate-800'
               }`}
@@ -109,7 +150,7 @@ const Layout: React.FC<LayoutProps> = ({
               <i className={`fas ${item.icon}`}></i>
               <span className="hidden lg:block">{item.label}</span>
             </button>
-          ))}
+          )})}
         </div>
 
         <div className="ml-auto flex items-center space-x-6 shrink-0">
@@ -195,8 +236,61 @@ const Layout: React.FC<LayoutProps> = ({
         </div>
       </nav>
 
+      {showDeliveryNav && (
+        <div className="bg-white border-b border-slate-200 fixed top-16 w-full z-40 shadow-sm">
+          <div className="h-12 flex items-center px-8">
+            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+              {NAV_DELIVERY.map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => {
+                    if (item.id === 'dashboard') {
+                      setActiveTab('dashboard');
+                      router.push('/');
+                    } else if (item.id === 'program') {
+                      setActiveTab('program');
+                      router.push(item.href);
+                    } else {
+                      setActiveTab(item.id);
+                      router.push(item.href);
+                    }
+                  }}
+                  className={`px-4 py-2 text-[10px] font-black uppercase rounded-lg transition-all ${
+                    activeDeliveryId === item.id ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-400 hover:text-slate-600'
+                  }`}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          {isActivitiesPath && (
+            <div className="h-12 border-t border-slate-100 flex items-center px-8 bg-white">
+              <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+                {activitiesTabs.map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => router.push(tab.path)}
+                    className={`px-4 py-2 text-[10px] font-black uppercase rounded-lg transition-all ${
+                      isActivityTabActive(tab.path)
+                        ? 'bg-blue-50 text-blue-700 border border-blue-100'
+                        : 'text-slate-400 hover:text-slate-600'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {showFilterBar && (
-        <div className="bg-white border-b border-slate-200 h-14 fixed top-16 w-full z-40 flex items-center px-8 justify-between shadow-sm">
+        <div
+          className="bg-white border-b border-slate-200 h-14 fixed w-full z-40 flex items-center px-8 justify-between shadow-sm"
+          style={{ top: `${filterTop}px` }}
+        >
           <div className="flex items-center gap-6 overflow-x-auto no-scrollbar shrink-0">
             {activeTab === 'wiki' && (
               <FilterSelect label="Space" value={selSpaceId} onChange={setSelSpaceId!} options={spaces.map(s => ({ id: s._id || s.id!, name: s.name }))} />
@@ -251,8 +345,11 @@ const Layout: React.FC<LayoutProps> = ({
         </div>
       )}
 
-      <main className={`${showFilterBar ? 'mt-[7.5rem]' : 'mt-16'} ${activeTab === 'activities' ? 'px-6 pb-6 pt-0 overflow-y-auto h-[calc(100vh-4rem)] min-h-0' : 'p-6 overflow-y-auto'} overflow-x-visible bg-[#F8FAFC]`}>
-        <div className="max-w-[1600px] mx-auto">
+      <main
+        className={`${activeTab === 'activities' ? 'px-6 pb-6 pt-0 overflow-y-auto h-[calc(100vh-4rem)] min-h-0' : 'p-6 overflow-y-auto'} overflow-x-visible bg-[#F8FAFC]`}
+        style={{ marginTop: `${mainTop}px` }}
+      >
+        <div className={isActivitiesPath ? 'w-full' : 'max-w-[1600px] mx-auto'}>
           {children}
         </div>
       </main>

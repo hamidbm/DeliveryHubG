@@ -97,7 +97,7 @@ const CommentsActivity: React.FC = () => {
   };
 
   return (
-    <div className="p-12 max-w-6xl mx-auto animate-fadeIn">
+    <div className="p-12 w-full animate-fadeIn">
       <div className="sticky top-14 z-20 bg-[#F8FAFC] pb-4 space-y-3">
         <div className="flex items-center gap-2">
           {[
