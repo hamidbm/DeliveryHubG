@@ -4,7 +4,7 @@ import { jwtVerify } from 'jose';
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const token = request.cookies.get('nexus_auth_token')?.value;
 
@@ -62,12 +62,12 @@ export async function middleware(request: NextRequest) {
   return NextResponse.next();
 }
 
-// Config to ensure middleware runs on all relevant paths
+// Config to ensure proxy runs on all relevant paths
 export const config = {
   matcher: [
     /*
      * Match all request paths except for the ones starting with:
-     * - api/auth (handled inside middleware)
+     * - api/auth (handled inside proxy)
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
