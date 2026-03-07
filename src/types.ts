@@ -268,6 +268,87 @@ export type SimulationRequest = {
   scenario: SimulationScenario;
 };
 
+export type PortfolioPlanSource = 'CREATED_PLAN' | 'PREVIEW';
+
+export type PortfolioPlanSummary = {
+  id: string;
+  name: string;
+  createdAt: string;
+  milestoneCount: number;
+  riskLevel: 'LOW' | 'MEDIUM' | 'HIGH';
+  source: PortfolioPlanSource;
+};
+
+export type PortfolioMilestoneInsight = {
+  id: string;
+  name: string;
+  startDate?: string;
+  endDate?: string;
+  targetCapacity?: number | null;
+  committedLoad?: number;
+  remainingLoad?: number;
+  utilizationPercent?: number | null;
+  utilizationState?: 'UNDERFILLED' | 'HEALTHY' | 'AT_RISK' | 'OVERLOADED';
+  readinessBand?: 'high' | 'medium' | 'low';
+  blockedItemCount?: number;
+  dependencyInbound?: number;
+  dependencyOutbound?: number;
+  riskLevel?: 'LOW' | 'MEDIUM' | 'HIGH';
+};
+
+export type PortfolioDependencyEdge = {
+  fromMilestoneId: string;
+  toMilestoneId: string;
+  count: number;
+  blockerCount: number;
+  blockedCount: number;
+};
+
+export type PortfolioPlanDetail = {
+  id: string;
+  name: string;
+  createdAt: string;
+  source: PortfolioPlanSource;
+  scopeType?: string;
+  scopeId?: string;
+  milestoneCount: number;
+  milestones: PortfolioMilestoneInsight[];
+};
+
+export type MilestoneForecast = {
+  milestoneId: string;
+  plannedEndDate: string;
+  bestCaseDate: string;
+  expectedDate: string;
+  worstCaseDate: string;
+  forecastConfidence: 'LOW' | 'MEDIUM' | 'HIGH';
+  slipRisk: 'LOW' | 'MEDIUM' | 'HIGH';
+};
+
+export type PlanForecastSummary = {
+  planId: string;
+  milestonesAnalyzed: number;
+  highRiskMilestones: number;
+  averageSlipDays: number;
+  averageConfidence: 'LOW' | 'MEDIUM' | 'HIGH';
+};
+
+export type PortfolioForecastSummary = {
+  plansAnalyzed: number;
+  totalMilestones: number;
+  highRiskMilestones: number;
+  expectedPortfolioSlipDays: number;
+};
+
+export type PortfolioOverview = {
+  totalPlans: number;
+  totalMilestones: number;
+  highRiskMilestones: number;
+  overloadedMilestones: number;
+  avgUtilization: number | null;
+  plansWithSimulations: number;
+};
+
 export type MilestoneComparison = {
   milestoneId: string;
   baselineEndDate: string;

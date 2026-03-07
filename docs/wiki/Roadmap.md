@@ -14,6 +14,30 @@ The Work Items roadmap now supports multiple UI views over the same data set:
 All tabs render the same milestones, sprints, capacity, and dependency data; the views are purely presentational.
 Each view now includes milestone health signals (utilization, risk, blocked count, readiness, confidence) computed from existing data.
 
+### Portfolio Analytics (Phase 6)
+Portfolio analytics aggregate multiple delivery plans into a single dashboard view:
+- Summary cards (plan count, milestone count, high risk, overload, avg utilization)
+- Timeline comparison across plans
+- Cross-plan dependency map (BLOCKS links only)
+- Health summary table per plan
+
+### Predictive Forecasting (Phase 7)
+Forecasting adds best/expected/worst-case delivery windows for milestones:
+- Forecast windows are derived from milestone intelligence (utilization, risk, readiness, dependency pressure, blocked items).
+- Roadmap views display forecast ranges and confidence signals (Execution Board, Timeline, Swimlane).
+- Portfolio dashboard includes expected portfolio slip and low-confidence plans.
+
+Example (milestone forecast window):
+```
+Planned End: 2026-06-01
+Forecast:
+  Best Case: 2026-05-28
+  Expected: 2026-06-03
+  Worst Case: 2026-06-15
+Confidence: MEDIUM
+Slip Risk: MEDIUM
+```
+
 ## Simulation (Phase 5)
 The roadmap supports delivery simulations that compare baseline plan previews against scenario overrides (capacity, scope, dates, velocity). Results show milestone slippage, utilization changes, and risk shifts, with an explicit per‑milestone date delta.
 DATE_SHIFT overrides apply to specific milestones (not global plan shifts).

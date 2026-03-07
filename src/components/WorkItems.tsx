@@ -12,6 +12,7 @@ import WorkItemsMilestonePlanningView from './WorkItemsMilestonePlanningView';
 import WorkItemsSprintsView from './WorkItemsSprintsView';
 import Milestones from './Milestones';
 import GenerateDeliveryPlanWizard from './GenerateDeliveryPlanWizard';
+import PortfolioDashboard from './portfolio/PortfolioDashboard';
 
 interface WorkItemsProps {
   applications: Application[];
@@ -44,6 +45,7 @@ const WorkItems: React.FC<WorkItemsProps> = (props) => {
   const viewGroups = useMemo(() => ({
     planning: [
       { id: 'roadmap', label: 'Roadmap' },
+      { id: 'portfolio', label: 'Portfolio' },
       { id: 'milestones', label: 'Milestones' },
       { id: 'milestone-plan', label: 'Cycle Planning' }
     ],
@@ -296,6 +298,8 @@ const WorkItems: React.FC<WorkItemsProps> = (props) => {
         <div className="animate-fadeIn">
           {activeView === 'roadmap' ? (
             <WorkItemsRoadmapView {...sanitizedProps} />
+          ) : activeView === 'portfolio' ? (
+            <PortfolioDashboard />
           ) : activeView === 'sprints' ? (
             <WorkItemsSprintsView {...sanitizedProps} />
           ) : activeView === 'board' ? (

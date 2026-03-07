@@ -70,6 +70,46 @@ Each item can have a parent and children to form a delivery hierarchy.
 - Commitment Drift chips for COMMITTED/IN_PROGRESS milestones with delta modal
 - Lazy list fetching with list counts to keep performance responsive
 
+### Portfolio (Phase 6)
+- Portfolio analytics live under Work Items → Portfolio.
+- Dashboard view with summary cards, plan selection, and tabs:
+  - Timeline comparison (overlapping milestones)
+  - Dependency view (cross-plan BLOCKS links)
+  - Health summary (risk + utilization per plan)
+- Created plans are primary; previews are used as fallback when no created plan exists.
+
+### Predictive Forecasting (Phase 7)
+- Forecast windows (best/expected/worst) are computed from milestone intelligence.
+- Roadmap views show forecast ranges and confidence badges.
+- Forecast APIs:
+  - `GET /api/forecast/plan/{planId}`
+  - `GET /api/forecast/plan/latest?scopeType=&scopeId=`
+  - `POST /api/forecast/portfolio`
+
+Example API response (plan forecast):
+```json
+{
+  "milestoneForecasts": [
+    {
+      "milestoneId": "m1",
+      "plannedEndDate": "2026-06-01T00:00:00.000Z",
+      "bestCaseDate": "2026-05-28T00:00:00.000Z",
+      "expectedDate": "2026-06-03T00:00:00.000Z",
+      "worstCaseDate": "2026-06-15T00:00:00.000Z",
+      "forecastConfidence": "MEDIUM",
+      "slipRisk": "MEDIUM"
+    }
+  ],
+  "summary": {
+    "planId": "created:123",
+    "milestonesAnalyzed": 1,
+    "highRiskMilestones": 0,
+    "averageSlipDays": 2,
+    "averageConfidence": "MEDIUM"
+  }
+}
+```
+
 ## Generate Delivery Plan (Planning Mode)
 The Planning toolbar includes **Generate Delivery Plan**, a guided wizard that creates a draft delivery structure.
 

@@ -2,8 +2,15 @@ import React from 'react';
 import WorkItemDetails from '../WorkItemDetails';
 import WorkItemsStaleModal from '../WorkItemsStaleModal';
 import OnboardingTip from '../OnboardingTip';
-import { WorkItem, Application, Bundle, WorkItemStatus } from '../../types';
+import { WorkItem, Application, Bundle, WorkItemStatus, MilestoneForecast } from '../../types';
 import type { MilestoneIntelligence } from './roadmapViewModels';
+
+const formatForecastDate = (value?: string) => {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleDateString();
+};
 
 interface ExecutionBoardViewProps {
   loading: boolean;
@@ -30,6 +37,8 @@ interface ExecutionBoardViewProps {
   groupedItems: Record<string, Partial<Record<WorkItemStatus, WorkItem[]>>>;
   intelByMilestone: Record<string, any>;
   milestoneIntelligenceById: Record<string, MilestoneIntelligence>;
+  forecastByMilestone: Record<string, MilestoneForecast>;
+  forecastStatus: { loading: boolean; error?: string };
   activeItem: WorkItem | null;
   staleModal: { milestoneId: string } | null;
   driftModal: { milestoneId: string; drift: any } | null;
@@ -86,6 +95,8 @@ const ExecutionBoardView: React.FC<ExecutionBoardViewProps> = ({
   groupedItems,
   intelByMilestone,
   milestoneIntelligenceById,
+  forecastByMilestone,
+  forecastStatus,
   activeItem,
   staleModal,
   driftModal,
@@ -279,6 +290,7 @@ const ExecutionBoardView: React.FC<ExecutionBoardViewProps> = ({
           const criticalIds = new Set((critical?.criticalPath?.nodes || []).map((n: any) => String(n.id)));
           const capacity = rollup?.capacity || {};
           const forecast = rollup?.forecast;
+          const predictiveForecast = forecastByMilestone[milestoneId];
           const confidence = rollup?.confidence;
           const staleness = rollup?.staleness || {};
           const staleTotal = staleness.staleCount || 0;
@@ -357,6 +369,19 @@ const ExecutionBoardView: React.FC<ExecutionBoardViewProps> = ({
                   <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-600">
                     Inbound {intelligence.dependencyInbound} / Outbound {intelligence.dependencyOutbound}
                   </span>
+                  {predictiveForecast && (
+                    <span className="px-2 py-1 rounded-full bg-slate-900 text-white">
+                      Forecast {formatForecastDate(predictiveForecast.bestCaseDate)} – {formatForecastDate(predictiveForecast.worstCaseDate)}
+                    </span>
+                  )}
+                  {predictiveForecast && (
+                    <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-600">
+                      Confidence {predictiveForecast.forecastConfidence} • Slip {predictiveForecast.slipRisk}
+                    </span>
+                  )}
+                  {!predictiveForecast && forecastStatus.loading && (
+                    <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-400">Forecast loading…</span>
+                  )}
                 </div>
               )}
 

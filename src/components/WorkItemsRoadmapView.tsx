@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react';
-import { WorkItem, Application, Bundle, Milestone, WorkItemStatus } from '../types';
+import { WorkItem, Application, Bundle, Milestone, WorkItemStatus, MilestoneForecast } from '../types';
 import RoadmapTabs, { RoadmapViewKey } from './roadmap/RoadmapTabs';
 import ExecutionBoardView from './roadmap/ExecutionBoardView';
 import RoadmapTimelineView from './roadmap/RoadmapTimelineView';
@@ -39,6 +39,8 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
   const [activeItem, setActiveItem] = useState<WorkItem | null>(null);
   const [showSimulation, setShowSimulation] = useState(false);
   const [roadmapIntel, setRoadmapIntel] = useState<any[]>([]);
+  const [forecastByMilestone, setForecastByMilestone] = useState<Record<string, MilestoneForecast>>({});
+  const [forecastStatus, setForecastStatus] = useState<{ loading: boolean; error?: string }>({ loading: false });
   const [intelLoading, setIntelLoading] = useState(false);
   const [intelError, setIntelError] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<any | null>(null);
@@ -116,9 +118,43 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
     }
   };
 
+  const loadForecast = async () => {
+    const scopeType = selAppId && selAppId !== 'all'
+      ? 'APPLICATION'
+      : selBundleId && selBundleId !== 'all'
+        ? 'BUNDLE'
+        : '';
+    const scopeId = scopeType === 'APPLICATION' ? selAppId : scopeType === 'BUNDLE' ? selBundleId : '';
+    if (!scopeType || !scopeId) {
+      setForecastByMilestone({});
+      return;
+    }
+    setForecastStatus({ loading: true });
+    try {
+      const res = await fetch(`/api/forecast/plan/latest?scopeType=${encodeURIComponent(scopeType)}&scopeId=${encodeURIComponent(scopeId)}`);
+      if (!res.ok) {
+        setForecastStatus({ loading: false, error: 'Failed to load forecast.' });
+        return;
+      }
+      const data = await res.json();
+      const map: Record<string, MilestoneForecast> = {};
+      (data?.milestoneForecasts || []).forEach((f: MilestoneForecast) => {
+        map[String(f.milestoneId)] = f;
+      });
+      setForecastByMilestone(map);
+      setForecastStatus({ loading: false });
+    } catch {
+      setForecastStatus({ loading: false, error: 'Failed to load forecast.' });
+    }
+  };
+
   useEffect(() => {
     loadIntel();
   }, [milestones]);
+
+  useEffect(() => {
+    loadForecast();
+  }, [selBundleId, selAppId]);
 
   useEffect(() => {
     fetch('/api/auth/me')
@@ -433,6 +469,8 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
           groupedItems={groupedItems}
           intelByMilestone={intelByMilestone}
           milestoneIntelligenceById={roadmapViewModel.intelligenceByMilestone}
+          forecastByMilestone={forecastByMilestone}
+          forecastStatus={forecastStatus}
           activeItem={activeItem}
           staleModal={staleModal}
           driftModal={driftModal}
@@ -475,10 +513,10 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
     }
 
     if (activeView === 'timeline') {
-      return <RoadmapTimelineView milestones={roadmapViewModel.milestones} />;
+      return <RoadmapTimelineView milestones={roadmapViewModel.milestones} forecastByMilestone={forecastByMilestone} />;
     }
     if (activeView === 'swimlane') {
-      return <RoadmapSwimlaneView milestones={roadmapViewModel.milestones} />;
+      return <RoadmapSwimlaneView milestones={roadmapViewModel.milestones} forecastByMilestone={forecastByMilestone} />;
     }
     return <RoadmapDependencyView milestones={roadmapViewModel.milestones} dependencies={roadmapViewModel.dependencies} />;
   };

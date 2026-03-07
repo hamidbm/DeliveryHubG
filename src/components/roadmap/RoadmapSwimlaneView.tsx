@@ -1,9 +1,11 @@
 import React, { useMemo } from 'react';
 import { buildSwimlaneRows, RoadmapMilestoneVM } from './roadmapViewModels';
+import type { MilestoneForecast } from '../../types';
 
 const RoadmapSwimlaneView: React.FC<{
   milestones: RoadmapMilestoneVM[];
-}> = ({ milestones }) => {
+  forecastByMilestone?: Record<string, MilestoneForecast>;
+}> = ({ milestones, forecastByMilestone = {} }) => {
   const rows = useMemo(() => buildSwimlaneRows(milestones), [milestones]);
 
   if (!milestones.length) {
@@ -50,6 +52,16 @@ const RoadmapSwimlaneView: React.FC<{
                   <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-600">
                     Blocked {milestone.intelligence?.blockedItemCount ?? 0}
                   </span>
+                  {forecastByMilestone[milestone.id] && (
+                    <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-600">
+                      Forecast {forecastByMilestone[milestone.id].bestCaseDate.split('T')[0]} – {forecastByMilestone[milestone.id].worstCaseDate.split('T')[0]}
+                    </span>
+                  )}
+                  {forecastByMilestone[milestone.id] && (
+                    <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-600">
+                      Confidence {forecastByMilestone[milestone.id].forecastConfidence} • Slip {forecastByMilestone[milestone.id].slipRisk}
+                    </span>
+                  )}
                 </div>
               </div>
             ))}
