@@ -43,7 +43,7 @@ const WorkItemAiPanel: React.FC<WorkItemAiPanelProps> = ({
         <div className="absolute top-0 right-0 w-64 h-64 bg-blue-600/10 rounded-full -mr-32 -mt-32 blur-3xl"></div>
         <header className="flex items-center gap-4 mb-8">
           <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></div>
-          <h4 className="text-[10px] font-black text-blue-400 uppercase tracking-[0.3em]">Gemini Intelligence Terminal</h4>
+          <h4 className="text-[10px] font-black text-blue-400 uppercase tracking-[0.3em]">AI Intelligence Terminal</h4>
         </header>
 
         <div className="prose prose-invert max-w-none">

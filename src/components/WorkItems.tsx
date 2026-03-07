@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect, Suspense, useMemo } from 'react';
 import { useSearchParams, useRouter } from '../App';
 import { WorkItem, WorkItemType, WorkItemStatus, Bundle, Application } from '../types';
 import WorkItemsTreeView from './WorkItemsTreeView';
@@ -11,7 +11,7 @@ import WorkItemsRoadmapView from './WorkItemsRoadmapView';
 import WorkItemsMilestonePlanningView from './WorkItemsMilestonePlanningView';
 import WorkItemsSprintsView from './WorkItemsSprintsView';
 import Milestones from './Milestones';
-import WorkPlanIntakeModal from './WorkPlanIntakeModal';
+import GenerateDeliveryPlanWizard from './GenerateDeliveryPlanWizard';
 
 interface WorkItemsProps {
   applications: Application[];
@@ -28,7 +28,7 @@ interface WorkItemsProps {
 const WorkItems: React.FC<WorkItemsProps> = (props) => {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const activeView = searchParams.get('view') || 'tree';
+  const activeView = searchParams.get('view') || 'roadmap';
   const [quickFilter, setQuickFilter] = useState<'all' | 'my' | 'updated' | 'blocked'>('all');
   const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
   const [includeArchived, setIncludeArchived] = useState(false);
@@ -40,6 +40,40 @@ const WorkItems: React.FC<WorkItemsProps> = (props) => {
     priorities: [] as string[],
     health: [] as string[]
   });
+
+  const viewGroups = useMemo(() => ({
+    planning: [
+      { id: 'roadmap', label: 'Roadmap' },
+      { id: 'milestones', label: 'Milestones' },
+      { id: 'milestone-plan', label: 'Cycle Planning' }
+    ],
+    execution: [
+      { id: 'board', label: 'Board' },
+      { id: 'backlog', label: 'Backlog' },
+      { id: 'list', label: 'List' }
+    ],
+    intelligence: [
+      { id: 'tree', label: 'Hierarchy' },
+      { id: 'sprints', label: 'Sprints' },
+      { id: 'analytics', label: 'Analytics' }
+    ]
+  }), []);
+
+  const viewToMode = useMemo(() => {
+    const map: Record<string, 'planning' | 'execution' | 'intelligence'> = {};
+    (Object.keys(viewGroups) as Array<keyof typeof viewGroups>).forEach((mode) => {
+      viewGroups[mode].forEach((view) => {
+        map[view.id] = mode;
+      });
+    });
+    return map;
+  }, [viewGroups]);
+
+  const [activeMode, setActiveMode] = useState<'planning' | 'execution' | 'intelligence'>(viewToMode[activeView] || 'planning');
+
+  useEffect(() => {
+    setActiveMode(viewToMode[activeView] || 'planning');
+  }, [activeView, viewToMode]);
 
   const setView = (view: string) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -54,6 +88,36 @@ const WorkItems: React.FC<WorkItemsProps> = (props) => {
     }));
   };
 
+  const toggleHighRisk = () => {
+    setFilters((prev) => {
+      const next = new Set(prev.priorities);
+      const hasHigh = next.has('HIGH');
+      const hasCritical = next.has('CRITICAL');
+      if (hasHigh || hasCritical) {
+        next.delete('HIGH');
+        next.delete('CRITICAL');
+      } else {
+        next.add('HIGH');
+        next.add('CRITICAL');
+      }
+      return { ...prev, priorities: Array.from(next) };
+    });
+  };
+
+  const toggleHealth = (value: string) => {
+    toggleFilter('health', value);
+  };
+
+  const activeFilterChips = useMemo(() => {
+    const chips: Array<{ id: string; label: string; cat: keyof typeof filters; value: string }> = [];
+    filters.types.forEach((type) => chips.push({ id: `type:${type}`, label: type, cat: 'types', value: type }));
+    filters.priorities.forEach((p) => chips.push({ id: `prio:${p}`, label: `Risk ${p}`, cat: 'priorities', value: p }));
+    filters.health.forEach((h) => chips.push({ id: `health:${h}`, label: h === 'BLOCKED' ? 'Blocked' : h === 'FLAGGED' ? 'Flagged' : h, cat: 'health', value: h }));
+    return chips;
+  }, [filters]);
+
+  const filtersCount = filters.types.length + filters.priorities.length + filters.health.length;
+
   const sanitizedProps = {
     ...props,
     selEpicId: props.selEpicId || 'all',
@@ -64,77 +128,119 @@ const WorkItems: React.FC<WorkItemsProps> = (props) => {
 
   return (
     <div className="flex flex-col gap-6 relative">
-      {/* View Switcher & Quick Filters Header */}
-      <div className="sticky top-0 z-40 flex flex-col md:flex-row md:items-center justify-between bg-white/95 backdrop-blur px-8 py-4 rounded-[2rem] border border-slate-200 shadow-sm gap-4">
-        <div className="flex items-center gap-6 overflow-x-auto no-scrollbar">
-          <div className="flex bg-slate-100 p-1 rounded-xl shrink-0">
-            {[
-              { id: 'roadmap', label: 'Roadmap', icon: 'fa-route' },
-              { id: 'tree', label: 'Hierarchy', icon: 'fa-sitemap' },
-              { id: 'backlog', label: 'Backlog', icon: 'fa-layer-group' },
-              { id: 'milestone-plan', label: 'Cycle Planning', icon: 'fa-map-signs' },
-              { id: 'sprints', label: 'Sprints', icon: 'fa-stopwatch' },
-              { id: 'milestones', label: 'Milestones', icon: 'fa-flag-checkered' },
-              { id: 'board', label: 'Board', icon: 'fa-chalkboard' },
-              { id: 'list', label: 'List View', icon: 'fa-list' },
-              { id: 'analytics', label: 'Analytics', icon: 'fa-chart-line' }
-            ].map(view => (
-              <button 
-                key={view.id}
-                onClick={() => setView(view.id)}
-                className={`px-4 py-2 text-[10px] font-black uppercase rounded-lg transition-all flex items-center gap-2 ${activeView === view.id ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
-              >
-                <i className={`fas ${view.icon}`}></i>
-                {view.label}
-              </button>
-            ))}
+      <div className="sticky top-0 z-40 bg-white/95 backdrop-blur px-6 py-3 rounded-[2rem] border border-slate-200 shadow-sm space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Mode</span>
+            <div className="flex bg-slate-100 p-1 rounded-xl">
+              {([
+                { id: 'planning', label: 'Planning' },
+                { id: 'execution', label: 'Execution' },
+                { id: 'intelligence', label: 'Intelligence' }
+              ] as const).map((mode) => (
+                <button
+                  key={mode.id}
+                  onClick={() => {
+                    if (activeMode === mode.id) return;
+                    setActiveMode(mode.id);
+                    const target = viewGroups[mode.id][0];
+                    if (target) setView(target.id);
+                  }}
+                  className={`px-4 py-1.5 text-[9px] font-black uppercase rounded-lg transition-all ${
+                    activeMode === mode.id ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400 hover:text-slate-600'
+                  }`}
+                >
+                  {mode.label}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
 
-        <div className="flex items-center gap-3">
-           <button
-             onClick={() => setIsPlanModalOpen(true)}
-             className="px-4 py-2 text-[9px] font-black uppercase rounded-xl border transition-all flex items-center gap-2 bg-slate-900 text-white border-slate-900 hover:bg-blue-600"
-           >
-             <i className="fas fa-sitemap"></i>
-             Create Plan
-           </button>
-           <button 
-             onClick={() => setIsFilterDrawerOpen(true)}
-             className={`px-4 py-2 text-[9px] font-black uppercase rounded-xl border transition-all flex items-center gap-2 ${filters.types.length || filters.priorities.length ? 'bg-blue-50 border-blue-200 text-blue-600' : 'bg-white border-slate-200 text-slate-400 hover:text-slate-600'}`}
-           >
-              <i className="fas fa-filter"></i> 
-              Filters { (filters.types.length + filters.priorities.length) > 0 ? `(${filters.types.length + filters.priorities.length})` : '' }
-           </button>
-           <button
-             onClick={() => setIncludeArchived(v => !v)}
-             className={`px-4 py-2 text-[9px] font-black uppercase rounded-xl border transition-all flex items-center gap-2 ${
-               includeArchived ? 'bg-amber-50 border-amber-200 text-amber-700' : 'bg-white border-slate-200 text-slate-400 hover:text-slate-600'
-             }`}
-           >
-             <i className="fas fa-box-archive"></i>
-             {includeArchived ? 'Archived: On' : 'Archived: Off'}
-           </button>
-           <div className="h-6 w-[1px] bg-slate-100 mx-2"></div>
-           <div className="flex items-center gap-3 bg-slate-50 p-1.5 rounded-2xl border border-slate-100 self-end md:self-auto">
+          <div className="flex items-center gap-3 flex-wrap">
+            <button
+              onClick={() => setIsFilterDrawerOpen(true)}
+              className={`px-4 py-1.5 text-[9px] font-black uppercase rounded-xl border transition-all flex items-center gap-2 ${
+                filtersCount > 0 ? 'bg-blue-50 border-blue-200 text-blue-600' : 'bg-white border-slate-200 text-slate-400 hover:text-slate-600'
+              }`}
+            >
+              <i className="fas fa-filter"></i>
+              Filters {filtersCount > 0 ? `(${filtersCount})` : ''}
+            </button>
+            <button
+              onClick={() => setIncludeArchived(v => !v)}
+              className={`px-4 py-1.5 text-[9px] font-black uppercase rounded-xl border transition-all flex items-center gap-2 ${
+                includeArchived ? 'bg-amber-50 border-amber-200 text-amber-700' : 'bg-white border-slate-200 text-slate-400 hover:text-slate-600'
+              }`}
+            >
+              <i className="fas fa-box-archive"></i>
+              {includeArchived ? 'Archived: On' : 'Archived: Off'}
+            </button>
+            <div className="h-6 w-[1px] bg-slate-100 mx-1"></div>
+            <div className="flex items-center gap-2 bg-slate-50 p-1 rounded-2xl border border-slate-100">
               <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest px-2">Focus:</span>
               {[
                 { id: 'all', label: 'All' },
                 { id: 'my', label: 'My Issues' },
-                { id: 'updated', label: 'Recent' },
-                { id: 'blocked', label: 'Blockers' }
-              ].map(f => (
+                { id: 'blocked', label: 'Blockers' },
+                { id: 'updated', label: 'Recent' }
+              ].map((f) => (
                 <button
                   key={f.id}
                   onClick={() => setQuickFilter(f.id as any)}
-                  className={`px-4 py-1.5 text-[9px] font-black uppercase rounded-lg transition-all ${quickFilter === f.id ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-400 hover:text-slate-600'}`}
+                  className={`px-3 py-1.5 text-[9px] font-black uppercase rounded-lg transition-all ${
+                    quickFilter === f.id ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-400 hover:text-slate-600'
+                  }`}
                 >
                   {f.label}
                 </button>
               ))}
-           </div>
+            </div>
+            {activeMode === 'planning' && (
+              <button
+                onClick={() => setIsPlanModalOpen(true)}
+                className="px-4 py-1.5 text-[9px] font-black uppercase rounded-xl border transition-all flex items-center gap-2 bg-slate-900 text-white border-slate-900 hover:bg-blue-600"
+              >
+                <i className="fas fa-sitemap"></i>
+                Generate Delivery Plan
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 flex-wrap">
+          {viewGroups[activeMode].map((view) => (
+            <button
+              key={view.id}
+              onClick={() => setView(view.id)}
+              className={`px-4 py-1.5 text-[9px] font-black uppercase rounded-lg transition-all ${
+                activeView === view.id ? 'bg-slate-900 text-white shadow-sm' : 'bg-slate-50 text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              {view.label}
+            </button>
+          ))}
         </div>
       </div>
+
+      {activeFilterChips.length > 0 && (
+        <div className="flex items-center flex-wrap gap-2">
+          {activeFilterChips.map((chip) => (
+            <button
+              key={chip.id}
+              onClick={() => toggleFilter(chip.cat, chip.value)}
+              className="px-3 py-1 text-[9px] font-black uppercase tracking-widest rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200"
+            >
+              {chip.label} <i className="fas fa-times ml-1"></i>
+            </button>
+          ))}
+          <button
+            onClick={() => setFilters({ types: [], priorities: [], health: [] })}
+            className="px-3 py-1 text-[9px] font-black uppercase tracking-widest rounded-full bg-white border border-slate-200 text-slate-500 hover:text-slate-700"
+          >
+            Clear
+          </button>
+        </div>
+      )}
 
       {/* Filter Drawer */}
       {isFilterDrawerOpen && (
@@ -142,34 +248,29 @@ const WorkItems: React.FC<WorkItemsProps> = (props) => {
           <div className="fixed inset-0 bg-slate-950/20 backdrop-blur-sm z-[150]" onClick={() => setIsFilterDrawerOpen(false)}></div>
           <div className="fixed right-0 top-0 bottom-0 w-80 bg-white shadow-2xl z-[160] p-10 flex flex-col animate-slideIn">
              <header className="flex justify-between items-center mb-10">
-                <h3 className="text-xl font-black text-slate-900 tracking-tighter uppercase italic">Precision Filters</h3>
+                <h3 className="text-xl font-black text-slate-900 tracking-tighter uppercase">Filters</h3>
                 <button onClick={() => setIsFilterDrawerOpen(false)} className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 hover:text-red-500 transition-all"><i className="fas fa-times"></i></button>
              </header>
 
              <div className="space-y-10 flex-1 overflow-y-auto custom-scrollbar pr-2">
                 <section>
-                   <h4 className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-4">Artifact Type</h4>
+                   <h4 className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-4">Work Item Type</h4>
                    <div className="space-y-2">
-                      {Object.values(WorkItemType).map(type => (
+                      {Object.values(WorkItemType).filter((type) => !['RISK', 'DEPENDENCY'].includes(type)).map(type => (
                         <FilterToggle key={type} label={type} active={filters.types.includes(type)} onClick={() => toggleFilter('types', type)} />
                       ))}
                    </div>
                 </section>
 
                 <section>
-                   <h4 className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-4">Urgency Level</h4>
+                   <h4 className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-4">Delivery Signals</h4>
                    <div className="space-y-2">
+                      <FilterToggle label="Blocked" active={filters.health.includes('BLOCKED')} onClick={() => toggleHealth('BLOCKED')} />
+                      <FilterToggle label="Flagged" active={filters.health.includes('FLAGGED')} onClick={() => toggleHealth('FLAGGED')} />
+                      <FilterToggle label="High Risk (Critical/High)" active={filters.priorities.some((p) => ['CRITICAL', 'HIGH'].includes(p))} onClick={toggleHighRisk} />
                       {['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'].map(p => (
-                        <FilterToggle key={p} label={p} active={filters.priorities.includes(p)} onClick={() => toggleFilter('priorities', p)} />
+                        <FilterToggle key={p} label={`Risk ${p}`} active={filters.priorities.includes(p)} onClick={() => toggleFilter('priorities', p)} />
                       ))}
-                   </div>
-                </section>
-
-                <section>
-                   <h4 className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-4">Health Pulse</h4>
-                   <div className="space-y-2">
-                      <FilterToggle label="Flagged" active={filters.health.includes('FLAGGED')} onClick={() => toggleFilter('health', 'FLAGGED')} />
-                      <FilterToggle label="Blocked" active={filters.health.includes('BLOCKED')} onClick={() => toggleFilter('health', 'BLOCKED')} />
                    </div>
                 </section>
              </div>
@@ -221,14 +322,10 @@ const WorkItems: React.FC<WorkItemsProps> = (props) => {
       </Suspense>
 
       {isPlanModalOpen && (
-        <WorkPlanIntakeModal
+        <GenerateDeliveryPlanWizard
           bundles={props.bundles}
           applications={props.applications}
           onClose={() => setIsPlanModalOpen(false)}
-          onSuccess={() => {
-            setIsPlanModalOpen(false);
-            router.refresh();
-          }}
         />
       )}
     </div>

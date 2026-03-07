@@ -270,7 +270,7 @@ const WorkItemsTreeView: React.FC<WorkItemsTreeViewProps> = ({
                 ))}
               </div>
             )}
-            {hasChildren && node.completion !== undefined && (
+            {hasChildren && node.completion !== undefined && (node.type === 'EPIC' || node.type === 'FEATURE') && (
               <div className="flex items-center gap-2 mt-1">
                 <div className={`h-1 flex-1 rounded-full overflow-hidden ${isActive ? 'bg-white/20' : 'bg-slate-100 shadow-inner'}`}>
                   <div className={`h-full transition-all duration-700 ${isActive ? 'bg-white' : 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]'}`} style={{ width: `${node.completion}%` }}></div>
@@ -337,8 +337,8 @@ const WorkItemsTreeView: React.FC<WorkItemsTreeViewProps> = ({
              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Work Hierarchy</h3>
              <div className="flex items-center gap-2">
                <div className="flex bg-slate-200 p-0.5 rounded-xl">
-                  <button onClick={() => setTreeMode('hierarchy')} className={`px-4 py-2 text-[10px] font-black uppercase rounded-lg transition-all ${treeMode === 'hierarchy' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400'}`}>Delivery</button>
-                  <button onClick={() => setTreeMode('milestone')} className={`px-4 py-2 text-[10px] font-black uppercase rounded-lg transition-all ${treeMode === 'milestone' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400'}`}>Milestone</button>
+                  <button onClick={() => setTreeMode('hierarchy')} className={`px-4 py-2 text-[10px] font-black uppercase rounded-lg transition-all ${treeMode === 'hierarchy' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400'}`}>By Delivery</button>
+                  <button onClick={() => setTreeMode('milestone')} className={`px-4 py-2 text-[10px] font-black uppercase rounded-lg transition-all ${treeMode === 'milestone' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400'}`}>By Milestone</button>
                </div>
                <div className="flex items-center gap-1">
                  <button
@@ -365,7 +365,7 @@ const WorkItemsTreeView: React.FC<WorkItemsTreeViewProps> = ({
         <nav className="flex-1 overflow-y-auto p-6 custom-scrollbar">{loading ? <div className="space-y-4">{[...Array(8)].map((_, i) => <div key={i} className="h-12 bg-slate-100 rounded-2xl animate-pulse" style={{ opacity: 1 - i * 0.1 }}></div>)}</div> : treeData.length === 0 ? <div className="p-10 text-center"><i className="fas fa-search text-slate-200 text-5xl mb-6 opacity-50"></i><p className="text-sm font-bold text-slate-400 uppercase tracking-widest leading-relaxed">No items match current criteria.</p></div> : <div className="space-y-0">{treeData.map(node => renderTreeNode(node))}</div>}</nav>
         
         <div className="p-6 bg-white border-t border-slate-100">
-           <button onClick={() => setIsCreating(true)} className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-blue-600/20 hover:bg-blue-700 transition-all flex items-center justify-center gap-2 group/add"><i className="fas fa-plus group-hover/add:rotate-90 transition-transform"></i>{activeItem ? `Spawn ${getSubArtifactType(activeItem.type)}` : 'New Artifact'}</button>
+           <button onClick={() => setIsCreating(true)} className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-blue-600/20 hover:bg-blue-700 transition-all flex items-center justify-center gap-2 group/add"><i className="fas fa-plus group-hover/add:rotate-90 transition-transform"></i>{activeItem ? `Create ${getSubArtifactType(activeItem.type)}` : 'New Artifact'}</button>
         </div>
       </aside>
 

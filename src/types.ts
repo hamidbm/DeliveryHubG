@@ -419,6 +419,11 @@ export interface WorkItem {
     blocking: boolean;
     dependsOn?: { type: 'bundle' | 'app' | 'external'; id?: string; name?: string };
   };
+  generator?: {
+    source: 'DELIVERY_PLAN_GENERATOR';
+    runId?: string;
+  };
+  generatedBy?: string;
 }
 
 export interface ChecklistItem { id: string; label: string; isCompleted: boolean; createdAt: string; }

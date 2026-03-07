@@ -3965,6 +3965,7 @@ export const fetchWorkItemTree = async (filters: any) => {
         bundleId: m.bundleId,
         children: mItems.map(i => ({
           id: i._id?.toString() || i.id,
+          key: i.key,
           label: i.title,
           type: i.type,
           status: i.status,
@@ -4024,6 +4025,7 @@ export const fetchWorkItemTree = async (filters: any) => {
 
         return {
           id: item._id?.toString() || item.id,
+          key: item.key,
           label: item.title,
           type: item.type,
           status: item.status,

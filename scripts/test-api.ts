@@ -39,6 +39,7 @@ const tests = [
   () => import('./test-github-integration').then((m) => m.run()),
   () => import('./test-event-taxonomy').then((m) => m.run()),
   () => import('./test-ownership').then((m) => m.run()),
+  () => import('./test-delivery-plan').then((m) => m.run()),
   () => import('./test-feed').then((m) => m.run()),
   () => import('./test-visibility').then((m) => m.run()),
   () => import('./test-data-quality').then((m) => m.run())

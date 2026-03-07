@@ -8,6 +8,37 @@ type Candidate = {
   score: number;
 };
 
+const resolveAdminCandidates = async () => {
+  const db = await getDb();
+  const adminDocs = await db.collection('admins').find({}).toArray();
+  const adminIds = adminDocs.map((a: any) => String(a.userId || '')).filter(Boolean);
+  const adminUsers = await resolveUsers(adminIds);
+  return adminIds.map((id) => {
+    const user = adminUsers.get(id);
+    return {
+      userId: id,
+      email: user?.email,
+      reason: 'Admin/CMO',
+      score: 95
+    };
+  });
+};
+
+const resolveBundleOwnerCandidates = async (bundleId: string) => {
+  const assignments = await fetchBundleAssignments({ bundleId, assignmentType: 'bundle_owner', active: true });
+  const ownerIds = assignments.map((a) => String(a.userId)).filter(Boolean);
+  const ownerUsers = await resolveUsers(ownerIds);
+  return ownerIds.map((id) => {
+    const user = ownerUsers.get(id);
+    return {
+      userId: id,
+      email: user?.email,
+      reason: 'Bundle owner',
+      score: 100
+    };
+  });
+};
+
 const resolveUsers = async (userIds: string[]) => {
   const db = await getDb();
   const ids = Array.from(new Set(userIds.filter(Boolean)));
@@ -171,19 +202,37 @@ export const suggestOwnersForMilestone = async (milestoneId: string) => {
     });
   }
 
-  const adminDocs = await db.collection('admins').find({}).toArray();
-  const adminIds = adminDocs.map((a: any) => String(a.userId || '')).filter(Boolean);
-  const adminUsers = await resolveUsers(adminIds);
-  adminIds.forEach((id) => {
-    const user = adminUsers.get(id);
-    candidates.push({
-      userId: id,
-      email: user?.email,
-      reason: 'Admin/CMO',
-      score: 95
-    });
-  });
+  const adminCandidates = await resolveAdminCandidates();
+  candidates.push(...adminCandidates);
 
+  return { candidates: dedupeCandidates(candidates) };
+};
+
+export const suggestOwnersForMilestoneScope = async ({
+  scopeType,
+  scopeId,
+  bundleId
+}: {
+  scopeType: 'BUNDLE' | 'APPLICATION' | 'PROGRAM';
+  scopeId: string;
+  bundleId?: string;
+}) => {
+  const candidates: Candidate[] = [];
+  if (bundleId) {
+    candidates.push(...(await resolveBundleOwnerCandidates(bundleId)));
+  }
+  candidates.push(...(await resolveAdminCandidates()));
+  return { candidates: dedupeCandidates(candidates) };
+};
+
+export const suggestOwnersForGeneratedArtifact = async ({
+  bundleId
+}: {
+  bundleId: string;
+}) => {
+  const candidates: Candidate[] = [];
+  candidates.push(...(await resolveBundleOwnerCandidates(bundleId)));
+  candidates.push(...(await resolveAdminCandidates()));
   return { candidates: dedupeCandidates(candidates) };
 };
 
