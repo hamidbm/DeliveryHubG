@@ -113,3 +113,16 @@ Snapshot tests from Phase 3 remain unchanged.
 - Heatmap colors are consistent
 - No new persistence introduced
 - Intelligence tests pass
+
+## Implementation Status
+
+Status: Completed
+
+Validation:
+- `npm run test:api` passes
+- roadmap intelligence tests pass
+- roadmap snapshot file regenerated and committed
+
+Notes:
+- snapshot determinism is based on a fixed mock dataset and can be re-verified with:
+  `node --import tsx scripts/gen-roadmap-views-snapshots.tsx`

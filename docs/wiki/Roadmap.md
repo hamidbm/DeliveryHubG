@@ -14,6 +14,11 @@ The Work Items roadmap now supports multiple UI views over the same data set:
 All tabs render the same milestones, sprints, capacity, and dependency data; the views are purely presentational.
 Each view now includes milestone health signals (utilization, risk, blocked count, readiness, confidence) computed from existing data.
 
+## Simulation (Phase 5)
+The roadmap supports delivery simulations that compare baseline plan previews against scenario overrides (capacity, scope, dates, velocity). Results show milestone slippage, utilization changes, and risk shifts, with an explicit per‑milestone date delta.
+DATE_SHIFT overrides apply to specific milestones (not global plan shifts).
+Use the **Simulate** button in the Roadmap toolbar to open the Simulation Editor, select a baseline preview, add one or more overrides, and submit.
+
 ### Near-term (next 2–4 weeks)
 1. Inline storyPoints edits in planning surfaces.
 Problem: editing storyPoints requires opening the detail drawer. Value: faster planning and fewer context switches. Dependencies: existing milestone planning and roadmap views. Deliverables: inline edit controls in planning and roadmap rows, with optimistic update + validation. Verify: edit storyPoints inline and see rollups update without page reload.

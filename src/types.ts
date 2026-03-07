@@ -251,6 +251,52 @@ export type NormalizedPlanInput = {
   assumptions: string[];
 };
 
+export type SimulationOverride = {
+  type: 'CAPACITY_SHIFT' | 'SCOPE_GROWTH' | 'DATE_SHIFT' | 'VELOCITY_ADJUSTMENT';
+  params: Record<string, any>;
+};
+
+export type SimulationScenario = {
+  id?: string;
+  name: string;
+  description?: string;
+  overrides: SimulationOverride[];
+};
+
+export type SimulationRequest = {
+  baselineInput: DeliveryPlanInput;
+  scenario: SimulationScenario;
+};
+
+export type MilestoneComparison = {
+  milestoneId: string;
+  baselineEndDate: string;
+  scenarioEndDate: string;
+  baselineCapacityUtilization: number | null;
+  scenarioCapacityUtilization: number | null;
+  baselineRisk: string;
+  scenarioRisk: string;
+};
+
+export type SimulationSummary = {
+  totalMilestones: number;
+  milestonesSlipped: number;
+  riskIncreaseCount: number;
+  averageUtilizationDiff: number | null;
+};
+
+export type SimulationComparison = {
+  milestoneComparisons: MilestoneComparison[];
+  summary: SimulationSummary;
+};
+
+export type SimulationResult = {
+  scenario: SimulationScenario;
+  baselinePreview: DeliveryPlanPreview;
+  scenarioPreview: DeliveryPlanPreview;
+  comparison: SimulationComparison;
+};
+
 export enum TimeModelStatus {
   TOLERATE = 'TOLERATE',
   INVEST = 'INVEST',

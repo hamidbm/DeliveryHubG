@@ -43,6 +43,8 @@ const tests = [
   () => import('./test-delivery-plan-capacity').then((m) => m.run()),
   () => import('./test-roadmap-views').then((m) => m.run()),
   () => import('./test-roadmap-intelligence').then((m) => m.run()),
+  () => import('./test-simulation-engine').then((m) => m.run()),
+  () => import('./test-simulation-api').then((m) => m.run()),
   () => import('./test-feed').then((m) => m.run()),
   () => import('./test-visibility').then((m) => m.run()),
   () => import('./test-data-quality').then((m) => m.run())
@@ -54,7 +56,9 @@ const runAll = async () => {
   }
 };
 
-runAll().catch((err) => {
-  console.error('[test:api] failed', err);
-  process.exit(1);
-});
+runAll()
+  .then(() => process.exit(0))
+  .catch((err) => {
+    console.error('[test:api] failed', err);
+    process.exit(1);
+  });

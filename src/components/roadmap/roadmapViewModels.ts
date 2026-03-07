@@ -361,3 +361,26 @@ export const buildRoadmapIntelligence = (roadmap: RoadmapViewModel) => ({
   milestones: roadmap.milestones,
   intelligenceByMilestone: roadmap.intelligenceByMilestone
 });
+
+export const generateSimulationViewModel = (
+  baselinePreview: { milestones: Array<{ index: number; endDate: string; targetCapacity?: number | null }>; artifacts: Array<{ milestoneIndex: number; storyCount: number }> },
+  scenarioPreview: { milestones: Array<{ index: number; endDate: string; targetCapacity?: number | null }>; artifacts: Array<{ milestoneIndex: number; storyCount: number }> }
+) => {
+  const getLoad = (preview: any, milestoneIndex: number) => {
+    const artifact = preview.artifacts.find((a: any) => a.milestoneIndex === milestoneIndex);
+    return artifact?.storyCount || 0;
+  };
+  const utilization = (load: number, target?: number | null) => (target && target > 0 ? load / target : null);
+  return baselinePreview.milestones.map((baselineMs) => {
+    const scenarioMs = scenarioPreview.milestones.find((m) => m.index === baselineMs.index) || baselineMs;
+    const baselineUtil = utilization(getLoad(baselinePreview, baselineMs.index), baselineMs.targetCapacity ?? null);
+    const scenarioUtil = utilization(getLoad(scenarioPreview, baselineMs.index), scenarioMs.targetCapacity ?? null);
+    return {
+      milestoneId: baselineMs.index,
+      baselineEndDate: baselineMs.endDate,
+      scenarioEndDate: scenarioMs.endDate,
+      baselineUtil,
+      scenarioUtil
+    };
+  });
+};

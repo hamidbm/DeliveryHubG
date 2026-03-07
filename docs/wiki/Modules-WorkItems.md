@@ -95,6 +95,21 @@ Events:
 Generator markers:
 - Generated items include `generator: { source: 'DELIVERY_PLAN_GENERATOR', runId }` for UX and governance rules.
 
+## Simulation Engine (Phase 5)
+The roadmap includes a Simulation button that allows “what‑if” scenarios against an existing plan preview.
+
+Supported overrides:
+- Capacity shift
+- Scope growth
+- Date shift (milestone-specific)
+- Velocity adjustment
+
+Simulation output shows:
+- milestone slip count
+- utilization deltas
+- risk changes per milestone
+- per‑milestone date delta (explicit slippage field)
+
 ## Work Item Details UX (Read‑First)
 The Work Item details panel is now read‑first with explicit edit mode.
 

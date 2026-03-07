@@ -6,6 +6,7 @@ import RoadmapTimelineView from './roadmap/RoadmapTimelineView';
 import RoadmapSwimlaneView from './roadmap/RoadmapSwimlaneView';
 import RoadmapDependencyView from './roadmap/RoadmapDependencyView';
 import { transformRawRoadmapData } from './roadmap/roadmapViewModels';
+import SimulationEditor from './SimulationEditor';
 
 interface WorkItemsRoadmapViewProps {
   applications: Application[];
@@ -36,6 +37,7 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
   const [loading, setLoading] = useState(true);
   const [activeView, setActiveView] = useState<RoadmapViewKey>('execution');
   const [activeItem, setActiveItem] = useState<WorkItem | null>(null);
+  const [showSimulation, setShowSimulation] = useState(false);
   const [roadmapIntel, setRoadmapIntel] = useState<any[]>([]);
   const [intelLoading, setIntelLoading] = useState(false);
   const [intelError, setIntelError] = useState<string | null>(null);
@@ -488,9 +490,21 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
           <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Roadmap Views</div>
           <div className="text-sm text-slate-500">Switch between execution, timeline, swimlane, and dependency views.</div>
         </div>
-        <RoadmapTabs active={activeView} onChange={setActiveView} />
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setShowSimulation(true)}
+            className="px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest bg-slate-900 text-white hover:bg-blue-600"
+          >
+            Simulate
+          </button>
+          <RoadmapTabs active={activeView} onChange={setActiveView} />
+        </div>
       </div>
       {renderActiveView()}
+
+      {showSimulation && (
+        <SimulationEditor onClose={() => setShowSimulation(false)} />
+      )}
     </div>
   );
 };
