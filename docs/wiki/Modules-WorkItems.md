@@ -56,9 +56,16 @@ Each item can have a parent and children to form a delivery hierarchy.
 - Bulk selection and quick actions
 
 ### Roadmap View
-- Timeline-style visualization
-- Milestone intelligence row (capacity, readiness, blocked, risks)
-- Cross-milestone dependency indicators
+- Multi-view roadmap with shared data (tabs):
+  - Execution Board (default)
+  - Timeline
+  - Swimlane
+  - Dependency
+- Execution Board preserves the milestone intelligence row (capacity, readiness, blocked, risks)
+- Timeline shows milestones on a calendar axis with readiness and capacity overlays
+- Swimlane groups milestones by time buckets with readiness/capacity badges
+- Dependency view aggregates cross‑milestone blockers at milestone level
+- Milestone health indicators include utilization, risk level, blocked count, readiness, and confidence
 - Drilldown modals for milestone and dependency details
 - Commitment Drift chips for COMMITTED/IN_PROGRESS milestones with delta modal
 - Lazy list fetching with list counts to keep performance responsive

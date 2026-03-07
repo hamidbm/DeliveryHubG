@@ -40,6 +40,9 @@ const tests = [
   () => import('./test-event-taxonomy').then((m) => m.run()),
   () => import('./test-ownership').then((m) => m.run()),
   () => import('./test-delivery-plan').then((m) => m.run()),
+  () => import('./test-delivery-plan-capacity').then((m) => m.run()),
+  () => import('./test-roadmap-views').then((m) => m.run()),
+  () => import('./test-roadmap-intelligence').then((m) => m.run()),
   () => import('./test-feed').then((m) => m.run()),
   () => import('./test-visibility').then((m) => m.run()),
   () => import('./test-data-quality').then((m) => m.run())

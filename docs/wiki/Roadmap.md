@@ -4,6 +4,16 @@ This section captures known gaps and likely next steps. The backbone is mileston
 
 ## Work Items Roadmap
 
+### Roadmap Views (UI)
+The Work Items roadmap now supports multiple UI views over the same data set:
+- Execution Board (default)
+- Timeline
+- Swimlane
+- Dependency
+
+All tabs render the same milestones, sprints, capacity, and dependency data; the views are purely presentational.
+Each view now includes milestone health signals (utilization, risk, blocked count, readiness, confidence) computed from existing data.
+
 ### Near-term (next 2–4 weeks)
 1. Inline storyPoints edits in planning surfaces.
 Problem: editing storyPoints requires opening the detail drawer. Value: faster planning and fewer context switches. Dependencies: existing milestone planning and roadmap views. Deliverables: inline edit controls in planning and roadmap rows, with optimistic update + validation. Verify: edit storyPoints inline and see rollups update without page reload.

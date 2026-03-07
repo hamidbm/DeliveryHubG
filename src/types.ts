@@ -109,6 +109,148 @@ export enum WorkItemStatus {
   BLOCKED = 'BLOCKED'
 }
 
+export type DeliveryPlanInput = {
+  scopeType: 'BUNDLE' | 'APPLICATION' | 'PROGRAM';
+  scopeId: string;
+  plannedStartDate?: string;
+  devStartDate: string;
+  integrationStartDate?: string;
+  uatStartDate: string;
+  goLiveDate: string;
+  stabilizationEndDate?: string;
+  milestoneCount: number;
+  sprintDurationWeeks: number;
+  milestoneDurationStrategy: 'AUTO_DISTRIBUTE' | 'FIXED_WEEKS';
+  milestoneDurationWeeks?: number;
+  deliveryPattern: 'STANDARD_PHASED' | 'PRODUCT_INCREMENT' | 'MIGRATION' | 'COMPLIANCE';
+  backlogShape: 'LIGHT' | 'STANDARD' | 'DETAILED';
+  storiesPerFeatureTarget?: number;
+  featuresPerMilestoneTarget?: number;
+  tasksPerStoryTarget?: number;
+  projectSize?: 'SMALL' | 'MEDIUM' | 'LARGE' | 'ENTERPRISE';
+  capacityMode?: 'TEAM_VELOCITY' | 'DIRECT_SPRINT_CAPACITY';
+  deliveryTeams?: number;
+  sprintVelocityPerTeam?: number;
+  directSprintCapacity?: number;
+  createTasksUnderStories?: boolean;
+  environmentFlow?: 'DEV_UAT_PROD' | 'DEV_SIT_UAT_PROD' | 'CUSTOM';
+  releaseType?: 'BIG_BANG' | 'PHASED' | 'INCREMENTAL';
+  suggestMilestoneOwners?: boolean;
+  suggestWorkItemOwners?: boolean;
+  createDependencySkeleton?: boolean;
+  preallocateStoriesToSprints?: boolean;
+  autoLinkMilestonesToRoadmap?: boolean;
+  generateDraftOnly?: boolean;
+  themesByMilestone?: Array<{ milestoneIndex: number; themes: string[] }>;
+};
+
+export type PlanScope = {
+  scopeType: 'BUNDLE' | 'APPLICATION' | 'PROGRAM';
+  scopeId: string;
+  scopeName: string;
+  bundleId?: string;
+  applicationId?: string;
+  scopeRef: { type: 'bundle' | 'application' | 'initiative'; id: string; name: string };
+};
+
+export type DeliveryPlanDerived = {
+  milestoneDurationDays?: number | null;
+  milestoneDurationWeeks?: number | null;
+};
+
+export type DeliveryPlanCapacitySummary = {
+  mode: 'TEAM_VELOCITY' | 'DIRECT_SPRINT_CAPACITY' | 'BUNDLE_CAPACITY_FALLBACK' | 'NONE';
+  sprintCapacity: number | null;
+  milestoneCapacities: Array<{
+    milestoneIndex: number;
+    sprintCount: number;
+    targetCapacity: number | null;
+  }>;
+};
+
+export type DeliveryPlanMilestoneRecord = {
+  index: number;
+  name: string;
+  startDate: string;
+  endDate: string;
+  themes: string[];
+  sprintCount: number;
+  suggestedOwner?: { userId?: string; email?: string; reason?: string };
+  targetCapacity?: number | null;
+};
+
+export type DeliveryPlanMilestoneDraft = {
+  index: number;
+  name: string;
+  startDate: string;
+  endDate: string;
+  themes: string[];
+};
+
+export type DeliveryPlanSprintRecord = {
+  name: string;
+  startDate: string;
+  endDate: string;
+  milestoneIndex?: number;
+};
+
+export type DeliveryPlanArtifact = {
+  milestoneIndex: number;
+  epicCount: number;
+  featureCount: number;
+  storyCount: number;
+  taskCount: number;
+  epics: Array<{
+    name: string;
+    features: Array<{
+      name: string;
+      stories: Array<{
+        name: string;
+        tasks: string[];
+      }>;
+    }>;
+  }>;
+};
+
+export type DeliveryPlanPreview = {
+  previewId: string;
+  counts: {
+    roadmapPhases: number;
+    milestones: number;
+    sprints: number;
+    epics: number;
+    features: number;
+    stories: number;
+    tasks: number;
+  };
+  roadmap: Array<{ name: string; startDate: string; endDate: string; milestoneIndexes: number[] }>;
+  milestones: DeliveryPlanMilestoneRecord[];
+  sprints: DeliveryPlanSprintRecord[];
+  artifacts: DeliveryPlanArtifact[];
+  derived?: DeliveryPlanDerived;
+  capacitySummary?: DeliveryPlanCapacitySummary;
+  warnings: string[];
+  assumptions: string[];
+};
+
+export type NormalizedPlanInput = {
+  plannedStart: Date | null;
+  devStart: Date;
+  integrationStart: Date | null;
+  uatStart: Date;
+  goLive: Date;
+  stabilizationEnd: Date | null;
+  overallStart: Date;
+  overallEnd: Date;
+  milestoneCount: number;
+  sprintDurationWeeks: number;
+  milestoneDurationWeeks?: number;
+  derivedMilestoneDurationDays?: number | null;
+  derivedMilestoneDurationWeeks?: number | null;
+  warnings: string[];
+  assumptions: string[];
+};
+
 export enum TimeModelStatus {
   TOLERATE = 'TOLERATE',
   INVEST = 'INVEST',
