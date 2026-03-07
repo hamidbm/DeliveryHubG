@@ -6,6 +6,12 @@ Use this wiki to understand what the app does today, how it is structured, and h
 
 Baseline bootstrap runs automatically on startup to install required reference data (taxonomy, themes, templates, bundles/apps). Sample data is optional and may change during development.
 
+## Recent Updates (Last Few Days)
+- Work Items: Generate Delivery Plan wizard (preview → draft creation)
+- Work Items: Read‑first details panel with explicit Edit mode
+- Work Items: Provider‑neutral AI tab and compact action row
+- Work Items: Sprint label shows name + dates and links to the Sprint view
+
 ## Quick Navigation
 - Architecture and structure: see `docs/wiki/Architecture.md`
 - Modules overview: see `docs/wiki/Modules-Overview.md`

@@ -23,6 +23,7 @@ Each item can have a parent and children to form a delivery hierarchy.
 - Review-driven work items (auto-created from review requests)
 - Governance-driven planning (readiness gates, capacity guardrails, and overrides)
 - Ownership model: milestone owner + assignee consistency with suggestions
+- Generate Delivery Plan wizard with preview and draft creation
 
 ## Ownership (RACI-lite)
 - Milestones have an owner (accountable).
@@ -37,6 +38,7 @@ Each item can have a parent and children to form a delivery hierarchy.
 - Expand and collapse to control scope
 - Select an item to see details and activity
 - Link badges show connected items and resources
+- Progress bars are shown only for Epics and Features
 
 ### Board (Kanban)
 - Drag-and-drop across status columns
@@ -60,6 +62,65 @@ Each item can have a parent and children to form a delivery hierarchy.
 - Drilldown modals for milestone and dependency details
 - Commitment Drift chips for COMMITTED/IN_PROGRESS milestones with delta modal
 - Lazy list fetching with list counts to keep performance responsive
+
+## Generate Delivery Plan (Planning Mode)
+The Planning toolbar includes **Generate Delivery Plan**, a guided wizard that creates a draft delivery structure.
+
+Flow:
+- Step 1: Intake (scope, dates, cadence, backlog shape, options, themes)
+- Step 2: Preview (roadmap phases, milestone schedule, sprint schedule, artifact counts, warnings)
+- Step 3: Create Draft Plan
+
+Creates:
+- Roadmap phases (`work_roadmap_phases`)
+- Milestones (`milestones`, status = DRAFT)
+- Sprints (`workitems_sprints`)
+- Work items (epics, features, stories, optional tasks in `workitems`)
+- Optional dependency skeleton (BLOCKS links between milestone epics)
+
+Preview persistence:
+- Stored in `work_plan_previews` with a 7-day TTL.
+
+Events:
+- `workitems.plan.previewed`
+- `workitems.plan.created`
+
+Generator markers:
+- Generated items include `generator: { source: 'DELIVERY_PLAN_GENERATOR', runId }` for UX and governance rules.
+
+## Work Item Details UX (Read‑First)
+The Work Item details panel is now read‑first with explicit edit mode.
+
+Header layout:
+- Row 1: Back + key + type pill + title
+- Row 2: Metadata strip (Parent, Milestone, Sprint, generator marker)
+- Row 3: Actions (AI Actions, Snapshot, Archive, Edit, Quick Actions)
+
+Tabs (renamed for clarity):
+- Overview
+- Execution Checklist
+- Comments
+- Links
+- Files
+- Activity
+- AI
+
+Overview layout:
+- Compact core fields (Status, Priority, Due Date, Assignee)
+- Relationships (Parent, Type, Milestone, Sprint)
+- Description
+
+Edit rules:
+- Read-only by default
+- Edit toggle applies to the whole screen
+- Structural fields (Parent/Type/Milestone/Sprint) remain read-only for generator-created items
+
+Sprint display:
+- Sprint shows name with dates, e.g. `Sprint 3 (May 1 – May 14)`
+- The sprint label links to the Sprint view
+
+Quick Actions:
+- Overflow menu provides common actions (Assign to me, Add dependency, Mark done)
 
 ### Milestone Planning
 - Assign or move items between milestones
