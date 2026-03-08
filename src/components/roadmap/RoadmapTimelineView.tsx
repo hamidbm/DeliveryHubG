@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { buildTimelineRows, RoadmapMilestoneVM } from './roadmapViewModels';
 import type { MilestoneForecast, MilestoneProbabilisticForecast } from '../../types';
+import ExplainabilityIcon from '../explainability/ExplainabilityIcon';
 
 const RoadmapTimelineView: React.FC<{
   milestones: RoadmapMilestoneVM[];
@@ -45,8 +46,9 @@ const RoadmapTimelineView: React.FC<{
 
   return (
     <div className="space-y-6">
-      <div className="text-[11px] text-slate-500">
+      <div className="text-[11px] text-slate-500 inline-flex items-center gap-2">
         Timeline spans {bounds ? new Date(bounds.min).toISOString().split('T')[0] : '—'} → {bounds ? new Date(bounds.max).toISOString().split('T')[0] : '—'}
+        <ExplainabilityIcon explainabilityKey="forecast_window" />
       </div>
       <div className="relative border border-slate-200 rounded-3xl p-6 bg-slate-50/40 min-h-[260px]">
         <div className="space-y-6">
@@ -81,13 +83,15 @@ const RoadmapTimelineView: React.FC<{
                 />
               </div>
               <div className="mt-2 flex items-center gap-3 text-[10px] text-slate-500">
-                <span>Readiness {row.intelligence?.readiness || '—'}</span>
-                <span>Confidence {row.intelligence?.confidence || '—'}</span>
-                <span>Capacity {row.targetCapacity ?? '—'}</span>
+                <span className="inline-flex items-center gap-1">Readiness {row.intelligence?.readiness || '—'} <ExplainabilityIcon explainabilityKey="readiness" /></span>
+                <span className="inline-flex items-center gap-1">Confidence {row.intelligence?.confidence || '—'} <ExplainabilityIcon explainabilityKey="confidence" /></span>
+                <span className="inline-flex items-center gap-1">Capacity {row.targetCapacity ?? '—'} <ExplainabilityIcon explainabilityKey="capacity_utilization" /></span>
                 <span>Sprints {row.sprintCount ?? '—'}</span>
                 {probabilisticForecastByMilestone[row.id] && (
-                  <span>
+                  <span className="inline-flex items-center gap-1">
                     Probabilistic P50 {probabilisticForecastByMilestone[row.id].p50Date.split('T')[0]} – P90 {probabilisticForecastByMilestone[row.id].p90Date.split('T')[0]}
+                    <ExplainabilityIcon explainabilityKey="p50_date" />
+                    <ExplainabilityIcon explainabilityKey="p90_date" />
                   </span>
                 )}
               </div>

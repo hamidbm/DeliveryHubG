@@ -367,6 +367,16 @@ export type PortfolioProbabilisticForecastSummary = {
   averagePortfolioP90SlipDays: number;
 };
 
+export type ExplainabilityContent = {
+  id: string;
+  title: string;
+  shortText: string;
+  detailText?: string;
+  whyItMatters?: string;
+  howToUse?: string;
+  actions?: string[];
+};
+
 export type PortfolioOverview = {
   totalPlans: number;
   totalMilestones: number;

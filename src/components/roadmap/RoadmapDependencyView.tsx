@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { buildDependencyGraph, RoadmapDependencyEdge, RoadmapMilestoneVM } from './roadmapViewModels';
+import ExplainabilityIcon from '../explainability/ExplainabilityIcon';
 
 const RoadmapDependencyView: React.FC<{
   milestones: RoadmapMilestoneVM[];
@@ -17,7 +18,10 @@ const RoadmapDependencyView: React.FC<{
 
   return (
     <div className="space-y-6">
-      <div className="text-[11px] text-slate-500">Milestone dependency map (aggregated).</div>
+      <div className="text-[11px] text-slate-500 inline-flex items-center gap-2">
+        Milestone dependency map (aggregated).
+        <ExplainabilityIcon explainabilityKey="dependency_pressure" />
+      </div>
       <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
         {graph.nodes.map((node) => {
           const milestone = milestones.find((m) => m.id === node.id);
@@ -27,11 +31,13 @@ const RoadmapDependencyView: React.FC<{
               <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Milestone</div>
               <div className="text-sm font-semibold text-slate-700">{node.label}</div>
               <div className="mt-2 flex flex-wrap gap-2 text-[9px] font-black uppercase tracking-widest">
-                <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-600">
+                <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-600 inline-flex items-center gap-1">
                   Inbound {intel?.dependencyInbound ?? 0}
+                  <ExplainabilityIcon explainabilityKey="dependency_pressure" />
                 </span>
-                <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-600">
+                <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-600 inline-flex items-center gap-1">
                   Outbound {intel?.dependencyOutbound ?? 0}
+                  <ExplainabilityIcon explainabilityKey="dependency_pressure" />
                 </span>
                 <span className={`px-2 py-1 rounded-full ${
                   intel?.riskLevel === 'HIGH' ? 'bg-rose-50 text-rose-700' :

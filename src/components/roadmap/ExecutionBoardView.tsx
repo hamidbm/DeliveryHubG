@@ -11,6 +11,7 @@ import {
   MilestoneProbabilisticForecast
 } from '../../types';
 import type { MilestoneIntelligence } from './roadmapViewModels';
+import ExplainabilityIcon from '../explainability/ExplainabilityIcon';
 
 const formatForecastDate = (value?: string) => {
   if (!value) return '—';
@@ -368,32 +369,40 @@ const ExecutionBoardView: React.FC<ExecutionBoardViewProps> = ({
 
               {intelligence && (
                 <div className="mt-4 flex flex-wrap gap-2 text-[9px] font-black uppercase tracking-widest">
-                  <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-600">
+                  <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-600 inline-flex items-center gap-1">
                     Utilization {intelligence.utilizationPercent != null ? `${Math.round(intelligence.utilizationPercent * 100)}%` : '—'}
+                    <ExplainabilityIcon explainabilityKey="capacity_utilization" />
                   </span>
-                  <span className={`px-2 py-1 rounded-full ${riskColor(intelligence.riskLevel)}`}>
+                  <span className={`px-2 py-1 rounded-full ${riskColor(intelligence.riskLevel)} inline-flex items-center gap-1`}>
                     Risk {intelligence.riskLevel}
+                    <ExplainabilityIcon explainabilityKey="risk_level" />
                   </span>
-                  <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-600">
+                  <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-600 inline-flex items-center gap-1">
                     Blocked {intelligence.blockedItemCount}
+                    <ExplainabilityIcon explainabilityKey="blocked_items" />
                   </span>
-                  <span className={`px-2 py-1 rounded-full ${readinessColor(intelligence.readiness)}`}>
+                  <span className={`px-2 py-1 rounded-full ${readinessColor(intelligence.readiness)} inline-flex items-center gap-1`}>
                     Readiness {intelligence.readiness}
+                    <ExplainabilityIcon explainabilityKey="readiness" />
                   </span>
-                  <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-600">
+                  <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-600 inline-flex items-center gap-1">
                     Confidence {intelligence.confidence}
+                    <ExplainabilityIcon explainabilityKey="confidence" />
                   </span>
-                  <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-600">
+                  <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-600 inline-flex items-center gap-1">
                     Inbound {intelligence.dependencyInbound} / Outbound {intelligence.dependencyOutbound}
+                    <ExplainabilityIcon explainabilityKey="dependency_pressure" />
                   </span>
                   {predictiveForecast && (
-                    <span className="px-2 py-1 rounded-full bg-slate-900 text-white">
+                    <span className="px-2 py-1 rounded-full bg-slate-900 text-white inline-flex items-center gap-1">
                       Forecast {formatForecastDate(predictiveForecast.bestCaseDate)} – {formatForecastDate(predictiveForecast.worstCaseDate)}
+                      <ExplainabilityIcon explainabilityKey="forecast_window" />
                     </span>
                   )}
                   {predictiveForecast && (
-                    <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-600">
+                    <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-600 inline-flex items-center gap-1">
                       Confidence {predictiveForecast.forecastConfidence} • Slip {predictiveForecast.slipRisk}
+                      <ExplainabilityIcon explainabilityKey="forecast_window" />
                     </span>
                   )}
                   {!predictiveForecast && forecastStatus.loading && (
@@ -406,11 +415,15 @@ const ExecutionBoardView: React.FC<ExecutionBoardViewProps> = ({
                 <div className="mt-3 flex flex-wrap gap-2 text-[9px] font-black uppercase tracking-widest">
                   {probabilisticForecast ? (
                     <>
-                      <span className="px-2 py-1 rounded-full bg-slate-900 text-white">
+                      <span className="px-2 py-1 rounded-full bg-slate-900 text-white inline-flex items-center gap-1">
                         P50 {formatForecastDate(probabilisticForecast.p50Date)} • P90 {formatForecastDate(probabilisticForecast.p90Date)}
+                        <ExplainabilityIcon explainabilityKey="p50_date" />
+                        <ExplainabilityIcon explainabilityKey="p90_date" />
                       </span>
-                      <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-600">
+                      <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-600 inline-flex items-center gap-1">
                         On-Time {formatPercent(probabilisticForecast.onTimeProbability)} • Uncertainty {probabilisticForecast.uncertaintyLevel}
+                        <ExplainabilityIcon explainabilityKey="on_time_probability" />
+                        <ExplainabilityIcon explainabilityKey="uncertainty_level" />
                       </span>
                     </>
                   ) : (

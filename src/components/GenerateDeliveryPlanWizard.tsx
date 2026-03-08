@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Bundle, Application } from '../types';
+import ExplainabilityIcon from './explainability/ExplainabilityIcon';
 
 interface GenerateDeliveryPlanWizardProps {
   bundles: Bundle[];
@@ -550,19 +551,28 @@ const GenerateDeliveryPlanWizard: React.FC<GenerateDeliveryPlanWizardProps> = ({
 
             <div className="grid grid-cols-3 gap-4">
               <div className="border border-slate-100 rounded-2xl p-4 bg-slate-50">
-                <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Capacity Mode</div>
+                <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 inline-flex items-center gap-2">
+                  Capacity Mode
+                  <ExplainabilityIcon explainabilityKey="capacity_utilization" />
+                </div>
                 <div className="text-sm font-semibold text-slate-700 mt-2">
                   {capacityModeLabel[preview.capacitySummary?.mode || 'NONE']}
                 </div>
               </div>
               <div className="border border-slate-100 rounded-2xl p-4 bg-slate-50">
-                <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Sprint Capacity</div>
+                <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 inline-flex items-center gap-2">
+                  Sprint Capacity
+                  <ExplainabilityIcon explainabilityKey="capacity_utilization" />
+                </div>
                 <div className="text-2xl font-black text-slate-900 mt-1">
                   {preview.capacitySummary?.sprintCapacity != null ? preview.capacitySummary.sprintCapacity : '—'}
                 </div>
               </div>
               <div className="border border-slate-100 rounded-2xl p-4 bg-slate-50">
-                <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Derived Milestone Duration</div>
+                <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 inline-flex items-center gap-2">
+                  Derived Milestone Duration
+                  <ExplainabilityIcon explainabilityKey="forecast_window" />
+                </div>
                 <div className="text-sm font-semibold text-slate-700 mt-2">
                   {preview.derived?.milestoneDurationWeeks != null
                     ? `${preview.derived.milestoneDurationWeeks} weeks${preview.derived.milestoneDurationDays != null ? ` (${preview.derived.milestoneDurationDays} days)` : ''}`

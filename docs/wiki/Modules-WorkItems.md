@@ -143,6 +143,11 @@ Example API response (probabilistic plan forecast):
 }
 ```
 
+### Explainability UI (Phase 9.1)
+- Explainability icons appear next to advanced metrics across roadmap, simulation, and portfolio views.
+- Popovers provide short explanations with optional “Show more” details and actions.
+- Dismissals are interaction-local (not persisted).
+
 ## Generate Delivery Plan (Planning Mode)
 The Planning toolbar includes **Generate Delivery Plan**, a guided wizard that creates a draft delivery structure.
 

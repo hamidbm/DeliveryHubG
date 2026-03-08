@@ -1,4 +1,5 @@
 import React from 'react';
+import ExplainabilityIcon from './explainability/ExplainabilityIcon';
 import type { SimulationResult } from '../types';
 
 const SimulationResults: React.FC<{ result: SimulationResult }> = ({ result }) => {
@@ -17,7 +18,10 @@ const SimulationResults: React.FC<{ result: SimulationResult }> = ({ result }) =
   return (
     <div className="border border-slate-100 rounded-3xl p-6 bg-slate-50/40 space-y-5">
       <div>
-        <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Simulation Results</div>
+        <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 inline-flex items-center gap-2">
+          Simulation Results
+          <ExplainabilityIcon explainabilityKey="simulation_scenario" />
+        </div>
         <div className="text-lg font-semibold text-slate-700">{result.scenario.name}</div>
         {result.scenario.description && (
           <div className="text-sm text-slate-500 mt-1">{result.scenario.description}</div>
@@ -26,19 +30,31 @@ const SimulationResults: React.FC<{ result: SimulationResult }> = ({ result }) =
 
       <div className="grid md:grid-cols-4 gap-3 text-sm">
         <div className="bg-white rounded-2xl p-4 border border-slate-100">
-          <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Milestones</div>
+          <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 inline-flex items-center gap-2">
+            Milestones
+            <ExplainabilityIcon explainabilityKey="scenario_delta" />
+          </div>
           <div className="text-xl font-black text-slate-700">{summary.totalMilestones}</div>
         </div>
         <div className="bg-white rounded-2xl p-4 border border-slate-100">
-          <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Slipped</div>
+          <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 inline-flex items-center gap-2">
+            Slipped
+            <ExplainabilityIcon explainabilityKey="scenario_delta" />
+          </div>
           <div className="text-xl font-black text-rose-600">{summary.milestonesSlipped}</div>
         </div>
         <div className="bg-white rounded-2xl p-4 border border-slate-100">
-          <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Risk Increases</div>
+          <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 inline-flex items-center gap-2">
+            Risk Increases
+            <ExplainabilityIcon explainabilityKey="risk_level" />
+          </div>
           <div className="text-xl font-black text-amber-600">{summary.riskIncreaseCount}</div>
         </div>
         <div className="bg-white rounded-2xl p-4 border border-slate-100">
-          <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Avg Util Diff</div>
+          <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 inline-flex items-center gap-2">
+            Avg Util Diff
+            <ExplainabilityIcon explainabilityKey="capacity_utilization" />
+          </div>
           <div className="text-xl font-black text-slate-700">{summary.averageUtilizationDiff == null ? '—' : `${Math.round(summary.averageUtilizationDiff * 100)}%`}</div>
         </div>
       </div>
@@ -50,10 +66,10 @@ const SimulationResults: React.FC<{ result: SimulationResult }> = ({ result }) =
               <th className="text-left py-2">Milestone</th>
               <th className="text-left py-2">Baseline End</th>
               <th className="text-left py-2">Scenario End</th>
-              <th className="text-left py-2">Baseline Util</th>
-              <th className="text-left py-2">Scenario Util</th>
-              <th className="text-left py-2">Risk Change</th>
-              <th className="text-left py-2">Date Delta</th>
+              <th className="text-left py-2">Baseline Util <ExplainabilityIcon explainabilityKey="capacity_utilization" /></th>
+              <th className="text-left py-2">Scenario Util <ExplainabilityIcon explainabilityKey="capacity_utilization" /></th>
+              <th className="text-left py-2">Risk Change <ExplainabilityIcon explainabilityKey="risk_level" /></th>
+              <th className="text-left py-2">Date Delta <ExplainabilityIcon explainabilityKey="scenario_delta" /></th>
             </tr>
           </thead>
           <tbody>

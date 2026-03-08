@@ -17,6 +17,7 @@ import {
 import PortfolioTimelineView from './PortfolioTimelineView';
 import PortfolioDependencyView from './PortfolioDependencyView';
 import PortfolioHealthSummary from './PortfolioHealthSummary';
+import ExplainabilityIcon from '../explainability/ExplainabilityIcon';
 
 const PortfolioDashboard: React.FC = () => {
   const [plans, setPlans] = useState<PortfolioPlanSummary[]>([]);
@@ -146,13 +147,13 @@ const PortfolioDashboard: React.FC = () => {
       <section className="grid md:grid-cols-9 gap-4">
         <SummaryCard label="Plans" value={overview?.totalPlans ?? plans.length} />
         <SummaryCard label="Milestones" value={overview?.totalMilestones ?? '—'} />
-        <SummaryCard label="High Risk" value={overview?.highRiskMilestones ?? '—'} />
-        <SummaryCard label="Overloaded" value={overview?.overloadedMilestones ?? '—'} />
-        <SummaryCard label="Avg Utilization" value={overview?.avgUtilization != null ? `${Math.round(overview.avgUtilization * 100)}%` : '—'} />
-        <SummaryCard label="Expected Slip" value={forecastSummary ? `${forecastSummary.expectedPortfolioSlipDays}d` : '—'} />
-        <SummaryCard label="Low Confidence Plans" value={forecastPlans.filter((p) => p.averageConfidence === 'LOW').length} />
-        <SummaryCard label="Avg On-Time" value={probSummary ? `${Math.round(probSummary.averageOnTimeProbability * 100)}%` : '—'} />
-        <SummaryCard label="High Uncertainty" value={probSummary?.highUncertaintyMilestones ?? '—'} />
+        <SummaryCard label="High Risk" value={overview?.highRiskMilestones ?? '—'} explainabilityKey="high_risk_milestones" />
+        <SummaryCard label="Overloaded" value={overview?.overloadedMilestones ?? '—'} explainabilityKey="capacity_utilization" />
+        <SummaryCard label="Avg Utilization" value={overview?.avgUtilization != null ? `${Math.round(overview.avgUtilization * 100)}%` : '—'} explainabilityKey="average_utilization" />
+        <SummaryCard label="Expected Slip" value={forecastSummary ? `${forecastSummary.expectedPortfolioSlipDays}d` : '—'} explainabilityKey="expected_portfolio_slip" />
+        <SummaryCard label="Low Confidence Plans" value={forecastPlans.filter((p) => p.averageConfidence === 'LOW').length} explainabilityKey="portfolio_health" />
+        <SummaryCard label="Avg On-Time" value={probSummary ? `${Math.round(probSummary.averageOnTimeProbability * 100)}%` : '—'} explainabilityKey="on_time_probability" />
+        <SummaryCard label="High Uncertainty" value={probSummary?.highUncertaintyMilestones ?? '—'} explainabilityKey="uncertainty_level" />
       </section>
 
       <section className="bg-white border border-slate-100 rounded-3xl p-6 space-y-4">
@@ -214,9 +215,12 @@ const PortfolioDashboard: React.FC = () => {
   );
 };
 
-const SummaryCard: React.FC<{ label: string; value: string | number }> = ({ label, value }) => (
+const SummaryCard: React.FC<{ label: string; value: string | number; explainabilityKey?: string }> = ({ label, value, explainabilityKey }) => (
   <div className="bg-white border border-slate-100 rounded-2xl p-4">
-    <div className="text-[10px] uppercase tracking-widest text-slate-400 font-black">{label}</div>
+    <div className="text-[10px] uppercase tracking-widest text-slate-400 font-black inline-flex items-center gap-2">
+      {label}
+      {explainabilityKey && <ExplainabilityIcon explainabilityKey={explainabilityKey} />}
+    </div>
     <div className="text-2xl font-black text-slate-900 mt-2">{value}</div>
   </div>
 );

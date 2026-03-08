@@ -47,6 +47,7 @@ const tests = [
   () => import('./test-forecast-api').then((m) => m.run()),
   () => import('./test-probabilistic-forecasting-engine').then((m) => m.run()),
   () => import('./test-probabilistic-forecast-api').then((m) => m.run()),
+  () => import('./test-explainability-ui').then((m) => m.run()),
   () => import('./test-portfolio-analytics').then((m) => m.run()),
   () => import('./test-portfolio-api').then((m) => m.run()),
   () => import('./test-simulation-engine').then((m) => m.run()),

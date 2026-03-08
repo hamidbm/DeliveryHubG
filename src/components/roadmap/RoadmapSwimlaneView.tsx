@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { buildSwimlaneRows, RoadmapMilestoneVM } from './roadmapViewModels';
 import type { MilestoneForecast, MilestoneProbabilisticForecast } from '../../types';
+import ExplainabilityIcon from '../explainability/ExplainabilityIcon';
 
 const RoadmapSwimlaneView: React.FC<{
   milestones: RoadmapMilestoneVM[];
@@ -52,25 +53,32 @@ const RoadmapSwimlaneView: React.FC<{
                   </span>
                   <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-600">
                     Blocked {milestone.intelligence?.blockedItemCount ?? 0}
+                    <ExplainabilityIcon explainabilityKey="blocked_items" />
                   </span>
                   {forecastByMilestone[milestone.id] && (
                     <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-600">
                       Forecast {forecastByMilestone[milestone.id].bestCaseDate.split('T')[0]} – {forecastByMilestone[milestone.id].worstCaseDate.split('T')[0]}
+                      <ExplainabilityIcon explainabilityKey="forecast_window" />
                     </span>
                   )}
                   {forecastByMilestone[milestone.id] && (
                     <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-600">
                       Confidence {forecastByMilestone[milestone.id].forecastConfidence} • Slip {forecastByMilestone[milestone.id].slipRisk}
+                      <ExplainabilityIcon explainabilityKey="forecast_window" />
                     </span>
                   )}
                   {probabilisticForecastByMilestone[milestone.id] && (
                     <span className="px-2 py-1 rounded-full bg-slate-900 text-white">
                       P50 {probabilisticForecastByMilestone[milestone.id].p50Date.split('T')[0]} • P90 {probabilisticForecastByMilestone[milestone.id].p90Date.split('T')[0]}
+                      <ExplainabilityIcon explainabilityKey="p50_date" />
+                      <ExplainabilityIcon explainabilityKey="p90_date" />
                     </span>
                   )}
                   {probabilisticForecastByMilestone[milestone.id] && (
                     <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-600">
                       On-Time {Math.round((probabilisticForecastByMilestone[milestone.id].onTimeProbability || 0) * 100)}% • Uncertainty {probabilisticForecastByMilestone[milestone.id].uncertaintyLevel}
+                      <ExplainabilityIcon explainabilityKey="on_time_probability" />
+                      <ExplainabilityIcon explainabilityKey="uncertainty_level" />
                     </span>
                   )}
                 </div>

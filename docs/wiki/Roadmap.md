@@ -52,6 +52,12 @@ On-Time: 62%
 Uncertainty: MEDIUM
 ```
 
+### Explainability UI (Phase 9.1)
+Advanced metrics now include inline explainability:
+- Roadmap views show explainability icons on utilization, risk, readiness, confidence, dependencies, and forecast signals.
+- Simulation results and portfolio metrics include contextual explanations.
+- Explainability is lightweight, dismissible, and action-oriented.
+
 ## Simulation (Phase 5)
 The roadmap supports delivery simulations that compare baseline plan previews against scenario overrides (capacity, scope, dates, velocity). Results show milestone slippage, utilization changes, and risk shifts, with an explicit per‑milestone date delta.
 DATE_SHIFT overrides apply to specific milestones (not global plan shifts).
