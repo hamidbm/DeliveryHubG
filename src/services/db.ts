@@ -266,6 +266,11 @@ const ensureBundleCapacityIndexes = async (db: any) => {
   await db.collection('bundle_capacity').createIndex({ updatedAt: -1 });
 };
 
+export const ensureApplicationPlanningMetadataIndexes = async (db: any) => {
+  await db.collection('application_planning_metadata').createIndex({ scopeType: 1, scopeId: 1 }, { unique: true });
+  await db.collection('application_planning_metadata').createIndex({ bundleId: 1 });
+};
+
 export const fetchBundleAssignments = async (filters: {
   bundleId?: string;
   userId?: string;

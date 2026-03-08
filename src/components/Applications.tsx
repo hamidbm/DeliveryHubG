@@ -1,10 +1,68 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { Application, Bundle, BundleAssignment, BundleProfile, BundleProfileMilestone, WorkItem, WorkItemType } from '../types';
+import { Application, ApplicationPlanningMetadata, Bundle, BundleAssignment, BundleProfile, WorkItem, WorkItemType } from '../types';
 import { usePathname, useRouter, useSearchParams } from '../App';
 import { canEditBundleProfileClient } from '../lib/authzClient';
 import CreateWorkItemModal from './CreateWorkItemModal';
 import ChangeFeed from './ChangeFeed';
+import ScheduleEnvironmentGrid from './applications/ScheduleEnvironmentGrid';
+import ScheduleScopeSelector from './applications/ScheduleScopeSelector';
+import ScheduleDefaultsPanel from './applications/ScheduleDefaultsPanel';
+
+const parseIsoDate = (value?: string | null) => {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date;
+};
+
+const toIsoDate = (date: Date | null) => (date ? date.toISOString().slice(0, 10) : null);
+
+const addDays = (date: Date, days: number) => {
+  const copy = new Date(date.getTime());
+  copy.setDate(copy.getDate() + days);
+  return copy;
+};
+
+const calcDurationDays = (start?: string | null, end?: string | null) => {
+  const startDate = parseIsoDate(start);
+  const endDate = parseIsoDate(end);
+  if (!startDate || !endDate) return null;
+  const diff = (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24);
+  return Math.max(1, Math.ceil(diff));
+};
+
+const deriveEndDate = (start?: string | null, durationDays?: number | null) => {
+  if (!start || !durationDays) return null;
+  const startDate = parseIsoDate(start);
+  if (!startDate) return null;
+  return toIsoDate(addDays(startDate, durationDays));
+};
+
+const computeTimelineDurationDays = (envs: Array<{ startDate?: string | null; endDate?: string | null; durationDays?: number | null }>) => {
+  const dates = envs.reduce((acc: Date[], env) => {
+    const start = parseIsoDate(env.startDate || null);
+    const end = parseIsoDate(env.endDate || deriveEndDate(env.startDate || null, env.durationDays || null));
+    if (start && end) {
+      acc.push(start, end);
+    }
+    return acc;
+  }, []);
+  if (!dates.length) return null;
+  const min = Math.min(...dates.map((d) => d.getTime()));
+  const max = Math.max(...dates.map((d) => d.getTime()));
+  const diff = (max - min) / (1000 * 60 * 60 * 24);
+  return Math.max(1, Math.ceil(diff));
+};
+
+const computeDerivedMilestoneWeeks = (envs: Array<{ startDate?: string | null; endDate?: string | null; durationDays?: number | null }>, milestoneCount?: number | null) => {
+  if (!milestoneCount) return null;
+  const timelineDays = computeTimelineDurationDays(envs);
+  if (!timelineDays) return null;
+  return Number((timelineDays / milestoneCount / 7).toFixed(2));
+};
+
+const ENVIRONMENT_SUGGESTIONS = ['DEV', 'SIT', 'INT', 'QA', 'PERF', 'UAT', 'STAGING', 'PREPROD', 'PROD'];
 
 interface ApplicationsProps {
   filterBundle: string;
@@ -369,6 +427,365 @@ const ApplicationDetail: React.FC<{
   onOpenBundle: () => void;
 }> = ({ app, bundleName, profile, owners, onOpenBundle }) => {
   const current = profile?.schedule?.milestones?.find((m) => m.status === 'in_progress') || profile?.schedule?.milestones?.find((m) => m.status !== 'done');
+  const appId = String(app._id || app.id || app.aid || '');
+  const bundleId = app.bundleId ? String(app.bundleId) : null;
+  const [activeTab, setActiveTab] = useState<'overview' | 'schedule'>('overview');
+  const [scopeMode, setScopeMode] = useState<'bundle' | 'application'>('application');
+  const [bundleMetadata, setBundleMetadata] = useState<ApplicationPlanningMetadata | null>(null);
+  const [appMetadata, setAppMetadata] = useState<ApplicationPlanningMetadata | null>(null);
+  const [resolvedMetadata, setResolvedMetadata] = useState<ApplicationPlanningMetadata | null>(null);
+  const [planningLoading, setPlanningLoading] = useState(false);
+  const [planningError, setPlanningError] = useState<string | null>(null);
+  const [editMode, setEditMode] = useState(false);
+  const [draft, setDraft] = useState<ApplicationPlanningMetadata | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [manualEndDates, setManualEndDates] = useState<Record<string, boolean>>({});
+  const [manualActualDates, setManualActualDates] = useState<Record<string, boolean>>({});
+
+  const normalizeEnvRows = (rows?: any[]) => {
+    const seen = new Set<string>();
+    const normalized: any[] = [];
+    (rows || []).forEach((row) => {
+      if (!row?.name) return;
+      const name = String(row.name).toUpperCase();
+      if (seen.has(name)) return;
+      seen.add(name);
+      normalized.push({ ...row, name });
+    });
+    return normalized;
+  };
+
+  const buildEmptyMetadata = (scopeType: 'bundle' | 'application', scopeId: string): ApplicationPlanningMetadata => ({
+    scopeType,
+    scopeId,
+    bundleId,
+    applicationId: scopeType === 'application' ? appId : undefined,
+    environments: [],
+    goLive: { planned: null, actual: null },
+    planningDefaults: { milestoneCount: null, sprintDurationWeeks: null, milestoneDurationWeeks: null },
+    capacityDefaults: { capacityModel: null, deliveryTeams: null, sprintVelocityPerTeam: null, directSprintCapacity: null, teamSize: null, projectSize: null },
+    notes: null
+  });
+
+  const normalizeMetadata = (data: ApplicationPlanningMetadata | null, scopeType: 'bundle' | 'application', scopeId: string) => ({
+    ...buildEmptyMetadata(scopeType, scopeId),
+    ...(data || {}),
+    environments: normalizeEnvRows(data?.environments || []).map((row) => ({
+      ...row,
+      endDate: row.endDate || deriveEndDate(row.startDate || null, row.durationDays || null),
+      durationDays: typeof row.durationDays === 'number' ? row.durationDays : calcDurationDays(row.startDate || null, row.endDate || null)
+    })),
+    goLive: data?.goLive || { planned: null, actual: null },
+    planningDefaults: data?.planningDefaults || { milestoneCount: null, sprintDurationWeeks: null, milestoneDurationWeeks: null },
+    capacityDefaults: data?.capacityDefaults || { capacityModel: null, deliveryTeams: null, sprintVelocityPerTeam: null, directSprintCapacity: null, teamSize: null, projectSize: null }
+  });
+
+  const loadPlanningMetadata = async () => {
+    if (!appId) return;
+    setPlanningLoading(true);
+    setPlanningError(null);
+    try {
+      const res = await fetch(`/api/applications/${encodeURIComponent(appId)}/planning-metadata`);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error || 'Failed to load planning metadata');
+      }
+      const data = await res.json();
+      const bundleMeta = data?.bundleMetadata ? normalizeMetadata(data.bundleMetadata, 'bundle', bundleId || '') : (bundleId ? buildEmptyMetadata('bundle', bundleId) : null);
+      const appMeta = normalizeMetadata(data?.applicationMetadata || null, 'application', appId);
+      const resolved = normalizeMetadata(data?.resolvedMetadata || data?.planningMetadata || null, 'application', appId);
+      setBundleMetadata(bundleMeta);
+      setAppMetadata(appMeta);
+      setResolvedMetadata(resolved);
+    } catch (err: any) {
+      setPlanningError(err?.message || 'Failed to load planning metadata');
+      setBundleMetadata(bundleId ? buildEmptyMetadata('bundle', bundleId) : null);
+      setAppMetadata(buildEmptyMetadata('application', appId));
+      setResolvedMetadata(buildEmptyMetadata('application', appId));
+    } finally {
+      setPlanningLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadPlanningMetadata();
+  }, [appId]);
+
+  useEffect(() => {
+    if (scopeMode === 'bundle') {
+      setEditMode(false);
+      setDraft(null);
+    }
+  }, [scopeMode]);
+
+  const startEdit = () => {
+    if (scopeMode !== 'application') {
+      setSaveError('Edit bundle schedule in the bundle profile.');
+      return;
+    }
+    setSaveError(null);
+    setDraft(JSON.parse(JSON.stringify(normalizeMetadata(appMetadata, 'application', appId))));
+    setManualEndDates({});
+    setManualActualDates({});
+    setEditMode(true);
+  };
+
+  const cancelEdit = () => {
+    setSaveError(null);
+    setDraft(null);
+    setManualEndDates({});
+    setManualActualDates({});
+    setEditMode(false);
+  };
+
+  const validateDraft = (data: ApplicationPlanningMetadata) => {
+    const errors: string[] = [];
+    (data.environments || []).forEach((env) => {
+      if (env.startDate && env.endDate) {
+        if (new Date(env.startDate).getTime() > new Date(env.endDate).getTime()) {
+          errors.push(`${env.name} start date must be before end date.`);
+        }
+      }
+      if (typeof env.durationDays === 'number' && env.durationDays <= 0) {
+        errors.push(`${env.name} duration must be positive.`);
+      }
+      if (env.actualStart && env.actualEnd) {
+        if (new Date(env.actualStart).getTime() > new Date(env.actualEnd).getTime()) {
+          errors.push(`${env.name} actual start must be before end.`);
+        }
+      }
+    });
+
+    const positiveFields: Array<{ label: string; value?: number | null }> = [
+      { label: 'Milestones', value: data.planningDefaults?.milestoneCount },
+      { label: 'Sprint duration', value: data.planningDefaults?.sprintDurationWeeks },
+      { label: 'Milestone duration', value: data.planningDefaults?.milestoneDurationWeeks },
+      { label: 'Delivery teams', value: data.capacityDefaults?.deliveryTeams },
+      { label: 'Velocity per team', value: data.capacityDefaults?.sprintVelocityPerTeam },
+      { label: 'Direct sprint capacity', value: data.capacityDefaults?.directSprintCapacity },
+      { label: 'Team size', value: data.capacityDefaults?.teamSize }
+    ];
+
+    positiveFields.forEach((field) => {
+      if (typeof field.value === 'number' && field.value <= 0) {
+        errors.push(`${field.label} must be positive.`);
+      }
+    });
+
+    if (errors.length) return errors.join(' ');
+    return null;
+  };
+
+  const saveDraft = async () => {
+    if (!draft) return;
+    const timelineDays = (() => {
+      const dates = (draft.environments || []).reduce((acc: Date[], env) => {
+        const start = parseIsoDate(env.startDate || null);
+        const end = parseIsoDate(env.endDate || deriveEndDate(env.startDate || null, env.durationDays || null));
+        if (start && end) {
+          acc.push(start, end);
+        }
+        return acc;
+      }, []);
+      if (!dates.length) return null;
+      const min = Math.min(...dates.map((d) => d.getTime()));
+      const max = Math.max(...dates.map((d) => d.getTime()));
+      const diff = (max - min) / (1000 * 60 * 60 * 24);
+      return Math.max(1, Math.ceil(diff));
+    })();
+
+    const error = validateDraft(draft);
+    if (error) {
+      setSaveError(error);
+      return;
+    }
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const milestoneCount = draft.planningDefaults?.milestoneCount;
+      const derivedMilestoneDurationWeeks = timelineDays && milestoneCount ? Number((timelineDays / milestoneCount / 7).toFixed(2)) : null;
+      const payload = {
+        ...draft,
+        planningDefaults: {
+          ...(draft.planningDefaults || {}),
+          milestoneDurationWeeks: derivedMilestoneDurationWeeks ?? draft.planningDefaults?.milestoneDurationWeeks ?? null
+        }
+      };
+      const res = await fetch(`/api/applications/${encodeURIComponent(appId)}/planning-metadata`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ planningMetadata: payload })
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error || 'Failed to save planning metadata');
+      }
+      const data = await res.json();
+      const bundleMeta = data?.bundleMetadata ? normalizeMetadata(data.bundleMetadata, 'bundle', bundleId || '') : (bundleId ? buildEmptyMetadata('bundle', bundleId) : null);
+      const appMeta = normalizeMetadata(data?.applicationMetadata || null, 'application', appId);
+      const resolved = normalizeMetadata(data?.resolvedMetadata || data?.planningMetadata || null, 'application', appId);
+      setBundleMetadata(bundleMeta);
+      setAppMetadata(appMeta);
+      setResolvedMetadata(resolved);
+      setEditMode(false);
+      setDraft(null);
+    } catch (err: any) {
+      setSaveError(err?.message || 'Failed to save planning metadata');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const updateEnvironment = (name: string, field: 'startDate' | 'durationDays' | 'endDate' | 'actualStart' | 'actualEnd', value: any) => {
+    if (!editMode) return;
+    setDraft((prev) => {
+      const base = normalizeMetadata(prev, 'application', appId);
+      const rows = base.environments || [];
+      const next = rows.map((row) => {
+        if (row.name !== name) return row;
+        const updated: any = { ...row, [field]: value };
+        if (field === 'actualStart' || field === 'actualEnd') {
+          setManualActualDates((current) => ({ ...current, [name]: true }));
+        }
+        if (field === 'endDate') {
+          setManualEndDates((current) => ({ ...current, [name]: true }));
+          if (row.startDate && value) {
+            updated.durationDays = calcDurationDays(row.startDate, value);
+          }
+        }
+        if (field === 'startDate' || field === 'durationDays') {
+          const manual = manualEndDates[name];
+          if (!manual) {
+            const derived = deriveEndDate(field === 'startDate' ? value : row.startDate, field === 'durationDays' ? value : row.durationDays);
+            updated.endDate = derived;
+          }
+        }
+        const endDate = updated.endDate || deriveEndDate(updated.startDate, updated.durationDays);
+        const manualActual = manualActualDates[name];
+        if (!manualActual && updated.startDate && endDate) {
+          updated.actualStart = updated.startDate;
+          updated.actualEnd = endDate;
+        }
+        return updated;
+      });
+      return { ...base, environments: next };
+    });
+  };
+
+  const updatePlanningDefaults = (updates: Partial<NonNullable<ApplicationPlanningMetadata['planningDefaults']>>) => {
+    if (!editMode) return;
+    setDraft((prev) => ({
+      ...(normalizeMetadata(prev, 'application', appId)),
+      planningDefaults: {
+        ...(prev?.planningDefaults || {}),
+        ...updates
+      }
+    }));
+  };
+
+  const updateCapacityDefaults = (updates: Partial<NonNullable<ApplicationPlanningMetadata['capacityDefaults']>>) => {
+    if (!editMode) return;
+    setDraft((prev) => ({
+      ...(normalizeMetadata(prev, 'application', appId)),
+      capacityDefaults: {
+        ...(prev?.capacityDefaults || {}),
+        ...updates
+      }
+    }));
+  };
+
+  const updateGoLive = (updates: Partial<NonNullable<ApplicationPlanningMetadata['goLive']>>) => {
+    if (!editMode) return;
+    setDraft((prev) => ({
+      ...(normalizeMetadata(prev, 'application', appId)),
+      goLive: {
+        ...(prev?.goLive || {}),
+        ...updates
+      }
+    }));
+  };
+
+  const updateNotes = (value: string | null) => {
+    if (!editMode) return;
+    setDraft((prev) => ({
+      ...(normalizeMetadata(prev, 'application', appId)),
+      notes: value
+    }));
+  };
+
+  const addEnvironment = (name: string) => {
+    if (!editMode) return;
+    setDraft((prev) => {
+      const base = normalizeMetadata(prev, 'application', appId);
+      const exists = (base.environments || []).some((row) => row.name === name);
+      if (exists) return base;
+      const next = [...(base.environments || []), { name, startDate: null, durationDays: null, endDate: null, actualStart: null, actualEnd: null }];
+      return { ...base, environments: next };
+    });
+  };
+
+  const currentMetadata = scopeMode === 'bundle'
+    ? normalizeMetadata(bundleMetadata, 'bundle', bundleId || '')
+    : normalizeMetadata(editMode ? draft : resolvedMetadata, 'application', appId);
+
+  const derivedMilestoneWeeks = computeDerivedMilestoneWeeks(
+    currentMetadata.environments || [],
+    currentMetadata.planningDefaults?.milestoneCount || null
+  );
+
+  const appOverrideMetadata = normalizeMetadata(appMetadata, 'application', appId);
+  const bundleBaseMetadata = normalizeMetadata(bundleMetadata, 'bundle', bundleId || '');
+
+  const allEnvNames = Array.from(new Set([
+    ...(bundleBaseMetadata.environments || []).map((row) => row.name),
+    ...(appOverrideMetadata.environments || []).map((row) => row.name)
+  ])).filter(Boolean);
+
+  const inheritanceMap = allEnvNames.reduce((acc: any, envName) => {
+    const bundleRow = bundleBaseMetadata.environments?.find((row) => row.name === envName);
+    const appRow = appOverrideMetadata.environments?.find((row) => row.name === envName);
+    acc[envName] = {
+      startDate: isInheritedValue(appRow?.startDate, bundleRow?.startDate),
+      durationDays: isInheritedValue(appRow?.durationDays, bundleRow?.durationDays),
+      endDate: isInheritedValue(appRow?.endDate, bundleRow?.endDate),
+      actualStart: isInheritedValue(appRow?.actualStart, bundleRow?.actualStart),
+      actualEnd: isInheritedValue(appRow?.actualEnd, bundleRow?.actualEnd)
+    };
+    return acc;
+  }, {});
+
+  const isInheritedValue = (appValue: any, bundleValue: any) => {
+    if (appValue === null || typeof appValue === 'undefined' || appValue === '') {
+      return Boolean(bundleValue);
+    }
+    return false;
+  };
+
+  const goLiveInherited = {
+    planned: isInheritedValue(appOverrideMetadata.goLive?.planned, bundleBaseMetadata.goLive?.planned),
+    actual: isInheritedValue(appOverrideMetadata.goLive?.actual, bundleBaseMetadata.goLive?.actual)
+  };
+
+  const defaultsInheritance = {
+    planningDefaults: {
+      milestoneCount: isInheritedValue(appOverrideMetadata.planningDefaults?.milestoneCount, bundleBaseMetadata.planningDefaults?.milestoneCount),
+      sprintDurationWeeks: isInheritedValue(appOverrideMetadata.planningDefaults?.sprintDurationWeeks, bundleBaseMetadata.planningDefaults?.sprintDurationWeeks),
+      milestoneDurationWeeks: isInheritedValue(appOverrideMetadata.planningDefaults?.milestoneDurationWeeks, bundleBaseMetadata.planningDefaults?.milestoneDurationWeeks)
+    },
+    capacityDefaults: {
+      capacityModel: isInheritedValue(appOverrideMetadata.capacityDefaults?.capacityModel, bundleBaseMetadata.capacityDefaults?.capacityModel),
+      deliveryTeams: isInheritedValue(appOverrideMetadata.capacityDefaults?.deliveryTeams, bundleBaseMetadata.capacityDefaults?.deliveryTeams),
+      sprintVelocityPerTeam: isInheritedValue(appOverrideMetadata.capacityDefaults?.sprintVelocityPerTeam, bundleBaseMetadata.capacityDefaults?.sprintVelocityPerTeam),
+      directSprintCapacity: isInheritedValue(appOverrideMetadata.capacityDefaults?.directSprintCapacity, bundleBaseMetadata.capacityDefaults?.directSprintCapacity),
+      teamSize: isInheritedValue(appOverrideMetadata.capacityDefaults?.teamSize, bundleBaseMetadata.capacityDefaults?.teamSize),
+      projectSize: isInheritedValue(appOverrideMetadata.capacityDefaults?.projectSize, bundleBaseMetadata.capacityDefaults?.projectSize)
+    },
+    notes: isInheritedValue(appOverrideMetadata.notes, bundleBaseMetadata.notes)
+  };
+
+  const renderInherited = (flag: boolean) => flag ? <span className="text-[9px] uppercase tracking-widest text-slate-400">inherited</span> : null;
+
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between">
@@ -382,29 +799,129 @@ const ApplicationDetail: React.FC<{
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-white border border-slate-200 rounded-2xl p-6">
-          <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-4">Bundle</div>
-          <div className="text-lg font-black text-slate-800">{bundleName}</div>
-          <div className="text-xs text-slate-500 mt-2">Status: {profile?.status?.replace('_', ' ') || 'unknown'}</div>
-          <div className="text-xs text-slate-500 mt-1">Current milestone: {current?.name || '—'}</div>
-          <div className="text-xs text-slate-500 mt-1">Planned Go-live: {profile?.schedule?.goLivePlanned ? new Date(profile.schedule.goLivePlanned).toLocaleDateString() : '—'}</div>
-          <div className="text-xs text-slate-500 mt-1">Actual Go-live: {profile?.schedule?.goLiveActual ? new Date(profile.schedule.goLiveActual).toLocaleDateString() : '—'}</div>
-        </div>
-        <div className="bg-white border border-slate-200 rounded-2xl p-6">
-          <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-4">Ownership</div>
-          <div className="text-sm text-slate-600">Vendor Lead: <span className="font-semibold text-slate-800">{owners.vendorLead}</span></div>
-          <div className="text-sm text-slate-600 mt-2">Engineering Owner: <span className="font-semibold text-slate-800">{owners.engineeringOwner}</span></div>
-        </div>
+      <div className="flex items-center gap-3 border-b border-slate-200 pb-2">
+        {[
+          { id: 'overview', label: 'Overview' },
+          { id: 'schedule', label: 'Schedule' }
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id as 'overview' | 'schedule')}
+            className={`px-3 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg ${activeTab === tab.id ? 'bg-slate-900 text-white' : 'text-slate-500 hover:text-slate-800'}`}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
 
-      <div className="bg-white border border-slate-200 rounded-2xl p-6">
-        <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-4">Bundle Schedule Summary</div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-slate-600">
-          <div>UAT Planned: {profile?.schedule?.uatPlannedStart ? new Date(profile.schedule.uatPlannedStart).toLocaleDateString() : '—'} → {profile?.schedule?.uatPlannedEnd ? new Date(profile.schedule.uatPlannedEnd).toLocaleDateString() : '—'}</div>
-          <div>UAT Actual: {profile?.schedule?.uatActualStart ? new Date(profile.schedule.uatActualStart).toLocaleDateString() : '—'} → {profile?.schedule?.uatActualEnd ? new Date(profile.schedule.uatActualEnd).toLocaleDateString() : '—'}</div>
+      {activeTab === 'overview' && (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="bg-white border border-slate-200 rounded-2xl p-6">
+              <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-4">Bundle</div>
+              <div className="text-lg font-black text-slate-800">{bundleName}</div>
+              <div className="text-xs text-slate-500 mt-2">Status: {profile?.status?.replace('_', ' ') || 'unknown'}</div>
+              <div className="text-xs text-slate-500 mt-1">Current milestone: {current?.name || '—'}</div>
+              <div className="text-xs text-slate-500 mt-1">Planned Go-live: {profile?.schedule?.goLivePlanned ? new Date(profile.schedule.goLivePlanned).toLocaleDateString() : '—'}</div>
+              <div className="text-xs text-slate-500 mt-1">Actual Go-live: {profile?.schedule?.goLiveActual ? new Date(profile.schedule.goLiveActual).toLocaleDateString() : '—'}</div>
+            </div>
+            <div className="bg-white border border-slate-200 rounded-2xl p-6">
+              <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-4">Ownership</div>
+              <div className="text-sm text-slate-600">Vendor Lead: <span className="font-semibold text-slate-800">{owners.vendorLead}</span></div>
+              <div className="text-sm text-slate-600 mt-2">Engineering Owner: <span className="font-semibold text-slate-800">{owners.engineeringOwner}</span></div>
+            </div>
+          </div>
+
+          <div className="bg-white border border-slate-200 rounded-2xl p-6">
+            <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-4">Bundle Schedule Summary</div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-slate-600">
+              <div>UAT Planned: {profile?.schedule?.uatPlannedStart ? new Date(profile.schedule.uatPlannedStart).toLocaleDateString() : '—'} → {profile?.schedule?.uatPlannedEnd ? new Date(profile.schedule.uatPlannedEnd).toLocaleDateString() : '—'}</div>
+              <div>UAT Actual: {profile?.schedule?.uatActualStart ? new Date(profile.schedule.uatActualStart).toLocaleDateString() : '—'} → {profile?.schedule?.uatActualEnd ? new Date(profile.schedule.uatActualEnd).toLocaleDateString() : '—'}</div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {activeTab === 'schedule' && (
+        <div className="space-y-6">
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 space-y-4">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div className="space-y-2">
+                <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Schedule Metadata</div>
+                <ScheduleScopeSelector
+                  scope={scopeMode}
+                  bundleName={bundleName}
+                  appName={app.name}
+                  onChange={setScopeMode}
+                />
+              </div>
+              {!editMode && scopeMode === 'application' && (
+                <button onClick={startEdit} className="px-3 py-2 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest rounded-lg">
+                  Edit
+                </button>
+              )}
+              {editMode && (
+                <div className="flex items-center gap-2">
+                  <button onClick={saveDraft} disabled={saving} className="px-3 py-2 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest rounded-lg disabled:opacity-60">
+                    {saving ? 'Saving...' : 'Save'}
+                  </button>
+                  <button onClick={cancelEdit} disabled={saving} className="px-3 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg border border-slate-200 text-slate-600">
+                    Cancel
+                  </button>
+                </div>
+              )}
+            </div>
+            {planningLoading && <div className="text-xs text-slate-400">Loading planning metadata...</div>}
+            {planningError && <div className="text-xs text-rose-500">{planningError}</div>}
+            {saveError && <div className="text-xs text-rose-500">{saveError}</div>}
+            {scopeMode === 'bundle' && (
+              <div className="text-xs text-slate-500">Bundle schedule is view-only here. Edit in the bundle profile.</div>
+            )}
+          </div>
+
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 space-y-4">
+            <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Environment Schedule</div>
+            <ScheduleEnvironmentGrid
+              environments={currentMetadata.environments || []}
+              editable={editMode}
+              onFieldChange={updateEnvironment}
+              onAddEnvironment={addEnvironment}
+              inheritance={scopeMode === 'application' ? inheritanceMap : undefined}
+              suggestions={ENVIRONMENT_SUGGESTIONS}
+            />
+          </div>
+
+          <div className="bg-white border border-slate-200 rounded-2xl p-6">
+            <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Go-Live / Business Cutover</div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs text-slate-600">
+              <label className="space-y-1">Go-Live Planned
+                {editMode ? (
+                  <input type="date" value={currentMetadata.goLive?.planned || ''} onChange={(e) => updateGoLive({ planned: e.target.value || null })} className="w-full border border-slate-200 rounded-lg px-2 py-2 text-xs" />
+                ) : (
+                  <div className="text-slate-700">{currentMetadata.goLive?.planned ? new Date(currentMetadata.goLive.planned).toLocaleDateString() : '—'} {scopeMode === 'application' && renderInherited(goLiveInherited.planned)}</div>
+                )}
+              </label>
+              <label className="space-y-1">Go-Live Actual
+                {editMode ? (
+                  <input type="date" value={currentMetadata.goLive?.actual || ''} onChange={(e) => updateGoLive({ actual: e.target.value || null })} className="w-full border border-slate-200 rounded-lg px-2 py-2 text-xs" />
+                ) : (
+                  <div className="text-slate-700">{currentMetadata.goLive?.actual ? new Date(currentMetadata.goLive.actual).toLocaleDateString() : '—'} {scopeMode === 'application' && renderInherited(goLiveInherited.actual)}</div>
+                )}
+              </label>
+            </div>
+          </div>
+
+          <ScheduleDefaultsPanel
+            metadata={currentMetadata}
+            editable={editMode}
+            onPlanningDefaultsChange={updatePlanningDefaults}
+            onCapacityDefaultsChange={updateCapacityDefaults}
+            onNotesChange={updateNotes}
+            inheritance={scopeMode === 'application' ? defaultsInheritance : undefined}
+            derivedMilestoneDurationWeeks={derivedMilestoneWeeks}
+          />
         </div>
-      </div>
+      )}
     </div>
   );
 };
@@ -432,6 +949,15 @@ const BundleProfileView: React.FC<{
   const [brief, setBrief] = useState<any | null>(null);
   const [briefLoading, setBriefLoading] = useState(false);
   const [briefError, setBriefError] = useState<string | null>(null);
+  const [scheduleMetadata, setScheduleMetadata] = useState<ApplicationPlanningMetadata | null>(null);
+  const [scheduleLoading, setScheduleLoading] = useState(false);
+  const [scheduleError, setScheduleError] = useState<string | null>(null);
+  const [scheduleEditMode, setScheduleEditMode] = useState(false);
+  const [scheduleDraft, setScheduleDraft] = useState<ApplicationPlanningMetadata | null>(null);
+  const [scheduleSaving, setScheduleSaving] = useState(false);
+  const [scheduleSaveError, setScheduleSaveError] = useState<string | null>(null);
+  const [scheduleManualEndDates, setScheduleManualEndDates] = useState<Record<string, boolean>>({});
+  const [scheduleManualActualDates, setScheduleManualActualDates] = useState<Record<string, boolean>>({});
 
   const loadProfile = async () => {
     setLoading(true);
@@ -446,8 +972,68 @@ const BundleProfileView: React.FC<{
     }
   };
 
+  const ensureScheduleRows = (rows?: any[]) => {
+    const seen = new Set<string>();
+    const normalized: any[] = [];
+    (rows || []).forEach((row) => {
+      if (!row?.name) return;
+      const name = String(row.name).toUpperCase();
+      if (seen.has(name)) return;
+      seen.add(name);
+      normalized.push({ ...row, name });
+    });
+    return normalized;
+  };
+
+  const buildEmptySchedule = (): ApplicationPlanningMetadata => ({
+    scopeType: 'bundle',
+    scopeId: String(bundleId),
+    bundleId: String(bundleId),
+    environments: ensureScheduleRows([]),
+    goLive: { planned: null, actual: null },
+    planningDefaults: { milestoneCount: null, sprintDurationWeeks: null, milestoneDurationWeeks: null },
+    capacityDefaults: { capacityModel: null, deliveryTeams: null, sprintVelocityPerTeam: null, directSprintCapacity: null, teamSize: null, projectSize: null },
+    notes: null
+  });
+
+  const normalizeSchedule = (data?: ApplicationPlanningMetadata | null): ApplicationPlanningMetadata => ({
+    ...buildEmptySchedule(),
+    ...(data || {}),
+    environments: ensureScheduleRows(data?.environments || []).map((row) => ({
+      ...row,
+      endDate: row.endDate || deriveEndDate(row.startDate || null, row.durationDays || null),
+      durationDays: typeof row.durationDays === 'number' ? row.durationDays : calcDurationDays(row.startDate || null, row.endDate || null)
+    })),
+    goLive: data?.goLive || { planned: null, actual: null },
+    planningDefaults: data?.planningDefaults || { milestoneCount: null, sprintDurationWeeks: null, milestoneDurationWeeks: null },
+    capacityDefaults: data?.capacityDefaults || { capacityModel: null, deliveryTeams: null, sprintVelocityPerTeam: null, directSprintCapacity: null, teamSize: null, projectSize: null }
+  });
+
+  const loadScheduleMetadata = async () => {
+    setScheduleLoading(true);
+    setScheduleError(null);
+    try {
+      const res = await fetch(`/api/applications/planning-metadata?scopeType=bundle&scopeId=${encodeURIComponent(bundleId)}`);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error || 'Failed to load schedule metadata');
+      }
+      const data = await res.json();
+      setScheduleMetadata(normalizeSchedule(data?.planningMetadata || null));
+    } catch (err: any) {
+      setScheduleError(err?.message || 'Failed to load schedule metadata');
+      setScheduleMetadata(buildEmptySchedule());
+    } finally {
+      setScheduleLoading(false);
+    }
+  };
+
   useEffect(() => {
     loadProfile();
+  }, [bundleId]);
+
+  useEffect(() => {
+    loadScheduleMetadata();
   }, [bundleId]);
 
   useEffect(() => {
@@ -490,6 +1076,208 @@ const BundleProfileView: React.FC<{
     setProfile({ ...profile, ...updates });
   };
 
+  const startScheduleEdit = () => {
+    if (!canEdit) {
+      setScheduleSaveError('You do not have permission to edit bundle schedule metadata.');
+      return;
+    }
+    setScheduleSaveError(null);
+    setScheduleDraft(JSON.parse(JSON.stringify(normalizeSchedule(scheduleMetadata))));
+    setScheduleManualEndDates({});
+    setScheduleManualActualDates({});
+    setScheduleEditMode(true);
+  };
+
+  const cancelScheduleEdit = () => {
+    setScheduleSaveError(null);
+    setScheduleDraft(null);
+    setScheduleManualEndDates({});
+    setScheduleManualActualDates({});
+    setScheduleEditMode(false);
+  };
+
+  const validateScheduleDraft = (data: ApplicationPlanningMetadata) => {
+    const errors: string[] = [];
+    (data.environments || []).forEach((env) => {
+      if (env.startDate && env.endDate) {
+        if (new Date(env.startDate).getTime() > new Date(env.endDate).getTime()) {
+          errors.push(`${env.name} start date must be before end date.`);
+        }
+      }
+      if (typeof env.durationDays === 'number' && env.durationDays <= 0) {
+        errors.push(`${env.name} duration must be positive.`);
+      }
+      if (env.actualStart && env.actualEnd) {
+        if (new Date(env.actualStart).getTime() > new Date(env.actualEnd).getTime()) {
+          errors.push(`${env.name} actual start must be before end.`);
+        }
+      }
+    });
+    const positiveFields: Array<{ label: string; value?: number | null }> = [
+      { label: 'Milestones', value: data.planningDefaults?.milestoneCount },
+      { label: 'Sprint duration', value: data.planningDefaults?.sprintDurationWeeks },
+      { label: 'Milestone duration', value: data.planningDefaults?.milestoneDurationWeeks },
+      { label: 'Delivery teams', value: data.capacityDefaults?.deliveryTeams },
+      { label: 'Velocity per team', value: data.capacityDefaults?.sprintVelocityPerTeam },
+      { label: 'Direct sprint capacity', value: data.capacityDefaults?.directSprintCapacity },
+      { label: 'Team size', value: data.capacityDefaults?.teamSize }
+    ];
+    positiveFields.forEach((field) => {
+      if (typeof field.value === 'number' && field.value <= 0) {
+        errors.push(`${field.label} must be positive.`);
+      }
+    });
+    if (errors.length) return errors.join(' ');
+    return null;
+  };
+
+  const saveScheduleDraft = async () => {
+    if (!scheduleDraft) return;
+    const timelineDays = (() => {
+      const dates = (scheduleDraft.environments || []).reduce((acc: Date[], env) => {
+        const start = parseIsoDate(env.startDate || null);
+        const end = parseIsoDate(env.endDate || deriveEndDate(env.startDate || null, env.durationDays || null));
+        if (start && end) {
+          acc.push(start, end);
+        }
+        return acc;
+      }, []);
+      if (!dates.length) return null;
+      const min = Math.min(...dates.map((d) => d.getTime()));
+      const max = Math.max(...dates.map((d) => d.getTime()));
+      const diff = (max - min) / (1000 * 60 * 60 * 24);
+      return Math.max(1, Math.ceil(diff));
+    })();
+
+    const error = validateScheduleDraft(scheduleDraft);
+    if (error) {
+      setScheduleSaveError(error);
+      return;
+    }
+    setScheduleSaving(true);
+    setScheduleSaveError(null);
+    try {
+      const milestoneCount = scheduleDraft.planningDefaults?.milestoneCount;
+      const derivedMilestoneDurationWeeks = timelineDays && milestoneCount ? Number((timelineDays / milestoneCount / 7).toFixed(2)) : null;
+      const payload = {
+        ...scheduleDraft,
+        planningDefaults: {
+          ...(scheduleDraft.planningDefaults || {}),
+          milestoneDurationWeeks: derivedMilestoneDurationWeeks ?? scheduleDraft.planningDefaults?.milestoneDurationWeeks ?? null
+        }
+      };
+      const res = await fetch('/api/applications/planning-metadata', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...payload,
+          scopeType: 'bundle',
+          scopeId: String(bundleId),
+          bundleId: String(bundleId)
+        })
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error || 'Failed to save schedule metadata');
+      }
+      const data = await res.json();
+      setScheduleMetadata(normalizeSchedule(data?.planningMetadata || null));
+      setScheduleEditMode(false);
+      setScheduleDraft(null);
+    } catch (err: any) {
+      setScheduleSaveError(err?.message || 'Failed to save schedule metadata');
+    } finally {
+      setScheduleSaving(false);
+    }
+  };
+
+  const updateScheduleEnvironment = (name: string, field: 'startDate' | 'durationDays' | 'endDate' | 'actualStart' | 'actualEnd', value: any) => {
+    if (!scheduleEditMode) return;
+    setScheduleDraft((prev) => {
+      const base = normalizeSchedule(prev);
+      const next = (base.environments || []).map((row) => {
+        if (row.name !== name) return row;
+        const updated: any = { ...row, [field]: value };
+        if (field === 'actualStart' || field === 'actualEnd') {
+          setScheduleManualActualDates((current) => ({ ...current, [name]: true }));
+        }
+        if (field === 'endDate') {
+          setScheduleManualEndDates((current) => ({ ...current, [name]: true }));
+          if (row.startDate && value) {
+            updated.durationDays = calcDurationDays(row.startDate, value);
+          }
+        }
+        if (field === 'startDate' || field === 'durationDays') {
+          const manual = scheduleManualEndDates[name];
+          if (!manual) {
+            const derived = deriveEndDate(field === 'startDate' ? value : row.startDate, field === 'durationDays' ? value : row.durationDays);
+            updated.endDate = derived;
+          }
+        }
+        const endDate = updated.endDate || deriveEndDate(updated.startDate, updated.durationDays);
+        const manualActual = scheduleManualActualDates[name];
+        if (!manualActual && updated.startDate && endDate) {
+          updated.actualStart = updated.startDate;
+          updated.actualEnd = endDate;
+        }
+        return updated;
+      });
+      return { ...base, environments: next };
+    });
+  };
+
+  const addScheduleEnvironment = (name: string) => {
+    if (!scheduleEditMode) return;
+    setScheduleDraft((prev) => {
+      const base = normalizeSchedule(prev);
+      const exists = (base.environments || []).some((row) => row.name === name);
+      if (exists) return base;
+      const next = [...(base.environments || []), { name, startDate: null, durationDays: null, endDate: null, actualStart: null, actualEnd: null }];
+      return { ...base, environments: next };
+    });
+  };
+
+  const updateSchedulePlanningDefaults = (updates: Partial<NonNullable<ApplicationPlanningMetadata['planningDefaults']>>) => {
+    if (!scheduleEditMode) return;
+    setScheduleDraft((prev) => ({
+      ...(normalizeSchedule(prev)),
+      planningDefaults: {
+        ...(prev?.planningDefaults || {}),
+        ...updates
+      }
+    }));
+  };
+
+  const updateScheduleCapacityDefaults = (updates: Partial<NonNullable<ApplicationPlanningMetadata['capacityDefaults']>>) => {
+    if (!scheduleEditMode) return;
+    setScheduleDraft((prev) => ({
+      ...(normalizeSchedule(prev)),
+      capacityDefaults: {
+        ...(prev?.capacityDefaults || {}),
+        ...updates
+      }
+    }));
+  };
+
+  const updateScheduleGoLive = (updates: Partial<NonNullable<ApplicationPlanningMetadata['goLive']>>) => {
+    if (!scheduleEditMode) return;
+    setScheduleDraft((prev) => ({
+      ...(normalizeSchedule(prev)),
+      goLive: {
+        ...(prev?.goLive || {}),
+        ...updates
+      }
+    }));
+  };
+
+  const updateScheduleNotes = (value: string | null) => {
+    if (!scheduleEditMode) return;
+    setScheduleDraft((prev) => ({
+      ...(normalizeSchedule(prev)),
+      notes: value
+    }));
+  };
+
   const toggleBundleWatch = async () => {
     try {
       const res = await fetch('/api/watchers', {
@@ -508,35 +1296,6 @@ const BundleProfileView: React.FC<{
     } catch (err: any) {
       setWatchMessage(err?.message || 'Failed to update watch');
     }
-  };
-
-  const updateSchedule = (updates: Partial<BundleProfile['schedule']>) => {
-    if (!profile) return;
-    setProfile({ ...profile, schedule: { ...profile.schedule, ...updates } });
-  };
-
-  const updateMilestone = (index: number, updates: Partial<BundleProfileMilestone>) => {
-    if (!profile) return;
-    const next = [...(profile.schedule?.milestones || [])];
-    next[index] = { ...next[index], ...updates };
-    updateSchedule({ milestones: next });
-  };
-
-  const addMilestone = () => {
-    const next = [...(profile?.schedule?.milestones || [])];
-    next.push({
-      key: `m${next.length + 1}`,
-      name: `Milestone ${next.length + 1}`,
-      status: 'not_started'
-    });
-    updateSchedule({ milestones: next });
-  };
-
-  const removeMilestone = (index: number) => {
-    if (!profile) return;
-    const next = [...(profile.schedule?.milestones || [])];
-    next.splice(index, 1);
-    updateSchedule({ milestones: next });
   };
 
   const handleSave = async () => {
@@ -563,6 +1322,12 @@ const BundleProfileView: React.FC<{
   const appsInBundle = useMemo(() => {
     return applications.filter((a) => String(a.bundleId) === String(bundleId));
   }, [applications, bundleId]);
+
+  const scheduleCurrent = normalizeSchedule(scheduleEditMode ? scheduleDraft : scheduleMetadata);
+  const scheduleDerivedMilestoneWeeks = computeDerivedMilestoneWeeks(
+    scheduleCurrent.environments || [],
+    scheduleCurrent.planningDefaults?.milestoneCount || null
+  );
 
   const [riskItems, setRiskItems] = useState<WorkItem[]>([]);
   const [depsItems, setDepsItems] = useState<WorkItem[]>([]);
@@ -1017,63 +1782,71 @@ const BundleProfileView: React.FC<{
           {activeTab === 'schedule' && (
             <div className="space-y-6">
               <div className="bg-white border border-slate-200 rounded-2xl p-6 space-y-4">
-                <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">UAT & Go-live</div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <label className="text-xs text-slate-500">UAT Planned Start
-                    <input type="date" value={profile.schedule?.uatPlannedStart || ''} onChange={(e) => updateSchedule({ uatPlannedStart: e.target.value || undefined })} disabled={!canEdit} className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-xs" />
+                <div className="flex items-center justify-between flex-wrap gap-3">
+                  <div>
+                    <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Bundle Schedule Metadata</div>
+                    <div className="text-xs text-slate-500 mt-1">Defaults apply across applications in this bundle.</div>
+                  </div>
+                  {!scheduleEditMode && canEdit && (
+                    <button onClick={startScheduleEdit} className="px-3 py-2 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest rounded-lg">
+                      Edit
+                    </button>
+                  )}
+                  {scheduleEditMode && (
+                    <div className="flex items-center gap-2">
+                      <button onClick={saveScheduleDraft} disabled={scheduleSaving} className="px-3 py-2 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest rounded-lg disabled:opacity-60">
+                        {scheduleSaving ? 'Saving...' : 'Save'}
+                      </button>
+                      <button onClick={cancelScheduleEdit} disabled={scheduleSaving} className="px-3 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg border border-slate-200 text-slate-600">
+                        Cancel
+                      </button>
+                    </div>
+                  )}
+                </div>
+                {scheduleLoading && <div className="text-xs text-slate-400">Loading schedule metadata...</div>}
+                {scheduleError && <div className="text-xs text-rose-500">{scheduleError}</div>}
+                {scheduleSaveError && <div className="text-xs text-rose-500">{scheduleSaveError}</div>}
+              </div>
+
+              <div className="bg-white border border-slate-200 rounded-2xl p-6 space-y-4">
+                <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Environment Schedule</div>
+                <ScheduleEnvironmentGrid
+                  environments={scheduleCurrent.environments || []}
+                  editable={scheduleEditMode}
+                  onFieldChange={updateScheduleEnvironment}
+                  onAddEnvironment={addScheduleEnvironment}
+                  suggestions={ENVIRONMENT_SUGGESTIONS}
+                />
+              </div>
+
+              <div className="bg-white border border-slate-200 rounded-2xl p-6">
+                <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Go-Live / Business Cutover</div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs text-slate-600">
+                  <label className="space-y-1">Go-Live Planned
+                    {scheduleEditMode ? (
+                      <input type="date" value={scheduleCurrent.goLive?.planned || ''} onChange={(e) => updateScheduleGoLive({ planned: e.target.value || null })} className="w-full border border-slate-200 rounded-lg px-2 py-2 text-xs" />
+                    ) : (
+                      <div className="text-slate-700">{scheduleCurrent.goLive?.planned ? new Date(scheduleCurrent.goLive.planned).toLocaleDateString() : '—'}</div>
+                    )}
                   </label>
-                  <label className="text-xs text-slate-500">UAT Planned End
-                    <input type="date" value={profile.schedule?.uatPlannedEnd || ''} onChange={(e) => updateSchedule({ uatPlannedEnd: e.target.value || undefined })} disabled={!canEdit} className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-xs" />
-                  </label>
-                  <label className="text-xs text-slate-500">UAT Actual Start
-                    <input type="date" value={profile.schedule?.uatActualStart || ''} onChange={(e) => updateSchedule({ uatActualStart: e.target.value || undefined })} disabled={!canEdit} className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-xs" />
-                  </label>
-                  <label className="text-xs text-slate-500">UAT Actual End
-                    <input type="date" value={profile.schedule?.uatActualEnd || ''} onChange={(e) => updateSchedule({ uatActualEnd: e.target.value || undefined })} disabled={!canEdit} className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-xs" />
-                  </label>
-                  <label className="text-xs text-slate-500">Go-live Planned
-                    <input type="date" value={profile.schedule?.goLivePlanned || ''} onChange={(e) => updateSchedule({ goLivePlanned: e.target.value || undefined })} disabled={!canEdit} className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-xs" />
-                  </label>
-                  <label className="text-xs text-slate-500">Go-live Actual
-                    <input type="date" value={profile.schedule?.goLiveActual || ''} onChange={(e) => updateSchedule({ goLiveActual: e.target.value || undefined })} disabled={!canEdit} className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-xs" />
+                  <label className="space-y-1">Go-Live Actual
+                    {scheduleEditMode ? (
+                      <input type="date" value={scheduleCurrent.goLive?.actual || ''} onChange={(e) => updateScheduleGoLive({ actual: e.target.value || null })} className="w-full border border-slate-200 rounded-lg px-2 py-2 text-xs" />
+                    ) : (
+                      <div className="text-slate-700">{scheduleCurrent.goLive?.actual ? new Date(scheduleCurrent.goLive.actual).toLocaleDateString() : '—'}</div>
+                    )}
                   </label>
                 </div>
               </div>
 
-              <div className="bg-white border border-slate-200 rounded-2xl p-6 space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Milestones</div>
-                  {canEdit && (
-                    <button onClick={addMilestone} className="text-[10px] font-black uppercase tracking-widest text-blue-600">Add milestone</button>
-                  )}
-                </div>
-                <div className="space-y-3">
-                  {(profile.schedule?.milestones || []).map((m, idx) => (
-                    <div key={m.key} className="grid grid-cols-1 md:grid-cols-7 gap-3 items-center border border-slate-100 rounded-xl p-3">
-                      <input value={m.name} onChange={(e) => updateMilestone(idx, { name: e.target.value })} disabled={!canEdit} className="md:col-span-2 border border-slate-200 rounded-lg px-3 py-2 text-xs" placeholder="Milestone name" />
-                      <select value={m.status} onChange={(e) => updateMilestone(idx, { status: e.target.value as BundleProfileMilestone['status'] })} disabled={!canEdit} className="border border-slate-200 rounded-lg px-3 py-2 text-xs">
-                        <option value="not_started">Not started</option>
-                        <option value="in_progress">In progress</option>
-                        <option value="done">Done</option>
-                        <option value="blocked">Blocked</option>
-                      </select>
-                      <input type="date" value={m.plannedStart || ''} onChange={(e) => updateMilestone(idx, { plannedStart: e.target.value || undefined })} disabled={!canEdit} className="border border-slate-200 rounded-lg px-3 py-2 text-xs" />
-                      <input type="date" value={m.plannedEnd || ''} onChange={(e) => updateMilestone(idx, { plannedEnd: e.target.value || undefined })} disabled={!canEdit} className="border border-slate-200 rounded-lg px-3 py-2 text-xs" />
-                      <input type="date" value={m.actualStart || ''} onChange={(e) => updateMilestone(idx, { actualStart: e.target.value || undefined })} disabled={!canEdit} className="border border-slate-200 rounded-lg px-3 py-2 text-xs" />
-                      <input type="date" value={m.actualEnd || ''} onChange={(e) => updateMilestone(idx, { actualEnd: e.target.value || undefined })} disabled={!canEdit} className="border border-slate-200 rounded-lg px-3 py-2 text-xs" />
-                      <div className="md:col-span-6">
-                        <input value={m.deliverables || ''} onChange={(e) => updateMilestone(idx, { deliverables: e.target.value })} disabled={!canEdit} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs" placeholder="Deliverables (optional)" />
-                      </div>
-                      {canEdit && (
-                        <button onClick={() => removeMilestone(idx)} className="text-[9px] font-black uppercase tracking-widest text-rose-500">Remove</button>
-                      )}
-                    </div>
-                  ))}
-                  {profile.schedule?.milestones?.length === 0 && (
-                    <div className="text-sm text-slate-400">No milestones yet. Add milestones to capture the SOW schedule.</div>
-                  )}
-                </div>
-              </div>
+              <ScheduleDefaultsPanel
+                metadata={scheduleCurrent}
+                editable={scheduleEditMode}
+                onPlanningDefaultsChange={updateSchedulePlanningDefaults}
+                onCapacityDefaultsChange={updateScheduleCapacityDefaults}
+                onNotesChange={updateScheduleNotes}
+                derivedMilestoneDurationWeeks={scheduleDerivedMilestoneWeeks}
+              />
             </div>
           )}
 

@@ -627,6 +627,44 @@ export interface Application {
   updatedAt?: string;
 }
 
+export interface PlanningEnvironmentEntry {
+  name: string;
+  startDate?: string | null;
+  durationDays?: number | null;
+  endDate?: string | null;
+  actualStart?: string | null;
+  actualEnd?: string | null;
+}
+
+export interface ApplicationPlanningMetadata {
+  _id?: string;
+  scopeType: 'bundle' | 'application';
+  scopeId: string;
+  applicationId?: string;
+  bundleId?: string | null;
+  environments?: PlanningEnvironmentEntry[];
+  goLive?: {
+    planned?: string | null;
+    actual?: string | null;
+  };
+  planningDefaults?: {
+    milestoneCount?: number | null;
+    sprintDurationWeeks?: number | null;
+    milestoneDurationWeeks?: number | null;
+  };
+  capacityDefaults?: {
+    capacityModel?: 'TEAM_VELOCITY' | 'DIRECT_SPRINT_CAPACITY' | null;
+    deliveryTeams?: number | null;
+    sprintVelocityPerTeam?: number | null;
+    directSprintCapacity?: number | null;
+    teamSize?: number | null;
+    projectSize?: 'SMALL' | 'MEDIUM' | 'LARGE' | 'ENTERPRISE' | null;
+  };
+  notes?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface Bundle {
   _id?: string;
   id?: string;

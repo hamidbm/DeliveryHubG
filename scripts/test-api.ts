@@ -52,6 +52,9 @@ const tests = [
   () => import('./test-portfolio-api').then((m) => m.run()),
   () => import('./test-simulation-engine').then((m) => m.run()),
   () => import('./test-simulation-api').then((m) => m.run()),
+  () => import('./test-application-planning-metadata').then((m) => m.run()),
+  () => import('./test-application-planning-metadata-api').then((m) => m.run()),
+  () => import('./test-application-planning-context').then((m) => m.run()),
   () => import('./test-feed').then((m) => m.run()),
   () => import('./test-visibility').then((m) => m.run()),
   () => import('./test-data-quality').then((m) => m.run())

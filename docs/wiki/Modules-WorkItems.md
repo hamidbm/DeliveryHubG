@@ -173,6 +173,10 @@ Events:
 Generator markers:
 - Generated items include `generator: { source: 'DELIVERY_PLAN_GENERATOR', runId }` for UX and governance rules.
 
+Planning defaults (Phase 9.2A):
+- Applications now persist planning metadata separately in `application_planning_metadata`, with bundle-level defaults and application overrides.
+- Phase 9.2B will consume the resolved planning context to auto-populate intake defaults (dates, cadence, capacity).
+
 ## Simulation Engine (Phase 5)
 The roadmap includes a Simulation button that allows “what‑if” scenarios against an existing plan preview.
 
