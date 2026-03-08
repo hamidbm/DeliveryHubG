@@ -38,6 +38,20 @@ Confidence: MEDIUM
 Slip Risk: MEDIUM
 ```
 
+### Probabilistic Forecasting (Phase 8)
+Probabilistic forecasting adds percentile-based delivery dates and on-time probability.
+- Roadmap views show P50/P90 and on-time probability with uncertainty badges.
+- Portfolio dashboard shows average on-time probability and high-uncertainty milestones.
+
+Example (probabilistic forecast):
+```
+Planned End: 2026-06-01
+P50: 2026-06-12
+P90: 2026-06-21
+On-Time: 62%
+Uncertainty: MEDIUM
+```
+
 ## Simulation (Phase 5)
 The roadmap supports delivery simulations that compare baseline plan previews against scenario overrides (capacity, scope, dates, velocity). Results show milestone slippage, utilization changes, and risk shifts, with an explicit per‑milestone date delta.
 DATE_SHIFT overrides apply to specific milestones (not global plan shifts).

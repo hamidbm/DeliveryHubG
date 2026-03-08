@@ -1,5 +1,13 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react';
-import { WorkItem, Application, Bundle, Milestone, WorkItemStatus, MilestoneForecast } from '../types';
+import {
+  WorkItem,
+  Application,
+  Bundle,
+  Milestone,
+  WorkItemStatus,
+  MilestoneForecast,
+  MilestoneProbabilisticForecast
+} from '../types';
 import RoadmapTabs, { RoadmapViewKey } from './roadmap/RoadmapTabs';
 import ExecutionBoardView from './roadmap/ExecutionBoardView';
 import RoadmapTimelineView from './roadmap/RoadmapTimelineView';
@@ -41,6 +49,8 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
   const [roadmapIntel, setRoadmapIntel] = useState<any[]>([]);
   const [forecastByMilestone, setForecastByMilestone] = useState<Record<string, MilestoneForecast>>({});
   const [forecastStatus, setForecastStatus] = useState<{ loading: boolean; error?: string }>({ loading: false });
+  const [probForecastByMilestone, setProbForecastByMilestone] = useState<Record<string, MilestoneProbabilisticForecast>>({});
+  const [probForecastStatus, setProbForecastStatus] = useState<{ loading: boolean; error?: string }>({ loading: false });
   const [intelLoading, setIntelLoading] = useState(false);
   const [intelError, setIntelError] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<any | null>(null);
@@ -148,12 +158,46 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
     }
   };
 
+  const loadProbabilisticForecast = async () => {
+    const scopeType = selAppId && selAppId !== 'all'
+      ? 'APPLICATION'
+      : selBundleId && selBundleId !== 'all'
+        ? 'BUNDLE'
+        : '';
+    const scopeId = scopeType === 'APPLICATION' ? selAppId : scopeType === 'BUNDLE' ? selBundleId : '';
+    if (!scopeType || !scopeId) {
+      setProbForecastByMilestone({});
+      return;
+    }
+    setProbForecastStatus({ loading: true });
+    try {
+      const res = await fetch(`/api/probabilistic-forecast/plan/latest?scopeType=${encodeURIComponent(scopeType)}&scopeId=${encodeURIComponent(scopeId)}`);
+      if (!res.ok) {
+        setProbForecastStatus({ loading: false, error: 'Failed to load probabilistic forecast.' });
+        return;
+      }
+      const data = await res.json();
+      const map: Record<string, MilestoneProbabilisticForecast> = {};
+      (data?.milestoneForecasts || []).forEach((f: MilestoneProbabilisticForecast) => {
+        map[String(f.milestoneId)] = f;
+      });
+      setProbForecastByMilestone(map);
+      setProbForecastStatus({ loading: false });
+    } catch {
+      setProbForecastStatus({ loading: false, error: 'Failed to load probabilistic forecast.' });
+    }
+  };
+
   useEffect(() => {
     loadIntel();
   }, [milestones]);
 
   useEffect(() => {
     loadForecast();
+  }, [selBundleId, selAppId]);
+
+  useEffect(() => {
+    loadProbabilisticForecast();
   }, [selBundleId, selAppId]);
 
   useEffect(() => {
@@ -471,6 +515,8 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
           milestoneIntelligenceById={roadmapViewModel.intelligenceByMilestone}
           forecastByMilestone={forecastByMilestone}
           forecastStatus={forecastStatus}
+          probabilisticForecastByMilestone={probForecastByMilestone}
+          probabilisticForecastStatus={probForecastStatus}
           activeItem={activeItem}
           staleModal={staleModal}
           driftModal={driftModal}
@@ -513,10 +559,22 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
     }
 
     if (activeView === 'timeline') {
-      return <RoadmapTimelineView milestones={roadmapViewModel.milestones} forecastByMilestone={forecastByMilestone} />;
+      return (
+        <RoadmapTimelineView
+          milestones={roadmapViewModel.milestones}
+          forecastByMilestone={forecastByMilestone}
+          probabilisticForecastByMilestone={probForecastByMilestone}
+        />
+      );
     }
     if (activeView === 'swimlane') {
-      return <RoadmapSwimlaneView milestones={roadmapViewModel.milestones} forecastByMilestone={forecastByMilestone} />;
+      return (
+        <RoadmapSwimlaneView
+          milestones={roadmapViewModel.milestones}
+          forecastByMilestone={forecastByMilestone}
+          probabilisticForecastByMilestone={probForecastByMilestone}
+        />
+      );
     }
     return <RoadmapDependencyView milestones={roadmapViewModel.milestones} dependencies={roadmapViewModel.dependencies} />;
   };

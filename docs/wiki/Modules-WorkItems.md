@@ -110,6 +110,39 @@ Example API response (plan forecast):
 }
 ```
 
+### Probabilistic Forecasting (Phase 8)
+- Percentile-based forecasting (P50/P75/P90) with on-time probability.
+- Roadmap views show compact probabilistic summaries (P50/P90 + on-time + uncertainty).
+- Probabilistic APIs:
+  - `GET /api/probabilistic-forecast/plan/{planId}`
+  - `GET /api/probabilistic-forecast/plan/latest?scopeType=&scopeId=`
+  - `POST /api/probabilistic-forecast/portfolio`
+
+Example API response (probabilistic plan forecast):
+```json
+{
+  "milestoneForecasts": [
+    {
+      "milestoneId": "m1",
+      "plannedEndDate": "2026-06-01T00:00:00.000Z",
+      "p50Date": "2026-06-12T00:00:00.000Z",
+      "p75Date": "2026-06-18T00:00:00.000Z",
+      "p90Date": "2026-06-21T00:00:00.000Z",
+      "onTimeProbability": 0.62,
+      "uncertaintyLevel": "MEDIUM"
+    }
+  ],
+  "summary": {
+    "planId": "created:123",
+    "milestonesAnalyzed": 1,
+    "lowConfidenceMilestones": 0,
+    "averageOnTimeProbability": 0.62,
+    "averageP50SlipDays": 11,
+    "averageP90SlipDays": 20
+  }
+}
+```
+
 ## Generate Delivery Plan (Planning Mode)
 The Planning toolbar includes **Generate Delivery Plan**, a guided wizard that creates a draft delivery structure.
 

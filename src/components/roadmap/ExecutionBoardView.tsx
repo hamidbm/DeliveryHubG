@@ -2,7 +2,14 @@ import React from 'react';
 import WorkItemDetails from '../WorkItemDetails';
 import WorkItemsStaleModal from '../WorkItemsStaleModal';
 import OnboardingTip from '../OnboardingTip';
-import { WorkItem, Application, Bundle, WorkItemStatus, MilestoneForecast } from '../../types';
+import {
+  WorkItem,
+  Application,
+  Bundle,
+  WorkItemStatus,
+  MilestoneForecast,
+  MilestoneProbabilisticForecast
+} from '../../types';
 import type { MilestoneIntelligence } from './roadmapViewModels';
 
 const formatForecastDate = (value?: string) => {
@@ -10,6 +17,11 @@ const formatForecastDate = (value?: string) => {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '—';
   return date.toLocaleDateString();
+};
+
+const formatPercent = (value?: number) => {
+  if (value === undefined || value === null || Number.isNaN(value)) return '—';
+  return `${Math.round(value * 100)}%`;
 };
 
 interface ExecutionBoardViewProps {
@@ -39,6 +51,8 @@ interface ExecutionBoardViewProps {
   milestoneIntelligenceById: Record<string, MilestoneIntelligence>;
   forecastByMilestone: Record<string, MilestoneForecast>;
   forecastStatus: { loading: boolean; error?: string };
+  probabilisticForecastByMilestone: Record<string, MilestoneProbabilisticForecast>;
+  probabilisticForecastStatus: { loading: boolean; error?: string };
   activeItem: WorkItem | null;
   staleModal: { milestoneId: string } | null;
   driftModal: { milestoneId: string; drift: any } | null;
@@ -97,6 +111,8 @@ const ExecutionBoardView: React.FC<ExecutionBoardViewProps> = ({
   milestoneIntelligenceById,
   forecastByMilestone,
   forecastStatus,
+  probabilisticForecastByMilestone,
+  probabilisticForecastStatus,
   activeItem,
   staleModal,
   driftModal,
@@ -291,6 +307,7 @@ const ExecutionBoardView: React.FC<ExecutionBoardViewProps> = ({
           const capacity = rollup?.capacity || {};
           const forecast = rollup?.forecast;
           const predictiveForecast = forecastByMilestone[milestoneId];
+          const probabilisticForecast = probabilisticForecastByMilestone[milestoneId];
           const confidence = rollup?.confidence;
           const staleness = rollup?.staleness || {};
           const staleTotal = staleness.staleCount || 0;
@@ -381,6 +398,23 @@ const ExecutionBoardView: React.FC<ExecutionBoardViewProps> = ({
                   )}
                   {!predictiveForecast && forecastStatus.loading && (
                     <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-400">Forecast loading…</span>
+                  )}
+                </div>
+              )}
+
+              {(probabilisticForecast || probabilisticForecastStatus.loading) && (
+                <div className="mt-3 flex flex-wrap gap-2 text-[9px] font-black uppercase tracking-widest">
+                  {probabilisticForecast ? (
+                    <>
+                      <span className="px-2 py-1 rounded-full bg-slate-900 text-white">
+                        P50 {formatForecastDate(probabilisticForecast.p50Date)} • P90 {formatForecastDate(probabilisticForecast.p90Date)}
+                      </span>
+                      <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-600">
+                        On-Time {formatPercent(probabilisticForecast.onTimeProbability)} • Uncertainty {probabilisticForecast.uncertaintyLevel}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-400">Probabilistic forecast loading…</span>
                   )}
                 </div>
               )}

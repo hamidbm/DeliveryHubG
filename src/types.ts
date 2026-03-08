@@ -340,6 +340,33 @@ export type PortfolioForecastSummary = {
   expectedPortfolioSlipDays: number;
 };
 
+export type MilestoneProbabilisticForecast = {
+  milestoneId: string;
+  plannedEndDate: string;
+  p50Date: string;
+  p75Date: string;
+  p90Date: string;
+  onTimeProbability: number;
+  uncertaintyLevel: 'LOW' | 'MEDIUM' | 'HIGH';
+};
+
+export type PlanProbabilisticForecastSummary = {
+  planId: string;
+  milestonesAnalyzed: number;
+  lowConfidenceMilestones: number;
+  averageOnTimeProbability: number;
+  averageP50SlipDays: number;
+  averageP90SlipDays: number;
+};
+
+export type PortfolioProbabilisticForecastSummary = {
+  plansAnalyzed: number;
+  milestonesAnalyzed: number;
+  averageOnTimeProbability: number;
+  highUncertaintyMilestones: number;
+  averagePortfolioP90SlipDays: number;
+};
+
 export type PortfolioOverview = {
   totalPlans: number;
   totalMilestones: number;

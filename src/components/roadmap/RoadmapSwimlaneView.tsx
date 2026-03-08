@@ -1,11 +1,12 @@
 import React, { useMemo } from 'react';
 import { buildSwimlaneRows, RoadmapMilestoneVM } from './roadmapViewModels';
-import type { MilestoneForecast } from '../../types';
+import type { MilestoneForecast, MilestoneProbabilisticForecast } from '../../types';
 
 const RoadmapSwimlaneView: React.FC<{
   milestones: RoadmapMilestoneVM[];
   forecastByMilestone?: Record<string, MilestoneForecast>;
-}> = ({ milestones, forecastByMilestone = {} }) => {
+  probabilisticForecastByMilestone?: Record<string, MilestoneProbabilisticForecast>;
+}> = ({ milestones, forecastByMilestone = {}, probabilisticForecastByMilestone = {} }) => {
   const rows = useMemo(() => buildSwimlaneRows(milestones), [milestones]);
 
   if (!milestones.length) {
@@ -60,6 +61,16 @@ const RoadmapSwimlaneView: React.FC<{
                   {forecastByMilestone[milestone.id] && (
                     <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-600">
                       Confidence {forecastByMilestone[milestone.id].forecastConfidence} • Slip {forecastByMilestone[milestone.id].slipRisk}
+                    </span>
+                  )}
+                  {probabilisticForecastByMilestone[milestone.id] && (
+                    <span className="px-2 py-1 rounded-full bg-slate-900 text-white">
+                      P50 {probabilisticForecastByMilestone[milestone.id].p50Date.split('T')[0]} • P90 {probabilisticForecastByMilestone[milestone.id].p90Date.split('T')[0]}
+                    </span>
+                  )}
+                  {probabilisticForecastByMilestone[milestone.id] && (
+                    <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-600">
+                      On-Time {Math.round((probabilisticForecastByMilestone[milestone.id].onTimeProbability || 0) * 100)}% • Uncertainty {probabilisticForecastByMilestone[milestone.id].uncertaintyLevel}
                     </span>
                   )}
                 </div>

@@ -1,5 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import type { PortfolioPlanSummary, PortfolioPlanDetail, PortfolioOverview, PortfolioDependencyEdge, PortfolioForecastSummary, PlanForecastSummary } from '../../types';
+import type {
+  PortfolioPlanSummary,
+  PortfolioPlanDetail,
+  PortfolioOverview,
+  PortfolioDependencyEdge,
+  PortfolioForecastSummary,
+  PlanForecastSummary,
+  PortfolioProbabilisticForecastSummary,
+  PlanProbabilisticForecastSummary
+} from '../../types';
 import {
   buildPortfolioTimelineRows,
   buildPortfolioDependencyGraph,
@@ -16,6 +25,8 @@ const PortfolioDashboard: React.FC = () => {
   const [compareData, setCompareData] = useState<{ plans: PortfolioPlanDetail[]; dependencies: PortfolioDependencyEdge[] } | null>(null);
   const [forecastSummary, setForecastSummary] = useState<PortfolioForecastSummary | null>(null);
   const [forecastPlans, setForecastPlans] = useState<PlanForecastSummary[]>([]);
+  const [probSummary, setProbSummary] = useState<PortfolioProbabilisticForecastSummary | null>(null);
+  const [probPlans, setProbPlans] = useState<PlanProbabilisticForecastSummary[]>([]);
   const [activeTab, setActiveTab] = useState<'timeline' | 'dependencies' | 'health'>('timeline');
   const [error, setError] = useState<string | null>(null);
   const [loadingCompare, setLoadingCompare] = useState(false);
@@ -51,6 +62,8 @@ const PortfolioDashboard: React.FC = () => {
       setCompareData(null);
       setForecastSummary(null);
       setForecastPlans([]);
+      setProbSummary(null);
+      setProbPlans([]);
       return;
     }
     const loadCompare = async () => {
@@ -92,6 +105,24 @@ const PortfolioDashboard: React.FC = () => {
     loadForecast();
   }, [selectedPlans]);
 
+  useEffect(() => {
+    if (!selectedPlans.length) return;
+    const loadProbForecast = async () => {
+      try {
+        const res = await fetch('/api/probabilistic-forecast/portfolio', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ planIds: selectedPlans })
+        });
+        const data = await res.json();
+        if (!res.ok) return;
+        setProbSummary(data.portfolioSummary || null);
+        setProbPlans(Array.isArray(data.planForecasts) ? data.planForecasts : []);
+      } catch {}
+    };
+    loadProbForecast();
+  }, [selectedPlans]);
+
   const togglePlan = (id: string) => {
     setSelectedPlans((prev) => (
       prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id]
@@ -112,7 +143,7 @@ const PortfolioDashboard: React.FC = () => {
         <div className="text-[10px] uppercase tracking-widest text-slate-400 font-black">Work Items · Portfolio</div>
       </header>
 
-      <section className="grid md:grid-cols-7 gap-4">
+      <section className="grid md:grid-cols-9 gap-4">
         <SummaryCard label="Plans" value={overview?.totalPlans ?? plans.length} />
         <SummaryCard label="Milestones" value={overview?.totalMilestones ?? '—'} />
         <SummaryCard label="High Risk" value={overview?.highRiskMilestones ?? '—'} />
@@ -120,6 +151,8 @@ const PortfolioDashboard: React.FC = () => {
         <SummaryCard label="Avg Utilization" value={overview?.avgUtilization != null ? `${Math.round(overview.avgUtilization * 100)}%` : '—'} />
         <SummaryCard label="Expected Slip" value={forecastSummary ? `${forecastSummary.expectedPortfolioSlipDays}d` : '—'} />
         <SummaryCard label="Low Confidence Plans" value={forecastPlans.filter((p) => p.averageConfidence === 'LOW').length} />
+        <SummaryCard label="Avg On-Time" value={probSummary ? `${Math.round(probSummary.averageOnTimeProbability * 100)}%` : '—'} />
+        <SummaryCard label="High Uncertainty" value={probSummary?.highUncertaintyMilestones ?? '—'} />
       </section>
 
       <section className="bg-white border border-slate-100 rounded-3xl p-6 space-y-4">

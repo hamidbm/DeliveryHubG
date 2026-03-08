@@ -65,6 +65,8 @@ const executionProps = {
   milestoneIntelligenceById: {},
   forecastByMilestone: {},
   forecastStatus: { loading: false },
+  probabilisticForecastByMilestone: {},
+  probabilisticForecastStatus: { loading: false },
   activeItem: null,
   staleModal: null,
   driftModal: null,
@@ -98,8 +100,8 @@ const executionProps = {
 
 const snapshots: Record<string, string> = {
   execution: renderToStaticMarkup(<ExecutionBoardView {...executionProps} />),
-  timeline: renderToStaticMarkup(<RoadmapTimelineView milestones={baseMilestones} forecastByMilestone={{}} />),
-  swimlane: renderToStaticMarkup(<RoadmapSwimlaneView milestones={baseMilestones} forecastByMilestone={{}} />),
+  timeline: renderToStaticMarkup(<RoadmapTimelineView milestones={baseMilestones} forecastByMilestone={{}} probabilisticForecastByMilestone={{}} />),
+  swimlane: renderToStaticMarkup(<RoadmapSwimlaneView milestones={baseMilestones} forecastByMilestone={{}} probabilisticForecastByMilestone={{}} />),
   dependency: renderToStaticMarkup(<RoadmapDependencyView milestones={baseMilestones} dependencies={baseDependencies} />)
 };
 
