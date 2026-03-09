@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Bundle, Application } from '../types';
+import { Bundle, Application, ApplicationPlanningMetadata, PlanningEnvironmentEntry } from '../types';
 import ExplainabilityIcon from './explainability/ExplainabilityIcon';
+import EnvironmentTimelineInputs from './planning/EnvironmentTimelineInputs';
 
 interface GenerateDeliveryPlanWizardProps {
   bundles: Bundle[];
@@ -33,13 +34,20 @@ const GenerateDeliveryPlanWizard: React.FC<GenerateDeliveryPlanWizardProps> = ({
   const [error, setError] = useState('');
   const [preview, setPreview] = useState<PreviewResponse['preview'] | null>(null);
   const [createResult, setCreateResult] = useState<any | null>(null);
+  const [planningContext, setPlanningContext] = useState<{
+    bundleMetadata?: ApplicationPlanningMetadata | null;
+    applicationMetadata?: ApplicationPlanningMetadata | null;
+    resolvedMetadata?: ApplicationPlanningMetadata | null;
+  } | null>(null);
+  const [planningContextLoading, setPlanningContextLoading] = useState(false);
+  const [planningContextError, setPlanningContextError] = useState('');
+  const [lastLoadedScope, setLastLoadedScope] = useState('');
+  const [syncReady, setSyncReady] = useState(false);
 
   const [scopeType, setScopeType] = useState<'BUNDLE' | 'APPLICATION' | 'PROGRAM'>('BUNDLE');
   const [scopeId, setScopeId] = useState('');
   const [plannedStartDate, setPlannedStartDate] = useState('');
-  const [devStartDate, setDevStartDate] = useState('');
-  const [integrationStartDate, setIntegrationStartDate] = useState('');
-  const [uatStartDate, setUatStartDate] = useState('');
+  const [environmentTimeline, setEnvironmentTimeline] = useState<Array<{ name: string; startDate?: string | null }>>([]);
   const [goLiveDate, setGoLiveDate] = useState('');
   const [stabilizationEndDate, setStabilizationEndDate] = useState('');
   const [milestoneCount, setMilestoneCount] = useState(4);
@@ -76,6 +84,58 @@ const GenerateDeliveryPlanWizard: React.FC<GenerateDeliveryPlanWizardProps> = ({
     return [];
   }, [scopeType, bundles, applications]);
 
+  const resolveEnvironment = (envs: PlanningEnvironmentEntry[] | undefined, name: string) => {
+    const key = name.toUpperCase();
+    return envs?.find((env) => String(env?.name || '').toUpperCase() === key) || null;
+  };
+
+  const applyPlanningMetadata = (meta?: ApplicationPlanningMetadata | null) => {
+    if (!meta) return;
+    const envs = meta.environments || [];
+    const prod = resolveEnvironment(envs, 'PROD');
+    const earliestStart = envs
+      .map((row) => row.startDate)
+      .filter(Boolean)
+      .sort()[0] || '';
+
+    setPlannedStartDate(earliestStart || '');
+    setEnvironmentTimeline(envs.map((env) => ({
+      name: String(env.name || '').toUpperCase(),
+      startDate: env.startDate || ''
+    })));
+    setGoLiveDate(meta.goLive?.planned || prod?.startDate || '');
+    setStabilizationEndDate(prod?.endDate || '');
+
+    if (typeof meta.planningDefaults?.milestoneCount === 'number') {
+      setMilestoneCount(meta.planningDefaults.milestoneCount || 1);
+    }
+    if (typeof meta.planningDefaults?.sprintDurationWeeks === 'number') {
+      setSprintDurationWeeks(meta.planningDefaults.sprintDurationWeeks || 1);
+    }
+    if (typeof meta.planningDefaults?.milestoneDurationWeeks === 'number') {
+      setMilestoneDurationStrategy('FIXED_WEEKS');
+      setMilestoneDurationWeeks(meta.planningDefaults.milestoneDurationWeeks || 1);
+    } else {
+      setMilestoneDurationStrategy('AUTO_DISTRIBUTE');
+    }
+
+    if (meta.capacityDefaults?.capacityModel) {
+      setCapacityMode(meta.capacityDefaults.capacityModel);
+    }
+    if (typeof meta.capacityDefaults?.deliveryTeams === 'number') {
+      setDeliveryTeams(meta.capacityDefaults.deliveryTeams);
+    }
+    if (typeof meta.capacityDefaults?.sprintVelocityPerTeam === 'number') {
+      setSprintVelocityPerTeam(meta.capacityDefaults.sprintVelocityPerTeam);
+    }
+    if (typeof meta.capacityDefaults?.directSprintCapacity === 'number') {
+      setDirectSprintCapacity(meta.capacityDefaults.directSprintCapacity);
+    }
+    if (meta.capacityDefaults?.projectSize) {
+      setProjectSize(meta.capacityDefaults.projectSize);
+    }
+  };
+
   const PROJECT_SIZE_DEFAULTS = useMemo(() => ({
     SMALL: { featuresPerMilestoneTarget: 2, storiesPerFeatureTarget: 3, tasksPerStoryTarget: 0 },
     MEDIUM: { featuresPerMilestoneTarget: 3, storiesPerFeatureTarget: 5, tasksPerStoryTarget: 1 },
@@ -98,7 +158,8 @@ const GenerateDeliveryPlanWizard: React.FC<GenerateDeliveryPlanWizardProps> = ({
 
   const derivedMilestoneDurationWeeks = useMemo(() => {
     if (milestoneDurationStrategy !== 'AUTO_DISTRIBUTE') return null;
-    const effectiveStart = plannedStartDate || devStartDate;
+    const firstEnvStart = environmentTimeline.find((env) => env.startDate)?.startDate || '';
+    const effectiveStart = plannedStartDate || firstEnvStart;
     if (!effectiveStart || !goLiveDate || !milestoneCount) return null;
     const start = new Date(effectiveStart);
     const end = new Date(goLiveDate);
@@ -106,7 +167,7 @@ const GenerateDeliveryPlanWizard: React.FC<GenerateDeliveryPlanWizardProps> = ({
     const days = Math.max(0, Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)));
     const weeks = milestoneCount > 0 ? days / milestoneCount / 7 : 0;
     return Math.round(weeks * 10) / 10;
-  }, [milestoneDurationStrategy, plannedStartDate, devStartDate, goLiveDate, milestoneCount]);
+  }, [milestoneDurationStrategy, plannedStartDate, environmentTimeline, goLiveDate, milestoneCount]);
 
   useEffect(() => {
     if (scopeType === 'PROGRAM') {
@@ -124,6 +185,181 @@ const GenerateDeliveryPlanWizard: React.FC<GenerateDeliveryPlanWizardProps> = ({
     }
   }, [scopeOptions, scopeType]);
 
+  useEffect(() => {
+    if (!scopeId || scopeType === 'PROGRAM') return;
+    const scopeKey = `${scopeType}:${scopeId}`;
+    if (scopeKey === lastLoadedScope) return;
+    let active = true;
+    setPlanningContextLoading(true);
+    setPlanningContextError('');
+    setSyncReady(false);
+
+    const load = async () => {
+      try {
+        if (scopeType === 'APPLICATION') {
+          const res = await fetch(`/api/applications/${encodeURIComponent(scopeId)}/planning-context`);
+          const data = await res.json();
+          if (!res.ok) throw new Error(data?.error || 'Failed to load planning context');
+          if (!active) return;
+          setPlanningContext({
+            bundleMetadata: data?.bundleMetadata || null,
+            applicationMetadata: data?.applicationMetadata || null,
+            resolvedMetadata: data?.resolvedMetadata || null
+          });
+          applyPlanningMetadata(data?.resolvedMetadata || null);
+        } else {
+          const res = await fetch(`/api/applications/planning-metadata?scopeType=bundle&scopeId=${encodeURIComponent(scopeId)}`);
+          const data = await res.json();
+          if (!res.ok) throw new Error(data?.error || 'Failed to load planning metadata');
+          if (!active) return;
+          setPlanningContext({
+            bundleMetadata: data?.planningMetadata || null,
+            applicationMetadata: null,
+            resolvedMetadata: data?.planningMetadata || null
+          });
+          applyPlanningMetadata(data?.planningMetadata || null);
+        }
+        if (active) {
+          setLastLoadedScope(scopeKey);
+          setSyncReady(true);
+        }
+      } catch (err: any) {
+        if (!active) return;
+        setPlanningContextError(err?.message || 'Failed to load planning context');
+      } finally {
+        if (active) setPlanningContextLoading(false);
+      }
+    };
+
+    load();
+    return () => {
+      active = false;
+    };
+  }, [scopeType, scopeId, lastLoadedScope]);
+
+  const buildUpdatedEnvironments = (existing: PlanningEnvironmentEntry[] | undefined) => {
+    const rows = Array.isArray(existing) ? [...existing] : [];
+    const upsertEnv = (name: string, updates: Partial<PlanningEnvironmentEntry>) => {
+      const key = name.toUpperCase();
+      const index = rows.findIndex((row) => String(row?.name || '').toUpperCase() === key);
+      if (index >= 0) {
+        rows[index] = { ...rows[index], ...updates, name: key };
+      } else if (updates.startDate || updates.endDate || updates.durationDays || updates.actualStart || updates.actualEnd) {
+        rows.push({ name: key, ...updates });
+      }
+    };
+
+    environmentTimeline.forEach((env) => {
+      upsertEnv(env.name, { startDate: env.startDate || null });
+    });
+
+    if (goLiveDate) {
+      upsertEnv('PROD', { startDate: goLiveDate || null });
+    }
+    if (stabilizationEndDate) {
+      upsertEnv('PROD', { endDate: stabilizationEndDate || null });
+    }
+
+    return rows.map((row) => ({
+      ...row,
+      name: String(row?.name || '').toUpperCase()
+    }));
+  };
+
+  const buildPlanningMetadataPayload = (changedOnly = false) => {
+    const scope = scopeType === 'APPLICATION' ? 'application' : 'bundle';
+    const baseMeta = scope === 'application' ? planningContext?.applicationMetadata : planningContext?.bundleMetadata;
+    const bundleId = scope === 'application'
+      ? (planningContext?.resolvedMetadata?.bundleId || baseMeta?.bundleId || null)
+      : scopeId;
+    const applicationId = scope === 'application'
+      ? (planningContext?.resolvedMetadata?.applicationId || baseMeta?.applicationId || scopeId)
+      : null;
+
+    const updatedEnvs = buildUpdatedEnvironments(baseMeta?.environments);
+    const baseEnvs = baseMeta?.environments || [];
+    const envChanged = updatedEnvs.length !== baseEnvs.length ||
+      updatedEnvs.some((env) => {
+        const existing = baseEnvs.find((row) => String(row?.name || '').toUpperCase() === String(env.name || '').toUpperCase());
+        return (existing?.startDate || '') !== (env.startDate || '');
+      });
+
+    const updatedPlanningDefaults = {
+      milestoneCount: milestoneCount || null,
+      sprintDurationWeeks: sprintDurationWeeks || null,
+      milestoneDurationWeeks: milestoneDurationStrategy === 'FIXED_WEEKS' ? milestoneDurationWeeks || null : null
+    };
+    const planningChanged = (
+      (baseMeta?.planningDefaults?.milestoneCount ?? null) !== (updatedPlanningDefaults.milestoneCount ?? null) ||
+      (baseMeta?.planningDefaults?.sprintDurationWeeks ?? null) !== (updatedPlanningDefaults.sprintDurationWeeks ?? null) ||
+      (baseMeta?.planningDefaults?.milestoneDurationWeeks ?? null) !== (updatedPlanningDefaults.milestoneDurationWeeks ?? null)
+    );
+
+    const updatedCapacityDefaults = {
+      capacityModel: capacityMode || null,
+      deliveryTeams: capacityMode === 'TEAM_VELOCITY' ? (deliveryTeams === '' ? null : Number(deliveryTeams)) : (baseMeta?.capacityDefaults?.deliveryTeams ?? null),
+      sprintVelocityPerTeam: capacityMode === 'TEAM_VELOCITY' ? (sprintVelocityPerTeam === '' ? null : Number(sprintVelocityPerTeam)) : (baseMeta?.capacityDefaults?.sprintVelocityPerTeam ?? null),
+      directSprintCapacity: capacityMode === 'DIRECT_SPRINT_CAPACITY' ? (directSprintCapacity === '' ? null : Number(directSprintCapacity)) : (baseMeta?.capacityDefaults?.directSprintCapacity ?? null),
+      teamSize: baseMeta?.capacityDefaults?.teamSize ?? null,
+      projectSize: projectSize || baseMeta?.capacityDefaults?.projectSize || null
+    };
+    const capacityChanged = (
+      (baseMeta?.capacityDefaults?.capacityModel ?? null) !== (updatedCapacityDefaults.capacityModel ?? null) ||
+      (baseMeta?.capacityDefaults?.deliveryTeams ?? null) !== (updatedCapacityDefaults.deliveryTeams ?? null) ||
+      (baseMeta?.capacityDefaults?.sprintVelocityPerTeam ?? null) !== (updatedCapacityDefaults.sprintVelocityPerTeam ?? null) ||
+      (baseMeta?.capacityDefaults?.directSprintCapacity ?? null) !== (updatedCapacityDefaults.directSprintCapacity ?? null) ||
+      (baseMeta?.capacityDefaults?.projectSize ?? null) !== (updatedCapacityDefaults.projectSize ?? null)
+    );
+
+    const goLiveChanged = (baseMeta?.goLive?.planned || '') !== (goLiveDate || '');
+
+    const payload: any = {
+      scopeType: scope,
+      scopeId,
+      bundleId,
+      applicationId
+    };
+
+    if (!changedOnly || envChanged) {
+      payload.environments = updatedEnvs;
+    }
+    if (!changedOnly || goLiveChanged) {
+      payload.goLive = {
+        planned: goLiveDate || null,
+        actual: baseMeta?.goLive?.actual ?? null
+      };
+    }
+    if (!changedOnly || planningChanged) {
+      payload.planningDefaults = updatedPlanningDefaults;
+    }
+    if (!changedOnly || capacityChanged) {
+      payload.capacityDefaults = updatedCapacityDefaults;
+    }
+    if (!changedOnly) {
+      payload.notes = baseMeta?.notes ?? null;
+    }
+
+    const hasChanges = envChanged || goLiveChanged || planningChanged || capacityChanged;
+    return { payload, hasChanges };
+  };
+
+  const persistPlanningMetadata = async () => {
+    if (!syncReady) return;
+    if (!scopeId || scopeType === 'PROGRAM') return;
+    if (planningContextLoading) return;
+    const { payload, hasChanges } = buildPlanningMetadataPayload(true);
+    if (!hasChanges) return;
+    try {
+      await fetch('/api/applications/planning-metadata', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+    } catch {
+      // Best-effort sync only.
+    }
+  };
+
   const milestoneRows = Array.from({ length: milestoneCount }, (_, i) => i + 1);
 
   const capacityModeLabel = useMemo(() => ({
@@ -133,14 +369,65 @@ const GenerateDeliveryPlanWizard: React.FC<GenerateDeliveryPlanWizardProps> = ({
     NONE: 'No capacity'
   }), []);
 
+  const environmentFlowOptions = useMemo(() => {
+    const names = environmentTimeline.map((env) => String(env?.name || '').toUpperCase()).filter(Boolean);
+    if (names.length === 0) {
+      return [{ value: 'CUSTOM', label: 'Custom' }];
+    }
+    const hasDev = names.includes('DEV');
+    const hasUat = names.includes('UAT');
+    const hasProd = names.includes('PROD');
+    const hasSit = names.includes('SIT');
+    if (hasDev && hasUat && hasProd && names.length === 3) {
+      return [{ value: 'DEV_UAT_PROD', label: 'Dev → UAT → Prod' }, { value: 'CUSTOM', label: 'Custom' }];
+    }
+    if (hasDev && hasSit && hasUat && hasProd && names.length === 4) {
+      return [{ value: 'DEV_SIT_UAT_PROD', label: 'Dev → SIT → UAT → Prod' }, { value: 'CUSTOM', label: 'Custom' }];
+    }
+    return [{ value: 'CUSTOM', label: names.join(' → ') }];
+  }, [environmentTimeline]);
+
+  useEffect(() => {
+    const values = environmentFlowOptions.map((opt) => opt.value);
+    if (!values.includes(environmentFlow)) {
+      setEnvironmentFlow(values[0]);
+    }
+  }, [environmentFlowOptions, environmentFlow]);
+
+  const resolvePlanDates = () => {
+    const byName = new Map<string, string>();
+    environmentTimeline.forEach((env) => {
+      const key = String(env?.name || '').toUpperCase();
+      if (key && env.startDate) byName.set(key, env.startDate);
+    });
+    const firstStart = environmentTimeline.find((env) => env.startDate)?.startDate || '';
+    const lastStart = environmentTimeline.length > 0 ? (environmentTimeline[environmentTimeline.length - 1]?.startDate || '') : '';
+    const devStart = byName.get('DEV') || firstStart;
+    const uatStart = byName.get('UAT') || (environmentTimeline.length > 1 ? (environmentTimeline[environmentTimeline.length - 2]?.startDate || firstStart) : firstStart);
+    const integrationStart = byName.get('INT') || byName.get('SIT') || '';
+    const prodStart = byName.get('PROD') || lastStart || '';
+
+    return {
+      devStartDate: devStart || '',
+      integrationStartDate: integrationStart || undefined,
+      uatStartDate: uatStart || '',
+      goLiveDate: goLiveDate || prodStart || ''
+    };
+  };
+
+  const validatePlanDates = () => {
+    const dates = resolvePlanDates();
+    if (!dates.devStartDate || !dates.uatStartDate || !dates.goLiveDate) {
+      return 'Please provide start dates for the delivery environments and a Go-Live date.';
+    }
+    return null;
+  };
+
   const buildPayload = () => ({
+    ...resolvePlanDates(),
     scopeType,
     scopeId,
     plannedStartDate: plannedStartDate || undefined,
-    devStartDate,
-    integrationStartDate: integrationStartDate || undefined,
-    uatStartDate,
-    goLiveDate,
     stabilizationEndDate: stabilizationEndDate || undefined,
     milestoneCount,
     sprintDurationWeeks,
@@ -175,6 +462,13 @@ const GenerateDeliveryPlanWizard: React.FC<GenerateDeliveryPlanWizardProps> = ({
     setLoading(true);
     setError('');
     try {
+      const validationError = validatePlanDates();
+      if (validationError) {
+        setError(validationError);
+        setLoading(false);
+        return;
+      }
+      await persistPlanningMetadata();
       const res = await fetch('/api/work-items/plan/preview', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -196,6 +490,7 @@ const GenerateDeliveryPlanWizard: React.FC<GenerateDeliveryPlanWizardProps> = ({
     setLoading(true);
     setError('');
     try {
+      await persistPlanningMetadata();
       const res = await fetch('/api/work-items/plan/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -227,7 +522,7 @@ const GenerateDeliveryPlanWizard: React.FC<GenerateDeliveryPlanWizardProps> = ({
   return (
     <div className="fixed inset-0 z-[220] flex items-center justify-center p-6">
       <div className="absolute inset-0 bg-slate-950/40 backdrop-blur-md" onClick={onClose}></div>
-      <div className="bg-white rounded-[3rem] w-full max-w-5xl p-12 shadow-2xl relative animate-fadeIn max-h-[90vh] overflow-y-auto custom-scrollbar">
+      <div className="bg-white rounded-[3rem] w-full max-w-[1200px] p-12 shadow-2xl relative animate-fadeIn max-h-[90vh] overflow-y-auto custom-scrollbar">
         <header className="mb-8 flex justify-between items-start">
           <div>
             <h3 className="text-3xl font-black text-slate-900 tracking-tight">Generate Delivery Plan</h3>
@@ -243,11 +538,17 @@ const GenerateDeliveryPlanWizard: React.FC<GenerateDeliveryPlanWizardProps> = ({
             {error}
           </div>
         )}
+        {planningContextError && (
+          <div className="mb-6 p-4 bg-amber-50 border border-amber-100 text-amber-700 text-sm rounded-2xl">
+            {planningContextError}
+          </div>
+        )}
 
         {step === 1 && (
           <div className="space-y-8">
-            <section className="grid grid-cols-3 gap-6">
-              <div className="space-y-2 col-span-1">
+            <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Scope</h4>
+            <section className="grid grid-cols-3 gap-4">
+              <div className="space-y-2">
                 <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Scope Type</label>
                 <select value={scopeType} onChange={(e) => setScopeType(e.target.value as any)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold outline-none">
                   <option value="BUNDLE">Bundle</option>
@@ -255,7 +556,7 @@ const GenerateDeliveryPlanWizard: React.FC<GenerateDeliveryPlanWizardProps> = ({
                   <option value="PROGRAM">Program</option>
                 </select>
               </div>
-              <div className="space-y-2 col-span-2">
+              <div className="space-y-2">
                 <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Scope</label>
                 <select disabled={scopeType === 'PROGRAM'} value={scopeId} onChange={(e) => setScopeId(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold outline-none">
                   {scopeType === 'PROGRAM' && <option value="program">Program</option>}
@@ -266,36 +567,22 @@ const GenerateDeliveryPlanWizard: React.FC<GenerateDeliveryPlanWizardProps> = ({
                   ))}
                 </select>
               </div>
-            </section>
-
-            <section className="grid grid-cols-3 gap-6">
               <div className="space-y-2">
                 <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Planned Start (optional)</label>
                 <input type="date" value={plannedStartDate} onChange={(e) => setPlannedStartDate(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold outline-none" />
               </div>
-              <div className="space-y-2">
-                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Dev Start</label>
-                <input type="date" value={devStartDate} onChange={(e) => setDevStartDate(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold outline-none" />
-              </div>
-              <div className="space-y-2">
-                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Integration Start (optional)</label>
-                <input type="date" value={integrationStartDate} onChange={(e) => setIntegrationStartDate(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold outline-none" />
-              </div>
-              <div className="space-y-2">
-                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">UAT Start</label>
-                <input type="date" value={uatStartDate} onChange={(e) => setUatStartDate(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold outline-none" />
-              </div>
-              <div className="space-y-2">
-                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Go-Live</label>
-                <input type="date" value={goLiveDate} onChange={(e) => setGoLiveDate(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold outline-none" />
-              </div>
-              <div className="space-y-2">
-                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Stabilization End (optional)</label>
-                <input type="date" value={stabilizationEndDate} onChange={(e) => setStabilizationEndDate(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold outline-none" />
-              </div>
             </section>
 
-            <section className="grid grid-cols-4 gap-6">
+            <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Environment Timeline</h4>
+            <EnvironmentTimelineInputs
+              environments={environmentTimeline}
+              onChange={setEnvironmentTimeline}
+              goLiveDate={goLiveDate}
+              onGoLiveChange={setGoLiveDate}
+            />
+
+            <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Milestone Planning</h4>
+            <section className="grid grid-cols-4 gap-4">
               <div className="space-y-2">
                 <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Milestone Count</label>
                 <input type="number" min={1} value={milestoneCount} onChange={(e) => setMilestoneCount(Number(e.target.value))} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold outline-none" />
@@ -329,7 +616,8 @@ const GenerateDeliveryPlanWizard: React.FC<GenerateDeliveryPlanWizardProps> = ({
               </div>
             </section>
 
-            <section className="grid grid-cols-3 gap-6">
+            <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Capacity & Delivery Model</h4>
+            <section className="grid grid-cols-5 gap-4">
               <div className="space-y-2">
                 <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Capacity Mode</label>
                 <select value={capacityMode} onChange={(e) => setCapacityMode(e.target.value as any)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold outline-none">
@@ -337,29 +625,22 @@ const GenerateDeliveryPlanWizard: React.FC<GenerateDeliveryPlanWizardProps> = ({
                   <option value="DIRECT_SPRINT_CAPACITY">Direct sprint capacity</option>
                 </select>
               </div>
-              {capacityMode === 'TEAM_VELOCITY' ? (
-                <>
-                  <div className="space-y-2">
-                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Delivery Teams</label>
-                    <input type="number" min={1} value={deliveryTeams} onChange={(e) => setDeliveryTeams(e.target.value ? Number(e.target.value) : '')} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold outline-none" />
+              <div className="space-y-2">
+                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                  {capacityMode === 'TEAM_VELOCITY' ? 'Teams × Velocity' : 'Sprint Capacity'}
+                </label>
+                {capacityMode === 'TEAM_VELOCITY' ? (
+                  <div className="grid grid-cols-2 gap-2">
+                    <input type="number" min={1} value={deliveryTeams} onChange={(e) => setDeliveryTeams(e.target.value ? Number(e.target.value) : '')} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold outline-none" placeholder="Teams" />
+                    <input type="number" min={1} value={sprintVelocityPerTeam} onChange={(e) => setSprintVelocityPerTeam(e.target.value ? Number(e.target.value) : '')} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold outline-none" placeholder="Velocity" />
                   </div>
-                  <div className="space-y-2">
-                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Sprint Velocity per Team</label>
-                    <input type="number" min={1} value={sprintVelocityPerTeam} onChange={(e) => setSprintVelocityPerTeam(e.target.value ? Number(e.target.value) : '')} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold outline-none" />
-                  </div>
-                </>
-              ) : (
-                <div className="space-y-2 col-span-2">
-                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Sprint Capacity</label>
-                  <input type="number" min={1} value={directSprintCapacity} onChange={(e) => setDirectSprintCapacity(e.target.value ? Number(e.target.value) : '')} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold outline-none" />
-                </div>
-              )}
-            </section>
-
-            <section className="grid grid-cols-3 gap-6">
+                ) : (
+                  <input type="number" min={1} value={directSprintCapacity} onChange={(e) => setDirectSprintCapacity(e.target.value ? Number(e.target.value) : '')} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold outline-none" />
+                )}
+              </div>
               <div className="space-y-2">
                 <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Delivery Pattern</label>
-                <select value={deliveryPattern} onChange={(e) => setDeliveryPattern(e.target.value as any)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold outline-none">
+                <select value={deliveryPattern} onChange={(e) => setDeliveryPattern(e.target.value as any)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold outline-none">
                   <option value="STANDARD_PHASED">Standard phased</option>
                   <option value="PRODUCT_INCREMENT">Product increment</option>
                   <option value="MIGRATION">Migration / rollout</option>
@@ -368,7 +649,7 @@ const GenerateDeliveryPlanWizard: React.FC<GenerateDeliveryPlanWizardProps> = ({
               </div>
               <div className="space-y-2">
                 <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Backlog Shape</label>
-                <select value={backlogShape} onChange={(e) => setBacklogShape(e.target.value as any)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold outline-none">
+                <select value={backlogShape} onChange={(e) => setBacklogShape(e.target.value as any)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold outline-none">
                   <option value="LIGHT">Light</option>
                   <option value="STANDARD">Standard</option>
                   <option value="DETAILED">Detailed</option>
@@ -376,7 +657,7 @@ const GenerateDeliveryPlanWizard: React.FC<GenerateDeliveryPlanWizardProps> = ({
               </div>
               <div className="space-y-2">
                 <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Project Size</label>
-                <select value={projectSize} onChange={(e) => setProjectSize(e.target.value as any)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold outline-none">
+                <select value={projectSize} onChange={(e) => setProjectSize(e.target.value as any)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold outline-none">
                   <option value="SMALL">Small</option>
                   <option value="MEDIUM">Medium</option>
                   <option value="LARGE">Large</option>
@@ -385,7 +666,8 @@ const GenerateDeliveryPlanWizard: React.FC<GenerateDeliveryPlanWizardProps> = ({
               </div>
             </section>
 
-            <section className="grid grid-cols-3 gap-6">
+            <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Backlog Shape</h4>
+            <section className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
                 <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Stories per Feature</label>
                 <input
@@ -413,17 +695,6 @@ const GenerateDeliveryPlanWizard: React.FC<GenerateDeliveryPlanWizardProps> = ({
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Release Type</label>
-                <select value={releaseType} onChange={(e) => setReleaseType(e.target.value as any)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold outline-none">
-                  <option value="BIG_BANG">Big bang</option>
-                  <option value="PHASED">Phased rollout</option>
-                  <option value="INCREMENTAL">Incremental waves</option>
-                </select>
-              </div>
-            </section>
-
-            <section className="grid grid-cols-3 gap-6">
-              <div className="space-y-2">
                 <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Tasks per Story</label>
                 <input
                   type="number"
@@ -436,29 +707,15 @@ const GenerateDeliveryPlanWizard: React.FC<GenerateDeliveryPlanWizardProps> = ({
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold outline-none"
                 />
               </div>
-              <div className="space-y-2">
-                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Environment Flow</label>
-                <select value={environmentFlow} onChange={(e) => setEnvironmentFlow(e.target.value as any)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold outline-none">
-                  <option value="DEV_UAT_PROD">Dev → UAT → Prod</option>
-                  <option value="DEV_SIT_UAT_PROD">Dev → SIT → UAT → Prod</option>
-                  <option value="CUSTOM">Custom</option>
-                </select>
-              </div>
+            </section>
+
+            <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Automation Options</h4>
+            <section className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
                 <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Suggest Milestone Owners</label>
                 <select value={suggestMilestoneOwners ? 'yes' : 'no'} onChange={(e) => setSuggestMilestoneOwners(e.target.value === 'yes')} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold outline-none">
                   <option value="yes">Yes</option>
                   <option value="no">No</option>
-                </select>
-              </div>
-            </section>
-
-            <section className="grid grid-cols-3 gap-6">
-              <div className="space-y-2">
-                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Create Tasks Under Stories</label>
-                <select value={createTasksUnderStories ? 'yes' : 'no'} onChange={(e) => setCreateTasksUnderStories(e.target.value === 'yes')} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold outline-none">
-                  <option value="no">No</option>
-                  <option value="yes">Yes</option>
                 </select>
               </div>
               <div className="space-y-2">
@@ -469,15 +726,22 @@ const GenerateDeliveryPlanWizard: React.FC<GenerateDeliveryPlanWizardProps> = ({
                 </select>
               </div>
               <div className="space-y-2">
+                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Create Tasks Under Stories</label>
+                <select value={createTasksUnderStories ? 'yes' : 'no'} onChange={(e) => setCreateTasksUnderStories(e.target.value === 'yes')} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold outline-none">
+                  <option value="no">No</option>
+                  <option value="yes">Yes</option>
+                </select>
+              </div>
+            </section>
+
+            <section className="grid grid-cols-3 gap-4">
+              <div className="space-y-2">
                 <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Create Dependency Skeleton</label>
                 <select value={createDependencySkeleton ? 'yes' : 'no'} onChange={(e) => setCreateDependencySkeleton(e.target.value === 'yes')} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold outline-none">
                   <option value="yes">Yes</option>
                   <option value="no">No</option>
                 </select>
               </div>
-            </section>
-
-            <section className="grid grid-cols-3 gap-6">
               <div className="space-y-2">
                 <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Pre-allocate Stories to Sprints</label>
                 <select value={preallocateStoriesToSprints ? 'yes' : 'no'} onChange={(e) => setPreallocateStoriesToSprints(e.target.value === 'yes')} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold outline-none">
@@ -492,6 +756,9 @@ const GenerateDeliveryPlanWizard: React.FC<GenerateDeliveryPlanWizardProps> = ({
                   <option value="no">No</option>
                 </select>
               </div>
+            </section>
+
+            <section className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
                 <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Generate Draft Only</label>
                 <select value={generateDraftOnly ? 'yes' : 'no'} onChange={(e) => setGenerateDraftOnly(e.target.value === 'yes')} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold outline-none">
