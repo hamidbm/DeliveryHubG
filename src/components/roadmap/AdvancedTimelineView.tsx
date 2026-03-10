@@ -6,6 +6,7 @@ import TimelineGrid from './TimelineGrid';
 import MilestoneBar from './MilestoneBar';
 import DependencyLayer from './DependencyLayer';
 import EnvironmentOverlay from './EnvironmentOverlay';
+import TimelineLegend from './TimelineLegend';
 
 type Bounds = { min: number; max: number; span: number };
 type GroupBy = 'none' | 'application' | 'bundle' | 'owner' | 'theme';
@@ -189,6 +190,7 @@ const AdvancedTimelineView: React.FC<{
     return map;
   }, [renderRows, bounds, width]);
 
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const ticks = buildTicks(bounds, zoom, width);
   const totalRows = groupedRows.reduce((acc, group) => acc + group.milestones.length, 0);
   const timelineHeight = 140 + totalRows * 48 + groupedRows.length * 24;
@@ -200,6 +202,7 @@ const AdvancedTimelineView: React.FC<{
           Timeline spans {new Date(bounds.min).toISOString().split('T')[0]} → {new Date(bounds.max).toISOString().split('T')[0]}
         </div>
         <div className="flex items-center gap-3">
+          <TimelineLegend />
           <select
             value={groupBy}
             onChange={(e) => setGroupBy(e.target.value as GroupBy)}
@@ -215,15 +218,15 @@ const AdvancedTimelineView: React.FC<{
         </div>
       </div>
 
-      <div ref={containerRef} className="border border-slate-200 rounded-3xl bg-white overflow-x-auto">
-        <div className="relative p-6" style={{ width }}>
+      <div ref={containerRef} className="border border-slate-200 rounded-3xl bg-white overflow-x-auto overflow-y-visible">
+        <div className="relative p-6 overflow-visible" style={{ width }}>
           <div className="relative mb-6">
             <TimelineGrid width={width} height={40} ticks={ticks} />
           </div>
 
           <EnvironmentOverlay environments={environments} bounds={bounds} width={width} goLiveDate={goLiveDate} />
 
-          <div className="relative mt-6" style={{ height: timelineHeight }}>
+          <div className="relative mt-6 overflow-visible" style={{ height: timelineHeight }}>
             <DependencyLayer width={width} height={timelineHeight} edges={dependencies} positions={positions} />
             {renderRows.map((row) => {
               if (row.type === 'label') {
@@ -258,6 +261,8 @@ const AdvancedTimelineView: React.FC<{
                     height={18}
                     forecastLeft={forecastLeft}
                     forecastWidth={forecastWidth}
+                    showDetails={expandedId === milestone.id}
+                    onToggleDetails={() => setExpandedId(prev => prev === milestone.id ? null : milestone.id)}
                   />
                 </div>
               );

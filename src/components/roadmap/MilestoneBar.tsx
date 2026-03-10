@@ -2,13 +2,9 @@ import React from 'react';
 import type { RoadmapMilestoneVM, MilestoneIntelligence } from './roadmapViewModels';
 import type { MilestoneForecast, MilestoneProbabilisticForecast } from '../../types';
 import MilestoneTooltip from './MilestoneTooltip';
-
-const confidenceColor = (confidence?: string | null) => {
-  if (confidence === 'HIGH') return 'bg-emerald-500';
-  if (confidence === 'MEDIUM') return 'bg-amber-500';
-  if (confidence === 'LOW') return 'bg-rose-500';
-  return 'bg-slate-300';
-};
+import ForecastBand from './ForecastBand';
+import CapacityHeatOverlay from './CapacityHeatOverlay';
+import ConfidenceIndicator from './ConfidenceIndicator';
 
 const utilizationGlow = (state?: string | null) => {
   if (state === 'OVERLOADED') return '0 0 12px rgba(244, 63, 94, 0.35)';
@@ -41,6 +37,8 @@ const MilestoneBar: React.FC<{
   height: number;
   forecastLeft?: number | null;
   forecastWidth?: number | null;
+  showDetails?: boolean;
+  onToggleDetails?: () => void;
 }> = ({
   milestone,
   intelligence,
@@ -50,7 +48,9 @@ const MilestoneBar: React.FC<{
   width,
   height,
   forecastLeft,
-  forecastWidth
+  forecastWidth,
+  showDetails = false,
+  onToggleDetails
 }) => {
   const title = [
     `Milestone: ${milestone.name}`,
@@ -63,12 +63,9 @@ const MilestoneBar: React.FC<{
   return (
     <div className="relative h-full group">
       {forecastLeft != null && forecastWidth != null && (
-        <div
-          className="absolute top-0 h-full rounded-full bg-slate-300/40"
-          style={{ left: forecastLeft, width: Math.max(4, forecastWidth) }}
-          title={probabilistic ? `P50 ${probabilistic.p50Date.split('T')[0]} → P90 ${probabilistic.p90Date.split('T')[0]}` : undefined}
-        />
+        <ForecastBand left={forecastLeft} width={forecastWidth} forecast={probabilistic} />
       )}
+      <CapacityHeatOverlay left={left} width={width} intelligence={intelligence} />
       <div
         className={`absolute top-0 h-full rounded-full ${riskColor(intelligence?.riskLevel)}`}
         style={{
@@ -80,7 +77,6 @@ const MilestoneBar: React.FC<{
       />
       <div className="absolute -top-4 flex items-center gap-2 text-[10px] text-slate-500">
         <span className="font-semibold text-slate-700">{milestone.name}</span>
-        <span className={`w-2 h-2 rounded-full ${confidenceColor(intelligence?.confidence)}`} title={`Confidence ${intelligence?.confidence || '—'}`} />
         {intelligence?.riskLevel ? (
           <i className={`fas fa-exclamation-triangle ${riskIconColor(intelligence?.riskLevel)}`} title={`Risk ${intelligence.riskLevel}`} />
         ) : null}
@@ -90,14 +86,34 @@ const MilestoneBar: React.FC<{
         {intelligence?.dependencyInbound ? (
           <i className="fas fa-link text-amber-500" title={`Dependency pressure ${intelligence.dependencyInbound}`} />
         ) : null}
-        {probabilistic ? (
-          <span className="text-[10px] text-slate-400">
-            On-Time {Math.round((probabilistic.onTimeProbability || 0) * 100)}% • Uncertainty {probabilistic.uncertaintyLevel}
-          </span>
-        ) : null}
+        <ConfidenceIndicator
+          confidence={intelligence?.confidence}
+          onTimeProbability={probabilistic?.onTimeProbability}
+          uncertainty={probabilistic?.uncertaintyLevel}
+        />
       </div>
-      <div className="absolute left-0 top-6 z-20 hidden group-hover:block">
+      <div className="absolute left-0 bottom-full mb-2 z-30 hidden group-hover:block">
         <MilestoneTooltip milestone={milestone} intelligence={intelligence} probabilistic={probabilistic} />
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleDetails?.();
+          }}
+          className="mt-2 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-700"
+        >
+          {showDetails ? 'Less' : 'More'}
+        </button>
+        {showDetails && (
+          <div className="mt-2 w-64 rounded-2xl border border-slate-200 bg-white shadow-xl p-3 text-xs text-slate-600">
+            <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Details</div>
+            <div className="space-y-1">
+              <div>Blocked: {intelligence?.blockedItemCount ?? '—'}</div>
+              <div>Dependencies: {intelligence?.dependencyInbound ?? '—'}</div>
+              <div>Capacity: {intelligence?.utilizationPercent != null ? `${Math.round(intelligence.utilizationPercent * 100)}%` : '—'}</div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

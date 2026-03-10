@@ -10,7 +10,7 @@ const MilestoneTooltip: React.FC<{
   probabilistic?: MilestoneProbabilisticForecast | null;
 }> = ({ milestone, intelligence, probabilistic }) => {
   return (
-    <div className="w-72 rounded-2xl border border-slate-200 bg-white shadow-xl p-3 text-xs text-slate-600">
+    <div className="w-64 rounded-2xl border border-slate-200 bg-white shadow-xl p-3 text-xs text-slate-600">
       <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Milestone</div>
       <div className="text-sm font-semibold text-slate-800">{milestone.name}</div>
       <div className="mt-2 space-y-1">
@@ -18,20 +18,14 @@ const MilestoneTooltip: React.FC<{
         {probabilistic && (
           <>
             <div>P50: {formatDate(probabilistic.p50Date)}</div>
-            <div>P75: {formatDate(probabilistic.p75Date)}</div>
             <div>P90: {formatDate(probabilistic.p90Date)}</div>
-            <div>On-Time: {Math.round((probabilistic.onTimeProbability || 0) * 100)}%</div>
-            <div>Uncertainty: {probabilistic.uncertaintyLevel}</div>
+            <div>On‑Time: {Math.round((probabilistic.onTimeProbability || 0) * 100)}%</div>
           </>
         )}
         {intelligence && (
           <>
-            <div>Readiness: {intelligence.readiness}</div>
+            <div>Confidence: {intelligence.confidence}</div>
             <div>Risk: {intelligence.riskLevel}</div>
-            <div>Blocked items: {intelligence.blockedItemCount}</div>
-            <div>Dependency pressure: {intelligence.dependencyInbound}</div>
-            <div>Capacity: {intelligence.targetCapacity ?? '—'}</div>
-            <div>Utilization: {intelligence.utilizationPercent != null ? `${Math.round(intelligence.utilizationPercent * 100)}%` : '—'}</div>
           </>
         )}
       </div>

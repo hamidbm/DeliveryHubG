@@ -63,7 +63,7 @@ Each item can have a parent and children to form a delivery hierarchy.
   - Dependency
 - Execution Board preserves the milestone intelligence row (capacity, readiness, blocked, risks)
 - Timeline shows milestones on a calendar axis with committed bars + probabilistic forecast bands
-- Timeline includes confidence/on-time/uncertainty indicators, capacity heat, dependency arrows, and environment overlays (Go‑Live marker included)
+- Timeline includes confidence/on-time/uncertainty indicators, capacity heat, dependency arrows, environment overlays (Go‑Live marker included), and rich tooltips
 - Swimlane groups milestones by time buckets with readiness/capacity badges
 - Dependency view aggregates cross‑milestone blockers at milestone level
 - Milestone health indicators include utilization, risk level, blocked count, readiness, and confidence

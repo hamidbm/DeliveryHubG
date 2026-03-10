@@ -33,6 +33,17 @@ const DependencyLayer: React.FC<{
 
   return (
     <svg className="absolute inset-0 pointer-events-auto" width={width} height={height}>
+      <defs>
+        <marker id="arrow-normal" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+          <path d="M0,0 L8,4 L0,8 Z" fill="#94a3b8" />
+        </marker>
+        <marker id="arrow-warn" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+          <path d="M0,0 L8,4 L0,8 Z" fill="#f59e0b" />
+        </marker>
+        <marker id="arrow-risk" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+          <path d="M0,0 L8,4 L0,8 Z" fill="#f97316" />
+        </marker>
+      </defs>
       {paths.map(({ key, path, stroke, edge }) => (
         <path
           key={key}
@@ -41,6 +52,7 @@ const DependencyLayer: React.FC<{
           stroke={stroke}
           strokeWidth={1.5}
           strokeDasharray={edge.blockedCount > 0 ? '4 3' : '0'}
+          markerEnd={`url(#${stroke === '#f97316' ? 'arrow-risk' : stroke === '#f59e0b' ? 'arrow-warn' : 'arrow-normal'})`}
         >
           <title>{`Dependency ${edge.fromMilestoneId} → ${edge.toMilestoneId} • Blocked items ${edge.blockedCount}`}</title>
         </path>

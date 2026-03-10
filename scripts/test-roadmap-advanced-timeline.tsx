@@ -63,7 +63,7 @@ export const run = async () => {
   );
 
   assert.ok(html.includes('p50') || html.includes('P50'), 'Expected probabilistic band to render');
-  assert.ok(html.includes('Go-Live'), 'Expected go-live marker to render');
+  assert.ok(html.includes('Go-Live / Business Cutover'), 'Expected go-live marker to render');
   assert.ok(html.includes('Dependency'), 'Expected dependency title to render');
   assert.ok(html.includes('On-Time'), 'Expected on-time indicator to render');
   assert.ok(html.includes('Uncertainty'), 'Expected uncertainty indicator to render');

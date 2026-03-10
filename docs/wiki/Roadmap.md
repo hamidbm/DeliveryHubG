@@ -23,6 +23,7 @@ The Timeline view was upgraded to a professional-grade visualization:
 - Milestone-to-milestone dependency arrows (from `BLOCKS`)
 - Environment overlays from planning metadata with a distinct Go‑Live marker
 - Grouping by Application, Bundle, Owner, or Theme
+- Legend toggle and rich milestone tooltips
 
 ### Portfolio Analytics (Phase 6)
 Portfolio analytics aggregate multiple delivery plans into a single dashboard view:
