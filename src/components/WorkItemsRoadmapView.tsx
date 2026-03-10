@@ -16,6 +16,7 @@ import RoadmapSwimlaneView from './roadmap/RoadmapSwimlaneView';
 import RoadmapDependencyView from './roadmap/RoadmapDependencyView';
 import { transformRawRoadmapData } from './roadmap/roadmapViewModels';
 import SimulationEditor from './SimulationEditor';
+import OptimizationEditor from './OptimizationEditor';
 
 interface WorkItemsRoadmapViewProps {
   applications: Application[];
@@ -38,6 +39,35 @@ const getGithubActivity = (item?: WorkItem) => {
   return active ? 'active' : 'stale';
 };
 
+type OptimizationAppliedSummary = {
+  planId?: string;
+  source?: 'CREATED_PLAN' | 'PREVIEW';
+  scopeType?: string;
+  scopeId?: string;
+  acceptedVariantId?: string;
+  acceptedVariantName?: string;
+  acceptedVariantScore?: number;
+  objectiveWeights?: {
+    onTime?: number;
+    riskReduction?: number;
+    capacityBalance?: number;
+    slippageMinimization?: number;
+  };
+  expectedImpact?: {
+    onTimeProbabilityDelta?: number;
+    expectedSlippageDaysDelta?: number;
+    riskScoreDelta?: number;
+    readinessScoreDelta?: number;
+  };
+  appliedAt?: string;
+  appliedBy?: string;
+  summary?: {
+    totalChanges?: number;
+    scheduleChanges?: number;
+    capacityChanges?: number;
+  };
+};
+
 const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
   applications, bundles, selBundleId, selAppId, selEpicId, searchQuery, quickFilter, activeFilters, includeArchived
 }) => {
@@ -47,6 +77,9 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
   const [activeView, setActiveView] = useState<RoadmapViewKey>('execution');
   const [activeItem, setActiveItem] = useState<WorkItem | null>(null);
   const [showSimulation, setShowSimulation] = useState(false);
+  const [showOptimization, setShowOptimization] = useState(false);
+  const [optimizationSummary, setOptimizationSummary] = useState<OptimizationAppliedSummary | null>(null);
+  const [optimizationSummaryStatus, setOptimizationSummaryStatus] = useState<{ loading: boolean; error?: string }>({ loading: false });
   const [roadmapIntel, setRoadmapIntel] = useState<any[]>([]);
   const [forecastByMilestone, setForecastByMilestone] = useState<Record<string, MilestoneForecast>>({});
   const [forecastStatus, setForecastStatus] = useState<{ loading: boolean; error?: string }>({ loading: false });
@@ -230,6 +263,36 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
     }
   };
 
+  const loadOptimizationSummary = async () => {
+    const scopeType = selAppId && selAppId !== 'all'
+      ? 'APPLICATION'
+      : selBundleId && selBundleId !== 'all'
+        ? 'BUNDLE'
+        : '';
+    const scopeId = scopeType === 'APPLICATION' ? selAppId : scopeType === 'BUNDLE' ? selBundleId : '';
+    const params = new URLSearchParams();
+    if (scopeType && scopeId) {
+      params.set('scopeType', scopeType);
+      params.set('scopeId', scopeId);
+    }
+
+    setOptimizationSummaryStatus({ loading: true });
+    try {
+      const res = await fetch(`/api/optimize/applied/latest${params.toString() ? `?${params.toString()}` : ''}`);
+      if (!res.ok) {
+        setOptimizationSummary(null);
+        setOptimizationSummaryStatus({ loading: false, error: 'Failed to load optimization summary.' });
+        return;
+      }
+      const data = await res.json();
+      setOptimizationSummary((data?.item as OptimizationAppliedSummary) || null);
+      setOptimizationSummaryStatus({ loading: false });
+    } catch {
+      setOptimizationSummary(null);
+      setOptimizationSummaryStatus({ loading: false, error: 'Failed to load optimization summary.' });
+    }
+  };
+
   useEffect(() => {
     loadIntel();
   }, [milestones]);
@@ -244,6 +307,10 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
 
   useEffect(() => {
     loadPlanningEnvironments();
+  }, [selBundleId, selAppId]);
+
+  useEffect(() => {
+    loadOptimizationSummary();
   }, [selBundleId, selAppId]);
 
   useEffect(() => {
@@ -531,6 +598,14 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
     loadIntel();
   };
 
+  const handleOptimizationApplied = () => {
+    invalidateCaches();
+    fetchData();
+    loadForecast();
+    loadProbabilisticForecast();
+    loadOptimizationSummary();
+  };
+
   const renderActiveView = () => {
     if (activeView === 'execution') {
       return (
@@ -635,8 +710,64 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
         <div>
           <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Roadmap Views</div>
           <div className="text-sm text-slate-500">Switch between execution, timeline, swimlane, and dependency views.</div>
+          <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Applied Optimization</div>
+              {optimizationSummaryStatus.loading && <div className="text-[10px] font-semibold text-slate-400">Loading...</div>}
+            </div>
+            {!optimizationSummaryStatus.loading && optimizationSummaryStatus.error && (
+              <div className="mt-2 text-xs text-rose-600">{optimizationSummaryStatus.error}</div>
+            )}
+            {!optimizationSummaryStatus.loading && !optimizationSummaryStatus.error && !optimizationSummary && (
+              <div className="mt-2 text-xs text-slate-500">No optimization variant has been applied yet for this scope.</div>
+            )}
+            {!optimizationSummaryStatus.loading && !optimizationSummaryStatus.error && optimizationSummary && (
+              <div className="mt-2 grid gap-2 text-xs text-slate-600">
+                <div>
+                  <span className="font-semibold text-slate-700">Variant:</span>{' '}
+                  {optimizationSummary.acceptedVariantName || optimizationSummary.acceptedVariantId || 'n/a'}
+                  {typeof optimizationSummary.acceptedVariantScore === 'number' ? ` (score ${optimizationSummary.acceptedVariantScore.toFixed(3)})` : ''}
+                </div>
+                <div>
+                  <span className="font-semibold text-slate-700">Applied:</span>{' '}
+                  {optimizationSummary.appliedAt ? new Date(optimizationSummary.appliedAt).toLocaleString() : 'n/a'}
+                  {optimizationSummary.appliedBy ? ` by ${optimizationSummary.appliedBy}` : ''}
+                </div>
+                <div>
+                  <span className="font-semibold text-slate-700">Headline changes:</span>{' '}
+                  {optimizationSummary.summary?.totalChanges || 0} total
+                  {` (${optimizationSummary.summary?.scheduleChanges || 0} schedule, ${optimizationSummary.summary?.capacityChanges || 0} capacity)`}
+                </div>
+                <div>
+                  <span className="font-semibold text-slate-700">Expected improvement:</span>{' '}
+                  {typeof optimizationSummary.expectedImpact?.onTimeProbabilityDelta === 'number'
+                    ? `${optimizationSummary.expectedImpact.onTimeProbabilityDelta >= 0 ? '+' : ''}${(optimizationSummary.expectedImpact.onTimeProbabilityDelta * 100).toFixed(1)}pp on-time`
+                    : 'n/a'}
+                  {typeof optimizationSummary.expectedImpact?.expectedSlippageDaysDelta === 'number'
+                    ? `, ${optimizationSummary.expectedImpact.expectedSlippageDaysDelta >= 0 ? '+' : ''}${optimizationSummary.expectedImpact.expectedSlippageDaysDelta.toFixed(1)}d slippage`
+                    : ''}
+                  {typeof optimizationSummary.expectedImpact?.riskScoreDelta === 'number'
+                    ? `, ${optimizationSummary.expectedImpact.riskScoreDelta >= 0 ? '+' : ''}${optimizationSummary.expectedImpact.riskScoreDelta.toFixed(2)} risk`
+                    : ''}
+                </div>
+                <div>
+                  <span className="font-semibold text-slate-700">Weights:</span>{' '}
+                  OT {Math.round((optimizationSummary.objectiveWeights?.onTime || 0) * 100)}% •
+                  Risk {Math.round((optimizationSummary.objectiveWeights?.riskReduction || 0) * 100)}% •
+                  Capacity {Math.round((optimizationSummary.objectiveWeights?.capacityBalance || 0) * 100)}% •
+                  Slip {Math.round((optimizationSummary.objectiveWeights?.slippageMinimization || 0) * 100)}%
+                </div>
+              </div>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-3">
+          <button
+            onClick={() => setShowOptimization(true)}
+            className="px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest bg-blue-600 text-white hover:bg-blue-700"
+          >
+            Optimize
+          </button>
           <button
             onClick={() => setShowSimulation(true)}
             className="px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest bg-slate-900 text-white hover:bg-blue-600"
@@ -650,6 +781,12 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
 
       {showSimulation && (
         <SimulationEditor onClose={() => setShowSimulation(false)} />
+      )}
+      {showOptimization && (
+        <OptimizationEditor
+          onClose={() => setShowOptimization(false)}
+          onApplied={handleOptimizationApplied}
+        />
       )}
     </div>
   );

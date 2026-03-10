@@ -367,6 +367,150 @@ export type PortfolioProbabilisticForecastSummary = {
   averagePortfolioP90SlipDays: number;
 };
 
+export type OptimizationObjectiveWeights = {
+  onTime: number;
+  riskReduction: number;
+  capacityBalance: number;
+  slippageMinimization: number;
+};
+
+export type OptimizationConstraints = {
+  noChangeBeforeDate?: string;
+  environmentBounds?: boolean;
+};
+
+export type OptimizationOptions = {
+  maxVariants?: number;
+  timeoutMs?: number;
+};
+
+export type OptimizationPlanRequest = {
+  objectiveWeights?: Partial<OptimizationObjectiveWeights>;
+  constraints?: OptimizationConstraints;
+  options?: OptimizationOptions;
+};
+
+export type OptimizationReasoning = {
+  type: string;
+  description: string;
+  impact?: Record<string, number>;
+};
+
+export type OptimizationVariantChange = {
+  milestoneId: string;
+  milestoneName?: string;
+  oldStartDate?: string;
+  newStartDate?: string;
+  oldEndDate?: string;
+  newEndDate?: string;
+  oldTargetCapacity?: number | null;
+  newTargetCapacity?: number | null;
+  category?: 'SCHEDULE' | 'CAPACITY' | 'DEPENDENCY' | 'RISK';
+};
+
+export type OptimizationVariantMetrics = {
+  onTimeProbability: number;
+  expectedSlippageDays: number;
+  riskScore: number;
+  readinessScore: number;
+  averageUtilization: number | null;
+};
+
+export type OptimizationVariant = {
+  variantId: string;
+  name: string;
+  description?: string;
+  score: number;
+  changes: OptimizationVariantChange[];
+  metrics: OptimizationVariantMetrics;
+  explanations: OptimizationReasoning[];
+};
+
+export type OptimizationBaseline = {
+  planId: string;
+  source: 'CREATED_PLAN' | 'PREVIEW';
+  generatedAt: string;
+  summary: OptimizationVariantMetrics;
+};
+
+export type PlanOptimizationResult = {
+  planId: string;
+  baselinePlan: OptimizationBaseline;
+  objectiveWeights: OptimizationObjectiveWeights;
+  constraints: OptimizationConstraints;
+  optimizedVariants: OptimizationVariant[];
+  recommendedVariantId?: string;
+  durationMs: number;
+};
+
+export type PortfolioOptimizationPlanSummary = {
+  planId: string;
+  bestVariantId?: string;
+  baseline: OptimizationVariantMetrics;
+  optimized?: OptimizationVariantMetrics;
+  delta: {
+    onTimeProbability: number;
+    expectedSlippageDays: number;
+    riskScore: number;
+    readinessScore: number;
+  };
+};
+
+export type PortfolioOptimizationResult = {
+  plansAnalyzed: number;
+  planSummaries: PortfolioOptimizationPlanSummary[];
+  objectiveWeights: OptimizationObjectiveWeights;
+  constraints: OptimizationConstraints;
+  generatedAt: string;
+};
+
+export type OptimizationApplyRequest = {
+  variantId: string;
+  objectiveWeights?: Partial<OptimizationObjectiveWeights>;
+  constraints?: OptimizationConstraints;
+  options?: OptimizationOptions;
+  variant?: OptimizationVariant;
+};
+
+export type OptimizationApplyAuditRecord = {
+  planId: string;
+  source: 'CREATED_PLAN' | 'PREVIEW';
+  scopeType?: string;
+  scopeId?: string;
+  acceptedVariantId: string;
+  acceptedVariantName?: string;
+  acceptedVariantScore?: number;
+  objectiveWeights: OptimizationObjectiveWeights;
+  expectedImpact?: {
+    onTimeProbabilityDelta: number;
+    expectedSlippageDaysDelta: number;
+    riskScoreDelta: number;
+    readinessScoreDelta: number;
+  };
+  appliedAt: string;
+  appliedBy: string;
+  summary: {
+    totalChanges: number;
+    scheduleChanges: number;
+    capacityChanges: number;
+  };
+  changes: OptimizationVariantChange[];
+};
+
+export type OptimizationApplyResult = {
+  planId: string;
+  applied: boolean;
+  source: 'CREATED_PLAN' | 'PREVIEW';
+  variant: OptimizationVariant;
+  appliedAt: string;
+  summary: {
+    totalChanges: number;
+    scheduleChanges: number;
+    capacityChanges: number;
+  };
+  auditId?: string;
+};
+
 export type ExplainabilityContent = {
   id: string;
   title: string;

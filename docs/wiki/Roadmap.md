@@ -74,6 +74,32 @@ The roadmap supports delivery simulations that compare baseline plan previews ag
 DATE_SHIFT overrides apply to specific milestones (not global plan shifts).
 Use the **Simulate** button in the Roadmap toolbar to open the Simulation Editor, select a baseline preview, add one or more overrides, and submit.
 
+## Schedule Optimization (Phase 10)
+The roadmap now supports objective-weighted schedule optimization for both preview and created plans.
+
+- Use the **Optimize** button to open the optimization editor.
+- Generate ranked variants using objective weights and constraints.
+- Apply an accepted variant directly to the selected plan.
+- Apply supports both plan id formats:
+  - `preview:{id}`
+  - `created:{id}`
+- After apply, roadmap and forecast surfaces refresh.
+
+APIs:
+- `POST /api/optimize/plan/{planId}`
+- `GET /api/optimize/plan/{planId}`
+- `GET /api/optimize/portfolio`
+- `POST /api/optimize/plan/{planId}/apply`
+
+## Applied Optimization Summary (Phase 10C)
+Roadmap header now includes an **Applied Optimization** summary panel.
+
+- Shows latest applied variant for current roadmap scope (bundle/app).
+- Includes variant name, apply timestamp/user, objective weights, change totals, and expected improvement deltas.
+- Reads from:
+  - `GET /api/optimize/applied/latest?scopeType=&scopeId=`
+- Handles historical records without `expectedImpact` fields by showing fallback values.
+
 ### Near-term (next 2–4 weeks)
 1. Inline storyPoints edits in planning surfaces.
 Problem: editing storyPoints requires opening the detail drawer. Value: faster planning and fewer context switches. Dependencies: existing milestone planning and roadmap views. Deliverables: inline edit controls in planning and roadmap rows, with optimistic update + validation. Verify: edit storyPoints inline and see rollups update without page reload.

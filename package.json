@@ -58,6 +58,9 @@
     "test:capacity-plan": "NODE_ENV=test tsx scripts/test-capacity-plan.ts",
     "test:visibility": "NODE_ENV=test tsx scripts/test-visibility.ts",
     "test:data-quality": "NODE_ENV=test tsx scripts/test-data-quality.ts",
+    "test:optimization": "NODE_ENV=test tsx scripts/test-optimization-engine.ts",
+    "test:optimize-api": "NODE_ENV=test tsx scripts/test-optimize-api.ts",
+    "test:optimize-apply": "NODE_ENV=test tsx scripts/test-optimize-apply.ts",
     "test:api": "NODE_ENV=test tsx scripts/test-api.ts"
   },
   "dependencies": {

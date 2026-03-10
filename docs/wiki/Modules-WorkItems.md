@@ -193,6 +193,61 @@ Simulation output shows:
 - risk changes per milestone
 - per‑milestone date delta (explicit slippage field)
 
+## Schedule Optimization (Phase 10)
+The roadmap includes an Optimization flow for recommending and applying improved schedules.
+
+Capabilities:
+- Generate ranked optimization variants from a selected plan.
+- Tune objective weights:
+  - on-time probability
+  - risk reduction
+  - capacity balance
+  - slippage minimization
+- Apply accepted variants to:
+  - preview plans (`preview:{id}`)
+  - created plans (`created:{id}`)
+- Persist apply audit records.
+- Emit an apply event.
+- Refresh roadmap + forecast/probabilistic forecast after apply.
+
+Optimization APIs:
+- `POST /api/optimize/plan/{planId}`
+- `GET /api/optimize/plan/{planId}`
+- `GET /api/optimize/portfolio`
+- `POST /api/optimize/plan/{planId}/apply`
+
+Apply audit storage:
+- Collection: `optimization_applied_runs`
+- Indexed for retrieval by:
+  - `planId + appliedAt`
+  - `appliedBy + appliedAt`
+  - `scopeType + scopeId + appliedAt`
+
+Apply event:
+- `workitems.optimization.applied`
+
+Expected impact fields (when present):
+- `onTimeProbabilityDelta`
+- `expectedSlippageDaysDelta`
+- `riskScoreDelta`
+- `readinessScoreDelta`
+
+## Applied Optimization Summary Panel (Phase 10C)
+Roadmap header includes an **Applied Optimization** panel for traceability.
+
+Displays:
+- latest applied variant
+- applied timestamp + user
+- objective weights used
+- change totals (schedule/capacity)
+- expected improvement deltas
+
+Data source:
+- `GET /api/optimize/applied/latest?scopeType=&scopeId=`
+
+Note:
+- Older audit records may not include `expectedImpact`; UI handles this gracefully.
+
 ## Work Item Details UX (Read‑First)
 The Work Item details panel is now read‑first with explicit edit mode.
 
