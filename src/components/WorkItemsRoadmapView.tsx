@@ -4,6 +4,7 @@ import {
   Application,
   Bundle,
   Milestone,
+  PlanningEnvironmentEntry,
   WorkItemStatus,
   MilestoneForecast,
   MilestoneProbabilisticForecast
@@ -51,6 +52,8 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
   const [forecastStatus, setForecastStatus] = useState<{ loading: boolean; error?: string }>({ loading: false });
   const [probForecastByMilestone, setProbForecastByMilestone] = useState<Record<string, MilestoneProbabilisticForecast>>({});
   const [probForecastStatus, setProbForecastStatus] = useState<{ loading: boolean; error?: string }>({ loading: false });
+  const [planningEnvironments, setPlanningEnvironments] = useState<PlanningEnvironmentEntry[]>([]);
+  const [planningGoLive, setPlanningGoLive] = useState<string | null>(null);
   const [intelLoading, setIntelLoading] = useState(false);
   const [intelError, setIntelError] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<any | null>(null);
@@ -188,6 +191,45 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
     }
   };
 
+  const loadPlanningEnvironments = async () => {
+    const scopeType = selAppId && selAppId !== 'all'
+      ? 'APPLICATION'
+      : selBundleId && selBundleId !== 'all'
+        ? 'BUNDLE'
+        : '';
+    const scopeId = scopeType === 'APPLICATION' ? selAppId : scopeType === 'BUNDLE' ? selBundleId : '';
+    if (!scopeType || !scopeId) {
+      setPlanningEnvironments([]);
+      return;
+    }
+    try {
+      if (scopeType === 'APPLICATION') {
+        const res = await fetch(`/api/applications/${encodeURIComponent(scopeId)}/planning-context`);
+        if (!res.ok) {
+          setPlanningEnvironments([]);
+          setPlanningGoLive(null);
+          return;
+        }
+        const data = await res.json();
+        setPlanningEnvironments(Array.isArray(data?.resolvedMetadata?.environments) ? data.resolvedMetadata.environments : []);
+        setPlanningGoLive(data?.resolvedMetadata?.goLive?.planned || null);
+      } else {
+        const res = await fetch(`/api/applications/planning-metadata?scopeType=bundle&scopeId=${encodeURIComponent(scopeId)}`);
+        if (!res.ok) {
+          setPlanningEnvironments([]);
+          setPlanningGoLive(null);
+          return;
+        }
+        const data = await res.json();
+        setPlanningEnvironments(Array.isArray(data?.planningMetadata?.environments) ? data.planningMetadata.environments : []);
+        setPlanningGoLive(data?.planningMetadata?.goLive?.planned || null);
+      }
+    } catch {
+      setPlanningEnvironments([]);
+      setPlanningGoLive(null);
+    }
+  };
+
   useEffect(() => {
     loadIntel();
   }, [milestones]);
@@ -198,6 +240,10 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
 
   useEffect(() => {
     loadProbabilisticForecast();
+  }, [selBundleId, selAppId]);
+
+  useEffect(() => {
+    loadPlanningEnvironments();
   }, [selBundleId, selAppId]);
 
   useEffect(() => {
@@ -562,8 +608,12 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
       return (
         <RoadmapTimelineView
           milestones={roadmapViewModel.milestones}
+          dependencies={roadmapViewModel.dependencies}
+          intelligenceByMilestone={roadmapViewModel.intelligenceByMilestone}
           forecastByMilestone={forecastByMilestone}
           probabilisticForecastByMilestone={probForecastByMilestone}
+          environments={planningEnvironments}
+          goLiveDate={planningGoLive}
         />
       );
     }

@@ -41,6 +41,7 @@ const tests = [
   () => import('./test-ownership').then((m) => m.run()),
   () => import('./test-delivery-plan').then((m) => m.run()),
   () => import('./test-delivery-plan-capacity').then((m) => m.run()),
+  () => import('./test-roadmap-advanced-timeline').then((m) => m.run()),
   () => import('./test-roadmap-views').then((m) => m.run()),
   () => import('./test-roadmap-intelligence').then((m) => m.run()),
   () => import('./test-forecasting-engine').then((m) => m.run()),

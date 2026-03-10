@@ -7,6 +7,11 @@ export type RoadmapMilestoneVM = {
   endDate?: string;
   sprintCount?: number;
   targetCapacity?: number | null;
+  applicationId?: string;
+  bundleId?: string;
+  ownerEmail?: string;
+  goal?: string;
+  themeLabel?: string;
   readinessBand?: string;
   confidenceBand?: string;
   confidenceScore?: number | null;
@@ -111,6 +116,11 @@ export const transformRawRoadmapData = ({
       endDate: milestone.endDate,
       sprintCount: (milestone as any).sprintCount || (milestone as any).sprintsCount,
       targetCapacity: typeof milestone.targetCapacity === 'number' ? milestone.targetCapacity : (rollup?.capacity?.targetCapacity ?? null),
+      applicationId: milestone.applicationId ? String(milestone.applicationId) : undefined,
+      bundleId: milestone.bundleId ? String(milestone.bundleId) : undefined,
+      ownerEmail: milestone.ownerEmail,
+      goal: milestone.goal,
+      themeLabel: milestone.goal || milestone.name || id,
       readinessBand: readiness.band,
       confidenceBand: confidence.band,
       confidenceScore: confidence.score ?? null,

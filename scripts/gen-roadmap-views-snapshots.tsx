@@ -98,7 +98,17 @@ const executionProps = {
 
 const snapshots = {
   execution: renderToStaticMarkup(<ExecutionBoardView {...executionProps} />),
-  timeline: renderToStaticMarkup(<RoadmapTimelineView milestones={baseMilestones} forecastByMilestone={{}} probabilisticForecastByMilestone={{}} />),
+  timeline: renderToStaticMarkup(
+    <RoadmapTimelineView
+      milestones={baseMilestones}
+      dependencies={baseDependencies}
+      intelligenceByMilestone={{}}
+      forecastByMilestone={{}}
+      probabilisticForecastByMilestone={{}}
+      environments={[]}
+      goLiveDate="2026-02-10T00:00:00.000Z"
+    />
+  ),
   swimlane: renderToStaticMarkup(<RoadmapSwimlaneView milestones={baseMilestones} forecastByMilestone={{}} probabilisticForecastByMilestone={{}} />),
   dependency: renderToStaticMarkup(<RoadmapDependencyView milestones={baseMilestones} dependencies={baseDependencies} />)
 };

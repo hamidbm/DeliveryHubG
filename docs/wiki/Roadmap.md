@@ -14,6 +14,16 @@ The Work Items roadmap now supports multiple UI views over the same data set:
 All tabs render the same milestones, sprints, capacity, and dependency data; the views are purely presentational.
 Each view now includes milestone health signals (utilization, risk, blocked count, readiness, confidence) computed from existing data.
 
+### Advanced Timeline (Phase 9.3)
+The Timeline view was upgraded to a professional-grade visualization:
+- Zoom levels: Quarter / Month / Sprint / Week
+- Committed bars + probabilistic forecast bands (P50–P90)
+- Confidence/on-time/uncertainty indicators
+- Capacity heat glow on milestones
+- Milestone-to-milestone dependency arrows (from `BLOCKS`)
+- Environment overlays from planning metadata with a distinct Go‑Live marker
+- Grouping by Application, Bundle, Owner, or Theme
+
 ### Portfolio Analytics (Phase 6)
 Portfolio analytics aggregate multiple delivery plans into a single dashboard view:
 - Summary cards (plan count, milestone count, high risk, overload, avg utilization)

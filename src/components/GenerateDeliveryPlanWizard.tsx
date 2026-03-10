@@ -388,7 +388,7 @@ const GenerateDeliveryPlanWizard: React.FC<GenerateDeliveryPlanWizardProps> = ({
   }, [environmentTimeline]);
 
   useEffect(() => {
-    const values = environmentFlowOptions.map((opt) => opt.value);
+    const values = environmentFlowOptions.map((opt) => opt.value as typeof environmentFlow);
     if (!values.includes(environmentFlow)) {
       setEnvironmentFlow(values[0]);
     }
