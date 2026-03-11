@@ -61,6 +61,9 @@
     "test:optimization": "NODE_ENV=test tsx scripts/test-optimization-engine.ts",
     "test:optimize-api": "NODE_ENV=test tsx scripts/test-optimize-api.ts",
     "test:optimize-apply": "NODE_ENV=test tsx scripts/test-optimize-apply.ts",
+    "test:application-portfolios": "NODE_ENV=test tsx scripts/test-application-portfolios.ts",
+    "test:application-dependencies": "NODE_ENV=test tsx scripts/test-application-dependencies.ts",
+    "test:environment-strategy": "NODE_ENV=test tsx scripts/test-environment-strategy.ts",
     "test:api": "NODE_ENV=test tsx scripts/test-api.ts"
   },
   "dependencies": {

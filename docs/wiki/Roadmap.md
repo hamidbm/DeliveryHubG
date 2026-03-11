@@ -100,6 +100,26 @@ Roadmap header now includes an **Applied Optimization** summary panel.
   - `GET /api/optimize/applied/latest?scopeType=&scopeId=`
 - Handles historical records without `expectedImpact` fields by showing fallback values.
 
+## Applications APM (Phase 11)
+Applications module now includes deeper APM capabilities used by planning and cross-system delivery analysis.
+
+Implemented:
+- application portfolios (`application_portfolios`)
+- release trains (`release_trains`)
+- cross-application dependencies (`application_dependencies`)
+- lifecycle records (`application_lifecycle`)
+- environment strategy (`application_environment_strategy`)
+- application delivery impact endpoint for dependency + milestone/work-item context
+
+Applications UI now includes:
+- apps dashboard cards (count, lifecycle tracked, critical systems, dependencies)
+- application detail tabs:
+  - Overview
+  - Environments
+  - Dependencies
+  - Lifecycle
+  - Delivery Impact
+
 ### Near-term (next 2–4 weeks)
 1. Inline storyPoints edits in planning surfaces.
 Problem: editing storyPoints requires opening the detail drawer. Value: faster planning and fewer context switches. Dependencies: existing milestone planning and roadmap views. Deliverables: inline edit controls in planning and roadmap rows, with optimistic update + validation. Verify: edit storyPoints inline and see rollups update without page reload.

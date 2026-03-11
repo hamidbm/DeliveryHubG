@@ -86,6 +86,10 @@ const Applications: React.FC<ApplicationsProps> = ({ filterBundle, filterApp, se
   const viewMode = viewParam === 'apps' ? 'apps' : 'bundles';
   const [bundleHealth, setBundleHealth] = useState<Record<string, any>>({});
   const [createModal, setCreateModal] = useState<{ open: boolean; type?: WorkItemType; bundleId?: string }>({ open: false });
+  const [apmSummary, setApmSummary] = useState<{ dependenciesCount: number; highCriticalApps: number }>({
+    dependenciesCount: 0,
+    highCriticalApps: 0
+  });
 
   useEffect(() => {
     const load = async () => {
@@ -125,6 +129,30 @@ const Applications: React.FC<ApplicationsProps> = ({ filterBundle, filterApp, se
     };
     loadHealth();
   }, [bundles]);
+
+  useEffect(() => {
+    const loadApmSummary = async () => {
+      try {
+        const res = await fetch('/api/application-dependencies');
+        const data = await res.json().catch(() => ({}));
+        const deps = Array.isArray(data?.items) ? data.items : [];
+        const highCriticalApps = applications.filter((app) => {
+          const level = String((app as any).businessCriticality || '').toUpperCase();
+          return level === 'HIGH' || level === 'CRITICAL';
+        }).length;
+        setApmSummary({
+          dependenciesCount: deps.length,
+          highCriticalApps
+        });
+      } catch {
+        setApmSummary((prev) => ({ ...prev, highCriticalApps: applications.filter((app) => {
+          const level = String((app as any).businessCriticality || '').toUpperCase();
+          return level === 'HIGH' || level === 'CRITICAL';
+        }).length }));
+      }
+    };
+    loadApmSummary();
+  }, [applications]);
 
   const profileByBundle = useMemo(() => {
     const map = new Map<string, BundleProfile>();
@@ -245,6 +273,7 @@ const Applications: React.FC<ApplicationsProps> = ({ filterBundle, filterApp, se
     return (
       <ApplicationDetail
         app={app}
+        applications={applications}
         bundleName={bundleName(app.bundleId)}
         profile={profile}
         owners={{
@@ -307,6 +336,29 @@ const Applications: React.FC<ApplicationsProps> = ({ filterBundle, filterApp, se
           {loadingProfiles ? 'Loading bundle profiles...' : viewMode === 'bundles' ? `${bundleFiltered.length} bundles` : `${filteredApps.length} apps`}
         </div>
       </div>
+
+      {viewMode === 'apps' && (
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="bg-white border border-slate-200 rounded-2xl p-4">
+            <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Applications</div>
+            <div className="text-2xl font-black text-slate-900 mt-1">{filteredApps.length}</div>
+          </div>
+          <div className="bg-white border border-slate-200 rounded-2xl p-4">
+            <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Lifecycle Tracked</div>
+            <div className="text-2xl font-black text-slate-900 mt-1">
+              {filteredApps.filter((app) => Boolean((app as any).lifecycleStatus)).length}
+            </div>
+          </div>
+          <div className="bg-white border border-slate-200 rounded-2xl p-4">
+            <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Critical Systems</div>
+            <div className="text-2xl font-black text-slate-900 mt-1">{apmSummary.highCriticalApps}</div>
+          </div>
+          <div className="bg-white border border-slate-200 rounded-2xl p-4">
+            <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Dependencies</div>
+            <div className="text-2xl font-black text-slate-900 mt-1">{apmSummary.dependenciesCount}</div>
+          </div>
+        </div>
+      )}
 
       {viewMode === 'bundles' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
@@ -421,15 +473,21 @@ const Applications: React.FC<ApplicationsProps> = ({ filterBundle, filterApp, se
 
 const ApplicationDetail: React.FC<{
   app: Application;
+  applications: Application[];
   bundleName: string;
   profile?: BundleProfile;
   owners: { vendorLead: string; engineeringOwner: string };
   onOpenBundle: () => void;
-}> = ({ app, bundleName, profile, owners, onOpenBundle }) => {
+}> = ({ app, applications, bundleName, profile, owners, onOpenBundle }) => {
   const current = profile?.schedule?.milestones?.find((m) => m.status === 'in_progress') || profile?.schedule?.milestones?.find((m) => m.status !== 'done');
   const appId = String(app._id || app.id || app.aid || '');
   const bundleId = app.bundleId ? String(app.bundleId) : null;
-  const [activeTab, setActiveTab] = useState<'overview' | 'schedule'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'environments' | 'dependencies' | 'lifecycle' | 'deliveryImpact'>('overview');
+  const [appDraft, setAppDraft] = useState<any>({ ...app });
+  const [savingApp, setSavingApp] = useState(false);
+  const [appSaveError, setAppSaveError] = useState<string | null>(null);
+  const [portfolios, setPortfolios] = useState<any[]>([]);
+  const [releaseTrains, setReleaseTrains] = useState<any[]>([]);
   const [scopeMode, setScopeMode] = useState<'bundle' | 'application'>('application');
   const [bundleMetadata, setBundleMetadata] = useState<ApplicationPlanningMetadata | null>(null);
   const [appMetadata, setAppMetadata] = useState<ApplicationPlanningMetadata | null>(null);
@@ -442,6 +500,17 @@ const ApplicationDetail: React.FC<{
   const [saveError, setSaveError] = useState<string | null>(null);
   const [manualEndDates, setManualEndDates] = useState<Record<string, boolean>>({});
   const [manualActualDates, setManualActualDates] = useState<Record<string, boolean>>({});
+  const [dependencies, setDependencies] = useState<any[]>([]);
+  const [dependenciesLoading, setDependenciesLoading] = useState(false);
+  const [dependencyForm, setDependencyForm] = useState<{ targetApplicationId: string; dependencyType: string; criticality: string }>({
+    targetApplicationId: '',
+    dependencyType: 'API',
+    criticality: 'MEDIUM'
+  });
+  const [lifecycle, setLifecycle] = useState<any>({ lifecycleStage: 'ACTIVE', lifecycleOwner: '', lifecycleNotes: '' });
+  const [lifecycleSaving, setLifecycleSaving] = useState(false);
+  const [deliveryImpact, setDeliveryImpact] = useState<any | null>(null);
+  const [deliveryImpactLoading, setDeliveryImpactLoading] = useState(false);
 
   const normalizeEnvRows = (rows?: any[]) => {
     const seen = new Set<string>();
@@ -511,6 +580,82 @@ const ApplicationDetail: React.FC<{
   useEffect(() => {
     loadPlanningMetadata();
   }, [appId]);
+
+  useEffect(() => {
+    setAppDraft({ ...app });
+  }, [app]);
+
+  useEffect(() => {
+    const loadApmRefs = async () => {
+      try {
+        const [pRes, rRes] = await Promise.all([fetch('/api/application-portfolios'), fetch('/api/release-trains')]);
+        const pData = await pRes.json().catch(() => ({}));
+        const rData = await rRes.json().catch(() => ({}));
+        setPortfolios(Array.isArray(pData?.items) ? pData.items : []);
+        setReleaseTrains(Array.isArray(rData?.items) ? rData.items : []);
+      } catch {
+        setPortfolios([]);
+        setReleaseTrains([]);
+      }
+    };
+    loadApmRefs();
+  }, []);
+
+  useEffect(() => {
+    if (activeTab !== 'dependencies') return;
+    const loadDependencies = async () => {
+      setDependenciesLoading(true);
+      try {
+        const res = await fetch(`/api/applications/${encodeURIComponent(appId)}/dependencies`);
+        const data = await res.json().catch(() => ({}));
+        setDependencies(Array.isArray(data?.items) ? data.items : []);
+      } catch {
+        setDependencies([]);
+      } finally {
+        setDependenciesLoading(false);
+      }
+    };
+    loadDependencies();
+  }, [activeTab, appId]);
+
+  useEffect(() => {
+    if (activeTab !== 'lifecycle') return;
+    const loadLifecycle = async () => {
+      try {
+        const res = await fetch(`/api/applications/${encodeURIComponent(appId)}/lifecycle`);
+        const data = await res.json().catch(() => ({}));
+        setLifecycle({
+          lifecycleStage: data?.lifecycle?.lifecycleStage || appDraft.lifecycleStatus || 'ACTIVE',
+          lifecycleOwner: data?.lifecycle?.lifecycleOwner || '',
+          lifecycleNotes: data?.lifecycle?.lifecycleNotes || ''
+        });
+      } catch {
+        setLifecycle({
+          lifecycleStage: appDraft.lifecycleStatus || 'ACTIVE',
+          lifecycleOwner: '',
+          lifecycleNotes: ''
+        });
+      }
+    };
+    loadLifecycle();
+  }, [activeTab, appId, appDraft.lifecycleStatus]);
+
+  useEffect(() => {
+    if (activeTab !== 'deliveryImpact') return;
+    const loadImpact = async () => {
+      setDeliveryImpactLoading(true);
+      try {
+        const res = await fetch(`/api/applications/${encodeURIComponent(appId)}/delivery-impact`);
+        const data = await res.json().catch(() => ({}));
+        setDeliveryImpact(data || null);
+      } catch {
+        setDeliveryImpact(null);
+      } finally {
+        setDeliveryImpactLoading(false);
+      }
+    };
+    loadImpact();
+  }, [activeTab, appId]);
 
   useEffect(() => {
     if (scopeMode === 'bundle') {
@@ -786,13 +931,82 @@ const ApplicationDetail: React.FC<{
 
   const renderInherited = (flag: boolean) => flag ? <span className="text-[9px] uppercase tracking-widest text-slate-400">inherited</span> : null;
 
+  const saveApplicationProfile = async () => {
+    setSavingApp(true);
+    setAppSaveError(null);
+    try {
+      const res = await fetch(`/api/applications/${encodeURIComponent(appId)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(appDraft)
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'Failed to save application profile');
+      setAppDraft(data || appDraft);
+    } catch (err: any) {
+      setAppSaveError(err?.message || 'Failed to save application profile');
+    } finally {
+      setSavingApp(false);
+    }
+  };
+
+  const addDependency = async () => {
+    if (!dependencyForm.targetApplicationId) return;
+    const res = await fetch('/api/application-dependencies', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sourceApplicationId: appId,
+        targetApplicationId: dependencyForm.targetApplicationId,
+        dependencyType: dependencyForm.dependencyType,
+        criticality: dependencyForm.criticality
+      })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setAppSaveError(data?.error || 'Failed to create dependency');
+      return;
+    }
+    setAppSaveError(null);
+    setDependencyForm((prev) => ({ ...prev, targetApplicationId: '' }));
+    const refresh = await fetch(`/api/applications/${encodeURIComponent(appId)}/dependencies`);
+    const next = await refresh.json().catch(() => ({}));
+    setDependencies(Array.isArray(next?.items) ? next.items : []);
+  };
+
+  const removeDependency = async (id: string) => {
+    const res = await fetch(`/api/application-dependencies/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    if (!res.ok) return;
+    setDependencies((prev) => prev.filter((entry) => String(entry?._id) !== String(id)));
+  };
+
+  const saveLifecycle = async () => {
+    setLifecycleSaving(true);
+    try {
+      const res = await fetch(`/api/applications/${encodeURIComponent(appId)}/lifecycle`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(lifecycle)
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'Failed to save lifecycle');
+      setLifecycle(data?.lifecycle || lifecycle);
+      setAppDraft((prev: any) => ({ ...prev, lifecycleStatus: data?.lifecycle?.lifecycleStage || prev.lifecycleStatus }));
+      setAppSaveError(null);
+    } catch (err: any) {
+      setAppSaveError(err?.message || 'Failed to save lifecycle');
+    } finally {
+      setLifecycleSaving(false);
+    }
+  };
+
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between">
         <div>
           <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Application Detail</div>
-          <h2 className="text-3xl font-black text-slate-900">{app.name}</h2>
-          <div className="text-sm text-slate-500 mt-1">App ID: {app.aid || '—'}</div>
+          <h2 className="text-3xl font-black text-slate-900">{appDraft.name || app.name}</h2>
+          <div className="text-sm text-slate-500 mt-1">App ID: {appDraft.aid || app.aid || '—'}</div>
         </div>
         <button onClick={onOpenBundle} className="px-4 py-2 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest rounded-xl">
           Open Bundle Profile
@@ -802,11 +1016,14 @@ const ApplicationDetail: React.FC<{
       <div className="flex items-center gap-3 border-b border-slate-200 pb-2">
         {[
           { id: 'overview', label: 'Overview' },
-          { id: 'schedule', label: 'Schedule' }
+          { id: 'environments', label: 'Environments' },
+          { id: 'dependencies', label: 'Dependencies' },
+          { id: 'lifecycle', label: 'Lifecycle' },
+          { id: 'deliveryImpact', label: 'Delivery Impact' }
         ].map((tab) => (
           <button
             key={tab.id}
-            onClick={() => setActiveTab(tab.id as 'overview' | 'schedule')}
+            onClick={() => setActiveTab(tab.id as 'overview' | 'environments' | 'dependencies' | 'lifecycle' | 'deliveryImpact')}
             className={`px-3 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg ${activeTab === tab.id ? 'bg-slate-900 text-white' : 'text-slate-500 hover:text-slate-800'}`}
           >
             {tab.label}
@@ -839,10 +1056,70 @@ const ApplicationDetail: React.FC<{
               <div>UAT Actual: {profile?.schedule?.uatActualStart ? new Date(profile.schedule.uatActualStart).toLocaleDateString() : '—'} → {profile?.schedule?.uatActualEnd ? new Date(profile.schedule.uatActualEnd).toLocaleDateString() : '—'}</div>
             </div>
           </div>
+
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Application Context</div>
+                <div className="text-xs text-slate-500">Portfolio, ownership, criticality, lifecycle, and release train metadata.</div>
+              </div>
+              <button
+                onClick={saveApplicationProfile}
+                disabled={savingApp}
+                className="px-3 py-2 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest rounded-lg disabled:opacity-60"
+              >
+                {savingApp ? 'Saving...' : 'Save Context'}
+              </button>
+            </div>
+            {appSaveError && <div className="text-xs text-rose-500">{appSaveError}</div>}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs text-slate-600">
+              <label className="space-y-1">Portfolio
+                <select value={appDraft.portfolioId || ''} onChange={(e) => setAppDraft((prev: any) => ({ ...prev, portfolioId: e.target.value || undefined }))} className="w-full border border-slate-200 rounded-lg px-2 py-2 text-xs">
+                  <option value="">Unassigned</option>
+                  {portfolios.map((p) => <option key={String(p?._id)} value={String(p?._id)}>{p?.name}</option>)}
+                </select>
+              </label>
+              <label className="space-y-1">Release Train
+                <select value={appDraft.releaseTrain || ''} onChange={(e) => setAppDraft((prev: any) => ({ ...prev, releaseTrain: e.target.value || undefined }))} className="w-full border border-slate-200 rounded-lg px-2 py-2 text-xs">
+                  <option value="">Unassigned</option>
+                  {releaseTrains.map((train) => <option key={String(train?._id)} value={train?.name}>{train?.name}</option>)}
+                </select>
+              </label>
+              <label className="space-y-1">Lifecycle Status
+                <select value={appDraft.lifecycleStatus || 'ACTIVE'} onChange={(e) => setAppDraft((prev: any) => ({ ...prev, lifecycleStatus: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-2 py-2 text-xs">
+                  {['ACTIVE', 'MAINTENANCE', 'SUNSETTING', 'RETIRED'].map((option) => <option key={option} value={option}>{option}</option>)}
+                </select>
+              </label>
+              <label className="space-y-1">Business Criticality
+                <select value={appDraft.businessCriticality || 'MEDIUM'} onChange={(e) => setAppDraft((prev: any) => ({ ...prev, businessCriticality: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-2 py-2 text-xs">
+                  {['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'].map((option) => <option key={option} value={option}>{option}</option>)}
+                </select>
+              </label>
+              <label className="space-y-1">Availability Tier
+                <select value={appDraft.availabilityTier || 'TIER3'} onChange={(e) => setAppDraft((prev: any) => ({ ...prev, availabilityTier: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-2 py-2 text-xs">
+                  {['TIER1', 'TIER2', 'TIER3', 'TIER4'].map((option) => <option key={option} value={option}>{option}</option>)}
+                </select>
+              </label>
+              <label className="space-y-1">Data Sensitivity
+                <select value={appDraft.dataSensitivity || 'INTERNAL'} onChange={(e) => setAppDraft((prev: any) => ({ ...prev, dataSensitivity: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-2 py-2 text-xs">
+                  {['PUBLIC', 'INTERNAL', 'CONFIDENTIAL', 'RESTRICTED'].map((option) => <option key={option} value={option}>{option}</option>)}
+                </select>
+              </label>
+              <label className="space-y-1">Operational Owner
+                <input value={appDraft.operationalOwner || ''} onChange={(e) => setAppDraft((prev: any) => ({ ...prev, operationalOwner: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-2 py-2 text-xs" />
+              </label>
+              <label className="space-y-1">Business Owner
+                <input value={appDraft.businessOwner || ''} onChange={(e) => setAppDraft((prev: any) => ({ ...prev, businessOwner: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-2 py-2 text-xs" />
+              </label>
+              <label className="space-y-1">Technical Owner
+                <input value={appDraft.technicalOwner || ''} onChange={(e) => setAppDraft((prev: any) => ({ ...prev, technicalOwner: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-2 py-2 text-xs" />
+              </label>
+            </div>
+          </div>
         </>
       )}
 
-      {activeTab === 'schedule' && (
+      {activeTab === 'environments' && (
         <div className="space-y-6">
           <div className="bg-white border border-slate-200 rounded-2xl p-6 space-y-4">
             <div className="flex items-center justify-between flex-wrap gap-3">
@@ -920,6 +1197,124 @@ const ApplicationDetail: React.FC<{
             inheritance={scopeMode === 'application' ? defaultsInheritance : undefined}
             derivedMilestoneDurationWeeks={derivedMilestoneWeeks}
           />
+        </div>
+      )}
+
+      {activeTab === 'dependencies' && (
+        <div className="space-y-4">
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 space-y-4">
+            <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Cross-Application Dependencies</div>
+            {appSaveError && <div className="text-xs text-rose-500">{appSaveError}</div>}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+              <select value={dependencyForm.targetApplicationId} onChange={(e) => setDependencyForm((prev) => ({ ...prev, targetApplicationId: e.target.value }))} className="border border-slate-200 rounded-lg px-3 py-2 text-xs">
+                <option value="">Select target application</option>
+                {applications.filter((entry) => String(entry._id || entry.id || entry.aid) !== appId).map((entry) => (
+                  <option key={String(entry._id || entry.id || entry.aid)} value={String(entry._id || entry.id || entry.aid)}>{entry.name}</option>
+                ))}
+              </select>
+              <select value={dependencyForm.dependencyType} onChange={(e) => setDependencyForm((prev) => ({ ...prev, dependencyType: e.target.value }))} className="border border-slate-200 rounded-lg px-3 py-2 text-xs">
+                {['API', 'DATA', 'EVENT', 'SHARED_INFRA'].map((option) => <option key={option} value={option}>{option}</option>)}
+              </select>
+              <select value={dependencyForm.criticality} onChange={(e) => setDependencyForm((prev) => ({ ...prev, criticality: e.target.value }))} className="border border-slate-200 rounded-lg px-3 py-2 text-xs">
+                {['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'].map((option) => <option key={option} value={option}>{option}</option>)}
+              </select>
+              <button onClick={addDependency} className="px-3 py-2 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest rounded-lg">
+                Add Dependency
+              </button>
+            </div>
+          </div>
+          <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+            <table className="min-w-full text-sm">
+              <thead className="bg-slate-50 text-[10px] uppercase tracking-widest text-slate-400">
+                <tr>
+                  <th className="px-4 py-2 text-left">Direction</th>
+                  <th className="px-4 py-2 text-left">Source</th>
+                  <th className="px-4 py-2 text-left">Target</th>
+                  <th className="px-4 py-2 text-left">Type</th>
+                  <th className="px-4 py-2 text-left">Criticality</th>
+                  <th className="px-4 py-2 text-left">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {dependenciesLoading && (
+                  <tr><td className="px-4 py-4 text-slate-400" colSpan={6}>Loading dependencies...</td></tr>
+                )}
+                {!dependenciesLoading && dependencies.map((dep) => {
+                  const isOutbound = String(dep?.sourceApplicationId) === appId;
+                  return (
+                    <tr key={String(dep?._id)} className="border-t border-slate-100">
+                      <td className="px-4 py-2 text-slate-500">{isOutbound ? 'Outbound' : 'Inbound'}</td>
+                      <td className="px-4 py-2 text-slate-700">{dep?.sourceApplication?.name || dep?.sourceApplicationId}</td>
+                      <td className="px-4 py-2 text-slate-700">{dep?.targetApplication?.name || dep?.targetApplicationId}</td>
+                      <td className="px-4 py-2 text-slate-500">{dep?.dependencyType}</td>
+                      <td className="px-4 py-2 text-slate-500">{dep?.criticality || 'MEDIUM'}</td>
+                      <td className="px-4 py-2">
+                        {isOutbound ? (
+                          <button onClick={() => removeDependency(String(dep?._id))} className="text-[10px] font-black uppercase tracking-widest text-rose-600">Delete</button>
+                        ) : (
+                          <span className="text-slate-300">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+                {!dependenciesLoading && dependencies.length === 0 && (
+                  <tr><td className="px-4 py-4 text-slate-400" colSpan={6}>No dependencies configured.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'lifecycle' && (
+        <div className="bg-white border border-slate-200 rounded-2xl p-6 space-y-4">
+          <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Lifecycle Management</div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs text-slate-600">
+            <label className="space-y-1">Lifecycle Stage
+              <select value={lifecycle.lifecycleStage || 'ACTIVE'} onChange={(e) => setLifecycle((prev: any) => ({ ...prev, lifecycleStage: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-2 py-2 text-xs">
+                {['ACTIVE', 'MAINTENANCE', 'SUNSETTING', 'RETIRED'].map((option) => <option key={option} value={option}>{option}</option>)}
+              </select>
+            </label>
+            <label className="space-y-1">Lifecycle Owner
+              <input value={lifecycle.lifecycleOwner || ''} onChange={(e) => setLifecycle((prev: any) => ({ ...prev, lifecycleOwner: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-2 py-2 text-xs" />
+            </label>
+            <label className="space-y-1">Notes
+              <input value={lifecycle.lifecycleNotes || ''} onChange={(e) => setLifecycle((prev: any) => ({ ...prev, lifecycleNotes: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-2 py-2 text-xs" />
+            </label>
+          </div>
+          <button onClick={saveLifecycle} disabled={lifecycleSaving} className="px-3 py-2 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest rounded-lg disabled:opacity-60">
+            {lifecycleSaving ? 'Saving...' : 'Save Lifecycle'}
+          </button>
+        </div>
+      )}
+
+      {activeTab === 'deliveryImpact' && (
+        <div className="space-y-4">
+          <div className="bg-white border border-slate-200 rounded-2xl p-6">
+            <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Cross-Application Delivery Impact</div>
+            {deliveryImpactLoading && <div className="text-sm text-slate-400">Loading impact model...</div>}
+            {!deliveryImpactLoading && deliveryImpact && (
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                {[
+                  { label: 'Outbound deps', value: deliveryImpact?.summary?.outboundDependencies || 0 },
+                  { label: 'Inbound deps', value: deliveryImpact?.summary?.inboundDependencies || 0 },
+                  { label: 'Connected apps', value: deliveryImpact?.summary?.connectedApplications || 0 },
+                  { label: 'Shared train apps', value: deliveryImpact?.summary?.sharedReleaseTrainApplications || 0 },
+                  { label: 'Impacted milestones', value: deliveryImpact?.summary?.impactedMilestones || 0 },
+                  { label: 'Related work items', value: deliveryImpact?.summary?.relatedWorkItems || 0 }
+                ].map((chip) => (
+                  <div key={chip.label} className="border border-slate-100 rounded-xl p-3">
+                    <div className="text-[9px] font-black uppercase tracking-widest text-slate-400">{chip.label}</div>
+                    <div className="text-lg font-black text-slate-800">{chip.value}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {!deliveryImpactLoading && !deliveryImpact && (
+              <div className="text-sm text-slate-400">No delivery impact data available.</div>
+            )}
+          </div>
         </div>
       )}
     </div>

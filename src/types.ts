@@ -742,8 +742,20 @@ export interface Application {
   aid: string; 
   name: string;
   bundleId: string;
+  portfolioId?: string;
   bundleKey?: string;
   description?: string;
+  businessOwner?: string;
+  technicalOwner?: string;
+  vendorOwner?: string;
+  tier?: 'TIER1' | 'TIER2' | 'TIER3' | 'TIER4';
+  lifecycleStatus?: 'ACTIVE' | 'MAINTENANCE' | 'SUNSETTING' | 'RETIRED';
+  businessCriticality?: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  availabilityTier?: 'TIER1' | 'TIER2' | 'TIER3' | 'TIER4';
+  dataSensitivity?: 'PUBLIC' | 'INTERNAL' | 'CONFIDENTIAL' | 'RESTRICTED';
+  regulatoryImpact?: 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH';
+  operationalOwner?: string;
+  releaseTrain?: string;
   tags?: string[];
   capabilityIds?: string[];
   techStack?: string[];
@@ -767,6 +779,59 @@ export interface Application {
     telemetry?: AppTelemetry[]; 
   };
   isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface ApplicationPortfolio {
+  _id?: string;
+  name: string;
+  description?: string;
+  executiveOwner?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export type ApplicationDependencyType = 'API' | 'DATA' | 'EVENT' | 'SHARED_INFRA';
+export type ApplicationDependencyCriticality = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+
+export interface ApplicationDependency {
+  _id?: string;
+  sourceApplicationId: string;
+  targetApplicationId: string;
+  dependencyType: ApplicationDependencyType;
+  criticality?: ApplicationDependencyCriticality;
+  notes?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface ApplicationLifecycleRecord {
+  _id?: string;
+  applicationId: string;
+  lifecycleStage: 'ACTIVE' | 'MAINTENANCE' | 'SUNSETTING' | 'RETIRED';
+  lifecycleOwner?: string;
+  lifecycleNotes?: string;
+  updatedAt?: string;
+}
+
+export interface ApplicationEnvironmentStrategy {
+  _id?: string;
+  applicationId: string;
+  environments: Array<{
+    name: string;
+    order: number;
+    description?: string;
+  }>;
+  updatedAt?: string;
+}
+
+export interface ReleaseTrain {
+  _id?: string;
+  name: string;
+  cadence: 'QUARTERLY' | 'MONTHLY' | 'BIWEEKLY' | 'WEEKLY' | 'CUSTOM';
+  portfolioId?: string;
+  description?: string;
   createdAt?: string;
   updatedAt?: string;
 }
