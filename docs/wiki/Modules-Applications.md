@@ -21,11 +21,15 @@ The Applications module is the portfolio inventory and APM context layer for sys
 - Milestone status rollups
 - Recent activity feed for bundle-scoped governance, scope, and dependency changes
 - Weekly Executive Brief card (bundle-level narrative and drivers)
-- Risks & Dependencies tab (read-only summary from Work Items)
-  - Open risks count
-  - High severity risks
-  - Blocking dependencies
-  - Quick-create risk/dependency work items
+- Bundle-level APM tabs (Phase 11C):
+  - Overview
+  - Environments (bundle baseline schedule/defaults)
+  - Ownership
+  - Dependencies (application dependency rollups + cross-bundle visibility)
+  - Lifecycle (rollup across apps in bundle)
+  - Delivery Impact (bundle impact summary + at-risk app drilldown)
+  - Notes
+- "Apps in this bundle" panel with direct `Open App Detail` actions
 
 ## Application Planning Metadata (Phase 9.2A Extension)
 - Planning metadata is stored in `application_planning_metadata` with **bundle scope** and **application scope**
@@ -54,6 +58,24 @@ Implemented tabs:
 - Dependencies
 - Lifecycle
 - Delivery Impact
+
+### Bundle Profile Tabs (Phase 11C)
+Implemented bundle runtime tabs:
+- Overview
+- Environments
+- Ownership
+- Dependencies
+- Lifecycle
+- Delivery Impact
+- Notes
+
+Implemented bundle-level APM exposure:
+- header badges for status, app count, current milestone, planned go-live
+- actions: `Open Roadmap`, `Open Program`, `View Apps in Bundle`
+- dependency rollups (inbound, outbound, internal, critical, cross-bundle)
+- lifecycle distribution and app lifecycle table
+- delivery impact rollups and at-risk applications table
+- consistent bundle-to-app drilldown (`Open App Detail`)
 
 ### Overview (Context Metadata)
 Implemented editable context fields:

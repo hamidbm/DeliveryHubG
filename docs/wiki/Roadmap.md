@@ -119,6 +119,18 @@ Applications UI now includes:
   - Dependencies
   - Lifecycle
   - Delivery Impact
+- bundle profile tabs (Phase 11C):
+  - Overview
+  - Environments
+  - Ownership
+  - Dependencies
+  - Lifecycle
+  - Delivery Impact
+  - Notes
+- bundle rollup surfaces:
+  - app dependency rollups (including cross-bundle context)
+  - lifecycle distribution across apps
+  - delivery impact rollups and at-risk app drilldowns
 
 ### Near-term (next 2–4 weeks)
 1. Inline storyPoints edits in planning surfaces.
