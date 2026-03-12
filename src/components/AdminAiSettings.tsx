@@ -309,24 +309,28 @@ const AdminAiSettings: React.FC = () => {
                 ))}
               </select>
               <select
-                value={settings.ai.taskRouting?.[task.key]?.model || 'openaiModelDefault'}
-                onChange={(e) =>
+                value={settings.ai.taskRouting?.[task.key]?.model || '__DEFAULT_MODEL__'}
+                onChange={(e) => {
+                  const nextTaskRoute = { ...(settings.ai.taskRouting?.[task.key] || {}) };
+                  if (e.target.value === '__DEFAULT_MODEL__') {
+                    delete nextTaskRoute.model;
+                  } else {
+                    nextTaskRoute.model = e.target.value;
+                  }
                   setSettings({
                     ...settings,
                     ai: {
                       ...settings.ai,
                       taskRouting: {
                         ...(settings.ai.taskRouting || {}),
-                        [task.key]: {
-                          ...(settings.ai.taskRouting?.[task.key] || {}),
-                          model: e.target.value
-                        }
+                        [task.key]: nextTaskRoute
                       }
                     }
-                  })
-                }
+                  });
+                }}
                 className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 outline-none"
               >
+                <option value="__DEFAULT_MODEL__">Use Provider Default Model</option>
                 {MODEL_KEYS.map((m) => (
                   <option key={m.id} value={m.id}>{m.label}</option>
                 ))}

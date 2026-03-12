@@ -40,6 +40,7 @@ const inferDefaultProvider = (aiSettings: AiSettingsLike): AiProviderId | null =
 
 export const resolveAiTaskProvider = (aiSettings: AiSettingsLike, taskKey: string) => {
   const taskRouteProvider = normalizeProvider(aiSettings.taskRouting?.[taskKey]?.provider || null);
+  const taskRouteModelRef = aiSettings.taskRouting?.[taskKey]?.model || null;
   const defaultProvider = inferDefaultProvider(aiSettings);
   const preferredProvider = taskRouteProvider || defaultProvider || null;
   const routed = preferredProvider
@@ -49,6 +50,7 @@ export const resolveAiTaskProvider = (aiSettings: AiSettingsLike, taskKey: strin
   return {
     task: taskKey,
     taskRouteProvider: taskRouteProvider || null,
+    taskRouteModelRef,
     adminSelectedDefault: aiSettings.selectedDefaultProvider || aiSettings.defaultProvider || null,
     activeEffectiveDefault: aiSettings.activeEffectiveDefaultProvider || aiSettings.defaultProvider || null,
     envDefault: aiSettings.envDefaultProvider || process.env.AI_DEFAULT_PROVIDER || null,
@@ -141,7 +143,14 @@ export const executeAiTextTask = async ({
   }
 
   if (resolution.openAiIntended) {
-    const openAiExecution = resolveOpenAiExecution(aiSettings, resolution.routedProvider, resolution.routedModel, openAiFallbackModel);
+    const isLegacyOpenAiModelRefOnOpenRouter =
+      resolution.routedProvider === 'OPEN_ROUTER'
+      && (resolution.taskRouteProvider === null || resolution.taskRouteProvider === 'OPEN_ROUTER')
+      && (resolution.taskRouteModelRef === 'openaiModelDefault'
+        || resolution.taskRouteModelRef === 'openaiModelHigh'
+        || resolution.taskRouteModelRef === 'openaiModelFast');
+    const routedModelForExecution = isLegacyOpenAiModelRefOnOpenRouter ? '' : resolution.routedModel;
+    const openAiExecution = resolveOpenAiExecution(aiSettings, resolution.routedProvider, routedModelForExecution, openAiFallbackModel);
     if (openAiExecution.available) {
       if (logDecision) {
         console.info('AI provider attempt', {
