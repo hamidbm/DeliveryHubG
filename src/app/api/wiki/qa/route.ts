@@ -1,12 +1,11 @@
 import { NextResponse } from 'next/server';
 import { checkAndIncrementAiRateLimit, fetchSystemSettings, fetchWikiQaHistory, saveAiAuditLog, saveWikiQaHistory } from '../../../../services/db';
-import { generateGeminiText } from '../../../../services/geminiService';
-import { generateOpenAiResponse } from '../../../../services/openaiService';
-import { getRateLimitPerHour, getRequestIdentity, getRetentionDays, resolveTaskRouting } from '../../../../services/aiPolicy';
+import { getRateLimitPerHour, getRequestIdentity, getRetentionDays } from '../../../../services/aiPolicy';
+import { executeAiTextTask } from '../../../../services/aiRouting';
 
 type AiSettings = {
   defaultProvider?: string;
-  openaiKey?: string;
+  openRouterModel?: string;
   openaiModelDefault?: string;
   openaiModelHigh?: string;
   openaiModel?: string;
@@ -35,68 +34,22 @@ export async function POST(request: Request) {
 
     const settings = await fetchSystemSettings();
     const aiSettings: AiSettings = (settings?.ai || {}) as AiSettings;
-    const provider = (aiSettings.defaultProvider === 'OPENAI' || aiSettings.defaultProvider === 'GEMINI' || aiSettings.defaultProvider === 'ANTHROPIC' || aiSettings.defaultProvider === 'HUGGINGFACE' || aiSettings.defaultProvider === 'COHERE')
-      ? aiSettings.defaultProvider
-      : 'GEMINI';
     const identity = getRequestIdentity(request);
     const allowed = await checkAndIncrementAiRateLimit(identity, getRateLimitPerHour(aiSettings, 30));
     if (!allowed) {
       return NextResponse.json({ error: 'Rate limit exceeded.' }, { status: 429 });
     }
     const taskKey = targetType === 'asset' ? 'assetQa' : 'wikiQa';
-    const { provider: routedProvider, model: routedModel } = resolveTaskRouting(aiSettings, taskKey, provider);
-    const openAiIntended = routedProvider === 'OPENAI';
-    const geminiProviderLabel = routedProvider === 'GEMINI' ? 'GEMINI' : 'GEMINI_FALLBACK';
     const prompt = buildQaPrompt(question, content, title);
-
-    if (openAiIntended) {
-      const apiKey = process.env.OPENAI_API_KEY || aiSettings.openaiKey;
-      const configuredModel = routedModel || aiSettings.openaiModelDefault || aiSettings.openaiModelHigh || aiSettings.openaiModel || aiSettings.defaultModel || 'gpt-5.2';
-      const model = configuredModel.startsWith('gpt-') ? configuredModel : 'gpt-5.2';
-      const reasoningEffort = model.startsWith('gpt-5.2-pro') ? 'medium' : 'low';
-
-      if (apiKey) {
-        const result = await generateOpenAiResponse({
-          prompt,
-          model,
-          apiKey,
-          reasoningEffort
-        });
-        const resolvedTargetId = targetId || pageId;
-        const resolvedTargetType = targetType || (pageId ? 'page' : 'asset');
-        if (resolvedTargetId) {
-          await saveWikiQaHistory({
-            targetId: resolvedTargetId,
-            targetType: resolvedTargetType,
-            ttlDays: getRetentionDays(aiSettings, resolvedTargetType === 'asset' ? 'assetQa' : 'wikiQa', 30),
-            question,
-            answer: result,
-            provider: 'OPENAI',
-            model
-          });
-        }
-        await saveAiAuditLog({
-          task: taskKey,
-          provider: 'OPENAI',
-          model,
-          success: true,
-          latencyMs: Date.now() - startedAt,
-          identity,
-          ttlDays: getRetentionDays(aiSettings, 'auditLogs', 30)
-        });
-        return NextResponse.json({ result, provider: 'OPENAI' });
-      }
-    }
-
-    if (!process.env.API_KEY) {
-      return NextResponse.json({ error: 'Gemini API key is missing.' }, { status: 400 });
-    }
-
-    const geminiModel =
-      routedProvider === 'GEMINI' && routedModel
-        ? routedModel
-        : aiSettings.geminiFlashModel || aiSettings.flashModel || 'gemini-3-flash-preview';
-    const result = await generateGeminiText(prompt, geminiModel);
+    const geminiModel = aiSettings.geminiFlashModel || aiSettings.flashModel || 'gemini-3-flash-preview';
+    const execution = await executeAiTextTask({
+      aiSettings,
+      taskKey,
+      prompt,
+      openAiFallbackModel: 'gpt-5.2',
+      geminiModel
+    });
+    const result = execution.text;
     const resolvedTargetId = targetId || pageId;
     const resolvedTargetType = targetType || (pageId ? 'page' : 'asset');
     if (resolvedTargetId) {
@@ -106,21 +59,23 @@ export async function POST(request: Request) {
         ttlDays: getRetentionDays(aiSettings, resolvedTargetType === 'asset' ? 'assetQa' : 'wikiQa', 30),
         question,
         answer: result,
-        provider: geminiProviderLabel,
-        model: geminiModel
+        provider: execution.provider,
+        model: execution.model
       });
     }
     await saveAiAuditLog({
       task: taskKey,
-      provider: geminiProviderLabel,
-      model: geminiModel,
+      provider: execution.provider,
+      model: execution.model,
       success: true,
       latencyMs: Date.now() - startedAt,
       identity,
       ttlDays: getRetentionDays(aiSettings, 'auditLogs', 30)
     });
-    return NextResponse.json({ result, provider: geminiProviderLabel });
+    return NextResponse.json({ result, provider: execution.provider });
   } catch (error) {
+    const message = (error as Error)?.message || 'AI request failed.';
+    const status = message.startsWith('No default AI provider is configured') ? 400 : 500;
     const settings = await fetchSystemSettings();
     const aiSettings: AiSettings = (settings?.ai || {}) as AiSettings;
     await saveAiAuditLog({
@@ -132,7 +87,7 @@ export async function POST(request: Request) {
       identity: getRequestIdentity(request),
       ttlDays: getRetentionDays(aiSettings, 'auditLogs', 30)
     });
-    return NextResponse.json({ error: 'AI request failed.' }, { status: 500 });
+    return NextResponse.json({ error: message }, { status });
   }
 }
 

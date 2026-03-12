@@ -27,12 +27,16 @@ export const generateOpenAiResponse = async ({
   prompt,
   model,
   apiKey,
+  baseUrl = 'https://api.openai.com/v1',
+  extraHeaders,
   reasoningEffort,
   timeoutMs = 120000
 }: {
   prompt: string;
   model: string;
   apiKey: string;
+  baseUrl?: string;
+  extraHeaders?: Record<string, string>;
   reasoningEffort?: OpenAiReasoningEffort;
   timeoutMs?: number;
 }) => {
@@ -48,7 +52,8 @@ export const generateOpenAiResponse = async ({
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`
+      'Authorization': `Bearer ${apiKey}`,
+      ...(extraHeaders || {})
     },
     body: JSON.stringify(body)
   };
@@ -56,7 +61,7 @@ export const generateOpenAiResponse = async ({
   const maxAttempts = 2;
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     try {
-      const response = await fetchWithTimeout('https://api.openai.com/v1/responses', requestInit, timeoutMs);
+      const response = await fetchWithTimeout(`${baseUrl.replace(/\/$/, '')}/responses`, requestInit, timeoutMs);
       const data = await response.json();
       if (data?.error) {
         throw new Error(data.error.message || 'OpenAI API Error');

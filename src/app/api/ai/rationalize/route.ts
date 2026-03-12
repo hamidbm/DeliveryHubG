@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
-import { suggestRationalization } from '../../../../services/geminiService';
 import { checkAndIncrementAiRateLimit, fetchSystemSettings, saveAiAuditLog } from '../../../../services/db';
 import { getRateLimitPerHour, getRequestIdentity, getRetentionDays } from '../../../../services/aiPolicy';
+import { executeAiTextTask } from '../../../../services/aiRouting';
 
 type AiSettings = {
   geminiFlashModel?: string;
@@ -21,13 +21,30 @@ export async function POST(request: Request) {
     if (!allowed) {
       return NextResponse.json({ error: 'Rate limit exceeded.' }, { status: 429 });
     }
-    const model = aiSettings.geminiFlashModel || aiSettings.flashModel || 'gemini-3-flash-preview';
-
-    const result = await suggestRationalization(app, model);
+    const prompt = `Act as an Enterprise Architect. Based on this application data: ${JSON.stringify(app)}, recommend one of the following TIME quadrants: INVEST, TOLERATE, MIGRATE, ELIMINATE. Provide a 2-sentence technical justification. Return JSON only with fields "recommendation" and "justification".`;
+    const execution = await executeAiTextTask({
+      aiSettings,
+      taskKey: 'appRationalize',
+      prompt,
+      openAiFallbackModel: 'gpt-5.2',
+      geminiModel: aiSettings.geminiFlashModel || aiSettings.flashModel || 'gemini-3-flash-preview'
+    });
+    let result: { recommendation: string; justification: string };
+    try {
+      const raw = execution.text || '{}';
+      const cleaned = raw.trim().replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```$/i, '').trim();
+      const parsed = JSON.parse(cleaned);
+      result = {
+        recommendation: String(parsed.recommendation || 'TOLERATE'),
+        justification: String(parsed.justification || 'AI analysis failed. Falling back to default baseline.')
+      };
+    } catch {
+      result = { recommendation: 'TOLERATE', justification: 'AI analysis failed. Falling back to default baseline.' };
+    }
     await saveAiAuditLog({
       task: 'appRationalize',
-      provider: 'GEMINI',
-      model,
+      provider: execution.provider,
+      model: execution.model,
       success: true,
       latencyMs: Date.now() - startedAt,
       identity,
@@ -35,6 +52,8 @@ export async function POST(request: Request) {
     });
     return NextResponse.json(result);
   } catch (error) {
+    const message = (error as Error)?.message || 'AI processing failed';
+    const status = message.startsWith('No default AI provider is configured') ? 400 : 500;
     const settings = await fetchSystemSettings();
     const aiSettings: AiSettings = (settings?.ai || {}) as AiSettings;
     await saveAiAuditLog({
@@ -46,6 +65,6 @@ export async function POST(request: Request) {
       identity: getRequestIdentity(request),
       ttlDays: getRetentionDays(aiSettings, 'auditLogs', 30)
     });
-    return NextResponse.json({ error: 'AI processing failed' }, { status: 500 });
+    return NextResponse.json({ error: message }, { status });
   }
 }

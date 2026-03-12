@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Application } from '../types';
-import { analyzeOperationsIntelligence } from '../services/geminiService';
 import { marked } from 'marked';
 import DOMPurify from 'isomorphic-dompurify';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell } from 'recharts';
@@ -34,11 +33,16 @@ const OpsCenter: React.FC<{ applications: Application[] }> = ({ applications }) 
   const runOpsAnalysis = async () => {
     setLoading(true);
     try {
-      const result = await analyzeOperationsIntelligence(
-        applications.slice(0, 5).map(a => ({ name: a.name, health: a.status.health })),
-        [{ cluster: activeCluster, status: 'Warning', cpu: '88%', memory: '74%', egress: '1.2GB/s' }]
-      );
-      setInsight(result);
+      const res = await fetch('/api/ai/operations-intelligence', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          telemetryData: applications.slice(0, 5).map(a => ({ name: a.name, health: a.status.health })),
+          infraData: [{ cluster: activeCluster, status: 'Warning', cpu: '88%', memory: '74%', egress: '1.2GB/s' }]
+        })
+      });
+      const data = await res.json();
+      setInsight(data.result || 'Operations Intelligence offline.');
     } finally {
       setLoading(false);
     }
@@ -72,7 +76,7 @@ const OpsCenter: React.FC<{ applications: Application[] }> = ({ applications }) 
                 <span className="text-[10px] font-black uppercase tracking-[0.3em] text-blue-400">Mission Control Terminal</span>
              </div>
              <h1 className="text-6xl font-black tracking-tighter leading-none">Observability Hub</h1>
-             <p className="text-slate-400 font-medium text-lg max-w-lg">Predictive anomaly detection and SRE intelligence powered by Gemini 3 Flash.</p>
+             <p className="text-slate-400 font-medium text-lg max-w-lg">Predictive anomaly detection and SRE intelligence powered by the configured AI provider.</p>
              <div className="flex items-center gap-4">
                 <button className="px-8 py-3 bg-blue-600 text-white text-[10px] font-black uppercase rounded-2xl shadow-xl shadow-blue-600/20 hover:bg-blue-500 transition-all">View Incident Log</button>
                 <div className="px-5 py-3 bg-white/5 border border-white/10 rounded-2xl flex items-center gap-3">

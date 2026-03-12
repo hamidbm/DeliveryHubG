@@ -40,7 +40,7 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
             <i className="fas fa-robot text-blue-600"></i>
             <span>AI Portfolio Insights</span>
           </h1>
-          <p className="text-slate-500">Automated risk assessment and delivery forecasting powered by Gemini.</p>
+          <p className="text-slate-500">Automated risk assessment and delivery forecasting powered by the configured AI provider.</p>
         </div>
         <button 
           onClick={generateAIReport}

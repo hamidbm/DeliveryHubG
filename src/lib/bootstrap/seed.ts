@@ -577,41 +577,18 @@ let aiSecretNoticeLogged = false;
 const applyAiSecretOverrides = (doc: any) => {
   if (!doc) return doc;
   const next = { ...doc };
-  const providers = { ...(next.providers || {}) };
-  const ensureProvider = (key: string) => {
-    if (!providers[key]) providers[key] = { apiKey: '', models: {} };
-  };
 
   const envOpenai = process.env.OPENAI_API_KEY;
+  const envOpenRouter = process.env.OPENROUTER_API_KEY;
   const envGemini = process.env.GEMINI_API_KEY;
   const envAnthropic = process.env.ANTHROPIC_API_KEY;
   const envHugging = process.env.HUGGINGFACE_API_KEY;
   const envCohere = process.env.COHERE_API_KEY;
 
-  if (envOpenai) {
-    ensureProvider('OPENAI');
-    providers.OPENAI.apiKey = envOpenai;
-  }
-  if (envGemini) {
-    ensureProvider('GEMINI');
-    providers.GEMINI.apiKey = envGemini;
-  }
-  if (envAnthropic) {
-    ensureProvider('ANTHROPIC');
-    providers.ANTHROPIC.apiKey = envAnthropic;
-  }
-  if (envHugging) {
-    ensureProvider('HUGGINGFACE');
-    providers.HUGGINGFACE.apiKey = envHugging;
-  }
-  if (envCohere) {
-    ensureProvider('COHERE');
-    providers.COHERE.apiKey = envCohere;
-  }
-
   if (!aiSecretNoticeLogged) {
     const missing = [
       !envOpenai && 'OPENAI_API_KEY',
+      !envOpenRouter && 'OPENROUTER_API_KEY',
       !envGemini && 'GEMINI_API_KEY',
       !envAnthropic && 'ANTHROPIC_API_KEY',
       !envHugging && 'HUGGINGFACE_API_KEY',
@@ -623,7 +600,6 @@ const applyAiSecretOverrides = (doc: any) => {
     aiSecretNoticeLogged = true;
   }
 
-  next.providers = providers;
   return next;
 };
 

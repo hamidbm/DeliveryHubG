@@ -1,8 +1,8 @@
 import { GoogleGenAI, Type } from "@google/genai";
 
-// Strictly use process.env.API_KEY directly during initialization.
+// Strictly use process.env.GEMINI_API_KEY directly during initialization.
 // This service should only be called from API routes (Server Context).
-const getAI = () => new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+const getAI = () => new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY as string });
 
 export const getPortfolioSummary = async (portfolioData: any, model: string = 'gemini-3-pro-preview') => {
   const ai = getAI();

@@ -382,7 +382,11 @@ const Applications: React.FC<ApplicationsProps> = ({ filterBundle, filterApp, se
               status === 'blocked' ? 'bg-rose-50 text-rose-600 border-rose-200' :
               'bg-slate-100 text-slate-500 border-slate-200';
             return (
-              <div key={bundle._id} className="bg-white border border-slate-200 rounded-[2rem] p-6 flex flex-col gap-4 shadow-sm">
+              <div
+                key={bundle._id}
+                onClick={() => router.push(`/applications/bundles/${encodeURIComponent(String(bundle._id))}`)}
+                className="bg-white border border-slate-200 rounded-[2rem] p-6 flex flex-col gap-4 shadow-sm cursor-pointer hover:border-slate-300"
+              >
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <div className="text-lg font-black text-slate-800">{bundle.name}</div>
@@ -393,16 +397,20 @@ const Applications: React.FC<ApplicationsProps> = ({ filterBundle, filterApp, se
                   </span>
                 </div>
                 <div className="text-xs text-slate-500 space-y-1">
-                  <div>Current milestone: <span className="font-semibold text-slate-700">{current?.name || '—'}</span></div>
-                  <div>Planned Go-live: <span className="font-semibold text-slate-700">{formatDate(profile?.schedule?.goLivePlanned)}</span></div>
+                  <div>Current milestone: <span className="font-semibold text-slate-700">{current?.name || 'Not linked yet'}</span></div>
+                  <div>Planned Go-live: <span className="font-semibold text-slate-700">{profile?.schedule?.goLivePlanned ? formatDate(profile?.schedule?.goLivePlanned) : 'Not scheduled'}</span></div>
                   <div>Health score: <span className="font-semibold text-slate-700">{health?.healthScore ?? '—'}</span></div>
-                  <div>Vendor Lead: <span className="font-semibold text-slate-700">{summarizeOwners(bundle._id, 'svp')}</span></div>
-                  <div>Engineering Owner: <span className="font-semibold text-slate-700">{summarizeOwners(bundle._id, 'bundle_owner')}</span></div>
+                  <div>Vendor Lead: <span className="font-semibold text-slate-700">{summarizeOwners(bundle._id, 'svp') === '—' ? 'Ownership incomplete' : summarizeOwners(bundle._id, 'svp')}</span></div>
+                  <div>Engineering Owner: <span className="font-semibold text-slate-700">{summarizeOwners(bundle._id, 'bundle_owner') === '—' ? 'Ownership incomplete' : summarizeOwners(bundle._id, 'bundle_owner')}</span></div>
                   <div>Apps: <span className="font-semibold text-slate-700">{apps.length}</span></div>
                 </div>
                 <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-slate-400">
                   <span>Updated {formatDate(profile?.updatedAt)}</span>
-                  <button onClick={() => router.push(`/applications/bundles/${encodeURIComponent(String(bundle._id))}`)} className="text-blue-600">Open Bundle Profile</button>
+                  <div className="flex items-center gap-3">
+                    <button onClick={(e) => { e.stopPropagation(); router.push('/?tab=work-items&view=roadmap'); }} className="text-slate-500">Open Roadmap</button>
+                    <button onClick={(e) => { e.stopPropagation(); router.push(`/applications/bundles/${encodeURIComponent(String(bundle._id))}`); }} className="text-blue-600">Open Bundle Profile</button>
+                    <button onClick={(e) => { e.stopPropagation(); router.push(`/applications/bundles/${encodeURIComponent(String(bundle._id))}`); }} className="text-blue-600">View Apps</button>
+                  </div>
                 </div>
               </div>
             );
@@ -2149,6 +2157,8 @@ const BundleProfileView: React.FC<{
     let critical = 0;
     let crossBundle = 0;
     const externalBundleCounts: Record<string, number> = {};
+    const inboundBundleIds = new Set<string>();
+    const outboundBundleIds = new Set<string>();
     rows.forEach((dep) => {
       const source = String(dep?.sourceApplicationId || '');
       const target = String(dep?.targetApplicationId || '');
@@ -2165,12 +2175,16 @@ const BundleProfileView: React.FC<{
           ? String(dep?.targetApplication?.bundleId || '')
           : String(dep?.sourceApplication?.bundleId || '');
         if (externalBundleId) externalBundleCounts[externalBundleId] = (externalBundleCounts[externalBundleId] || 0) + 1;
+        if (sourceIn && !targetIn && externalBundleId) outboundBundleIds.add(externalBundleId);
+        if (!sourceIn && targetIn && externalBundleId) inboundBundleIds.add(externalBundleId);
       }
     });
     return {
       rows,
       summary: { inbound, outbound, internal, critical, crossBundle },
-      externalBundleCounts
+      externalBundleCounts,
+      inboundBundleIds: Array.from(inboundBundleIds),
+      outboundBundleIds: Array.from(outboundBundleIds)
     };
   }, [appDependencyItems, bundleAppIdSet]);
 
@@ -2467,7 +2481,11 @@ const BundleProfileView: React.FC<{
                   </div>
                 </div>
                 {briefLoading && <div className="text-sm text-slate-400">Generating brief…</div>}
-                {briefError && <div className="text-sm text-rose-500">{briefError}</div>}
+                {briefError && (
+                  <div className="text-sm text-rose-500">
+                    Unable to load executive brief. Try regenerate or check data availability.
+                  </div>
+                )}
                 {!briefLoading && brief && (
                   <div className="space-y-2">
                     <div className="flex items-center gap-3">
@@ -2555,6 +2573,7 @@ const BundleProfileView: React.FC<{
                       <th className="text-left py-2 px-3">Blocked</th>
                       <th className="text-left py-2 px-3">High/Critical</th>
                       <th className="text-left py-2 px-3">Slip</th>
+                      <th className="text-left py-2 px-3">Action</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -2574,12 +2593,17 @@ const BundleProfileView: React.FC<{
                           <td className="py-3 px-3 text-slate-500">{rollup.totals?.blockedDerived ?? 0}</td>
                           <td className="py-3 px-3 text-slate-500">{(rollup.risks?.openBySeverity?.high || 0) + (rollup.risks?.openBySeverity?.critical || 0)}</td>
                           <td className="py-3 px-3 text-slate-500">{rollup.schedule?.isLate ? `${rollup.schedule?.slipDays || 0}d` : '—'}</td>
+                          <td className="py-3 px-3">
+                            <button onClick={() => router.push('/?tab=work-items&view=roadmap')} className="text-[10px] font-black uppercase tracking-widest text-blue-600">
+                              View in Roadmap
+                            </button>
+                          </td>
                         </tr>
                       );
                     })}
                     {(programIntel?.bundleRollups?.[0]?.milestones || []).length === 0 && (
                       <tr>
-                        <td colSpan={7} className="py-6 text-center text-slate-400 text-sm">No milestones found.</td>
+                        <td colSpan={8} className="py-6 text-center text-slate-400 text-sm">No milestones found.</td>
                       </tr>
                     )}
                   </tbody>
@@ -2635,6 +2659,9 @@ const BundleProfileView: React.FC<{
                 <div className="mt-4 text-xs text-slate-500">
                   Health Score: <span className="font-semibold text-slate-700">{localHealth.healthScore}</span> · Band: <span className="font-semibold text-slate-700">{localHealth.healthBand}</span>
                 </div>
+              )}
+              {(profile.statusSource || 'computed') === 'computed' && (
+                <div className="text-xs text-slate-400">Computed from delivery intelligence.</div>
               )}
             </div>
           )}
@@ -2834,14 +2861,31 @@ const BundleProfileView: React.FC<{
                           <td className="px-4 py-2 text-slate-700">{dep?.targetApplication?.name || dep?.targetApplicationId || '—'}</td>
                           <td className="px-4 py-2 text-slate-500">{dep?.dependencyType || '—'}</td>
                           <td className="px-4 py-2 text-slate-500">{dep?.criticality || 'MEDIUM'}</td>
-                          <td className="px-4 py-2 text-slate-500">{scopeLabel}</td>
+                          <td className="px-4 py-2 text-slate-500">
+                            {scopeLabel}
+                            {scopeLabel === 'Cross-bundle' && (
+                              <span className="ml-2 px-2 py-1 rounded-full bg-amber-50 text-amber-700 text-[9px] font-black uppercase tracking-widest">Cross-bundle</span>
+                            )}
+                          </td>
                           <td className="px-4 py-2">
-                            <button
-                              onClick={() => onOpenApp(sourceInBundle ? sourceId : targetId)}
-                              className="text-[10px] font-black uppercase tracking-widest text-blue-600"
-                            >
-                              Open App Detail
-                            </button>
+                            <div className="flex items-center gap-2">
+                              {sourceId && (
+                                <button
+                                  onClick={() => onOpenApp(sourceId)}
+                                  className="text-[10px] font-black uppercase tracking-widest text-blue-600"
+                                >
+                                  Open Source App
+                                </button>
+                              )}
+                              {targetId && (
+                                <button
+                                  onClick={() => onOpenApp(targetId)}
+                                  className="text-[10px] font-black uppercase tracking-widest text-blue-600"
+                                >
+                                  Open Target App
+                                </button>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       );
@@ -2891,7 +2935,7 @@ const BundleProfileView: React.FC<{
                       </tr>
                     ))}
                     {!riskLoading && riskItems.length === 0 && (
-                      <tr><td className="px-4 py-4 text-slate-400" colSpan={6}>No risks found.</td></tr>
+                      <tr><td className="px-4 py-4 text-slate-400" colSpan={6}>No bundle risks found. Use Add Risk to track bundle-level delivery risks.</td></tr>
                     )}
                   </tbody>
                 </table>
@@ -2922,7 +2966,7 @@ const BundleProfileView: React.FC<{
                       </tr>
                     ))}
                     {!riskLoading && depsItems.length === 0 && (
-                      <tr><td className="px-4 py-4 text-slate-400" colSpan={6}>No dependencies found.</td></tr>
+                      <tr><td className="px-4 py-4 text-slate-400" colSpan={6}>No work item dependencies found. This section is separate from cross-application dependency mapping above.</td></tr>
                     )}
                   </tbody>
                 </table>
@@ -3007,9 +3051,16 @@ const BundleProfileView: React.FC<{
                     </div>
                   ))}
                 </div>
+                <div className="mt-3 text-xs text-slate-600">
+                  {bundleDeliveryImpact.totals.outboundDependencies > bundleDeliveryImpact.totals.inboundDependencies
+                    ? 'This bundle is currently acting as a dependency driver across related applications.'
+                    : bundleDeliveryImpact.totals.inboundDependencies > bundleDeliveryImpact.totals.outboundDependencies
+                      ? 'This bundle currently depends on external systems and may face inbound dependency pressure.'
+                      : 'This bundle currently has balanced delivery impact signals.'}
+                </div>
                 {bundleImpactLoading && <div className="text-xs text-slate-400 mt-3">Loading delivery impact rollups...</div>}
                 {!bundleImpactLoading && bundleDeliveryImpact.atRiskApps.length === 0 && (
-                  <div className="text-xs text-slate-500 mt-3">No delivery impact signals available yet.</div>
+                  <div className="text-xs text-slate-500 mt-3">Delivery impact will appear when this bundle participates in plans, milestones, or cross-application dependencies.</div>
                 )}
               </div>
 
@@ -3043,6 +3094,23 @@ const BundleProfileView: React.FC<{
                   </tbody>
                 </table>
               </div>
+
+              <div className="bg-white border border-slate-200 rounded-2xl p-6">
+                <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-4">Cross-Bundle Impact</div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-slate-600">
+                  <div className="border border-slate-100 rounded-xl p-4">
+                    <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Bundles affecting this bundle</div>
+                    <div className="text-2xl font-black text-slate-800 mt-1">{bundleDependencyRollup.inboundBundleIds.length}</div>
+                  </div>
+                  <div className="border border-slate-100 rounded-xl p-4">
+                    <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Bundles affected by this bundle</div>
+                    <div className="text-2xl font-black text-slate-800 mt-1">{bundleDependencyRollup.outboundBundleIds.length}</div>
+                  </div>
+                </div>
+                {bundleDependencyRollup.inboundBundleIds.length === 0 && bundleDependencyRollup.outboundBundleIds.length === 0 && (
+                  <div className="text-xs text-slate-500 mt-3">No cross-bundle impact detected yet.</div>
+                )}
+              </div>
             </div>
           )}
 
@@ -3054,7 +3122,7 @@ const BundleProfileView: React.FC<{
                 onChange={(e) => updateProfile({ notes: e.target.value })}
                 disabled={!canEdit}
                 className="w-full min-h-[200px] border border-slate-200 rounded-xl px-4 py-3 text-sm"
-                placeholder="Add bundle notes..."
+                placeholder="Bundle notes can capture program context, assumptions, and coordination details."
               />
             </div>
           )}

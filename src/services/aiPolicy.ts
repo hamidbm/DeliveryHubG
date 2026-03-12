@@ -1,9 +1,10 @@
-type ProviderId = 'OPENAI' | 'GEMINI' | 'ANTHROPIC' | 'HUGGINGFACE' | 'COHERE';
+type ProviderId = 'OPENAI' | 'OPEN_ROUTER' | 'GEMINI' | 'ANTHROPIC' | 'HUGGINGFACE' | 'COHERE';
 
 const MODEL_KEYS = new Set([
   'openaiModelDefault',
   'openaiModelHigh',
   'openaiModelFast',
+  'openRouterModel',
   'geminiFlashModel',
   'geminiProModel',
   'anthropicModel',
@@ -25,7 +26,7 @@ export const isProviderEnabled = (aiSettings: any, provider: ProviderId) => {
 
 export const chooseFallbackProvider = (aiSettings: any, preferred: ProviderId): ProviderId => {
   if (isProviderEnabled(aiSettings, preferred)) return preferred;
-  const order: ProviderId[] = ['OPENAI', 'GEMINI', 'ANTHROPIC', 'HUGGINGFACE', 'COHERE'];
+  const order: ProviderId[] = ['OPEN_ROUTER', 'OPENAI', 'GEMINI', 'ANTHROPIC', 'HUGGINGFACE', 'COHERE'];
   for (const candidate of order) {
     if (isProviderEnabled(aiSettings, candidate)) return candidate;
   }

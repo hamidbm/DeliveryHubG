@@ -1,8 +1,8 @@
 
 import { NextResponse } from 'next/server';
-import { suggestReassignment } from '../../../../services/geminiService';
 import { checkAndIncrementAiRateLimit, fetchSystemSettings, fetchWorkItemById, saveAiAuditLog } from '../../../../services/db';
 import { getRateLimitPerHour, getRequestIdentity, getRetentionDays } from '../../../../services/aiPolicy';
+import { executeAiTextTask } from '../../../../services/aiRouting';
 
 type AiSettings = {
   geminiFlashModel?: string;
@@ -34,12 +34,19 @@ export async function POST(request: Request) {
       { name: 'Alex Architect', load: 4, role: 'Enterprise Architect' }
     ];
 
-    const model = aiSettings.geminiFlashModel || aiSettings.flashModel || 'gemini-3-flash-preview';
-    const suggestion = await suggestReassignment(item, teamCapacity, model);
+    const prompt = `Suggest peer for task handover: ${JSON.stringify(item)} Team: ${JSON.stringify(teamCapacity)}`;
+    const execution = await executeAiTextTask({
+      aiSettings,
+      taskKey: 'suggestReassignment',
+      prompt,
+      openAiFallbackModel: 'gpt-5.2',
+      geminiModel: aiSettings.geminiFlashModel || aiSettings.flashModel || 'gemini-3-flash-preview'
+    });
+    const suggestion = execution.text;
     await saveAiAuditLog({
       task: 'suggestReassignment',
-      provider: 'GEMINI',
-      model,
+      provider: execution.provider,
+      model: execution.model,
       success: true,
       latencyMs: Date.now() - startedAt,
       identity,
@@ -47,6 +54,8 @@ export async function POST(request: Request) {
     });
     return NextResponse.json({ suggestion });
   } catch (error) {
+    const message = (error as Error)?.message || 'AI Rebalancing failed';
+    const status = message.startsWith('No default AI provider is configured') ? 400 : 500;
     const settings = await fetchSystemSettings();
     const aiSettings: AiSettings = (settings?.ai || {}) as AiSettings;
     await saveAiAuditLog({
@@ -58,6 +67,6 @@ export async function POST(request: Request) {
       identity: getRequestIdentity(request),
       ttlDays: getRetentionDays(aiSettings, 'auditLogs', 30)
     });
-    return NextResponse.json({ error: 'AI Rebalancing failed' }, { status: 500 });
+    return NextResponse.json({ error: message }, { status });
   }
 }
