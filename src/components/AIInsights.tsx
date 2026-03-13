@@ -79,9 +79,11 @@ const createPdfMeasurer = () => {
     return (text: string, size: number) => text.length * size * 0.46;
   }
   return (text: string, size: number, bold = false) => {
-    context.font = `${bold ? 700 : 400} ${size}px Arial`;
-    // Convert CSS px-ish width to PDF points.
-    return context.measureText(text).width * 0.75;
+    // PDF sizes are in points; canvas expects px. Convert pt -> px for accurate width,
+    // then convert measured px back to pt.
+    const pxSize = size * (96 / 72);
+    context.font = `${bold ? 700 : 400} ${pxSize}px Arial`;
+    return context.measureText(text).width * (72 / 96);
   };
 };
 
@@ -232,8 +234,30 @@ const wrapSegmentsToLines = (
     lineWidth = 0;
   };
 
+  const splitTokenToFit = (token: PdfTextSegment, width: number): PdfTextSegment[] => {
+    if (measure(token.text, fontSize, token.bold) <= width) return [token];
+    const parts: PdfTextSegment[] = [];
+    let current = '';
+    for (const ch of token.text) {
+      const candidate = current + ch;
+      if (current && measure(candidate, fontSize, token.bold) > width) {
+        parts.push({ text: current, bold: token.bold });
+        current = ch;
+      } else {
+        current = candidate;
+      }
+    }
+    if (current) parts.push({ text: current, bold: token.bold });
+    return parts.length > 0 ? parts : [token];
+  };
+
   const pushToken = (token: PdfTextSegment) => {
     const width = measure(token.text, fontSize, token.bold);
+    if (width > maxWidth && token.text.trim().length > 0) {
+      const subTokens = splitTokenToFit(token, maxWidth);
+      subTokens.forEach((subToken) => pushToken(subToken));
+      return;
+    }
     if (lineWidth + width <= maxWidth || line.length === 0) {
       line.push(token);
       lineWidth += width;
@@ -304,11 +328,15 @@ const buildStyledPdf = (blocks: PdfBlock[]) => {
     const indent = block.indent || 0;
     const maxWidth = pageWidth - marginLeft - marginRight - indent;
     const lines = wrapSegmentsToLines(block.segments, maxWidth, block.fontSize, measure);
+    let firstBaselineY: number | null = null;
+    let lastBaselineY: number | null = null;
 
     lines.forEach((lineSegments) => {
       ensureSpace(block.lineHeight + block.spacingAfter);
       const x = marginLeft + indent;
       const y = currentY;
+      if (firstBaselineY === null) firstBaselineY = y;
+      lastBaselineY = y;
       const [r, g, b] = block.color || [15, 23, 42];
       commands.push(`${(r / 255).toFixed(3)} ${(g / 255).toFixed(3)} ${(b / 255).toFixed(3)} rg`);
       commands.push('BT');
@@ -323,22 +351,25 @@ const buildStyledPdf = (blocks: PdfBlock[]) => {
         commands.push(`(${escapePdfText(segment.text)}) Tj`);
       });
       commands.push('ET');
-      if (block.headingLevel === 1) {
-        const underlineY = y - 6;
-        commands.push('0.514 0.361 0.965 RG');
-        commands.push('1.4 w');
-        commands.push(`${x.toFixed(2)} ${underlineY.toFixed(2)} m ${(x + 180).toFixed(2)} ${underlineY.toFixed(2)} l S`);
-      }
-      if (block.headingLevel === 2) {
-        const left = x - 8;
-        const top = y + 3;
-        const bottom = y - block.lineHeight + 3;
-        commands.push('0.024 0.714 0.831 RG');
-        commands.push('2 w');
-        commands.push(`${left.toFixed(2)} ${top.toFixed(2)} m ${left.toFixed(2)} ${bottom.toFixed(2)} l S`);
-      }
       currentY -= block.lineHeight;
     });
+    if (block.headingLevel === 1 && firstBaselineY !== null) {
+      const x = marginLeft + indent;
+      const underlineY = firstBaselineY - block.fontSize * 0.35;
+      commands.push('0.514 0.361 0.965 RG');
+      commands.push('1.4 w');
+      commands.push(`${x.toFixed(2)} ${underlineY.toFixed(2)} m ${(x + 180).toFixed(2)} ${underlineY.toFixed(2)} l S`);
+    }
+    if (block.headingLevel === 2 && firstBaselineY !== null && lastBaselineY !== null) {
+      const x = marginLeft + indent;
+      // Align accent bar to heading glyph box (more ascent than descent).
+      const top = firstBaselineY + block.fontSize * 0.72;
+      const bottom = lastBaselineY - block.fontSize * 0.28;
+      const left = x - 8;
+      commands.push('0.024 0.714 0.831 RG');
+      commands.push('2 w');
+      commands.push(`${left.toFixed(2)} ${top.toFixed(2)} m ${left.toFixed(2)} ${bottom.toFixed(2)} l S`);
+    }
     currentY -= block.spacingAfter;
   });
 
