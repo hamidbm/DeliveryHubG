@@ -28,7 +28,8 @@ export async function buildPortfolioIntelligenceSnapshot(): Promise<PortfolioSna
         projection: {
           _id: 1, id: 1, key: 1, title: 1, name: 1,
           status: 1, dueDate: 1, blocked: 1, assignee: 1, assignedTo: 1,
-          bundleId: 1, applicationId: 1, milestoneId: 1, milestoneIds: 1, priority: 1
+          bundleId: 1, applicationId: 1, milestoneId: 1, milestoneIds: 1, priority: 1,
+          links: 1, linkSummary: 1, dependency: 1
         }
       }
     ).toArray(),
@@ -112,7 +113,28 @@ export async function buildPortfolioIntelligenceSnapshot(): Promise<PortfolioSna
       bundleId: item.bundleId ? String(item.bundleId) : undefined,
       applicationId: item.applicationId ? String(item.applicationId) : undefined,
       milestoneIds: milestoneIdsRaw.map((id: any) => String(id)).filter(Boolean),
-      priority: item.priority ? String(item.priority) : undefined
+      priority: item.priority ? String(item.priority) : undefined,
+      links: Array.isArray(item.links)
+        ? item.links.slice(0, 20).map((link: any) => ({
+            type: link?.type ? String(link.type) : undefined,
+            targetId: link?.targetId ? String(link.targetId) : undefined,
+            workItemId: link?.workItemId ? String(link.workItemId) : undefined,
+            itemId: link?.itemId ? String(link.itemId) : undefined,
+            title: link?.title ? String(link.title) : undefined
+          }))
+        : undefined,
+      dependency: item?.dependency && typeof item.dependency === 'object'
+        ? {
+            blocking: typeof item.dependency.blocking === 'boolean' ? item.dependency.blocking : undefined,
+            dependsOn: item.dependency.dependsOn
+              ? {
+                  id: item.dependency.dependsOn.id ? String(item.dependency.dependsOn.id) : undefined,
+                  name: item.dependency.dependsOn.name ? String(item.dependency.dependsOn.name) : undefined,
+                  type: item.dependency.dependsOn.type ? String(item.dependency.dependsOn.type) : undefined
+                }
+              : undefined
+          }
+        : undefined
     };
   }).filter((item) => item.id);
 

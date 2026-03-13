@@ -29,6 +29,13 @@ const emptySnapshot: PortfolioSnapshot = {
   milestones: { total: 0, overdue: 0 }
 };
 
+const unwrapCachedPayload = (cached: any) => {
+  if (!cached) return null;
+  const wrapped = cached?.report;
+  if (wrapped && typeof wrapped === 'object' && wrapped.status) return wrapped;
+  return cached;
+};
+
 const loadPortfolioReport = async (): Promise<{ report: StructuredPortfolioReport; snapshot: PortfolioSnapshot; snapshotHash: string } | null> => {
   const cached = await fetchAiAnalysisCache(PORTFOLIO_CACHE_KEY);
   if (!cached) return null;
@@ -51,7 +58,8 @@ const loadPortfolioReport = async (): Promise<{ report: StructuredPortfolioRepor
 };
 
 const loadExecutiveCache = async () => {
-  const cached = await fetchAiAnalysisCache(EXEC_CACHE_KEY);
+  const cachedRaw = await fetchAiAnalysisCache(EXEC_CACHE_KEY);
+  const cached = unwrapCachedPayload(cachedRaw);
   if (!cached || cached.status !== 'success' || !cached.executiveSummary) return null;
 
   return {
@@ -70,6 +78,15 @@ const saveExecutiveCache = async (payload: { executiveSummary: any; snapshotHash
     status: 'success',
     reportType: EXEC_CACHE_KEY,
     executiveSummary: payload.executiveSummary,
+    report: {
+      status: 'success',
+      reportType: EXEC_CACHE_KEY,
+      executiveSummary: payload.executiveSummary,
+      metadata: {
+        generatedAt: payload.executiveSummary.generatedAt,
+        snapshotHash: payload.snapshotHash
+      }
+    },
     metadata: {
       generatedAt: payload.executiveSummary.generatedAt,
       snapshotHash: payload.snapshotHash

@@ -35,6 +35,7 @@ AI in DeliveryHub is assistive only. It never writes to the database without exp
 - Persisted AI Insights portfolio report in `ai_analysis_cache` (`_id: portfolio-summary`)
 - Persisted executive portfolio summary in `ai_analysis_cache` (`_id: executive-summary`)
 - Persisted forecast signal set in `ai_analysis_cache` (`_id: portfolio-forecast`)
+- Persisted cross-project propagation signals in `ai_analysis_cache` (`_id: risk-propagation`)
 
 ## AI Insights Portfolio Summary (Phase 12A)
 - API contract split:
@@ -377,6 +378,31 @@ AI in DeliveryHub is assistive only. It never writes to the database without exp
       - “Is execution slowing down?”
       - “Which areas show growing backlog?”
     - `suggestionGenerator.ts` now emits forecast-aware prompts when forecast signals exist
+- 13C added cross-project risk propagation and dependency intelligence:
+  - new propagation contracts in `src/types/ai.ts`:
+    - `RiskPropagationSignal`
+    - `PropagationPath`
+  - dependency graph extractor:
+    - `src/services/ai/dependencyExtractor.ts`
+    - deterministic edges across work items, milestones, bundles, applications, and reviews
+  - propagation engine:
+    - `src/services/ai/riskPropagation.ts`
+    - source risk selection from high alerts + forecast signals
+    - downstream traversal with path evidence and severity scoring
+  - propagation API:
+    - `GET /api/ai/risk-propagation`
+    - `POST /api/ai/risk-propagation` (explicit regeneration)
+  - propagation cache behavior:
+    - cache key `risk-propagation` in `ai_analysis_cache`
+    - freshness metadata with 24h stale window
+  - executive UI integration:
+    - panel and cards added to Executive Insights page:
+      - `src/components/ai/RiskPropagationPanel.tsx`
+      - `src/components/ai/PropagationSignalCard.tsx`
+  - query/suggestion integration:
+    - `portfolio-query` now reads cached propagation signals
+    - deterministic intents added for cascade/dependency/path questions
+    - suggestion generator now emits propagation-aware prompts when signals exist
 
 ## Visual Flows
 

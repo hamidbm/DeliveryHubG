@@ -36,6 +36,7 @@ Top-level fields:
   - `portfolio-summary`: includes `snapshot`, structured `report`, `relatedEntitiesMeta`
   - `executive-summary`: includes `executiveSummary` with portfolio health, observations, concerns, alerts, trends, recommendations
   - `portfolio-forecast`: includes `forecastSignals[]` with category, severity, confidence, evidence, and related entities
+  - `risk-propagation`: includes `riskPropagationSignals[]` with propagation paths, severity, evidence, and related entities
 
 Observed indexes:
 - `{ _id: 1 }`

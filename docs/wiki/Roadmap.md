@@ -234,6 +234,12 @@ Implemented:
   - forecast cache persisted in `ai_analysis_cache` under `portfolio-forecast`
   - executive insights page now includes forecast signal cards (severity, confidence, evidence, related entities)
   - deterministic query + suggestions now include forecast-aware intents/prompts
+- 13C: cross-project risk propagation and dependency intelligence:
+  - deterministic dependency extractor + propagation engine added (`dependencyExtractor.ts`, `riskPropagation.ts`)
+  - new propagation API added (`GET/POST /api/ai/risk-propagation`)
+  - propagation cache persisted in `ai_analysis_cache` under `risk-propagation`
+  - executive insights page now includes cross-project propagation cards with paths/evidence/entity links
+  - deterministic query + suggestions now include propagation-aware intents/prompts
 
 Current 12B behavior:
 - structured sections are primary in AI Insights UI

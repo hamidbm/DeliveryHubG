@@ -40,6 +40,21 @@ export interface PortfolioSnapshot {
       applicationId?: string;
       milestoneIds?: string[];
       priority?: string;
+      links?: Array<{
+        type?: string;
+        targetId?: string;
+        workItemId?: string;
+        itemId?: string;
+        title?: string;
+      }>;
+      dependency?: {
+        blocking?: boolean;
+        dependsOn?: {
+          id?: string;
+          name?: string;
+          type?: string;
+        };
+      };
     }>;
   };
   reviews: {
@@ -249,6 +264,22 @@ export interface ForecastSignal {
   summary: string;
   evidence: EvidenceItem[];
   relatedEntities?: EntityReference[];
+}
+
+export interface PropagationPath {
+  from: EntityReference;
+  to: EntityReference;
+  linkType: 'dependency' | 'shared_resource' | 'milestone_sequence';
+}
+
+export interface RiskPropagationSignal {
+  id: string;
+  title: string;
+  severity: 'low' | 'medium' | 'high';
+  summary: string;
+  paths: PropagationPath[];
+  evidence: EvidenceItem[];
+  relatedEntities: EntityReference[];
 }
 
 export interface PortfolioSuggestion {

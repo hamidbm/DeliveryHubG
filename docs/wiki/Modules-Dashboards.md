@@ -143,6 +143,19 @@ Dashboards provide program-level rollups for milestones, risks, and delivery sta
   - forecast cards include severity, confidence, evidence, and related entity links
   - forecast cache is persisted in `ai_analysis_cache` using `portfolio-forecast`
   - Ask DeliveryHub AI now supports forecast-aware deterministic prompts (delivery-soon risk, likely milestone slips, execution slowdown, backlog growth)
+- 13C added Cross-Project Risk Propagation:
+  - propagation API endpoints:
+    - `GET /api/ai/risk-propagation`
+    - `POST /api/ai/risk-propagation`
+  - Executive Insights now includes a **Cross-Project Risk Propagation** panel
+  - propagation cards show:
+    - severity
+    - summary
+    - propagation paths (`From -> To via linkType`)
+    - evidence
+    - related entity drill-down chips
+  - propagation cache is persisted in `ai_analysis_cache` using `risk-propagation`
+  - Ask DeliveryHub AI now supports deterministic propagation questions (cascade risk, dependency-contributing risk, propagation paths)
 - Visual sequence diagrams for cache/regenerate/query/drill-down are documented in `docs/wiki/AI.md` under **Visual Flows**.
 
 ## Program Capacity (v1)

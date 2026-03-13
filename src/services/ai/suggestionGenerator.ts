@@ -1,4 +1,4 @@
-import { ForecastSignal, PortfolioSuggestion, StructuredPortfolioReport } from '../../types/ai';
+import { ForecastSignal, PortfolioSuggestion, RiskPropagationSignal, StructuredPortfolioReport } from '../../types/ai';
 import { PortfolioSignalSummary } from './portfolioSignals';
 
 const pushUnique = (target: PortfolioSuggestion[], item: PortfolioSuggestion) => {
@@ -11,7 +11,8 @@ export const generatePortfolioSuggestions = (
   signals: PortfolioSignalSummary,
   report?: StructuredPortfolioReport,
   followUps: string[] = [],
-  forecastSignals: ForecastSignal[] = []
+  forecastSignals: ForecastSignal[] = [],
+  riskPropagationSignals: RiskPropagationSignal[] = []
 ): PortfolioSuggestion[] => {
   const suggestions: PortfolioSuggestion[] = [];
 
@@ -202,6 +203,23 @@ export const generatePortfolioSuggestions = (
       label: 'Backlog growth',
       prompt: 'Which areas show growing backlog?',
       category: 'capacity',
+      provenance: 'deterministic'
+    });
+  }
+
+  if (riskPropagationSignals.length > 0) {
+    pushUnique(suggestions, {
+      id: 'sugg-propagation-risk-cascade',
+      label: 'Risk cascade',
+      prompt: 'Which delivery risks cascade into other areas?',
+      category: 'risk',
+      provenance: 'deterministic'
+    });
+    pushUnique(suggestions, {
+      id: 'sugg-propagation-dependencies',
+      label: 'Dependency risks',
+      prompt: 'Show me dependencies contributing to delivery risk.',
+      category: 'risk',
       provenance: 'deterministic'
     });
   }

@@ -1,9 +1,10 @@
 'use client';
 
 import React from 'react';
-import { ExecutiveSummary, ForecastSignal } from '../../types/ai';
+import { ExecutiveSummary, ForecastSignal, RiskPropagationSignal } from '../../types/ai';
 import ExecutiveSummaryCard from './ExecutiveSummaryCard';
 import ForecastPanel from './ForecastPanel';
+import RiskPropagationPanel from './RiskPropagationPanel';
 
 type ApiResponse = {
   status: 'success' | 'error';
@@ -19,6 +20,12 @@ type ApiResponse = {
 type ForecastApiResponse = {
   status: 'success' | 'error';
   forecastSignals?: ForecastSignal[];
+  error?: string;
+};
+
+type PropagationApiResponse = {
+  status: 'success' | 'error';
+  riskPropagationSignals?: RiskPropagationSignal[];
   error?: string;
 };
 
@@ -38,19 +45,26 @@ const ExecutiveInsightsPage: React.FC = () => {
   const [forecastSignals, setForecastSignals] = React.useState<ForecastSignal[]>([]);
   const [forecastLoading, setForecastLoading] = React.useState(false);
   const [forecastError, setForecastError] = React.useState('');
+  const [propagationSignals, setPropagationSignals] = React.useState<RiskPropagationSignal[]>([]);
+  const [propagationLoading, setPropagationLoading] = React.useState(false);
+  const [propagationError, setPropagationError] = React.useState('');
 
   const load = React.useCallback(async () => {
     setLoading(true);
     setForecastLoading(true);
+    setPropagationLoading(true);
     setError('');
     setForecastError('');
+    setPropagationError('');
     try {
-      const [summaryRes, forecastRes] = await Promise.all([
+      const [summaryRes, forecastRes, propagationRes] = await Promise.all([
         fetch('/api/ai/executive-summary'),
-        fetch('/api/ai/portfolio-forecast')
+        fetch('/api/ai/portfolio-forecast'),
+        fetch('/api/ai/risk-propagation')
       ]);
       const summaryData = await summaryRes.json() as ApiResponse;
       const forecastData = await forecastRes.json() as ForecastApiResponse;
+      const propagationData = await propagationRes.json() as PropagationApiResponse;
 
       if (!summaryRes.ok) {
         setError(summaryData?.error || 'Failed to load executive insights.');
@@ -66,14 +80,24 @@ const ExecutiveInsightsPage: React.FC = () => {
       } else {
         setForecastSignals(Array.isArray(forecastData?.forecastSignals) ? forecastData.forecastSignals : []);
       }
+
+      if (!propagationRes.ok) {
+        setPropagationError(propagationData?.error || 'Failed to load propagation signals.');
+        setPropagationSignals([]);
+      } else {
+        setPropagationSignals(Array.isArray(propagationData?.riskPropagationSignals) ? propagationData.riskPropagationSignals : []);
+      }
     } catch {
       setError('Failed to load executive insights.');
       setSummary(null);
       setForecastError('Failed to load forecast signals.');
       setForecastSignals([]);
+      setPropagationError('Failed to load propagation signals.');
+      setPropagationSignals([]);
     } finally {
       setLoading(false);
       setForecastLoading(false);
+      setPropagationLoading(false);
     }
   }, []);
 
@@ -85,13 +109,16 @@ const ExecutiveInsightsPage: React.FC = () => {
     setBusy(true);
     setError('');
     setForecastError('');
+    setPropagationError('');
     try {
-      const [summaryRes, forecastRes] = await Promise.all([
+      const [summaryRes, forecastRes, propagationRes] = await Promise.all([
         fetch('/api/ai/executive-summary', { method: 'POST' }),
-        fetch('/api/ai/portfolio-forecast', { method: 'POST' })
+        fetch('/api/ai/portfolio-forecast', { method: 'POST' }),
+        fetch('/api/ai/risk-propagation', { method: 'POST' })
       ]);
       const summaryData = await summaryRes.json() as ApiResponse;
       const forecastData = await forecastRes.json() as ForecastApiResponse;
+      const propagationData = await propagationRes.json() as PropagationApiResponse;
 
       if (!summaryRes.ok) {
         setError(summaryData?.error || 'Failed to regenerate executive insights.');
@@ -105,9 +132,16 @@ const ExecutiveInsightsPage: React.FC = () => {
       } else {
         setForecastSignals(Array.isArray(forecastData?.forecastSignals) ? forecastData.forecastSignals : []);
       }
+
+      if (!propagationRes.ok) {
+        setPropagationError(propagationData?.error || 'Failed to regenerate propagation signals.');
+      } else {
+        setPropagationSignals(Array.isArray(propagationData?.riskPropagationSignals) ? propagationData.riskPropagationSignals : []);
+      }
     } catch {
       setError('Failed to regenerate executive insights.');
       setForecastError('Failed to regenerate forecast signals.');
+      setPropagationError('Failed to regenerate propagation signals.');
     } finally {
       setBusy(false);
     }
@@ -189,6 +223,12 @@ const ExecutiveInsightsPage: React.FC = () => {
               signals={forecastSignals}
               loading={forecastLoading}
               error={forecastError}
+            />
+
+            <RiskPropagationPanel
+              signals={propagationSignals}
+              loading={propagationLoading}
+              error={propagationError}
             />
           </>
         )}

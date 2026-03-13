@@ -5,11 +5,12 @@ import { getAuthUserFromCookies } from '../../../../services/visibility';
 import { derivePortfolioSignals } from '../../../../services/ai/portfolioSignals';
 import { normalizePortfolioReport } from '../../../../services/ai/normalizePortfolioReport';
 import { loadTrendSignals } from '../../../../services/ai/trendAnalyzer';
-import { generateForecastSignals } from '../../../../services/ai/forecastEngine';
-import { PortfolioSnapshot, StructuredPortfolioReport } from '../../../../types/ai';
+import { generateRiskPropagationSignals } from '../../../../services/ai/riskPropagation';
+import { ForecastSignal, PortfolioSnapshot, StructuredPortfolioReport } from '../../../../types/ai';
 
-const FORECAST_CACHE_KEY = 'portfolio-forecast';
+const CACHE_KEY = 'risk-propagation';
 const PORTFOLIO_CACHE_KEY = 'portfolio-summary';
+const FORECAST_CACHE_KEY = 'portfolio-forecast';
 const FRESH_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 const buildSnapshotHash = (snapshot: unknown) => createHash('sha256').update(JSON.stringify(snapshot)).digest('hex');
@@ -57,13 +58,20 @@ const loadPortfolioReport = async (): Promise<{ report: StructuredPortfolioRepor
   };
 };
 
-const loadForecastCache = async () => {
+const loadForecastSignals = async (): Promise<ForecastSignal[]> => {
   const cachedRaw = await fetchAiAnalysisCache(FORECAST_CACHE_KEY);
   const cached = unwrapCachedPayload(cachedRaw);
-  if (!cached || cached.status !== 'success' || !Array.isArray(cached.forecastSignals)) return null;
+  if (!cached || cached.status !== 'success' || !Array.isArray(cached.forecastSignals)) return [];
+  return cached.forecastSignals as ForecastSignal[];
+};
+
+const loadRiskPropagationCache = async () => {
+  const cachedRaw = await fetchAiAnalysisCache(CACHE_KEY);
+  const cached = unwrapCachedPayload(cachedRaw);
+  if (!cached || cached.status !== 'success' || !Array.isArray(cached.riskPropagationSignals)) return null;
 
   return {
-    forecastSignals: cached.forecastSignals,
+    riskPropagationSignals: cached.riskPropagationSignals,
     metadata: {
       generatedAt: cached.metadata?.generatedAt,
       freshnessStatus: resolveFreshnessStatus(cached.metadata?.generatedAt),
@@ -73,45 +81,47 @@ const loadForecastCache = async () => {
   };
 };
 
-const saveForecastCache = async (payload: { forecastSignals: any[]; snapshotHash: string; generatedAt: string }) => {
-  await saveAiAnalysisCache(FORECAST_CACHE_KEY, {
+const saveRiskPropagationCache = async (payload: { riskPropagationSignals: any[]; snapshotHash: string; generatedAt: string }) => {
+  await saveAiAnalysisCache(CACHE_KEY, {
     status: 'success',
-    reportType: FORECAST_CACHE_KEY,
-    forecastSignals: payload.forecastSignals,
-    report: {
-      status: 'success',
-      reportType: FORECAST_CACHE_KEY,
-      forecastSignals: payload.forecastSignals,
-      metadata: {
-        generatedAt: payload.generatedAt,
-        snapshotHash: payload.snapshotHash
-      }
-    },
+    reportType: CACHE_KEY,
     metadata: {
       generatedAt: payload.generatedAt,
       snapshotHash: payload.snapshotHash
     },
-    updatedAt: new Date().toISOString()
+    riskPropagationSignals: payload.riskPropagationSignals,
+    report: {
+      status: 'success',
+      reportType: CACHE_KEY,
+      metadata: {
+        generatedAt: payload.generatedAt,
+        snapshotHash: payload.snapshotHash
+      },
+      riskPropagationSignals: payload.riskPropagationSignals
+    }
   });
 };
 
-const buildAndPersistForecast = async () => {
+const buildAndPersistRiskPropagation = async () => {
   const portfolio = await loadPortfolioReport();
   if (!portfolio) return null;
-  const trendContext = await loadTrendSignals();
-  const forecastSignals = generateForecastSignals(
+
+  const forecastSignals = await loadForecastSignals();
+  const riskPropagationSignals = generateRiskPropagationSignals(
     portfolio.snapshot,
     portfolio.report,
-    portfolio.report.trendSignals || trendContext.trendSignals || []
+    forecastSignals
   );
   const generatedAt = new Date().toISOString();
-  await saveForecastCache({
-    forecastSignals,
+
+  await saveRiskPropagationCache({
+    riskPropagationSignals,
     snapshotHash: portfolio.snapshotHash,
     generatedAt
   });
+
   return {
-    forecastSignals,
+    riskPropagationSignals,
     metadata: {
       generatedAt,
       freshnessStatus: 'fresh' as const,
@@ -127,17 +137,17 @@ export async function GET() {
     return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
   }
 
-  const cached = await loadForecastCache();
+  const cached = await loadRiskPropagationCache();
   if (cached) {
-    return NextResponse.json({ status: 'success', forecastSignals: cached.forecastSignals, metadata: cached.metadata });
+    return NextResponse.json({ status: 'success', riskPropagationSignals: cached.riskPropagationSignals, metadata: cached.metadata });
   }
 
-  const built = await buildAndPersistForecast();
+  const built = await buildAndPersistRiskPropagation();
   if (!built) {
     return NextResponse.json({ error: 'No portfolio summary report available. Generate AI portfolio analysis first.' }, { status: 404 });
   }
 
-  return NextResponse.json({ status: 'success', forecastSignals: built.forecastSignals, metadata: built.metadata });
+  return NextResponse.json({ status: 'success', riskPropagationSignals: built.riskPropagationSignals, metadata: built.metadata });
 }
 
 export async function POST() {
@@ -146,10 +156,10 @@ export async function POST() {
     return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
   }
 
-  const built = await buildAndPersistForecast();
+  const built = await buildAndPersistRiskPropagation();
   if (!built) {
     return NextResponse.json({ error: 'No portfolio summary report available. Generate AI portfolio analysis first.' }, { status: 404 });
   }
 
-  return NextResponse.json({ status: 'success', forecastSignals: built.forecastSignals, metadata: built.metadata });
+  return NextResponse.json({ status: 'success', riskPropagationSignals: built.riskPropagationSignals, metadata: built.metadata });
 }

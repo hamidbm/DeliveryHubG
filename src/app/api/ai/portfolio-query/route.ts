@@ -10,6 +10,7 @@ import { resolveRelatedEntitiesMetaFromEvidence } from '../../../../services/ent
 import { loadTrendSignals } from '../../../../services/ai/trendAnalyzer';
 const CACHE_KEY = 'portfolio-summary';
 const FORECAST_CACHE_KEY = 'portfolio-forecast';
+const RISK_PROPAGATION_CACHE_KEY = 'risk-propagation';
 
 type AiSettings = {
   geminiProModel?: string;
@@ -57,8 +58,20 @@ const loadStructuredReport = async (): Promise<PortfolioSummaryResponse | null> 
 
 const loadForecastSignals = async (): Promise<ForecastSignal[]> => {
   const cached = await fetchAiAnalysisCache(FORECAST_CACHE_KEY);
-  if (!cached || cached.status !== 'success' || !Array.isArray(cached.forecastSignals)) return [];
-  return cached.forecastSignals as ForecastSignal[];
+  const source = cached?.status === 'success'
+    ? cached
+    : (cached?.report?.status === 'success' ? cached.report : null);
+  if (!source || !Array.isArray(source.forecastSignals)) return [];
+  return source.forecastSignals as ForecastSignal[];
+};
+
+const loadRiskPropagationSignals = async () => {
+  const cached = await fetchAiAnalysisCache(RISK_PROPAGATION_CACHE_KEY);
+  const source = cached?.status === 'success'
+    ? cached
+    : (cached?.report?.status === 'success' ? cached.report : null);
+  if (!source || !Array.isArray(source.riskPropagationSignals)) return [];
+  return source.riskPropagationSignals;
 };
 
 export async function POST(request: Request) {
@@ -80,6 +93,7 @@ export async function POST(request: Request) {
   const signals = derivePortfolioSignals(cached.snapshot);
   const trendContext = await loadTrendSignals();
   const forecastSignals = await loadForecastSignals();
+  const riskPropagationSignals = await loadRiskPropagationSignals();
   const deterministic = answerPortfolioQuestionDeterministically(
     question,
     signals,
@@ -87,7 +101,8 @@ export async function POST(request: Request) {
     cached.snapshot,
     cached.report?.trendSignals || trendContext.trendSignals,
     trendContext.history,
-    forecastSignals
+    forecastSignals,
+    riskPropagationSignals
   );
   let answer: PortfolioQueryResponse = {
     ...deterministic,

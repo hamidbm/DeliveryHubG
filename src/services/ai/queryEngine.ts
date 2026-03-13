@@ -1,6 +1,7 @@
 import {
   EntityReference,
   ForecastSignal,
+  RiskPropagationSignal,
   PortfolioQueryResponse,
   PortfolioSnapshot,
   PortfolioSnapshotHistory,
@@ -61,6 +62,9 @@ type Intent =
   | 'forecast-milestone-slip'
   | 'forecast-execution-slowdown'
   | 'forecast-backlog-growth'
+  | 'propagation-cascade'
+  | 'propagation-dependencies'
+  | 'propagation-paths'
   | 'general';
 
 const KEYWORDS: Record<Intent, string[]> = {
@@ -99,6 +103,9 @@ const KEYWORDS: Record<Intent, string[]> = {
   'forecast-milestone-slip': ['milestones likely to slip', 'milestone may slip', 'likely to slip'],
   'forecast-execution-slowdown': ['execution slowing down', 'throughput slowdown', 'delivery slowdown'],
   'forecast-backlog-growth': ['areas show growing backlog', 'growing backlog', 'backlog growth'],
+  'propagation-cascade': ['cascade', 'ripple effect', 'cross-project', 'impact other areas'],
+  'propagation-dependencies': ['dependencies contributing to risk', 'dependency risk', 'dependency contributing'],
+  'propagation-paths': ['risk paths', 'propagation paths', 'interdependency paths'],
   general: []
 };
 
@@ -141,6 +148,15 @@ const detectIntent = (q: string): Intent => {
   }
   if (q.includes('growing backlog')) {
     return 'forecast-backlog-growth';
+  }
+  if (q.includes('cascade') || q.includes('ripple effect') || q.includes('cross-project')) {
+    return 'propagation-cascade';
+  }
+  if (q.includes('dependency') && q.includes('risk')) {
+    return 'propagation-dependencies';
+  }
+  if ((q.includes('propagation') || q.includes('interdependency')) && q.includes('path')) {
+    return 'propagation-paths';
   }
 
   const scores: Array<{ intent: Intent; score: number }> = [];
@@ -707,6 +723,56 @@ const answerForecastQuery = (
   });
 };
 
+const answerPropagationQuery = (
+  signals: RiskPropagationSignal[] = [],
+  mode: 'cascade' | 'dependencies' | 'paths'
+): PortfolioQueryResponse => {
+  if (!signals.length) {
+    return withEntities({
+      answer: 'No cross-project propagation signals are currently available.',
+      explanation: 'Generate risk propagation analysis first to evaluate cascade impact across dependencies.',
+      evidence: asEvidence(['Risk propagation cache is empty.']),
+      followUps: [
+        'Generate risk propagation analysis now.',
+        'What risks may impact delivery soon?',
+        'Which milestones are likely to slip?'
+      ]
+    });
+  }
+
+  const top = signals.slice(0, 5);
+  const label = mode === 'cascade'
+    ? 'cascading delivery risks'
+    : mode === 'dependencies'
+      ? 'dependency-driven risks'
+      : 'propagation paths';
+
+  return withEntities({
+    answer: `${top.length} ${label} identified in the latest cross-project analysis.`,
+    explanation: 'Answer is generated deterministically from dependency graph traversal and upstream risk severity scoring.',
+    evidence: asEvidence(top.flatMap((signal) => {
+      const lines: Array<string | { text: string; entities: EntityReference[] }> = [
+        {
+          text: `${signal.title} (${signal.severity}) - ${signal.summary}`,
+          entities: signal.relatedEntities || []
+        }
+      ];
+      if (mode === 'paths' || mode === 'cascade') {
+        lines.push(...signal.paths.slice(0, 2).map((path) => ({
+          text: `${path.from.label} -> ${path.to.label} via ${path.linkType.replace('_', ' ')}`,
+          entities: [path.from, path.to]
+        })));
+      }
+      return lines;
+    })),
+    followUps: [
+      'Which bundles have the largest downstream blast radius?',
+      'Which upstream blockers should be resolved first?',
+      'Which milestones are exposed by these dependency chains?'
+    ]
+  });
+};
+
 export const answerPortfolioQuestionDeterministically = (
   question: string,
   signals: PortfolioSignalSummary,
@@ -714,7 +780,8 @@ export const answerPortfolioQuestionDeterministically = (
   snapshot: PortfolioSnapshot | undefined,
   trendSignals: PortfolioTrendSignal[] = [],
   snapshotHistory: PortfolioSnapshotHistory[] = [],
-  forecastSignals: ForecastSignal[] = []
+  forecastSignals: ForecastSignal[] = [],
+  riskPropagationSignals: RiskPropagationSignal[] = []
 ): PortfolioQueryResponse => {
   const q = normalizeQuestion(question);
   const intent = detectIntent(q);
@@ -763,6 +830,9 @@ export const answerPortfolioQuestionDeterministically = (
     case 'forecast-milestone-slip': return answerForecastQuery(forecastSignals, 'milestone-slip');
     case 'forecast-execution-slowdown': return answerForecastQuery(forecastSignals, 'execution-slowdown');
     case 'forecast-backlog-growth': return answerForecastQuery(forecastSignals, 'backlog-growth');
+    case 'propagation-cascade': return answerPropagationQuery(riskPropagationSignals, 'cascade');
+    case 'propagation-dependencies': return answerPropagationQuery(riskPropagationSignals, 'dependencies');
+    case 'propagation-paths': return answerPropagationQuery(riskPropagationSignals, 'paths');
     default: {
       const risk = topRisk(report);
       const fallback = withEntities({
