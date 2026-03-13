@@ -52,6 +52,79 @@ const urgencyLabel = (urgency?: string) => {
   return 'Later';
 };
 
+const severityWeight: Record<string, number> = {
+  critical: 4,
+  high: 3,
+  medium: 2,
+  low: 1
+};
+
+const HealthBadge = ({ value }: { value?: string }) => {
+  const level = (value || 'unknown').toLowerCase();
+  return (
+    <span className={`px-3 py-1 rounded-full border text-xs font-bold uppercase ${healthBadgeStyle[level] || healthBadgeStyle.unknown}`}>
+      {level}
+    </span>
+  );
+};
+
+const SeverityBadge = ({ value }: { value?: string }) => {
+  const level = (value || 'medium').toLowerCase();
+  const styleMap: Record<string, string> = {
+    critical: 'bg-rose-100 text-rose-700 border-rose-200',
+    high: 'bg-orange-100 text-orange-700 border-orange-200',
+    medium: 'bg-amber-100 text-amber-700 border-amber-200',
+    low: 'bg-slate-100 text-slate-700 border-slate-200'
+  };
+  return (
+    <span className={`text-[11px] px-2 py-0.5 rounded-full border uppercase font-bold ${styleMap[level] || styleMap.medium}`}>
+      {level}
+    </span>
+  );
+};
+
+const UrgencyBadge = ({ value }: { value?: string }) => {
+  const level = (value || 'later').toLowerCase();
+  const styleMap: Record<string, string> = {
+    now: 'bg-rose-100 text-rose-700 border-rose-200',
+    '7d': 'bg-orange-100 text-orange-700 border-orange-200',
+    '30d': 'bg-amber-100 text-amber-700 border-amber-200',
+    later: 'bg-blue-100 text-blue-700 border-blue-200'
+  };
+  return (
+    <span className={`text-[11px] px-2 py-0.5 rounded-full border uppercase font-bold ${styleMap[level] || styleMap.later}`}>
+      {urgencyLabel(level)}
+    </span>
+  );
+};
+
+const SectionCard = ({
+  icon,
+  title,
+  children
+}: {
+  icon: string;
+  title: string;
+  children: React.ReactNode;
+}) => (
+  <section className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+    <div className="flex items-center gap-2 mb-3">
+      <i className={`fas ${icon} text-slate-400 text-xs`}></i>
+      <h3 className="text-sm font-black uppercase tracking-widest text-slate-500">{title}</h3>
+    </div>
+    {children}
+  </section>
+);
+
+const EvidenceList = ({ evidence }: { evidence?: string[] }) => {
+  if (!evidence?.length) return null;
+  return (
+    <ul className="mt-2 list-disc pl-5 text-sm text-slate-600 space-y-1">
+      {evidence.map((entry, idx) => <li key={`e-${idx}`}>{entry}</li>)}
+    </ul>
+  );
+};
+
 type PdfTextSegment = {
   text: string;
   bold?: boolean;
@@ -736,88 +809,109 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
               )}
               {structuredReport ? (
                 <div className="space-y-5">
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs font-black uppercase tracking-widest text-slate-400">Overall Health</span>
-                    <span className={`px-3 py-1 rounded-full border text-xs font-bold uppercase ${healthBadgeStyle[structuredReport.overallHealth] || healthBadgeStyle.unknown}`}>
-                      {structuredReport.overallHealth}
-                    </span>
-                  </div>
+                  <SectionCard icon="fa-heart-pulse" title="Overall Health">
+                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                      <HealthBadge value={structuredReport.overallHealth} />
+                      <p className="text-sm text-slate-600">
+                        {structuredReport.executiveSummary
+                          ? structuredReport.executiveSummary.split('. ').slice(0, 1).join('. ').trim()
+                          : 'Insufficient data available to determine portfolio health context.'}
+                      </p>
+                    </div>
+                  </SectionCard>
 
-                  <section className="bg-slate-50 border border-slate-200 rounded-xl p-4">
-                    <h3 className="text-sm font-black uppercase tracking-widest text-slate-500 mb-2">Executive Summary</h3>
-                    <p className="text-slate-700 leading-7">{structuredReport.executiveSummary || 'Summary unavailable.'}</p>
-                  </section>
+                  <SectionCard icon="fa-align-left" title="Executive Summary">
+                    <p className="text-slate-700 leading-7 whitespace-pre-wrap break-words">
+                      {structuredReport.executiveSummary || 'Summary unavailable.'}
+                    </p>
+                  </SectionCard>
 
-                  <section className="bg-white border border-slate-200 rounded-xl p-4">
-                    <h3 className="text-sm font-black uppercase tracking-widest text-slate-500 mb-3">Top Risks</h3>
-                    <div className="space-y-3">
-                      {structuredReport.topRisks?.length ? structuredReport.topRisks.map((risk) => (
-                        <div key={risk.id} className="border border-slate-200 rounded-lg p-3 bg-slate-50">
-                          <div className="flex items-center justify-between gap-3">
-                            <p className="font-semibold text-slate-800">{risk.title}</p>
-                            <span className="text-[11px] px-2 py-0.5 rounded-full bg-slate-200 text-slate-700 uppercase font-bold">{risk.severity}</span>
+                  <SectionCard icon="fa-triangle-exclamation" title="Top Risks">
+                    <div className="space-y-3 max-h-[460px] overflow-y-auto pr-1">
+                      {(structuredReport.topRisks || [])
+                        .slice()
+                        .sort((a, b) => (severityWeight[b.severity] || 0) - (severityWeight[a.severity] || 0))
+                        .map((risk) => {
+                          const summary = (risk.summary || '').trim() || risk.evidence?.[0] || 'No summary provided.';
+                          return (
+                            <div key={risk.id} className="border border-slate-200 rounded-lg p-3 bg-slate-50">
+                              <div className="flex items-center justify-between gap-3">
+                                <p className="font-semibold text-slate-800 break-words">{risk.title}</p>
+                                <SeverityBadge value={risk.severity} />
+                              </div>
+                              <p className="text-sm text-slate-600 mt-1 break-words">{summary}</p>
+                              <EvidenceList evidence={risk.evidence} />
+                            </div>
+                          );
+                        })}
+                      {(structuredReport.topRisks || []).length === 0 && (
+                        <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
+                          No major risks identified at this time.
+                        </div>
+                      )}
+                    </div>
+                  </SectionCard>
+
+                  <SectionCard icon="fa-list-check" title="Recommended Actions">
+                    <div className="space-y-3 max-h-[460px] overflow-y-auto pr-1">
+                      {(structuredReport.recommendedActions || []).map((action) => {
+                        const summary = (action.summary || '').trim() || action.evidence?.[0] || 'No summary provided.';
+                        return (
+                          <div key={action.id} className="border border-slate-200 rounded-lg p-3 bg-slate-50">
+                            <div className="flex items-center justify-between gap-3">
+                              <p className="font-semibold text-slate-800 break-words">{action.title}</p>
+                              <UrgencyBadge value={action.urgency} />
+                            </div>
+                            <p className="text-sm text-slate-600 mt-1 break-words">{summary}</p>
+                            {action.ownerHint && <p className="text-xs text-slate-500 mt-2">Owner Hint: {action.ownerHint}</p>}
+                            <EvidenceList evidence={action.evidence} />
                           </div>
-                          <p className="text-sm text-slate-600 mt-1">{risk.summary}</p>
-                          {risk.evidence?.length > 0 && (
-                            <ul className="mt-2 list-disc pl-5 text-sm text-slate-600 space-y-1">
-                              {risk.evidence.map((entry, idx) => <li key={`${risk.id}-e-${idx}`}>{entry}</li>)}
-                            </ul>
-                          )}
+                        );
+                      })}
+                      {(structuredReport.recommendedActions || []).length === 0 && (
+                        <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
+                          No recommended actions available.
                         </div>
-                      )) : <p className="text-sm text-slate-500">No major risks identified.</p>}
+                      )}
                     </div>
-                  </section>
+                  </SectionCard>
 
-                  <section className="bg-white border border-slate-200 rounded-xl p-4">
-                    <h3 className="text-sm font-black uppercase tracking-widest text-slate-500 mb-3">Recommended Actions</h3>
-                    <div className="space-y-3">
-                      {structuredReport.recommendedActions?.length ? structuredReport.recommendedActions.map((action) => (
-                        <div key={action.id} className="border border-slate-200 rounded-lg p-3 bg-slate-50">
-                          <div className="flex items-center justify-between gap-3">
-                            <p className="font-semibold text-slate-800">{action.title}</p>
-                            <span className="text-[11px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 uppercase font-bold">{urgencyLabel(action.urgency)}</span>
+                  <SectionCard icon="fa-bullseye" title="Concentration Signals">
+                    <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
+                      {(structuredReport.concentrationSignals || []).map((signal) => {
+                        const summary = (signal.summary || '').trim() || signal.evidence?.[0] || 'No summary provided.';
+                        return (
+                          <div key={signal.id} className="border border-slate-200 rounded-lg p-3 bg-slate-50">
+                            <p className="font-semibold text-slate-800 break-words">{signal.title}</p>
+                            <p className="text-sm text-slate-600 mt-1 break-words">{summary}</p>
+                            {signal.impact && <p className="text-xs text-slate-500 mt-2">Impact: {signal.impact}</p>}
+                            <EvidenceList evidence={signal.evidence} />
                           </div>
-                          <p className="text-sm text-slate-600 mt-1">{action.summary}</p>
-                          {action.ownerHint && <p className="text-xs text-slate-500 mt-2">Owner Hint: {action.ownerHint}</p>}
-                          {action.evidence?.length ? (
-                            <ul className="mt-2 list-disc pl-5 text-sm text-slate-600 space-y-1">
-                              {action.evidence.map((entry, idx) => <li key={`${action.id}-e-${idx}`}>{entry}</li>)}
-                            </ul>
-                          ) : null}
+                        );
+                      })}
+                      {(structuredReport.concentrationSignals || []).length === 0 && (
+                        <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
+                          No concentration signals identified.
                         </div>
-                      )) : <p className="text-sm text-slate-500">No recommended actions available.</p>}
+                      )}
                     </div>
-                  </section>
+                  </SectionCard>
 
-                  <section className="bg-white border border-slate-200 rounded-xl p-4">
-                    <h3 className="text-sm font-black uppercase tracking-widest text-slate-500 mb-3">Concentration Signals</h3>
-                    <div className="space-y-3">
-                      {structuredReport.concentrationSignals?.length ? structuredReport.concentrationSignals.map((signal) => (
-                        <div key={signal.id} className="border border-slate-200 rounded-lg p-3 bg-slate-50">
-                          <p className="font-semibold text-slate-800">{signal.title}</p>
-                          <p className="text-sm text-slate-600 mt-1">{signal.summary}</p>
-                          {signal.impact && <p className="text-xs text-slate-500 mt-2">Impact: {signal.impact}</p>}
-                          {signal.evidence?.length ? (
-                            <ul className="mt-2 list-disc pl-5 text-sm text-slate-600 space-y-1">
-                              {signal.evidence.map((entry, idx) => <li key={`${signal.id}-e-${idx}`}>{entry}</li>)}
-                            </ul>
-                          ) : null}
-                        </div>
-                      )) : <p className="text-sm text-slate-500">No concentration signals identified.</p>}
-                    </div>
-                  </section>
-
-                  <section className="bg-white border border-slate-200 rounded-xl p-4">
-                    <h3 className="text-sm font-black uppercase tracking-widest text-slate-500 mb-3">Questions To Ask</h3>
-                    <div className="space-y-2">
-                      {structuredReport.questionsToAsk?.length ? structuredReport.questionsToAsk.map((item) => (
+                  <SectionCard icon="fa-circle-question" title="Questions To Ask">
+                    <div className="space-y-2 max-h-[360px] overflow-y-auto pr-1">
+                      {(structuredReport.questionsToAsk || []).map((item) => (
                         <div key={item.id} className="border border-slate-200 rounded-lg p-3 bg-slate-50">
-                          <p className="text-sm font-semibold text-slate-800">{item.question}</p>
-                          {item.rationale && <p className="text-xs text-slate-500 mt-1">{item.rationale}</p>}
+                          <p className="text-sm font-semibold text-slate-800 break-words">{item.question}</p>
+                          {item.rationale && <p className="text-xs text-slate-500 mt-1 break-words">{item.rationale}</p>}
                         </div>
-                      )) : <p className="text-sm text-slate-500">No follow-up questions available.</p>}
+                      ))}
+                      {(structuredReport.questionsToAsk || []).length === 0 && (
+                        <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
+                          No follow-up questions suggested.
+                        </div>
+                      )}
                     </div>
-                  </section>
+                  </SectionCard>
 
                   {structuredReport.markdownReport && (
                     <section className="bg-white border border-slate-200 rounded-xl p-4">
