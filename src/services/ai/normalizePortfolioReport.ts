@@ -9,6 +9,7 @@ import {
 } from '../../types/ai';
 import { PortfolioSignalSummary } from './portfolioSignals';
 import { formatPortfolioReportAsMarkdown } from './formatPortfolioReportAsMarkdown';
+import { toEvidenceItems } from './evidenceEntities';
 
 const HEALTH_VALUES: PortfolioHealthSignal[] = ['green', 'amber', 'red', 'unknown'];
 const RISK_VALUES: PortfolioRiskSeverity[] = ['low', 'medium', 'high', 'critical'];
@@ -27,6 +28,22 @@ const asStringArray = (value: unknown, maxItems = 5) => {
     .filter(Boolean)
     .slice(0, maxItems);
 };
+
+const asEvidenceTextArray = (value: unknown, maxItems = 5) => {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((entry: any) => {
+      if (typeof entry === 'string') return entry.trim();
+      if (typeof entry?.text === 'string') return entry.text.trim();
+      if (typeof entry?.label === 'string' && typeof entry?.value === 'string') return `${entry.label}: ${entry.value}`.trim();
+      return '';
+    })
+    .filter(Boolean)
+    .slice(0, maxItems);
+};
+
+const evidenceFromTexts = (texts: string[], provenance: 'ai' | 'deterministic' | 'legacy') =>
+  toEvidenceItems(texts, provenance, 5);
 
 const stripMarkdownSyntax = (text: string) => text
   .replace(/```[\s\S]*?```/g, (block) => block.replace(/```/g, '').trim())
@@ -54,26 +71,30 @@ const deterministicSeverityFromSignals = (signals: PortfolioSignalSummary): Port
   return 'low';
 };
 
-const ensureRiskEvidence = (evidence: string[], signals: PortfolioSignalSummary) => {
-  const seeded = [...evidence];
+const ensureRiskEvidence = (evidenceTexts: string[], signals: PortfolioSignalSummary, provenance: 'ai' | 'deterministic' | 'legacy') => {
+  const seeded = [...evidenceTexts];
   if (seeded.length === 0) {
     seeded.push(`${signals.unassignedWorkItems} out of ${signals.totalWorkItems} work items are unassigned.`);
   }
   if (seeded.length < 2) {
     seeded.push(`Only ${signals.inProgressWorkItems} work items (${(signals.activeWorkRatio * 100).toFixed(1)}%) are in progress.`);
   }
-  return seeded.slice(0, 5);
+  return evidenceFromTexts(seeded.slice(0, 5), provenance);
 };
 
-const ensureActionEvidence = (evidence: string[], fallbackEvidence: string[]) => {
-  const seeded = [...evidence];
+const ensureActionEvidence = (
+  evidenceTexts: string[],
+  fallbackEvidence: string[],
+  provenance: 'ai' | 'deterministic' | 'legacy'
+) => {
+  const seeded = [...evidenceTexts];
   if (seeded.length === 0 && fallbackEvidence.length > 0) {
     seeded.push(fallbackEvidence[0]);
   }
   if (seeded.length < 2 && fallbackEvidence.length > 1) {
     seeded.push(fallbackEvidence[1]);
   }
-  return seeded.slice(0, 5);
+  return evidenceFromTexts(seeded.slice(0, 5), provenance);
 };
 
 const defaultExecutiveSummary = (signals: PortfolioSignalSummary) => [
@@ -94,7 +115,7 @@ const synthesizeRisks = (signals: PortfolioSignalSummary): StructuredRiskItem[] 
       evidence: ensureRiskEvidence([
         `${signals.unassignedWorkItems} out of ${signals.totalWorkItems} work items are unassigned.`,
         `Unassigned ratio is ${(signals.unassignedRatio * 100).toFixed(1)}%.`
-      ], signals),
+      ], signals, 'deterministic'),
       provenance: 'deterministic'
     });
   }
@@ -107,7 +128,7 @@ const synthesizeRisks = (signals: PortfolioSignalSummary): StructuredRiskItem[] 
       evidence: ensureRiskEvidence([
         `${signals.blockedWorkItems} work items are currently blocked.`,
         `Blocked ratio is ${(signals.blockedRatio * 100).toFixed(1)}%.`
-      ], signals),
+      ], signals, 'deterministic'),
       provenance: 'deterministic'
     });
   }
@@ -120,7 +141,7 @@ const synthesizeRisks = (signals: PortfolioSignalSummary): StructuredRiskItem[] 
       evidence: ensureRiskEvidence([
         `${signals.overdueWorkItems} work items are overdue.`,
         `${signals.milestonesOverdue} milestones are overdue.`
-      ].filter((item) => !item.startsWith('0 ')), signals),
+      ].filter((item) => !item.startsWith('0 ')), signals, 'deterministic'),
       provenance: 'deterministic'
     });
   }
@@ -141,7 +162,7 @@ const synthesizeActions = (signals: PortfolioSignalSummary): StructuredActionIte
       evidence: [
         `${signals.unassignedWorkItems} work items are currently unassigned.`,
         `Unassigned ratio is ${(signals.unassignedRatio * 100).toFixed(1)}%.`
-      ],
+      ].map((entry) => evidenceFromTexts([entry], 'deterministic')[0]).filter(Boolean),
       provenance: 'deterministic'
     });
   }
@@ -155,7 +176,7 @@ const synthesizeActions = (signals: PortfolioSignalSummary): StructuredActionIte
       evidence: [
         `${signals.blockedWorkItems} work items are blocked.`,
         `Blocked ratio is ${(signals.blockedRatio * 100).toFixed(1)}%.`
-      ],
+      ].map((entry) => evidenceFromTexts([entry], 'deterministic')[0]).filter(Boolean),
       provenance: 'deterministic'
     });
   }
@@ -169,7 +190,7 @@ const synthesizeActions = (signals: PortfolioSignalSummary): StructuredActionIte
       evidence: [
         `${signals.reviewsOpen} review cycles are open.`,
         `${signals.reviewsOverdue} review cycles are overdue.`
-      ],
+      ].map((entry) => evidenceFromTexts([entry], 'deterministic')[0]).filter(Boolean),
       provenance: 'deterministic'
     });
   }
@@ -186,7 +207,7 @@ const synthesizeConcentrationSignals = (signals: PortfolioSignalSummary): Struct
       evidence: [
         `${signals.inProgressWorkItems} work items are in progress out of ${signals.totalWorkItems}.`,
         `Active work ratio is ${(signals.activeWorkRatio * 100).toFixed(1)}%.`
-      ],
+      ].map((entry) => evidenceFromTexts([entry], 'deterministic')[0]).filter(Boolean),
       provenance: 'deterministic'
     });
   }
@@ -198,7 +219,7 @@ const synthesizeConcentrationSignals = (signals: PortfolioSignalSummary): Struct
       evidence: [
         `${signals.unassignedWorkItems} work items are unassigned.`,
         `Unassigned ratio is ${(signals.unassignedRatio * 100).toFixed(1)}%.`
-      ],
+      ].map((entry) => evidenceFromTexts([entry], 'deterministic')[0]).filter(Boolean),
       provenance: 'deterministic'
     });
   }
@@ -210,7 +231,7 @@ const synthesizeConcentrationSignals = (signals: PortfolioSignalSummary): Struct
       evidence: [
         `${signals.criticalApplications} applications are critical.`,
         `${signals.blockedWorkItems} items are blocked and ${signals.overdueWorkItems} are overdue.`
-      ],
+      ].map((entry) => evidenceFromTexts([entry], 'deterministic')[0]).filter(Boolean),
       provenance: 'deterministic'
     });
   }
@@ -312,7 +333,7 @@ const normalizeLegacyMarkdownReport = (raw: unknown, signals: PortfolioSignalSum
     title: entry.slice(0, 100),
     severity: deterministicSeverityFromSignals(signals),
     summary: entry,
-    evidence: ensureRiskEvidence([entry], signals),
+    evidence: ensureRiskEvidence([entry], signals, 'legacy'),
     provenance: 'legacy' as const
   }));
   const recommendedActions = actionBullets.slice(0, 5).map((entry, index) => ({
@@ -320,14 +341,14 @@ const normalizeLegacyMarkdownReport = (raw: unknown, signals: PortfolioSignalSum
     title: entry.slice(0, 100),
     urgency: '7d' as const,
     summary: entry,
-    evidence: ensureActionEvidence([entry], signals.notableSignals),
+    evidence: ensureActionEvidence([entry], signals.notableSignals, 'legacy'),
     provenance: 'legacy' as const
   }));
   const concentrationSignals = signalBullets.slice(0, 5).map((entry, index) => ({
     id: `signal-${index + 1}`,
     title: entry.slice(0, 100),
     summary: entry,
-    evidence: [entry, ...signals.notableSignals].slice(0, 2),
+    evidence: evidenceFromTexts([entry, ...signals.notableSignals].slice(0, 2), 'legacy'),
     provenance: 'legacy' as const
   }));
   const questionsToAsk = questionBullets.slice(0, 6).map((entry, index) => ({
@@ -404,12 +425,15 @@ export const normalizePortfolioReport = (
       const effectiveSeverity = RISK_VALUES.indexOf(chosenSeverity) < RISK_VALUES.indexOf(deterministicSeverity)
         ? deterministicSeverity
         : chosenSeverity;
+      const explicitEvidence = toEvidenceItems(item?.evidence, 'ai', 5);
       return {
         id: `risk-${index + 1}`,
         title: asString(item?.title, `Risk ${index + 1}`),
         severity: effectiveSeverity,
         summary: asString(item?.summary, 'No summary provided.'),
-        evidence: ensureRiskEvidence(asStringArray(item?.evidence, 5), signals),
+        evidence: explicitEvidence.length > 0
+          ? explicitEvidence
+          : ensureRiskEvidence(asEvidenceTextArray(item?.evidence, 5), signals, 'ai'),
         provenance: 'ai' as const
       };
     });
@@ -425,13 +449,16 @@ export const normalizePortfolioReport = (
           : deterministicSeverityFromSignals(signals) === 'medium'
             ? '30d'
             : 'later';
+      const explicitEvidence = toEvidenceItems(item?.evidence, 'ai', 5);
       return {
         id: `action-${index + 1}`,
         title: asString(item?.title, `Action ${index + 1}`),
         urgency: (URGENCY_VALUES as readonly string[]).includes(urgencyCandidate) ? urgencyCandidate as (typeof URGENCY_VALUES)[number] : defaultUrgency,
         summary: asString(item?.summary, 'No summary provided.'),
         ownerHint: asString(item?.ownerHint, '') || undefined,
-        evidence: ensureActionEvidence(asStringArray(item?.evidence, 5), signals.notableSignals),
+        evidence: explicitEvidence.length > 0
+          ? explicitEvidence
+          : ensureActionEvidence(asEvidenceTextArray(item?.evidence, 5), signals.notableSignals, 'ai'),
         provenance: 'ai' as const
       };
     });
@@ -443,9 +470,9 @@ export const normalizePortfolioReport = (
       title: asString(item?.title, `Signal ${index + 1}`),
       summary: asString(item?.summary, 'No summary provided.'),
       impact: asString(item?.impact, '') || undefined,
-      evidence: asStringArray(item?.evidence, 5).length > 0
-        ? asStringArray(item?.evidence, 5)
-        : signals.notableSignals.slice(0, 2),
+      evidence: asEvidenceTextArray(item?.evidence, 5).length > 0
+        ? toEvidenceItems(item?.evidence, 'ai', 5)
+        : evidenceFromTexts(signals.notableSignals.slice(0, 2), 'deterministic'),
       provenance: 'ai' as const
     }));
 

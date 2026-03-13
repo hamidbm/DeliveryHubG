@@ -165,6 +165,11 @@ Implemented:
   - deterministic-first answering over cached structured portfolio report
   - evidence/follow-up response shape for explainable AI interaction
   - AI Insights “Ask DeliveryHub AI” panel with dynamic quick suggestions and follow-up re-query flow
+- 12C.1: evidence exploration + entity drill-down:
+  - typed evidence/entity contracts (`EvidenceItem`, `EntityReference`, `EntityType`) applied to structured sections and query answers
+  - centralized entity mapping/link utility for evidence (`src/services/ai/evidenceEntities.ts`)
+  - AI Insights evidence UI upgraded with clickable entity chips and grouped related-entity lists
+  - graceful fallback preserved for evidence items without entity references
 
 Current 12B behavior:
 - structured sections are primary in AI Insights UI

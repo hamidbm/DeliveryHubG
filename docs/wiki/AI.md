@@ -91,7 +91,7 @@ AI in DeliveryHub is assistive only. It never writes to the database without exp
   - standardized response contract:
     - `answer`
     - `explanation`
-    - `evidence[]` (module, label, metric/value, confidence, recommendation, source)
+    - `evidence[]` (`EvidenceItem[]` with `text`, `entities[]`, optional `provenance`)
     - `followUps[]`
   - graceful behavior when provider/parsing fails: still returns useful deterministic guidance from cached structured data
   - new query services:
@@ -102,6 +102,28 @@ AI in DeliveryHub is assistive only. It never writes to the database without exp
     - contextual quick suggestions from report/signals
     - evidence-backed answer rendering
     - follow-up chips that can be clicked to immediately re-query
+- 12C.1 introduced operational drill-down from insights to entities:
+  - typed evidence model in `src/types/ai.ts`:
+    - `EntityType`: `workitem | application | bundle | milestone | review`
+    - `EntityReference`: `type`, `id`, `label`, optional `secondary`
+    - `EvidenceItem`: `text`, `entities[]`, optional `provenance`
+  - structured report section evidence now uses `EvidenceItem[]`:
+    - `topRisks`
+    - `recommendedActions`
+    - `concentrationSignals`
+  - query response evidence now uses `EvidenceItem[]`
+  - centralized evidence/entity mapping utility:
+    - `src/services/ai/evidenceEntities.ts`
+    - best-effort entity extraction from evidence text (exact IDs where present; group refs otherwise)
+    - centralized entity link resolution for UI drill-down
+  - normalization and deterministic synthesis now emit entity-anchored evidence:
+    - `src/services/ai/normalizePortfolioReport.ts`
+    - `src/services/ai/queryEngine.ts`
+  - AI Insights UI evidence rendering upgraded with related-entity drill-down:
+    - `src/components/ui/EntityEvidenceList.tsx`
+    - used in risks/actions/signals/query-answer evidence blocks
+  - fallback behavior preserved:
+    - evidence still renders as plain text if no entity references are available
 
 ## Where AI Shows Up
 - Wiki page view: AI dropdown for summary, key decisions, assumptions

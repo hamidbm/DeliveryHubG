@@ -54,6 +54,12 @@ Dashboards provide program-level rollups for milestones, risks, and delivery sta
   - evidence-backed responses with concise explanation and follow-up prompts
   - follow-up prompts are actionable chips that can be re-run as new queries
   - API endpoint: `POST /api/ai/portfolio-query`
+- 12C.1 added evidence exploration and drill-down:
+  - structured and query evidence now use typed `EvidenceItem[]` with `entities[]`
+  - entity references include `workitem`, `application`, `bundle`, `milestone`, `review`
+  - AI Insights evidence blocks now render clickable entity chips and grouped **Related Entities**
+  - drill-down links navigate to existing DeliveryHub pages/views without regenerating AI content
+  - when no entity refs exist, evidence still renders as plain text
 
 ## Program Capacity (v1)
 - Capacity is defined per bundle as points per week or points per sprint.

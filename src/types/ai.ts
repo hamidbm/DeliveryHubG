@@ -33,13 +33,27 @@ export type PortfolioSummaryStatus = 'success' | 'error' | 'empty';
 export type PortfolioHealthSignal = 'green' | 'amber' | 'red' | 'unknown';
 export type PortfolioRiskSeverity = 'low' | 'medium' | 'high' | 'critical';
 export type PortfolioReportProvenance = 'ai' | 'deterministic' | 'legacy';
+export type EntityType = 'workitem' | 'application' | 'bundle' | 'milestone' | 'review';
+
+export interface EntityReference {
+  type: EntityType;
+  id: string;
+  label: string;
+  secondary?: string;
+}
+
+export interface EvidenceItem {
+  text: string;
+  entities: EntityReference[];
+  provenance?: PortfolioReportProvenance;
+}
 
 export interface StructuredRiskItem {
   id: string;
   title: string;
   severity: PortfolioRiskSeverity;
   summary: string;
-  evidence: string[];
+  evidence: EvidenceItem[];
   provenance: PortfolioReportProvenance;
 }
 
@@ -49,7 +63,7 @@ export interface StructuredActionItem {
   urgency: 'now' | '7d' | '30d' | 'later';
   summary: string;
   ownerHint?: string;
-  evidence?: string[];
+  evidence?: EvidenceItem[];
   provenance: PortfolioReportProvenance;
 }
 
@@ -58,7 +72,7 @@ export interface StructuredConcentrationSignal {
   title: string;
   summary: string;
   impact?: string;
-  evidence?: string[];
+  evidence?: EvidenceItem[];
   provenance: PortfolioReportProvenance;
 }
 
@@ -107,11 +121,6 @@ export interface PortfolioSummaryResponse {
   report?: StructuredPortfolioReport;
 }
 
-export interface PortfolioQueryEvidenceItem {
-  label: string;
-  value: string;
-}
-
 export interface PortfolioSuggestion {
   id: string;
   label: string;
@@ -123,6 +132,6 @@ export interface PortfolioSuggestion {
 export interface PortfolioQueryResponse {
   answer: string;
   explanation: string;
-  evidence: PortfolioQueryEvidenceItem[];
+  evidence: EvidenceItem[];
   followUps: string[];
 }

@@ -5,6 +5,7 @@ import { PortfolioQueryResponse, PortfolioSummaryResponse } from '../../../../ty
 import { derivePortfolioSignals } from '../../../../services/ai/portfolioSignals';
 import { answerPortfolioQuestionDeterministically } from '../../../../services/ai/queryEngine';
 import { executeAiTextTask } from '../../../../services/aiRouting';
+import { toEvidenceItems } from '../../../../services/ai/evidenceEntities';
 
 const CACHE_KEY = 'portfolio-summary';
 
@@ -76,7 +77,7 @@ Return strict JSON only with shape:
 {
   "answer": "string",
   "explanation": "string",
-  "evidence": [{"label":"string","value":"string"}],
+  "evidence": [{"text":"string","entities":[{"type":"workitem|application|bundle|milestone|review","id":"string","label":"string","secondary":"optional"}]}],
   "followUps": ["string"]
 }
 Keep evidence factual and concise.
@@ -95,18 +96,13 @@ Do not invent numbers.`;
     const raw = execution.text?.trim() || '';
     const parsed = JSON.parse(raw.startsWith('{') ? raw : raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1));
     if (typeof parsed?.answer === 'string' && typeof parsed?.explanation === 'string') {
+      const parsedEvidence = Array.isArray(parsed.evidence)
+        ? toEvidenceItems(parsed.evidence, 'ai', 6)
+        : [];
       answer = {
         answer: parsed.answer.trim() || deterministic.answer,
         explanation: parsed.explanation.trim() || deterministic.explanation,
-        evidence: Array.isArray(parsed.evidence)
-          ? parsed.evidence
-            .map((item: any) => ({
-              label: typeof item?.label === 'string' ? item.label.trim() : '',
-              value: typeof item?.value === 'string' ? item.value.trim() : ''
-            }))
-            .filter((item: any) => item.label && item.value)
-            .slice(0, 6)
-          : deterministic.evidence,
+        evidence: parsedEvidence.length > 0 ? parsedEvidence : deterministic.evidence,
         followUps: Array.isArray(parsed.followUps)
           ? parsed.followUps.map((item: any) => String(item || '').trim()).filter(Boolean).slice(0, 6)
           : deterministic.followUps

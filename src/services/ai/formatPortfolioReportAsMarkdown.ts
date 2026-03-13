@@ -1,4 +1,5 @@
 import {
+  EvidenceItem,
   StructuredPortfolioReport,
   StructuredActionItem,
   StructuredConcentrationSignal,
@@ -17,8 +18,8 @@ const urgencyLabel = (value: StructuredActionItem['urgency']) => {
 
 const healthLabel = (value: StructuredPortfolioReport['overallHealth']) => value.charAt(0).toUpperCase() + value.slice(1);
 
-const joinEvidence = (evidence?: string[]) => (evidence && evidence.length > 0
-  ? evidence.map((entry) => `  - ${entry}`).join('\n')
+const joinEvidence = (evidence?: EvidenceItem[]) => (evidence && evidence.length > 0
+  ? evidence.map((entry) => `  - ${entry.text}`).join('\n')
   : '  - No explicit evidence provided.');
 
 const formatRisks = (items: StructuredRiskItem[]) => {

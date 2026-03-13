@@ -6,6 +6,7 @@ import { marked } from 'marked';
 import DOMPurify from 'isomorphic-dompurify';
 import { derivePortfolioSignals } from '../services/ai/portfolioSignals';
 import { generatePortfolioSuggestions } from '../services/ai/suggestionGenerator';
+import EntityEvidenceList from './ui/EntityEvidenceList';
 
 type AnalysisState = 'loading' | 'success' | 'error' | 'cached' | 'empty';
 let lastAutoLoadAt = 0;
@@ -117,15 +118,6 @@ const SectionCard = ({
     {children}
   </section>
 );
-
-const EvidenceList = ({ evidence }: { evidence?: string[] }) => {
-  if (!evidence?.length) return null;
-  return (
-    <ul className="mt-2 list-disc pl-5 text-sm text-slate-600 space-y-1">
-      {evidence.map((entry, idx) => <li key={`e-${idx}`}>{entry}</li>)}
-    </ul>
-  );
-};
 
 type PdfTextSegment = {
   text: string;
@@ -881,7 +873,7 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
                         .slice()
                         .sort((a, b) => (severityWeight[b.severity] || 0) - (severityWeight[a.severity] || 0))
                         .map((risk) => {
-                          const summary = (risk.summary || '').trim() || risk.evidence?.[0] || 'No summary provided.';
+                          const summary = (risk.summary || '').trim() || risk.evidence?.[0]?.text || 'No summary provided.';
                           return (
                             <div key={risk.id} className="border border-slate-200 rounded-lg p-3 bg-slate-50">
                               <div className="flex items-center justify-between gap-3">
@@ -889,7 +881,7 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
                                 <SeverityBadge value={risk.severity} />
                               </div>
                               <p className="text-sm text-slate-600 mt-1 break-words">{summary}</p>
-                              <EvidenceList evidence={risk.evidence} />
+                              <EntityEvidenceList evidence={risk.evidence} />
                             </div>
                           );
                         })}
@@ -904,7 +896,7 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
                   <SectionCard icon="fa-list-check" title="Recommended Actions">
                     <div className="space-y-3 max-h-[460px] overflow-y-auto pr-1">
                       {(structuredReport.recommendedActions || []).map((action) => {
-                        const summary = (action.summary || '').trim() || action.evidence?.[0] || 'No summary provided.';
+                        const summary = (action.summary || '').trim() || action.evidence?.[0]?.text || 'No summary provided.';
                         return (
                           <div key={action.id} className="border border-slate-200 rounded-lg p-3 bg-slate-50">
                             <div className="flex items-center justify-between gap-3">
@@ -913,7 +905,7 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
                             </div>
                             <p className="text-sm text-slate-600 mt-1 break-words">{summary}</p>
                             {action.ownerHint && <p className="text-xs text-slate-500 mt-2">Owner Hint: {action.ownerHint}</p>}
-                            <EvidenceList evidence={action.evidence} />
+                            <EntityEvidenceList evidence={action.evidence} />
                           </div>
                         );
                       })}
@@ -928,13 +920,13 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
                   <SectionCard icon="fa-bullseye" title="Concentration Signals">
                     <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
                       {(structuredReport.concentrationSignals || []).map((signal) => {
-                        const summary = (signal.summary || '').trim() || signal.evidence?.[0] || 'No summary provided.';
+                        const summary = (signal.summary || '').trim() || signal.evidence?.[0]?.text || 'No summary provided.';
                         return (
                           <div key={signal.id} className="border border-slate-200 rounded-lg p-3 bg-slate-50">
                             <p className="font-semibold text-slate-800 break-words">{signal.title}</p>
                             <p className="text-sm text-slate-600 mt-1 break-words">{summary}</p>
                             {signal.impact && <p className="text-xs text-slate-500 mt-2">Impact: {signal.impact}</p>}
-                            <EvidenceList evidence={signal.evidence} />
+                            <EntityEvidenceList evidence={signal.evidence} />
                           </div>
                         );
                       })}
@@ -1025,11 +1017,7 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
                           {queryResponse.evidence?.length > 0 && (
                             <div>
                               <p className="text-xs font-black uppercase tracking-widest text-slate-400 mb-1">Evidence</p>
-                              <ul className="list-disc pl-5 text-sm text-slate-600 space-y-1">
-                                {queryResponse.evidence.map((item, idx) => (
-                                  <li key={`qev-${idx}`}><strong>{item.label}:</strong> {item.value}</li>
-                                ))}
-                              </ul>
+                              <EntityEvidenceList evidence={queryResponse.evidence} />
                             </div>
                           )}
                           {queryResponse.followUps?.length > 0 && (
