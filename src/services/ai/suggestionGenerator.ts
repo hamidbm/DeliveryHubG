@@ -127,6 +127,44 @@ export const generatePortfolioSuggestions = (
     });
   }
 
+  const activeAlerts = report?.alerts || [];
+  if (activeAlerts.length > 0) {
+    pushUnique(suggestions, {
+      id: 'sugg-alerts-active',
+      label: 'Active alerts',
+      prompt: 'What alerts are active now?',
+      category: 'alert',
+      provenance: 'deterministic'
+    });
+    pushUnique(suggestions, {
+      id: 'sugg-alerts-emerging',
+      label: 'Emerging risks',
+      prompt: 'Show me emerging portfolio risks.',
+      category: 'alert',
+      provenance: 'deterministic'
+    });
+  }
+
+  const healthScore = report?.healthScore;
+  if (healthScore) {
+    pushUnique(suggestions, {
+      id: 'sugg-health-score',
+      label: 'Health score',
+      prompt: 'Check delivery execution health score.',
+      category: 'health',
+      provenance: 'deterministic'
+    });
+    if (healthScore.overall < 70) {
+      pushUnique(suggestions, {
+        id: 'sugg-health-low',
+        label: 'Low health drivers',
+        prompt: 'Which signals are driving the low portfolio health score?',
+        category: 'health',
+        provenance: 'deterministic'
+      });
+    }
+  }
+
   (report?.questionsToAsk || []).forEach((question, index) => {
     pushUnique(suggestions, {
       id: `sugg-report-${index + 1}`,

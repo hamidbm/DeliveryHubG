@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Application, Bundle } from '../types';
-import { EntityReference, EntityType, EvidenceItem, PortfolioSummaryResponse, PortfolioQueryResponse, PortfolioSuggestion, RelatedEntitiesMeta, SavedInvestigation } from '../types/ai';
+import { EntityReference, EntityType, EvidenceItem, PortfolioAlert, PortfolioSummaryResponse, PortfolioQueryResponse, PortfolioSuggestion, RelatedEntitiesMeta, SavedInvestigation } from '../types/ai';
 import MarkdownRenderer from './MarkdownRenderer';
 import { marked } from 'marked';
 import DOMPurify from 'isomorphic-dompurify';
@@ -9,6 +9,8 @@ import { generatePortfolioSuggestions } from '../services/ai/suggestionGenerator
 import EntityEvidenceList from './ui/EntityEvidenceList';
 import RelatedEntitiesSection from './ui/RelatedEntitiesSection';
 import TrendSignalCard from './ui/TrendSignalCard';
+import HealthScoreCard from './ui/HealthScoreCard';
+import AlertCard from './ui/AlertCard';
 import QueryHistoryPanel, { QueryHistoryItem } from './ai/QueryHistoryPanel';
 import InvestigationPanel from './ai/InvestigationPanel';
 import PinnedInsightsPanel from './ai/PinnedInsightsPanel';
@@ -66,6 +68,8 @@ const severityWeight: Record<string, number> = {
   medium: 2,
   low: 1
 };
+
+const alertSeverityWeight = severityWeight;
 
 const HealthBadge = ({ value }: { value?: string }) => {
   const level = (value || 'unknown').toLowerCase();
@@ -797,6 +801,23 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
     await refreshInvestigations();
   };
 
+  const saveAlertAsInvestigation = async (alert: PortfolioAlert) => {
+    const queryResult: PortfolioQueryResponse = {
+      answer: `${alert.title} (${alert.severity})`,
+      explanation: alert.rationale,
+      evidence: alert.evidence || [],
+      alerts: [alert],
+      followUps: [
+        'Which entities are driving this alert?',
+        'What should be fixed in the next 7 days?',
+        'Is this alert trend improving or worsening?'
+      ],
+      relatedEntitiesMeta,
+      entities: alert.entities || []
+    };
+    await saveInvestigation(alert.title, queryResult);
+  };
+
   const handleRunSaved = async (item: SavedInvestigation) => {
     setQueryInput(item.question);
     await submitQuery(item.question);
@@ -1115,6 +1136,10 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
                     </div>
                   </SectionCard>
 
+                  <SectionCard icon="fa-gauge-high" title="Portfolio Health">
+                    <HealthScoreCard score={structuredReport.healthScore} />
+                  </SectionCard>
+
                   <SectionCard icon="fa-chart-line" title="Portfolio Trends">
                     <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
                       {(structuredReport.trendSignals || []).map((signal, index) => (
@@ -1126,6 +1151,27 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
                       {(structuredReport.trendSignals || []).length === 0 && (
                         <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
                           Trend analysis needs at least two historical snapshots. Generate more reports over time to unlock this section.
+                        </div>
+                      )}
+                    </div>
+                  </SectionCard>
+
+                  <SectionCard icon="fa-bell" title="Alerts">
+                    <div className="space-y-3 max-h-[460px] overflow-y-auto pr-1">
+                      {(structuredReport.alerts || [])
+                        .slice()
+                        .sort((a, b) => (alertSeverityWeight[b.severity] || 0) - (alertSeverityWeight[a.severity] || 0))
+                        .map((alert) => (
+                          <AlertCard
+                            key={alert.id}
+                            alert={alert}
+                            relatedEntitiesMeta={relatedEntitiesMeta}
+                            onSaveInvestigation={saveAlertAsInvestigation}
+                          />
+                        ))}
+                      {(structuredReport.alerts || []).length === 0 && (
+                        <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
+                          No active alerts in this report.
                         </div>
                       )}
                     </div>

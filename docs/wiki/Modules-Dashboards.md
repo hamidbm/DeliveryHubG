@@ -87,6 +87,16 @@ Dashboards provide program-level rollups for milestones, risks, and delivery sta
   - structured report now includes `trendSignals[]` and UI renders a **Portfolio Trends** section
   - trend-aware deterministic query support added for delivery/risk/backlog/milestone trend questions
   - quick suggestions now include trend investigations when rising signals are present
+- 12E added proactive operations intelligence in AI Insights:
+  - deterministic **Portfolio Health** scoring (`0-100`) with weighted component breakdown
+  - deterministic **Alerts** panel combining:
+    - trend deterioration alerts
+    - threshold breach alerts
+    - predictive risk alerts
+  - predictive risk rules cover execution pressure, milestone slip risk, review congestion, and capacity pressure
+  - query support expanded for active alerts, emerging risks, predictive near-term risk, and health score questions
+  - alert-aware quick suggestions now surface health/alert investigations
+  - each alert card supports direct **Save as Investigation** using the existing saved investigation workflow
 - Visual sequence diagrams for cache/regenerate/query/drill-down are documented in `docs/wiki/AI.md` under **Visual Flows**.
 
 ## Program Capacity (v1)

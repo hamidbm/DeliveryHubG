@@ -1,5 +1,7 @@
 import {
   EvidenceItem,
+  HealthScore,
+  PortfolioAlert,
   PortfolioTrendSignal,
   StructuredPortfolioReport,
   StructuredActionItem,
@@ -113,6 +115,34 @@ const formatTrendSignals = (items: PortfolioTrendSignal[] = []) => {
     .join('\n\n');
 };
 
+const formatHealthScore = (score?: HealthScore) => {
+  if (!score) return '_Health score is not available._';
+  return [
+    `- Overall: ${score.overall}/100`,
+    `- Unassigned: ${score.components.unassigned}/100`,
+    `- Blocked: ${score.components.blocked}/100`,
+    `- Overdue: ${score.components.overdue}/100`,
+    `- Active: ${score.components.active}/100`,
+    `- Critical Apps: ${score.components.criticalApps}/100`,
+    `- Milestone Overdue: ${score.components.milestoneOverdue}/100`
+  ].join('\n');
+};
+
+const formatAlerts = (items: PortfolioAlert[] = []) => {
+  if (items.length === 0) return '_No active alerts at this time._';
+  return items
+    .map((item, index) => [
+      `### ${index + 1}. ${item.title}`,
+      `- Severity: ${severityLabel(item.severity)}`,
+      `- Type: ${item.resultOf}`,
+      `- Summary: ${item.summary}`,
+      `- Rationale: ${item.rationale}`,
+      '- Evidence:',
+      joinEvidence(item.evidence)
+    ].join('\n'))
+    .join('\n\n');
+};
+
 export const formatPortfolioReportAsMarkdown = (report: StructuredPortfolioReport) => {
   return [
     `## Overall Health: ${healthLabel(report.overallHealth)}`,
@@ -129,8 +159,14 @@ export const formatPortfolioReportAsMarkdown = (report: StructuredPortfolioRepor
     '## Concentration Signals',
     formatSignals(report.concentrationSignals || []),
     '',
+    '## Portfolio Health Score',
+    formatHealthScore(report.healthScore),
+    '',
     '## Portfolio Trends',
     formatTrendSignals(report.trendSignals || []),
+    '',
+    '## Alerts',
+    formatAlerts(report.alerts || []),
     '',
     '## Questions To Ask',
     formatQuestions(report.questionsToAsk || [])

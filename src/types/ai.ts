@@ -89,6 +89,40 @@ export interface PortfolioTrendSignal {
   summary?: string;
 }
 
+export interface HealthScore {
+  overall: number;
+  components: {
+    unassigned: number;
+    blocked: number;
+    overdue: number;
+    active: number;
+    criticalApps: number;
+    milestoneOverdue: number;
+  };
+}
+
+export interface PredictiveRisk {
+  id: string;
+  title: string;
+  severity: PortfolioRiskSeverity;
+  summary: string;
+  evidence: EvidenceItem[];
+  entities: EntityReference[];
+  provenance: 'deterministic' | 'legacy';
+}
+
+export interface PortfolioAlert {
+  id: string;
+  title: string;
+  severity: PortfolioRiskSeverity;
+  summary: string;
+  rationale: string;
+  evidence: EvidenceItem[];
+  entities: EntityReference[];
+  resultOf: 'trend' | 'threshold' | 'predictive';
+  timestamp: string;
+}
+
 export type PortfolioSummaryStatus = 'success' | 'error' | 'empty';
 export type PortfolioHealthSignal = 'green' | 'amber' | 'red' | 'unknown';
 export type PortfolioRiskSeverity = 'low' | 'medium' | 'high' | 'critical';
@@ -152,6 +186,8 @@ export interface StructuredPortfolioReport {
   recommendedActions: StructuredActionItem[];
   concentrationSignals: StructuredConcentrationSignal[];
   trendSignals?: PortfolioTrendSignal[];
+  alerts?: PortfolioAlert[];
+  healthScore?: HealthScore;
   questionsToAsk: StructuredQuestionItem[];
   markdownReport?: string;
 }
@@ -189,7 +225,7 @@ export interface PortfolioSuggestion {
   id: string;
   label: string;
   prompt: string;
-  category: 'risk' | 'delivery' | 'capacity' | 'review';
+  category: 'risk' | 'delivery' | 'capacity' | 'review' | 'alert' | 'trend' | 'health';
   provenance: 'deterministic' | 'ai';
 }
 
@@ -197,6 +233,7 @@ export interface PortfolioQueryResponse {
   answer: string;
   explanation: string;
   evidence: EvidenceItem[];
+  alerts?: PortfolioAlert[];
   followUps: string[];
   relatedEntitiesMeta?: RelatedEntitiesMeta;
   entities?: EntityReference[];

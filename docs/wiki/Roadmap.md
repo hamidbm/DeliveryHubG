@@ -194,6 +194,13 @@ Implemented:
   - AI Insights UI includes Portfolio Trends cards under Concentration Signals
   - deterministic query engine now supports trend questions (delivery/risk/blocked/backlog/milestones)
   - trend-aware quick suggestions integrated into Ask DeliveryHub AI
+- 12E: early warning alerts, health scoring, and predictive risk:
+  - deterministic portfolio health score (`0-100`) added to structured report
+  - deterministic alerts added to structured report (`alerts[]`) with severity and evidence
+  - predictive risk detection added (execution risk, milestone slip risk, review congestion, capacity pressure)
+  - query engine extended for alert- and health-centric prompts
+  - AI Insights UI now includes Portfolio Health and Alerts sections
+  - alerts can be converted directly into saved investigations from the UI
 
 Current 12B behavior:
 - structured sections are primary in AI Insights UI

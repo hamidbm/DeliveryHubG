@@ -1,7 +1,10 @@
 import {
+  HealthScore,
+  PortfolioAlert,
   StructuredPortfolioReport,
   PortfolioHealthSignal,
   PortfolioRiskSeverity,
+  PortfolioSnapshot,
   StructuredRiskItem,
   StructuredActionItem,
   StructuredConcentrationSignal,
@@ -11,6 +14,8 @@ import {
 import { PortfolioSignalSummary } from './portfolioSignals';
 import { formatPortfolioReportAsMarkdown } from './formatPortfolioReportAsMarkdown';
 import { toEvidenceItems } from './evidenceEntities';
+import { computePortfolioHealthScore } from './healthScorer';
+import { detectPortfolioAlerts } from './alertDetector';
 
 const HEALTH_VALUES: PortfolioHealthSignal[] = ['green', 'amber', 'red', 'unknown'];
 const RISK_VALUES: PortfolioRiskSeverity[] = ['low', 'medium', 'high', 'critical'];
@@ -344,10 +349,36 @@ const normalizeTrendSignals = (
   return parsed.length > 0 ? parsed : fallback.slice(0, 12);
 };
 
+const normalizeAlertList = (raw: unknown): PortfolioAlert[] => {
+  return (Array.isArray(raw) ? raw : [])
+    .slice(0, 12)
+    .map((item: any, index) => {
+      const severityCandidate = asString(item?.severity, 'medium').toLowerCase() as PortfolioRiskSeverity;
+      const severity = RISK_VALUES.includes(severityCandidate) ? severityCandidate : 'medium';
+      const resultOfRaw = asString(item?.resultOf, '').toLowerCase();
+      const resultOf: PortfolioAlert['resultOf'] = resultOfRaw === 'trend' || resultOfRaw === 'threshold' || resultOfRaw === 'predictive'
+        ? resultOfRaw
+        : 'threshold';
+      const entities = Array.isArray(item?.entities) ? item.entities : [];
+      return {
+        id: asString(item?.id, `alert-${index + 1}`),
+        title: asString(item?.title, `Alert ${index + 1}`),
+        severity,
+        summary: asString(item?.summary, 'No summary provided.'),
+        rationale: asString(item?.rationale, 'Derived from report normalization context.'),
+        evidence: toEvidenceItems(item?.evidence, 'ai', 6),
+        entities,
+        resultOf,
+        timestamp: asString(item?.timestamp, new Date().toISOString())
+      } as PortfolioAlert;
+    });
+};
+
 const normalizeLegacyMarkdownReport = (
   raw: unknown,
   signals: PortfolioSignalSummary,
-  trendSignals: PortfolioTrendSignal[] = []
+  trendSignals: PortfolioTrendSignal[] = [],
+  snapshot?: PortfolioSnapshot
 ): StructuredPortfolioReport => {
   const markdown = typeof raw === 'string'
     ? raw
@@ -396,6 +427,11 @@ const normalizeLegacyMarkdownReport = (
   const mergedSignals = concentrationSignals.length > 0 ? concentrationSignals : synthesizeConcentrationSignals(signals);
   const mergedQuestions = questionsToAsk.length >= 2 ? questionsToAsk : synthesizeQuestions(signals);
 
+  const healthScore: HealthScore = computePortfolioHealthScore(signals, snapshot);
+  const alerts = snapshot
+    ? detectPortfolioAlerts(snapshot, signals, trendSignals, healthScore)
+    : [];
+
   return {
     overallHealth: inferHealthFallback(signals),
     executiveSummary,
@@ -403,6 +439,8 @@ const normalizeLegacyMarkdownReport = (
     recommendedActions: mergedActions,
     concentrationSignals: mergedSignals,
     trendSignals: trendSignals.slice(0, 12),
+    alerts,
+    healthScore,
     questionsToAsk: mergedQuestions,
     markdownReport: markdown || formatPortfolioReportAsMarkdown({
       overallHealth: inferHealthFallback(signals),
@@ -411,6 +449,8 @@ const normalizeLegacyMarkdownReport = (
       recommendedActions: mergedActions,
       concentrationSignals: mergedSignals,
       trendSignals: trendSignals.slice(0, 12),
+      alerts,
+      healthScore,
       questionsToAsk: mergedQuestions
     })
   };
@@ -419,7 +459,8 @@ const normalizeLegacyMarkdownReport = (
 export const normalizePortfolioReport = (
   raw: unknown,
   signals: PortfolioSignalSummary,
-  fallbackTrendSignals: PortfolioTrendSignal[] = []
+  fallbackTrendSignals: PortfolioTrendSignal[] = [],
+  snapshot?: PortfolioSnapshot
 ): {
   report: StructuredPortfolioReport;
   normalizationFallbackUsed: boolean;
@@ -428,7 +469,7 @@ export const normalizePortfolioReport = (
   const parsed = parseRawToObject(raw);
   if (!parsed) {
     return {
-      report: normalizeLegacyMarkdownReport(raw, signals, fallbackTrendSignals),
+      report: normalizeLegacyMarkdownReport(raw, signals, fallbackTrendSignals, snapshot),
       normalizationFallbackUsed: true,
       sectionsSynthesized: { risks: true, actions: true, signals: true, questions: true }
     };
@@ -438,11 +479,14 @@ export const normalizePortfolioReport = (
     || Object.prototype.hasOwnProperty.call(parsed, 'topRisks')
     || Object.prototype.hasOwnProperty.call(parsed, 'recommendedActions')
     || Object.prototype.hasOwnProperty.call(parsed, 'concentrationSignals')
-    || Object.prototype.hasOwnProperty.call(parsed, 'questionsToAsk');
+    || Object.prototype.hasOwnProperty.call(parsed, 'questionsToAsk')
+    || Object.prototype.hasOwnProperty.call(parsed, 'trendSignals')
+    || Object.prototype.hasOwnProperty.call(parsed, 'alerts')
+    || Object.prototype.hasOwnProperty.call(parsed, 'healthScore');
 
   if (!hasStructuredShape) {
     return {
-      report: normalizeLegacyMarkdownReport(parsed, signals, fallbackTrendSignals),
+      report: normalizeLegacyMarkdownReport(parsed, signals, fallbackTrendSignals, snapshot),
       normalizationFallbackUsed: true,
       sectionsSynthesized: { risks: true, actions: true, signals: true, questions: true }
     };
@@ -526,6 +570,17 @@ export const normalizePortfolioReport = (
   const mergedSignals = concentrationSignals.length > 0 ? concentrationSignals : synthesizeConcentrationSignals(signals);
   const mergedQuestions = questionsToAsk.length >= 2 ? questionsToAsk : synthesizeQuestions(signals);
   const mergedTrends = normalizeTrendSignals(parsed.trendSignals, fallbackTrendSignals);
+  const aiAlerts = normalizeAlertList(parsed.alerts);
+  const healthScore = computePortfolioHealthScore(signals, snapshot);
+  const deterministicAlerts = snapshot
+    ? detectPortfolioAlerts(snapshot, signals, mergedTrends, healthScore)
+    : [];
+  const mergedAlerts = [...deterministicAlerts];
+  aiAlerts.forEach((item) => {
+    if (!mergedAlerts.some((existing) => existing.title.toLowerCase() === item.title.toLowerCase())) {
+      mergedAlerts.push(item);
+    }
+  });
   const sectionsSynthesized = {
     risks: topRisks.length === 0,
     actions: recommendedActions.length === 0,
@@ -540,6 +595,8 @@ export const normalizePortfolioReport = (
     recommendedActions: mergedActions,
     concentrationSignals: mergedSignals,
     trendSignals: mergedTrends,
+    alerts: mergedAlerts.slice(0, 12),
+    healthScore,
     questionsToAsk: mergedQuestions,
     markdownReport: asString(parsed.markdownReport, '')
   };

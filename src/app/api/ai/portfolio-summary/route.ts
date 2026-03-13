@@ -99,7 +99,7 @@ const normalizeCachedReport = async (cached: any): Promise<PortfolioSummaryRespo
   const snapshot = source.snapshot || emptySnapshot;
   const signals = derivePortfolioSignals(snapshot);
   const trendContext = await loadTrendSignals();
-  const normalized = normalizePortfolioReport(source.report, signals, trendContext.trendSignals);
+  const normalized = normalizePortfolioReport(source.report, signals, trendContext.trendSignals, snapshot);
   const generatedAt = source.metadata?.generatedAt || cached.updatedAt || new Date().toISOString();
   const metadata = {
     provider: source.metadata?.provider || 'UNKNOWN',
@@ -229,7 +229,7 @@ ${JSON.stringify(snapshot, null, 2)}`;
     });
     const signals = derivePortfolioSignals(snapshot);
     const trendContext = await loadTrendSignals();
-    const normalized = normalizePortfolioReport(execution.text, signals, trendContext.trendSignals);
+    const normalized = normalizePortfolioReport(execution.text, signals, trendContext.trendSignals, snapshot);
 
     const generatedAt = new Date().toISOString();
     const snapshotHash = buildSnapshotHash(snapshot);

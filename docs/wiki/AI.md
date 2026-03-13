@@ -208,6 +208,41 @@ AI in DeliveryHub is assistive only. It never writes to the database without exp
     - “Are milestones getting healthier?”
   - AI Insights UI now includes a dedicated **Portfolio Trends** section with directional cards (`↑`, `↓`, `→`)
   - quick suggestions are trend-aware when rising trend signals are detected
+- 12E added proactive alerting, health scoring, and predictive risk detection:
+  - new deterministic health scoring service: `src/services/ai/healthScorer.ts`
+  - weighted portfolio health score (`0-100`) is computed from:
+    - unassigned ratio (20%)
+    - blocked ratio (20%)
+    - overdue ratio (20%)
+    - active work ratio (15%)
+    - critical app count (15%)
+    - overdue milestone count (10%)
+  - new predictive risk engine: `src/services/ai/predictiveRisk.ts`
+    - execution risk escalation
+    - milestone slip risk
+    - review congestion risk
+    - capacity pressure risk
+  - new alert detector: `src/services/ai/alertDetector.ts`
+    - trend-based alerts
+    - threshold-based alerts
+    - predictive alerts
+  - structured report contract now supports:
+    - `healthScore`
+    - `alerts[]`
+  - deterministic normalization now computes and merges:
+    - trend signals
+    - health score
+    - active alerts
+  - query engine now supports alert/health/predictive prompts:
+    - “What alerts are active now?”
+    - “Show me emerging portfolio risks”
+    - “Is delivery risk increasing in the next 7 days?”
+    - “What is the portfolio health score?”
+  - quick suggestions now include alert and health-oriented prompts
+  - AI Insights UI now includes:
+    - **Portfolio Health** card with component breakdown bars
+    - **Alerts** panel with severity ordering, rationale, evidence, and related entities
+    - **Save as Investigation** action directly from each alert card
 
 ## Visual Flows
 

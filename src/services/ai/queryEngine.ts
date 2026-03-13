@@ -51,6 +51,10 @@ type Intent =
   | 'trend-blocked-increasing'
   | 'trend-backlog-growing'
   | 'trend-milestone-health'
+  | 'alerts-active'
+  | 'emerging-risks'
+  | 'predictive-risk'
+  | 'health-score'
   | 'risk-ranking'
   | 'general';
 
@@ -81,6 +85,10 @@ const KEYWORDS: Record<Intent, string[]> = {
   'trend-blocked-increasing': ['blocked tasks increasing', 'blocked trend', 'blocked tasks trend'],
   'trend-backlog-growing': ['backlog growing', 'unassigned increasing', 'ownerless increasing', 'workload growing'],
   'trend-milestone-health': ['milestones getting healthier', 'milestone trend', 'milestone health trend'],
+  'alerts-active': ['alerts', 'active alerts', 'what alerts', 'warning alerts'],
+  'emerging-risks': ['emerging risk', 'emerging portfolio risks', 'emerging delivery risks'],
+  'predictive-risk': ['next 7 days', 'predictive risk', 'future risk', 'likely slip'],
+  'health-score': ['health score', 'portfolio health score', 'execution health'],
   'risk-ranking': ['biggest risk', 'most risk', 'areas have risk', 'fix first', 'delivery risk'],
   general: []
 };
@@ -100,6 +108,18 @@ const detectIntent = (q: string): Intent => {
   }
   if (q.includes('milestone') && (q.includes('healthier') || q.includes('improving') || q.includes('trend'))) {
     return 'trend-milestone-health';
+  }
+  if (q.includes('alert')) {
+    return 'alerts-active';
+  }
+  if (q.includes('emerging') && q.includes('risk')) {
+    return 'emerging-risks';
+  }
+  if (q.includes('next 7 days') || q.includes('predictive') || q.includes('future risk') || q.includes('likely slip')) {
+    return 'predictive-risk';
+  }
+  if (q.includes('health score') || (q.includes('portfolio health') && q.includes('score'))) {
+    return 'health-score';
   }
 
   const scores: Array<{ intent: Intent; score: number }> = [];
@@ -538,11 +558,91 @@ const answerTrendQuery = (
   });
 };
 
+const answerHealthScoreQuery = (report?: StructuredPortfolioReport): PortfolioQueryResponse => {
+  const score = report?.healthScore;
+  if (!score) {
+    return withEntities({
+      answer: 'Health score is not available in the current report.',
+      explanation: 'Generate or refresh the portfolio summary to compute deterministic health scoring.',
+      evidence: asEvidence(['No health score found on the current structured report.']),
+      followUps: [
+        'Regenerate AI Insights report now.',
+        'What alerts are active now?',
+        'Show me emerging portfolio risks.'
+      ]
+    });
+  }
+  return withEntities({
+    answer: `Portfolio health score is ${score.overall}/100.`,
+    explanation: 'Health score is deterministic and weighted across unassigned, blocked, overdue, active throughput, critical applications, and overdue milestones.',
+    evidence: asEvidence([
+      `Unassigned component: ${score.components.unassigned}/100`,
+      `Blocked component: ${score.components.blocked}/100`,
+      `Overdue component: ${score.components.overdue}/100`,
+      `Active component: ${score.components.active}/100`,
+      `Critical apps component: ${score.components.criticalApps}/100`,
+      `Milestone overdue component: ${score.components.milestoneOverdue}/100`
+    ]),
+    followUps: [
+      'Which component is dragging health score down the most?',
+      'What alerts are active now?',
+      'Is delivery trend improving?'
+    ]
+  });
+};
+
+const answerAlertQuery = (
+  report: StructuredPortfolioReport | undefined,
+  mode: 'active' | 'emerging' | 'predictive'
+): PortfolioQueryResponse => {
+  const allAlerts = (report?.alerts || []).slice();
+  const alerts = mode === 'predictive'
+    ? allAlerts.filter((item) => item.resultOf === 'predictive')
+    : mode === 'emerging'
+      ? allAlerts.filter((item) => item.resultOf === 'trend' || item.resultOf === 'predictive')
+      : allAlerts;
+
+  if (alerts.length === 0) {
+    return withEntities({
+      answer: 'No active alerts are currently triggered.',
+      explanation: 'Alert rules did not detect threshold, trend, or predictive deterioration in the current report context.',
+      evidence: asEvidence(['Alert detector returned zero active alerts.']),
+      alerts: [],
+      followUps: [
+        'Is delivery improving over time?',
+        'Which bundles have the highest delivery risk?',
+        'What is the current portfolio health score?'
+      ]
+    });
+  }
+
+  const top = alerts.slice(0, 5);
+  return withEntities({
+    answer: `${alerts.length} alert${alerts.length === 1 ? '' : 's'} active. Top alert: ${top[0].title} (${top[0].severity}).`,
+    explanation: mode === 'predictive'
+      ? 'Predictive alerts combine current stress signals with trend deterioration to flag near-term execution threats.'
+      : mode === 'emerging'
+        ? 'Emerging risk alerts combine worsening trends and predictive rules.'
+        : 'Alerts include trend, threshold, and predictive categories generated deterministically.',
+    evidence: asEvidence(top.flatMap((alert) => (
+      alert.evidence?.length
+        ? alert.evidence.slice(0, 1).map((item) => ({ text: `${alert.title}: ${item.text}`, entities: alert.entities || item.entities || [] }))
+        : [{ text: `${alert.title}: ${alert.summary}`, entities: alert.entities || [] }]
+    ))),
+    alerts: top,
+    followUps: [
+      'Save the top alert as an investigation.',
+      'Which entities are driving these alerts?',
+      'What actions should be prioritized this week?'
+    ]
+  });
+};
+
 export const answerPortfolioQuestionDeterministically = (
   question: string,
   signals: PortfolioSignalSummary,
-  report?: StructuredPortfolioReport,
-  snapshot?: PortfolioSnapshot,
+  report: StructuredPortfolioReport | undefined,
+  snapshot: PortfolioSnapshot | undefined,
   trendSignals: PortfolioTrendSignal[] = [],
   snapshotHistory: PortfolioSnapshotHistory[] = []
 ): PortfolioQueryResponse => {
@@ -584,6 +684,10 @@ export const answerPortfolioQuestionDeterministically = (
     case 'trend-blocked-increasing': return answerTrendQuery('blocked-increasing', trendSignals, snapshotHistory);
     case 'trend-backlog-growing': return answerTrendQuery('backlog-growing', trendSignals, snapshotHistory);
     case 'trend-milestone-health': return answerTrendQuery('milestone-health', trendSignals, snapshotHistory);
+    case 'alerts-active': return answerAlertQuery(report, 'active');
+    case 'emerging-risks': return answerAlertQuery(report, 'emerging');
+    case 'predictive-risk': return answerAlertQuery(report, 'predictive');
+    case 'health-score': return answerHealthScoreQuery(report);
     case 'risk-ranking': return answerRiskRanking(signals, report);
     default: {
       const risk = topRisk(report);

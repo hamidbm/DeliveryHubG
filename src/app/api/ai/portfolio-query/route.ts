@@ -135,6 +135,7 @@ Do not invent numbers.`;
         answer: parsed.answer.trim() || deterministic.answer,
         explanation: parsed.explanation.trim() || deterministic.explanation,
         evidence: parsedEvidence.length > 0 ? parsedEvidence : deterministic.evidence,
+        alerts: deterministic.alerts,
         followUps: Array.isArray(parsed.followUps)
           ? parsed.followUps.map((item: any) => String(item || '').trim()).filter(Boolean).slice(0, 6)
           : deterministic.followUps,
