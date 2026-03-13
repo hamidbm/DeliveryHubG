@@ -1336,6 +1336,38 @@ export const checkAndIncrementAiRateLimit = async (identity: string, limit: numb
   return count <= limit;
 };
 
+const ensureAiAnalysisCacheIndexes = async (db: any) => {
+  const collection = db.collection('ai_analysis_cache');
+  await collection.createIndex({ updatedAt: -1 });
+};
+
+export const fetchAiAnalysisCache = async (key: string) => {
+  try {
+    const db = await getDb();
+    await ensureAiAnalysisCacheIndexes(db);
+    const collection = db.collection('ai_analysis_cache');
+    return await collection.findOne({ _id: key } as any);
+  } catch {
+    return null;
+  }
+};
+
+export const saveAiAnalysisCache = async (key: string, report: any) => {
+  const db = await getDb();
+  await ensureAiAnalysisCacheIndexes(db);
+  const collection = db.collection('ai_analysis_cache');
+  const now = new Date().toISOString();
+  const isFirstClassReport = Boolean(report && typeof report === 'object' && report.status && report.metadata && report.report);
+  const payload = isFirstClassReport
+    ? { ...report, reportType: report.reportType || key, updatedAt: now }
+    : { report, updatedAt: now };
+  return await collection.updateOne(
+    { _id: key } as any,
+    { $set: payload },
+    { upsert: true }
+  );
+};
+
 export const saveWikiSpace = async (space: Partial<WikiSpace>) => {
   const db = await getDb();
   const { _id, ...data } = space;

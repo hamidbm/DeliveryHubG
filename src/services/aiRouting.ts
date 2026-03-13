@@ -3,6 +3,12 @@ import { generateGeminiText } from './geminiService';
 import { generateOpenAiResponse, pickOpenAiReasoningEffort } from './openaiService';
 
 export type AiProviderId = 'OPENAI' | 'OPEN_ROUTER' | 'GEMINI' | 'ANTHROPIC' | 'HUGGINGFACE' | 'COHERE';
+export type AiErrorCode = 'AI_PROVIDER_NOT_CONFIGURED' | 'AI_PROVIDER_CREDENTIALS_MISSING' | 'AI_PROVIDER_RATE_LIMIT' | 'AI_PROVIDER_REQUEST_FAILED' | 'AI_UNKNOWN_ERROR';
+
+export type AttemptedProvider = {
+  provider: string;
+  model: string;
+};
 
 type AiSettingsLike = {
   defaultProvider?: string;
@@ -121,13 +127,53 @@ export const logAiProviderResolution = (
   });
 };
 
+const classifyProviderFailureCode = (message: string): AiErrorCode => {
+  const lower = message.toLowerCase();
+  if (lower.includes('missing openrouter_api_key') || lower.includes('missing openai_api_key') || lower.includes('gemini api key is missing')) {
+    return 'AI_PROVIDER_CREDENTIALS_MISSING';
+  }
+  if (
+    lower.includes('insufficient credits')
+    || lower.includes('quota')
+    || lower.includes('resource_exhausted')
+    || lower.includes('rate limit')
+    || lower.includes('429')
+  ) {
+    return 'AI_PROVIDER_RATE_LIMIT';
+  }
+  if (lower.includes('provider request failed') || lower.includes('timeout')) {
+    return 'AI_PROVIDER_REQUEST_FAILED';
+  }
+  return 'AI_UNKNOWN_ERROR';
+};
+
+const createAiExecutionError = (
+  message: string,
+  attemptedProviders: AttemptedProvider[],
+  code?: AiErrorCode
+) => {
+  const error = new Error(message) as Error & {
+    code: AiErrorCode;
+    attemptedProviders: AttemptedProvider[];
+    lastAttemptedProvider: string | null;
+    lastAttemptedModel: string | null;
+  };
+  error.code = code || classifyProviderFailureCode(message);
+  error.attemptedProviders = attemptedProviders;
+  const last = attemptedProviders[attemptedProviders.length - 1];
+  error.lastAttemptedProvider = last?.provider || null;
+  error.lastAttemptedModel = last?.model || null;
+  return error;
+};
+
 export const executeAiTextTask = async ({
   aiSettings,
   taskKey,
   prompt,
   openAiFallbackModel,
   geminiModel,
-  logDecision = true
+  logDecision = true,
+  timeoutMs = 20000
 }: {
   aiSettings: AiSettingsLike;
   taskKey: string;
@@ -135,11 +181,17 @@ export const executeAiTextTask = async ({
   openAiFallbackModel: string;
   geminiModel: string;
   logDecision?: boolean;
+  timeoutMs?: number;
 }) => {
   const resolution = resolveAiTaskProvider(aiSettings, taskKey);
+  const attemptedProviders: AttemptedProvider[] = [];
   let fallbackReason: string | null = null;
   if (!resolution.routedProvider) {
-    throw new Error('No default AI provider is configured. Ask an admin to set a default provider in Admin -> AI Settings, or set AI_DEFAULT_PROVIDER before starting the app.');
+    throw createAiExecutionError(
+      'No default AI provider is configured. Ask an admin to set a default provider in Admin -> AI Settings, or set AI_DEFAULT_PROVIDER before starting the app.',
+      attemptedProviders,
+      'AI_PROVIDER_NOT_CONFIGURED'
+    );
   }
 
   if (resolution.openAiIntended) {
@@ -152,6 +204,7 @@ export const executeAiTextTask = async ({
     const routedModelForExecution = isLegacyOpenAiModelRefOnOpenRouter ? '' : resolution.routedModel;
     const openAiExecution = resolveOpenAiExecution(aiSettings, resolution.routedProvider, routedModelForExecution, openAiFallbackModel);
     if (openAiExecution.available) {
+      attemptedProviders.push({ provider: openAiExecution.providerLabel, model: openAiExecution.model });
       if (logDecision) {
         console.info('AI provider attempt', {
           task: taskKey,
@@ -166,8 +219,12 @@ export const executeAiTextTask = async ({
           apiKey: openAiExecution.apiKey,
           baseUrl: openAiExecution.baseUrl,
           extraHeaders: openAiExecution.extraHeaders,
-          reasoningEffort: pickOpenAiReasoningEffort(openAiExecution.model)
+          reasoningEffort: pickOpenAiReasoningEffort(openAiExecution.model),
+          timeoutMs
         });
+        if (!text || text.trim().toLowerCase() === 'ai response unavailable.') {
+          throw new Error('Provider request failed: empty/unavailable response');
+        }
         if (logDecision) {
           logAiProviderResolution(resolution, openAiExecution.providerLabel, null);
         }
@@ -202,9 +259,10 @@ export const executeAiTextTask = async ({
   }
 
   if (!process.env.GEMINI_API_KEY) {
-    throw new Error('Gemini API key is missing.');
+    throw createAiExecutionError('Gemini API key is missing.', attemptedProviders, 'AI_PROVIDER_CREDENTIALS_MISSING');
   }
 
+  attemptedProviders.push({ provider: 'GEMINI', model: geminiModel });
   if (logDecision) {
     console.info('AI provider attempt', {
       task: taskKey,
@@ -212,7 +270,21 @@ export const executeAiTextTask = async ({
       model: geminiModel
     });
   }
-  const text = await generateGeminiText(prompt, geminiModel);
+  let text = '';
+  try {
+    text = await Promise.race([
+      generateGeminiText(prompt, geminiModel),
+      new Promise<string>((_, reject) =>
+        setTimeout(() => reject(new Error(`Provider request failed: timeout after ${timeoutMs}ms`)), timeoutMs)
+      )
+    ]);
+    if (!text || text.trim().toLowerCase() === 'ai response unavailable.') {
+      throw new Error('Provider request failed: empty/unavailable response');
+    }
+  } catch (error: any) {
+    const message = error?.message || fallbackReason || 'All configured providers are unavailable.';
+    throw createAiExecutionError(message, attemptedProviders);
+  }
   if (logDecision) {
     logAiProviderResolution(resolution, 'GEMINI', fallbackReason);
   }

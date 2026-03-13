@@ -132,6 +132,22 @@ Applications UI now includes:
   - lifecycle distribution across apps
   - delivery impact rollups and at-risk app drilldowns
 
+## AI Insights Stabilization (Phase 12A)
+AI Insights portfolio reporting is now stabilized across reliability, UX, and export behavior.
+
+Implemented:
+- 12A: deterministic snapshot + structured response contract + cached fallback
+- 12A.1: provider error normalization, attempted provider metadata preservation, duplicate-call mitigation
+- 12A.2: markdown rendering in report panel + markdown/pdf export actions
+- 12A.3: cache-first load semantics (`GET` read, `POST` manual regenerate), first-run empty state, 24h freshness policy
+- 12A.4: styled PDF export pipeline aligned with in-app report presentation
+
+Current behavior:
+- revisits read cached persisted report first
+- manual regenerate is the only live generation trigger
+- stale reports still display with clear stale-state messaging
+- exports are direct downloads with executive-readable formatting
+
 ### Near-term (next 2–4 weeks)
 1. Inline storyPoints edits in planning surfaces.
 Problem: editing storyPoints requires opening the detail drawer. Value: faster planning and fewer context switches. Dependencies: existing milestone planning and roadmap views. Deliverables: inline edit controls in planning and roadmap rows, with optimistic update + validation. Verify: edit storyPoints inline and see rollups update without page reload.

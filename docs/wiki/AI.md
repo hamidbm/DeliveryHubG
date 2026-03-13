@@ -32,6 +32,30 @@ AI in DeliveryHub is assistive only. It never writes to the database without exp
 - Audit logs in `ai_audit_logs`
 - Rate limits in `ai_rate_limits`
 - Persisted wiki insights in `wiki_ai_insights`
+- Persisted AI Insights portfolio report in `ai_analysis_cache` (`_id: portfolio-summary`)
+
+## AI Insights Portfolio Summary (Phase 12A)
+- API contract split:
+  - `GET /api/ai/portfolio-summary`: read latest persisted report only (no provider call)
+  - `POST /api/ai/portfolio-summary`: manual regenerate, persist, return fresh report
+- Cache-first UX:
+  - Page load uses cached report first
+  - No automatic provider generation on page visit
+  - First-run empty state prompts explicit `Generate Analysis`
+- Freshness policy:
+  - `fresh`: generated within 24 hours
+  - `stale`: older than 24 hours
+  - stale reports still render with a stale banner; manual regenerate remains available
+- Persisted report metadata includes:
+  - `generatedAt`, `provider`, `model`, `freshnessStatus`, `snapshotHash`, `updatedAt`
+- Provider normalization and fallback:
+  - quota/credits/rate-limit errors normalized (not `AI_UNKNOWN_ERROR`)
+  - attempted provider/model metadata preserved on terminal failures
+  - if generation fails and a cached success exists, cached report is returned
+- Rendering/export:
+  - in-app report renders markdown with Wiki-style presentation (Aurora styling)
+  - Markdown download available
+  - PDF download is direct file download with styled report layout (no popup viewer tab)
 
 ## Where AI Shows Up
 - Wiki page view: AI dropdown for summary, key decisions, assumptions

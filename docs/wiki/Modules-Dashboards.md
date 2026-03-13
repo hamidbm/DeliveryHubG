@@ -13,8 +13,25 @@ Dashboards provide program-level rollups for milestones, risks, and delivery sta
 ## Data
 - Stored in module-specific collections
 - AI Insights uses AI settings and audit logs
+- AI Insights portfolio report persistence uses `ai_analysis_cache` (`portfolio-summary`)
 - Bundle capacity configuration stored in `bundle_capacity`
 - Capacity planning uses milestone rollups (`remainingPoints`) and committed milestone dates
+
+## AI Insights (Phase 12A)
+- Page load is cache-first (`GET /api/ai/portfolio-summary`), with no automatic live generation.
+- Manual refresh only (`POST /api/ai/portfolio-summary`) via `Generate/Regenerate Analysis`.
+- Freshness policy:
+  - `fresh` within 24 hours
+  - `stale` older than 24 hours (still shown with stale banner)
+- First-run experience:
+  - empty state when no cached report exists
+  - explicit generate action required
+- Failure behavior:
+  - normalized provider quota/rate-limit errors
+  - fallback to last successful cached report when live generation fails
+- Exports:
+  - Markdown download
+  - styled PDF download (direct file save)
 
 ## Program Capacity (v1)
 - Capacity is defined per bundle as points per week or points per sprint.

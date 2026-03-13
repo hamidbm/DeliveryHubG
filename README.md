@@ -30,6 +30,24 @@ Documentation
 - Dashboards and AI Insights for executive rollups
 - Admin tooling for taxonomy, themes, and AI governance
 
+## AI Insights (Phase 12A)
+- Cache-first portfolio report experience:
+  - `GET /api/ai/portfolio-summary` reads latest persisted report from `ai_analysis_cache`
+  - `POST /api/ai/portfolio-summary` manually regenerates report and persists it
+- No automatic provider generation on page visit
+- First-run explicit generate flow when no cached report exists
+- Freshness policy:
+  - `fresh` if generated within 24 hours
+  - `stale` if older than 24 hours (still displayed, with stale banner)
+- Provider failure handling:
+  - normalized quota/rate-limit/credentials errors
+  - attempted provider metadata retained for diagnostics
+  - cached success returned when live generation fails
+- Report rendering/export:
+  - markdown rendered in app with wiki-style presentation
+  - markdown export
+  - styled PDF direct download
+
 ## Architecture
 - Next.js App Router with server-side MongoDB access
 - BFF design with API routes as the integration surface

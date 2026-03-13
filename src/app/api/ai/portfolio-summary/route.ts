@@ -1,50 +1,209 @@
 import { NextResponse } from 'next/server';
-import { checkAndIncrementAiRateLimit, fetchSystemSettings, fetchApplications, fetchBundles, saveAiAuditLog } from '../../../../services/db';
+import { createHash } from 'crypto';
+import {
+  checkAndIncrementAiRateLimit,
+  fetchAiAnalysisCache,
+  fetchSystemSettings,
+  saveAiAnalysisCache,
+  saveAiAuditLog
+} from '../../../../services/db';
 import { getRateLimitPerHour, getRequestIdentity, getRetentionDays } from '../../../../services/aiPolicy';
 import { executeAiTextTask } from '../../../../services/aiRouting';
+import { buildPortfolioIntelligenceSnapshot } from '../../../../services/ai/portfolioSnapshot';
+import { PortfolioSummaryResponse } from '../../../../types/ai';
+import { getAuthUserFromCookies } from '../../../../services/visibility';
+import { AttemptedProvider, AiErrorCode } from '../../../../services/aiRouting';
 
 type AiSettings = {
-  defaultProvider?: string;
-  selectedDefaultProvider?: string;
-  activeEffectiveDefaultProvider?: string;
-  envDefaultProvider?: string;
-  fallbackOrder?: string[];
-  taskRouting?: Record<string, { provider?: string; model?: string }>;
-  openaiModelDefault?: string;
-  openaiModelHigh?: string;
-  openRouterModel?: string;
   geminiProModel?: string;
   proModel?: string;
 };
+type PortfolioSummaryErrorCode = AiErrorCode | 'PORTFOLIO_SNAPSHOT_FAILED';
+
+const CACHE_KEY = 'portfolio-summary';
+const FRESH_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+const errorResponse = (code: PortfolioSummaryErrorCode, message: string): PortfolioSummaryResponse => ({
+  status: 'error',
+  error: { code, message }
+});
+
+const classifyError = (message: string, explicitCode?: string): { code: PortfolioSummaryErrorCode; message: string } => {
+  if (explicitCode === 'AI_PROVIDER_NOT_CONFIGURED') return { code: 'AI_PROVIDER_NOT_CONFIGURED', message };
+  if (explicitCode === 'AI_PROVIDER_CREDENTIALS_MISSING') return { code: 'AI_PROVIDER_CREDENTIALS_MISSING', message };
+  if (explicitCode === 'AI_PROVIDER_RATE_LIMIT') return { code: 'AI_PROVIDER_RATE_LIMIT', message };
+  if (explicitCode === 'AI_PROVIDER_REQUEST_FAILED') return { code: 'AI_PROVIDER_REQUEST_FAILED', message };
+  const lower = message.toLowerCase();
+  if (message.startsWith('No default AI provider is configured')) {
+    return { code: 'AI_PROVIDER_NOT_CONFIGURED', message };
+  }
+  if (lower.includes('missing openrouter_api_key') || lower.includes('missing openai_api_key') || lower.includes('gemini api key is missing')) {
+    return { code: 'AI_PROVIDER_CREDENTIALS_MISSING', message };
+  }
+  if (lower.includes('rate limit exceeded')) {
+    return { code: 'AI_PROVIDER_RATE_LIMIT', message: 'AI provider rate limit exceeded. Try again shortly.' };
+  }
+  if (lower.includes('insufficient credits') || lower.includes('quota') || lower.includes('resource_exhausted') || lower.includes('429')) {
+    return { code: 'AI_PROVIDER_RATE_LIMIT', message };
+  }
+  if (lower.includes('snapshot')) {
+    return { code: 'PORTFOLIO_SNAPSHOT_FAILED', message };
+  }
+  return { code: 'AI_UNKNOWN_ERROR', message };
+};
+
+const describeRateLimit = (attempted: AttemptedProvider[]) => {
+  if (attempted.length > 1) {
+    return 'AI analysis could not be generated because all configured providers are unavailable or out of quota.';
+  }
+  const last = attempted[attempted.length - 1];
+  if (last?.provider === 'OPEN_ROUTER') {
+    return 'The configured OpenRouter provider cannot generate analysis because the account has insufficient credits or quota.';
+  }
+  if (last?.provider === 'GEMINI') {
+    return 'The configured Gemini provider cannot generate analysis because its API quota is exhausted.';
+  }
+  return 'AI analysis could not be generated because providers are out of quota or rate-limited.';
+};
+
+const resolveFreshnessStatus = (generatedAt?: string) => {
+  if (!generatedAt) return 'stale' as const;
+  const ageMs = Date.now() - new Date(generatedAt).getTime();
+  return ageMs <= FRESH_WINDOW_MS ? 'fresh' as const : 'stale' as const;
+};
+
+const buildSnapshotHash = (snapshot: unknown) => createHash('sha256')
+  .update(JSON.stringify(snapshot))
+  .digest('hex');
+
+const normalizeCachedReport = (cached: any): PortfolioSummaryResponse | null => {
+  if (!cached) return null;
+  const legacyReport = cached?.report?.status === 'success' ? cached.report : null;
+  const currentReport = cached?.status === 'success' ? cached : null;
+  const source = currentReport || legacyReport;
+  if (!source) return null;
+  const generatedAt = source.metadata?.generatedAt || cached.updatedAt || new Date().toISOString();
+  const metadata = {
+    provider: source.metadata?.provider || 'UNKNOWN',
+    model: source.metadata?.model || 'UNKNOWN',
+    generatedAt,
+    cached: true,
+    freshnessStatus: source.metadata?.freshnessStatus || resolveFreshnessStatus(generatedAt),
+    snapshotHash: source.metadata?.snapshotHash
+  } satisfies NonNullable<PortfolioSummaryResponse['metadata']>;
+  return {
+    status: 'success',
+    metadata,
+    snapshot: source.snapshot,
+    report: source.report
+  };
+};
+
+const loadCachedSuccess = async () => {
+  const cached = await fetchAiAnalysisCache(CACHE_KEY);
+  return normalizeCachedReport(cached);
+};
+
+export async function GET() {
+  const authUser = await getAuthUserFromCookies();
+  if (!authUser?.userId) {
+    return NextResponse.json(errorResponse('AI_UNKNOWN_ERROR', 'Unauthenticated'), { status: 401 });
+  }
+
+  const cached = await loadCachedSuccess();
+  if (!cached) {
+    return NextResponse.json(
+      {
+        status: 'empty',
+        message: 'No AI portfolio analysis exists yet. Click Generate Analysis to create the first report.'
+      } satisfies PortfolioSummaryResponse
+    );
+  }
+  return NextResponse.json(cached);
+}
 
 export async function POST(request: Request) {
   const startedAt = Date.now();
+  const identity = getRequestIdentity(request);
+
+  const authUser = await getAuthUserFromCookies();
+  if (!authUser?.userId) {
+    return NextResponse.json(errorResponse('AI_UNKNOWN_ERROR', 'Unauthenticated'), { status: 401 });
+  }
+
   try {
     const settings = await fetchSystemSettings();
     const aiSettings: AiSettings = (settings?.ai || {}) as AiSettings;
-    const identity = getRequestIdentity(request);
     const allowed = await checkAndIncrementAiRateLimit(identity, getRateLimitPerHour(aiSettings, 30));
     if (!allowed) {
-      return NextResponse.json({ error: 'Rate limit exceeded.' }, { status: 429 });
+      return NextResponse.json(
+        errorResponse('AI_PROVIDER_RATE_LIMIT', 'AI provider rate limit exceeded. Try again shortly.'),
+        { status: 429 }
+      );
     }
 
-    // Fetch real-time registry data to ensure the AI has the latest context
-    const [applications, bundles] = await Promise.all([
-      fetchApplications(),
-      fetchBundles()
+    const snapshot = await Promise.race([
+      buildPortfolioIntelligenceSnapshot(),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Portfolio snapshot build timeout')), 500)
+      )
     ]);
+    if (
+      snapshot.applications.total === 0
+      && snapshot.bundles.total === 0
+      && snapshot.workItems.total === 0
+      && snapshot.reviews.open === 0
+      && snapshot.milestones.total === 0
+    ) {
+      throw new Error('Portfolio snapshot has no data to analyze.');
+    }
 
-    const prompt = `You are generating an executive portfolio delivery insight summary.\n\nApplications count: ${applications.length}\nBundles count: ${bundles.length}\n\nBundle snapshot (JSON):\n${JSON.stringify(bundles.slice(0, 50))}\n\nApplication snapshot (JSON):\n${JSON.stringify(applications.slice(0, 120))}\n\nProduce concise Markdown with:\n1) Overall portfolio health signal\n2) Top 3 risks\n3) Top 3 action recommendations\n4) Notable concentration points (owner, lifecycle, criticality, or bundle pressure).`;
-    const geminiModel = aiSettings.geminiProModel || aiSettings.proModel || 'gemini-3-pro-preview';
+    const prompt = `You are an enterprise delivery portfolio analyst.
+
+Analyze the following portfolio snapshot and produce a short executive report.
+
+Portfolio Snapshot:
+${JSON.stringify(snapshot, null, 2)}
+
+Provide:
+1. Executive summary (3-5 sentences)
+2. Major portfolio signals
+3. Delivery risks
+4. Observations
+
+Respond with concise language suitable for executives.`;
+
     const execution = await executeAiTextTask({
       aiSettings,
       taskKey: 'portfolioSummary',
       prompt,
       openAiFallbackModel: 'gpt-5.2',
-      geminiModel
+      geminiModel: aiSettings.geminiProModel || aiSettings.proModel || 'gemini-3-pro-preview',
+      timeoutMs: 20000
     });
-    const summary = execution.text || 'Analysis unavailable.';
 
+    const generatedAt = new Date().toISOString();
+    const snapshotHash = buildSnapshotHash(snapshot);
+    const response: PortfolioSummaryResponse = {
+      status: 'success',
+      metadata: {
+        generatedAt,
+        provider: execution.provider,
+        model: execution.model,
+        cached: false,
+        freshnessStatus: 'fresh',
+        snapshotHash
+      },
+      snapshot,
+      report: {
+        executiveSummary: execution.text || 'Analysis unavailable.'
+      }
+    };
+
+    await saveAiAnalysisCache(CACHE_KEY, {
+      ...response,
+      reportType: CACHE_KEY
+    });
     await saveAiAuditLog({
       task: 'portfolioSummary',
       provider: execution.provider,
@@ -54,22 +213,72 @@ export async function POST(request: Request) {
       identity,
       ttlDays: getRetentionDays(aiSettings, 'auditLogs', 30)
     });
-    return NextResponse.json({ summary });
+    console.info('ai_portfolio_summary', {
+      timestamp: new Date().toISOString(),
+      provider: execution.provider,
+      model: execution.model,
+      duration: Date.now() - startedAt,
+      success: true
+    });
+    return NextResponse.json(response);
   } catch (error) {
-    const message = (error as Error)?.message || 'AI Synthesis failed';
-    const status = message.startsWith('No default AI provider is configured') ? 400 : 500;
+    const enriched = error as Error & {
+      code?: string;
+      attemptedProviders?: AttemptedProvider[];
+      lastAttemptedProvider?: string | null;
+      lastAttemptedModel?: string | null;
+    };
+    const attemptedProviders = Array.isArray(enriched?.attemptedProviders) ? enriched.attemptedProviders : [];
+    const classified = classifyError(enriched?.message || 'Unknown AI error', enriched?.code);
+    const userMessage = classified.code === 'AI_PROVIDER_RATE_LIMIT'
+      ? describeRateLimit(attemptedProviders)
+      : classified.message;
     const settings = await fetchSystemSettings();
     const aiSettings: AiSettings = (settings?.ai || {}) as AiSettings;
+
     await saveAiAuditLog({
       task: 'portfolioSummary',
-      provider: 'UNKNOWN',
+      provider: enriched?.lastAttemptedProvider || 'UNKNOWN',
       success: false,
-      error: (error as Error)?.message,
+      error: `${classified.code}: ${classified.message}`,
+      model: enriched?.lastAttemptedModel || undefined,
       latencyMs: Date.now() - startedAt,
-      identity: getRequestIdentity(request),
+      identity,
       ttlDays: getRetentionDays(aiSettings, 'auditLogs', 30)
     });
-    console.error("Portfolio AI API Error:", error);
-    return NextResponse.json({ error: message }, { status });
+    console.info('ai_portfolio_summary', {
+      timestamp: new Date().toISOString(),
+      provider: enriched?.lastAttemptedProvider || 'UNKNOWN',
+      model: enriched?.lastAttemptedModel || 'UNKNOWN',
+      duration: Date.now() - startedAt,
+      success: false,
+      errorCode: classified.code,
+      attemptedProviders
+    });
+
+    const cached = await loadCachedSuccess();
+    if (cached) {
+      return NextResponse.json(cached);
+    }
+
+    const status = classified.code === 'AI_PROVIDER_RATE_LIMIT'
+      ? 429
+      : classified.code === 'AI_PROVIDER_NOT_CONFIGURED' || classified.code === 'AI_PROVIDER_CREDENTIALS_MISSING'
+        ? 400
+        : classified.code === 'PORTFOLIO_SNAPSHOT_FAILED'
+          ? 500
+          : 500;
+    return NextResponse.json(
+      {
+        ...errorResponse(classified.code, userMessage),
+        metadata: {
+          generatedAt: new Date().toISOString(),
+          provider: enriched?.lastAttemptedProvider || 'UNKNOWN',
+          model: enriched?.lastAttemptedModel || 'UNKNOWN',
+          attemptedProviders: attemptedProviders.length > 0 ? attemptedProviders : undefined
+        }
+      } satisfies PortfolioSummaryResponse,
+      { status }
+    );
   }
 }
