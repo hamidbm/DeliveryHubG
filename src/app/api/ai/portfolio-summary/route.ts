@@ -10,9 +10,11 @@ import {
 import { getRateLimitPerHour, getRequestIdentity, getRetentionDays } from '../../../../services/aiPolicy';
 import { executeAiTextTask } from '../../../../services/aiRouting';
 import { buildPortfolioIntelligenceSnapshot } from '../../../../services/ai/portfolioSnapshot';
-import { PortfolioSummaryResponse } from '../../../../types/ai';
+import { PortfolioSummaryResponse, PortfolioSnapshot } from '../../../../types/ai';
 import { getAuthUserFromCookies } from '../../../../services/visibility';
 import { AttemptedProvider, AiErrorCode } from '../../../../services/aiRouting';
+import { derivePortfolioSignals } from '../../../../services/ai/portfolioSignals';
+import { normalizePortfolioReport } from '../../../../services/ai/normalizePortfolioReport';
 
 type AiSettings = {
   geminiProModel?: string;
@@ -76,12 +78,25 @@ const buildSnapshotHash = (snapshot: unknown) => createHash('sha256')
   .update(JSON.stringify(snapshot))
   .digest('hex');
 
+const emptySnapshot: PortfolioSnapshot = {
+  generatedAt: new Date().toISOString(),
+  applications: { total: 0, byHealth: { healthy: 0, warning: 0, critical: 0, unknown: 0 } },
+  bundles: { total: 0 },
+  workItems: { total: 0, overdue: 0, blocked: 0, unassigned: 0, byStatus: {} },
+  reviews: { open: 0, overdue: 0 },
+  milestones: { total: 0, overdue: 0 }
+};
+
 const normalizeCachedReport = (cached: any): PortfolioSummaryResponse | null => {
   if (!cached) return null;
   const legacyReport = cached?.report?.status === 'success' ? cached.report : null;
   const currentReport = cached?.status === 'success' ? cached : null;
   const source = currentReport || legacyReport;
+  const legacyCacheNormalized = Boolean(legacyReport && !currentReport);
   if (!source) return null;
+  const snapshot = source.snapshot || emptySnapshot;
+  const signals = derivePortfolioSignals(snapshot);
+  const normalized = normalizePortfolioReport(source.report, signals);
   const generatedAt = source.metadata?.generatedAt || cached.updatedAt || new Date().toISOString();
   const metadata = {
     provider: source.metadata?.provider || 'UNKNOWN',
@@ -89,13 +104,14 @@ const normalizeCachedReport = (cached: any): PortfolioSummaryResponse | null => 
     generatedAt,
     cached: true,
     freshnessStatus: source.metadata?.freshnessStatus || resolveFreshnessStatus(generatedAt),
-    snapshotHash: source.metadata?.snapshotHash
+    snapshotHash: source.metadata?.snapshotHash,
+    legacyCacheNormalized
   } satisfies NonNullable<PortfolioSummaryResponse['metadata']>;
   return {
     status: 'success',
     metadata,
-    snapshot: source.snapshot,
-    report: source.report
+    snapshot,
+    report: normalized.report
   };
 };
 
@@ -159,19 +175,33 @@ export async function POST(request: Request) {
     }
 
     const prompt = `You are an enterprise delivery portfolio analyst.
+You will receive:
+1. A deterministic portfolio snapshot
+2. A deterministic signal summary
 
-Analyze the following portfolio snapshot and produce a short executive report.
+Return STRICT JSON only (no markdown fences) matching this schema:
+{
+  "overallHealth": "green|amber|red|unknown",
+  "executiveSummary": "string",
+  "topRisks": [{ "title": "string", "severity": "low|medium|high|critical", "summary": "string", "evidence": ["string"] }],
+  "recommendedActions": [{ "title": "string", "urgency": "now|7d|30d|later", "summary": "string", "ownerHint": "string", "evidence": ["string"] }],
+  "concentrationSignals": [{ "title": "string", "summary": "string", "impact": "string", "evidence": ["string"] }],
+  "questionsToAsk": [{ "question": "string", "rationale": "string" }]
+}
 
-Portfolio Snapshot:
-${JSON.stringify(snapshot, null, 2)}
+Constraints:
+- executiveSummary concise and management-friendly
+- topRisks max 5
+- recommendedActions max 5
+- concentrationSignals max 5
+- questionsToAsk between 2 and 6
+- Ground statements in provided data
 
-Provide:
-1. Executive summary (3-5 sentences)
-2. Major portfolio signals
-3. Delivery risks
-4. Observations
+Deterministic signal summary:
+${JSON.stringify(derivePortfolioSignals(snapshot), null, 2)}
 
-Respond with concise language suitable for executives.`;
+Portfolio snapshot:
+${JSON.stringify(snapshot, null, 2)}`;
 
     const execution = await executeAiTextTask({
       aiSettings,
@@ -181,6 +211,8 @@ Respond with concise language suitable for executives.`;
       geminiModel: aiSettings.geminiProModel || aiSettings.proModel || 'gemini-3-pro-preview',
       timeoutMs: 20000
     });
+    const signals = derivePortfolioSignals(snapshot);
+    const normalized = normalizePortfolioReport(execution.text, signals);
 
     const generatedAt = new Date().toISOString();
     const snapshotHash = buildSnapshotHash(snapshot);
@@ -195,9 +227,7 @@ Respond with concise language suitable for executives.`;
         snapshotHash
       },
       snapshot,
-      report: {
-        executiveSummary: execution.text || 'Analysis unavailable.'
-      }
+      report: normalized.report
     };
 
     await saveAiAnalysisCache(CACHE_KEY, {
@@ -218,7 +248,9 @@ Respond with concise language suitable for executives.`;
       provider: execution.provider,
       model: execution.model,
       duration: Date.now() - startedAt,
-      success: true
+      success: true,
+      normalizationFallbackUsed: normalized.normalizationFallbackUsed,
+      structuredReportGenerated: true
     });
     return NextResponse.json(response);
   } catch (error) {

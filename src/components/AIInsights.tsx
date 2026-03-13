@@ -38,6 +38,20 @@ const formatAgeLabel = (generatedAt?: string) => {
   return `Generated ${days} day${days === 1 ? '' : 's'} ago`;
 };
 
+const healthBadgeStyle: Record<string, string> = {
+  green: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+  amber: 'bg-amber-100 text-amber-800 border-amber-200',
+  red: 'bg-rose-100 text-rose-800 border-rose-200',
+  unknown: 'bg-slate-100 text-slate-700 border-slate-200'
+};
+
+const urgencyLabel = (urgency?: string) => {
+  if (urgency === 'now') return 'Now';
+  if (urgency === '7d') return 'Next 7 Days';
+  if (urgency === '30d') return 'Next 30 Days';
+  return 'Later';
+};
+
 type PdfTextSegment = {
   text: string;
   bold?: boolean;
@@ -443,6 +457,7 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
   const [report, setReport] = useState<PortfolioSummaryResponse | null>(null);
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [auroraCss, setAuroraCss] = useState<string>('');
+  const [showNarrative, setShowNarrative] = useState(false);
   const hasAutoLoadedRef = useRef(false);
   const inFlightRef = useRef(false);
 
@@ -473,6 +488,7 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
         setErrorMessage(data.error?.message || 'AI analysis failed.');
         return;
       }
+      setShowNarrative(false);
       setReport(data);
       setState(data.metadata?.cached ? 'cached' : 'success');
     } catch {
@@ -507,6 +523,7 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
         setState('empty');
         return;
       }
+      setShowNarrative(false);
       setReport(data);
       setState(data.metadata?.cached ? 'cached' : 'success');
     } catch {
@@ -548,7 +565,8 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
 
   const snapshot = report?.snapshot;
   const metadata = report?.metadata;
-  const reportMarkdown = report?.report?.executiveSummary || '';
+  const structuredReport = report?.report;
+  const reportMarkdown = structuredReport?.markdownReport || structuredReport?.executiveSummary || '';
   const hasExportableReport = Boolean(reportMarkdown && (state === 'success' || state === 'cached'));
 
   const buildReportHeader = () => {
@@ -711,9 +729,120 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
           {(state === 'success' || state === 'cached') && (
             <div className="space-y-4">
               {auroraCss && <style dangerouslySetInnerHTML={{ __html: auroraCss }} />}
-              <div className="wiki-content theme-aurora">
-                <MarkdownRenderer content={reportMarkdown || 'Analysis unavailable.'} />
-              </div>
+              {metadata?.legacyCacheNormalized && (
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+                  This report was normalized from an older cached AI format. Some structured sections were inferred.
+                </div>
+              )}
+              {structuredReport ? (
+                <div className="space-y-5">
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs font-black uppercase tracking-widest text-slate-400">Overall Health</span>
+                    <span className={`px-3 py-1 rounded-full border text-xs font-bold uppercase ${healthBadgeStyle[structuredReport.overallHealth] || healthBadgeStyle.unknown}`}>
+                      {structuredReport.overallHealth}
+                    </span>
+                  </div>
+
+                  <section className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                    <h3 className="text-sm font-black uppercase tracking-widest text-slate-500 mb-2">Executive Summary</h3>
+                    <p className="text-slate-700 leading-7">{structuredReport.executiveSummary || 'Summary unavailable.'}</p>
+                  </section>
+
+                  <section className="bg-white border border-slate-200 rounded-xl p-4">
+                    <h3 className="text-sm font-black uppercase tracking-widest text-slate-500 mb-3">Top Risks</h3>
+                    <div className="space-y-3">
+                      {structuredReport.topRisks?.length ? structuredReport.topRisks.map((risk) => (
+                        <div key={risk.id} className="border border-slate-200 rounded-lg p-3 bg-slate-50">
+                          <div className="flex items-center justify-between gap-3">
+                            <p className="font-semibold text-slate-800">{risk.title}</p>
+                            <span className="text-[11px] px-2 py-0.5 rounded-full bg-slate-200 text-slate-700 uppercase font-bold">{risk.severity}</span>
+                          </div>
+                          <p className="text-sm text-slate-600 mt-1">{risk.summary}</p>
+                          {risk.evidence?.length > 0 && (
+                            <ul className="mt-2 list-disc pl-5 text-sm text-slate-600 space-y-1">
+                              {risk.evidence.map((entry, idx) => <li key={`${risk.id}-e-${idx}`}>{entry}</li>)}
+                            </ul>
+                          )}
+                        </div>
+                      )) : <p className="text-sm text-slate-500">No major risks identified.</p>}
+                    </div>
+                  </section>
+
+                  <section className="bg-white border border-slate-200 rounded-xl p-4">
+                    <h3 className="text-sm font-black uppercase tracking-widest text-slate-500 mb-3">Recommended Actions</h3>
+                    <div className="space-y-3">
+                      {structuredReport.recommendedActions?.length ? structuredReport.recommendedActions.map((action) => (
+                        <div key={action.id} className="border border-slate-200 rounded-lg p-3 bg-slate-50">
+                          <div className="flex items-center justify-between gap-3">
+                            <p className="font-semibold text-slate-800">{action.title}</p>
+                            <span className="text-[11px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 uppercase font-bold">{urgencyLabel(action.urgency)}</span>
+                          </div>
+                          <p className="text-sm text-slate-600 mt-1">{action.summary}</p>
+                          {action.ownerHint && <p className="text-xs text-slate-500 mt-2">Owner Hint: {action.ownerHint}</p>}
+                          {action.evidence?.length ? (
+                            <ul className="mt-2 list-disc pl-5 text-sm text-slate-600 space-y-1">
+                              {action.evidence.map((entry, idx) => <li key={`${action.id}-e-${idx}`}>{entry}</li>)}
+                            </ul>
+                          ) : null}
+                        </div>
+                      )) : <p className="text-sm text-slate-500">No recommended actions available.</p>}
+                    </div>
+                  </section>
+
+                  <section className="bg-white border border-slate-200 rounded-xl p-4">
+                    <h3 className="text-sm font-black uppercase tracking-widest text-slate-500 mb-3">Concentration Signals</h3>
+                    <div className="space-y-3">
+                      {structuredReport.concentrationSignals?.length ? structuredReport.concentrationSignals.map((signal) => (
+                        <div key={signal.id} className="border border-slate-200 rounded-lg p-3 bg-slate-50">
+                          <p className="font-semibold text-slate-800">{signal.title}</p>
+                          <p className="text-sm text-slate-600 mt-1">{signal.summary}</p>
+                          {signal.impact && <p className="text-xs text-slate-500 mt-2">Impact: {signal.impact}</p>}
+                          {signal.evidence?.length ? (
+                            <ul className="mt-2 list-disc pl-5 text-sm text-slate-600 space-y-1">
+                              {signal.evidence.map((entry, idx) => <li key={`${signal.id}-e-${idx}`}>{entry}</li>)}
+                            </ul>
+                          ) : null}
+                        </div>
+                      )) : <p className="text-sm text-slate-500">No concentration signals identified.</p>}
+                    </div>
+                  </section>
+
+                  <section className="bg-white border border-slate-200 rounded-xl p-4">
+                    <h3 className="text-sm font-black uppercase tracking-widest text-slate-500 mb-3">Questions To Ask</h3>
+                    <div className="space-y-2">
+                      {structuredReport.questionsToAsk?.length ? structuredReport.questionsToAsk.map((item) => (
+                        <div key={item.id} className="border border-slate-200 rounded-lg p-3 bg-slate-50">
+                          <p className="text-sm font-semibold text-slate-800">{item.question}</p>
+                          {item.rationale && <p className="text-xs text-slate-500 mt-1">{item.rationale}</p>}
+                        </div>
+                      )) : <p className="text-sm text-slate-500">No follow-up questions available.</p>}
+                    </div>
+                  </section>
+
+                  {structuredReport.markdownReport && (
+                    <section className="bg-white border border-slate-200 rounded-xl p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <h3 className="text-sm font-black uppercase tracking-widest text-slate-500">Full Narrative Report</h3>
+                        <button
+                          onClick={() => setShowNarrative((open) => !open)}
+                          className="text-xs font-semibold text-blue-700 hover:text-blue-800"
+                        >
+                          {showNarrative ? 'Hide' : 'Show'}
+                        </button>
+                      </div>
+                      {showNarrative && (
+                        <div className="wiki-content theme-aurora mt-3">
+                          <MarkdownRenderer content={structuredReport.markdownReport} />
+                        </div>
+                      )}
+                    </section>
+                  )}
+                </div>
+              ) : (
+                <div className="wiki-content theme-aurora">
+                  <MarkdownRenderer content={reportMarkdown || 'Analysis unavailable.'} />
+                </div>
+              )}
               {metadata && (
                 <div className="text-xs text-slate-500 border-t border-slate-100 pt-4">
                   <p>{formatAgeLabel(metadata.generatedAt)}</p>
