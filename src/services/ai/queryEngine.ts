@@ -80,6 +80,8 @@ const detectIntent = (q: string): Intent => {
   return scores[0].intent;
 };
 
+export const detectPortfolioQueryIntent = (question: string): string => detectIntent(normalizeQuestion(question));
+
 const topRisk = (report?: StructuredPortfolioReport) => {
   const risks = (report?.topRisks || []).slice().sort((a, b) => (severityScore[b.severity] || 0) - (severityScore[a.severity] || 0));
   return risks[0];

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Application, Bundle } from '../types';
-import { EntityReference, EntityType, EvidenceItem, PortfolioSummaryResponse, PortfolioQueryResponse, PortfolioSuggestion, RelatedEntitiesMeta } from '../types/ai';
+import { EntityReference, EntityType, EvidenceItem, PortfolioSummaryResponse, PortfolioQueryResponse, PortfolioSuggestion, RelatedEntitiesMeta, SavedInvestigation } from '../types/ai';
 import MarkdownRenderer from './MarkdownRenderer';
 import { marked } from 'marked';
 import DOMPurify from 'isomorphic-dompurify';
@@ -8,6 +8,9 @@ import { derivePortfolioSignals } from '../services/ai/portfolioSignals';
 import { generatePortfolioSuggestions } from '../services/ai/suggestionGenerator';
 import EntityEvidenceList from './ui/EntityEvidenceList';
 import RelatedEntitiesSection from './ui/RelatedEntitiesSection';
+import QueryHistoryPanel, { QueryHistoryItem } from './ai/QueryHistoryPanel';
+import InvestigationPanel from './ai/InvestigationPanel';
+import PinnedInsightsPanel from './ai/PinnedInsightsPanel';
 
 type AnalysisState = 'loading' | 'success' | 'error' | 'cached' | 'empty';
 let lastAutoLoadAt = 0;
@@ -556,10 +559,14 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
   const [auroraCss, setAuroraCss] = useState<string>('');
   const [showNarrative, setShowNarrative] = useState(false);
   const [queryInput, setQueryInput] = useState('');
+  const [lastQueryQuestion, setLastQueryQuestion] = useState('');
   const [queryLoading, setQueryLoading] = useState(false);
   const [queryError, setQueryError] = useState('');
   const [queryResponse, setQueryResponse] = useState<PortfolioQueryResponse | null>(null);
   const [suggestions, setSuggestions] = useState<PortfolioSuggestion[]>([]);
+  const [queryHistory, setQueryHistory] = useState<QueryHistoryItem[]>([]);
+  const [savedInvestigations, setSavedInvestigations] = useState<SavedInvestigation[]>([]);
+  const [investigationBusyId, setInvestigationBusyId] = useState<string | null>(null);
   const hasAutoLoadedRef = useRef(false);
   const inFlightRef = useRef(false);
 
@@ -656,6 +663,34 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
   }, []);
 
   useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem('aiInsights.queryHistory');
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return;
+      setQueryHistory(parsed.slice(0, 20));
+    } catch {
+      // Ignore history load failures
+    }
+  }, []);
+
+  useEffect(() => {
+    const loadInvestigations = async () => {
+      try {
+        const res = await fetch('/api/ai/investigations');
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data?.status === 'success' && Array.isArray(data.items)) {
+          setSavedInvestigations(data.items);
+        }
+      } catch {
+        // Ignore panel load failures
+      }
+    };
+    loadInvestigations();
+  }, []);
+
+  useEffect(() => {
     const loadAuroraTheme = async () => {
       try {
         const res = await fetch('/api/wiki/themes?active=true');
@@ -679,10 +714,30 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
   const relatedEntitiesMeta = report?.relatedEntitiesMeta || {};
   const reportMarkdown = structuredReport?.markdownReport || structuredReport?.executiveSummary || '';
   const hasExportableReport = Boolean(reportMarkdown && (state === 'success' || state === 'cached'));
+  const pinnedItems = savedInvestigations.filter((item) => item.pinned).slice(0, 6);
+
+  const toQueryResponseFromSaved = (item: SavedInvestigation): PortfolioQueryResponse => ({
+    answer: item.answer,
+    explanation: item.explanation,
+    evidence: item.evidence || [],
+    followUps: item.followUps || [],
+    relatedEntitiesMeta: item.relatedEntitiesMeta,
+    entities: item.entities || []
+  });
+
+  const refreshInvestigations = async () => {
+    const res = await fetch('/api/ai/investigations');
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data?.status === 'success' && Array.isArray(data.items)) {
+      setSavedInvestigations(data.items);
+    }
+  };
 
   const submitQuery = async (seedQuestion?: string) => {
     const question = (seedQuestion ?? queryInput).trim();
     if (!question) return;
+    setLastQueryQuestion(question);
     setQueryLoading(true);
     setQueryError('');
     try {
@@ -698,6 +753,21 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
       }
       const parsed = data as PortfolioQueryResponse;
       setQueryResponse(parsed);
+      const historyItem: QueryHistoryItem = {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        question,
+        timestamp: new Date().toISOString(),
+        result: parsed
+      };
+      setQueryHistory((prev) => {
+        const deduped = [historyItem, ...prev.filter((entry) => entry.question.toLowerCase() !== question.toLowerCase())].slice(0, 20);
+        try {
+          sessionStorage.setItem('aiInsights.queryHistory', JSON.stringify(deduped));
+        } catch {
+          // Ignore storage failures
+        }
+        return deduped;
+      });
       if (snapshot) {
         const nextSuggestions = generatePortfolioSuggestions(
           derivePortfolioSignals(snapshot),
@@ -711,6 +781,68 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
       setQueryError('Unable to answer question.');
     } finally {
       setQueryLoading(false);
+    }
+  };
+
+  const saveInvestigation = async (question: string, result: PortfolioQueryResponse) => {
+    const normalizedQuestion = question.trim();
+    if (!normalizedQuestion) return;
+    const res = await fetch('/api/ai/investigations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question: normalizedQuestion, queryResult: result })
+    });
+    if (!res.ok) return;
+    await refreshInvestigations();
+  };
+
+  const handleRunSaved = async (item: SavedInvestigation) => {
+    setQueryInput(item.question);
+    await submitQuery(item.question);
+  };
+
+  const handleRefreshSaved = async (item: SavedInvestigation) => {
+    setInvestigationBusyId(item.id);
+    try {
+      const res = await fetch(`/api/ai/investigations/${encodeURIComponent(item.id)}/refresh`, { method: 'POST' });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data?.status === 'success' && data.investigation) {
+        setSavedInvestigations((prev) => prev.map((p) => p.id === item.id ? data.investigation : p));
+        setQueryResponse(toQueryResponseFromSaved(data.investigation));
+      }
+    } finally {
+      setInvestigationBusyId(null);
+    }
+  };
+
+  const handleTogglePinSaved = async (item: SavedInvestigation, forcePinned?: boolean) => {
+    setInvestigationBusyId(item.id);
+    try {
+      const pinned = typeof forcePinned === 'boolean' ? forcePinned : !item.pinned;
+      const res = await fetch(`/api/ai/investigations/${encodeURIComponent(item.id)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pinned })
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data?.status === 'success' && data.item) {
+        setSavedInvestigations((prev) => prev.map((p) => p.id === item.id ? data.item : p));
+      }
+    } finally {
+      setInvestigationBusyId(null);
+    }
+  };
+
+  const handleDeleteSaved = async (item: SavedInvestigation) => {
+    setInvestigationBusyId(item.id);
+    try {
+      const res = await fetch(`/api/ai/investigations/${encodeURIComponent(item.id)}`, { method: 'DELETE' });
+      if (!res.ok) return;
+      setSavedInvestigations((prev) => prev.filter((p) => p.id !== item.id));
+    } finally {
+      setInvestigationBusyId(null);
     }
   };
 
@@ -785,6 +917,16 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
 
   return (
     <div className="space-y-6">
+      <PinnedInsightsPanel
+        items={pinnedItems}
+        busyId={investigationBusyId}
+        onView={(item) => {
+          setQueryInput(item.question);
+          setQueryResponse(toQueryResponseFromSaved(item));
+        }}
+        onRefresh={handleRefreshSaved}
+        onUnpin={(item) => handleTogglePinSaved(item, false)}
+      />
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold text-slate-800 flex items-center space-x-2">
@@ -1048,6 +1190,14 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
                         <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2">
                           <p className="text-sm font-semibold text-slate-800">{queryResponse.answer}</p>
                           <p className="text-sm text-slate-600">{queryResponse.explanation}</p>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => saveInvestigation(lastQueryQuestion || queryInput, queryResponse)}
+                              className="px-2 py-1 rounded border border-blue-200 bg-blue-50 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+                            >
+                              Save Investigation
+                            </button>
+                          </div>
                           {queryResponse.evidence?.length > 0 && (
                             <div>
                               <p className="text-xs font-black uppercase tracking-widest text-slate-400 mb-1">Evidence</p>
@@ -1079,6 +1229,22 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
                           )}
                         </div>
                       )}
+
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                        <QueryHistoryPanel
+                          items={queryHistory}
+                          onRunAgain={(question) => submitQuery(question)}
+                          onSave={(item) => saveInvestigation(item.question, item.result)}
+                        />
+                        <InvestigationPanel
+                          items={savedInvestigations}
+                          busyId={investigationBusyId}
+                          onRun={handleRunSaved}
+                          onRefresh={handleRefreshSaved}
+                          onTogglePin={handleTogglePinSaved}
+                          onDelete={handleDeleteSaved}
+                        />
+                      </div>
                     </div>
                   </SectionCard>
                 </div>

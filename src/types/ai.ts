@@ -178,3 +178,19 @@ export interface PortfolioQueryResponse {
   relatedEntitiesMeta?: RelatedEntitiesMeta;
   entities?: EntityReference[];
 }
+
+export interface SavedInvestigation {
+  id: string;
+  userId: string;
+  question: string;
+  normalizedIntent?: string;
+  answer: string;
+  explanation: string;
+  evidence: EvidenceItem[];
+  entities: EntityReference[];
+  followUps: string[];
+  pinned: boolean;
+  relatedEntitiesMeta?: RelatedEntitiesMeta;
+  createdAt: string;
+  updatedAt: string;
+}

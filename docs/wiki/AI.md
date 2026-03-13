@@ -160,6 +160,28 @@ AI in DeliveryHub is assistive only. It never writes to the database without exp
     - contextual deterministic follow-up prompts (2–4)
     - optional top-level `entities[]` for downstream UI drill-down usage
   - AI refinement remains optional; deterministic answer path remains primary and fast
+- 12C.4 added persistent investigation workspace capabilities:
+  - new persisted collection: `ai_saved_queries`
+  - saved investigation model (`SavedInvestigation`) includes:
+    - `question`, `normalizedIntent`, `answer`, `explanation`
+    - `evidence[]`, `entities[]`, `followUps[]`
+    - `pinned`, `createdAt`, `updatedAt`, optional `relatedEntitiesMeta`
+  - backend service:
+    - `src/services/ai/investigationService.ts`
+    - save/list/pin-delete/update/refresh operations with owner-scoped access
+    - indexes on `(userId, createdAt)` and `(userId, pinned, updatedAt)`
+  - new authenticated APIs:
+    - `GET/POST /api/ai/investigations`
+    - `PATCH/DELETE /api/ai/investigations/:id`
+    - `POST /api/ai/investigations/:id/refresh`
+  - refresh behavior:
+    - reruns deterministic query engine against current cached portfolio context
+    - updates stored snapshot answer fields
+  - AI Insights UI now includes:
+    - `Pinned Insights` panel (max 6)
+    - `Saved Investigations` panel (run, refresh, pin/unpin, delete)
+    - `Query History` panel (session-scoped, up to 20 recent entries, run again, save)
+  - investigations are private to the authenticated owner and do not introduce cross-user sharing
 
 ## Visual Flows
 

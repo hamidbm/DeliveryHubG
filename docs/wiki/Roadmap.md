@@ -181,6 +181,12 @@ Implemented:
   - portfolio snapshot enriched with lightweight entity lists for list/ranking answers
   - query responses now expose richer evidence, contextual follow-ups, and optional top-level `entities[]`
   - deterministic-first query path remains primary, with AI refinement still optional
+- 12C.4: saved investigations, history, and pinned insights:
+  - persisted saved-query workspace backed by `ai_saved_queries`
+  - new investigation APIs for list/save/pin-delete/refresh
+  - deterministic refresh of saved investigations against current portfolio context
+  - AI Insights now includes Pinned Insights, Saved Investigations, and Query History panels
+  - owner-scoped access enforcement for investigation records
 
 Current 12B behavior:
 - structured sections are primary in AI Insights UI

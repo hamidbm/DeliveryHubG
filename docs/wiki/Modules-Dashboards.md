@@ -74,6 +74,12 @@ Dashboards provide program-level rollups for milestones, risks, and delivery sta
   - contextual deterministic follow-up suggestions are generated per query result
   - extractor-backed deterministic metrics are reused across intents (`src/services/ai/knowledgeExtractors.ts`)
   - query-time behavior remains snapshot/signals/report-based (no additional DB fetches required for deterministic answer generation)
+- 12C.4 added persistent investigation workflow:
+  - users can save query results as investigations (`ai_saved_queries`)
+  - saved items support run/refresh/pin/unpin/delete actions
+  - pinned investigations are surfaced at the top of AI Insights (`max 6`)
+  - query history is kept per browser session and supports run-again + save
+  - refresh re-runs deterministic query logic and updates the saved answer snapshot
 - Visual sequence diagrams for cache/regenerate/query/drill-down are documented in `docs/wiki/AI.md` under **Visual Flows**.
 
 ## Program Capacity (v1)
