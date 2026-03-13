@@ -1,9 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Application, Bundle } from '../types';
-import { PortfolioSummaryResponse } from '../types/ai';
+import { PortfolioSummaryResponse, PortfolioQueryResponse, PortfolioSuggestion } from '../types/ai';
 import MarkdownRenderer from './MarkdownRenderer';
 import { marked } from 'marked';
 import DOMPurify from 'isomorphic-dompurify';
+import { derivePortfolioSignals } from '../services/ai/portfolioSignals';
+import { generatePortfolioSuggestions } from '../services/ai/suggestionGenerator';
 
 type AnalysisState = 'loading' | 'success' | 'error' | 'cached' | 'empty';
 let lastAutoLoadAt = 0;
@@ -531,6 +533,11 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [auroraCss, setAuroraCss] = useState<string>('');
   const [showNarrative, setShowNarrative] = useState(false);
+  const [queryInput, setQueryInput] = useState('');
+  const [queryLoading, setQueryLoading] = useState(false);
+  const [queryError, setQueryError] = useState('');
+  const [queryResponse, setQueryResponse] = useState<PortfolioQueryResponse | null>(null);
+  const [suggestions, setSuggestions] = useState<PortfolioSuggestion[]>([]);
   const hasAutoLoadedRef = useRef(false);
   const inFlightRef = useRef(false);
 
@@ -563,6 +570,10 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
       }
       setShowNarrative(false);
       setReport(data);
+      if (data.snapshot) {
+        const generated = generatePortfolioSuggestions(derivePortfolioSignals(data.snapshot), data.report);
+        setSuggestions(generated);
+      }
       setState(data.metadata?.cached ? 'cached' : 'success');
     } catch {
       setReport(null);
@@ -598,6 +609,10 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
       }
       setShowNarrative(false);
       setReport(data);
+      if (data.snapshot) {
+        const generated = generatePortfolioSuggestions(derivePortfolioSignals(data.snapshot), data.report);
+        setSuggestions(generated);
+      }
       setState(data.metadata?.cached ? 'cached' : 'success');
     } catch {
       setReport(null);
@@ -641,6 +656,40 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
   const structuredReport = report?.report;
   const reportMarkdown = structuredReport?.markdownReport || structuredReport?.executiveSummary || '';
   const hasExportableReport = Boolean(reportMarkdown && (state === 'success' || state === 'cached'));
+
+  const submitQuery = async (seedQuestion?: string) => {
+    const question = (seedQuestion ?? queryInput).trim();
+    if (!question) return;
+    setQueryLoading(true);
+    setQueryError('');
+    try {
+      const res = await fetch('/api/ai/portfolio-query', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setQueryError(data?.error || 'Unable to answer question.');
+        return;
+      }
+      const parsed = data as PortfolioQueryResponse;
+      setQueryResponse(parsed);
+      if (snapshot) {
+        const nextSuggestions = generatePortfolioSuggestions(
+          derivePortfolioSignals(snapshot),
+          structuredReport,
+          parsed.followUps || []
+        );
+        setSuggestions(nextSuggestions);
+      }
+      if (!seedQuestion) setQueryInput('');
+    } catch {
+      setQueryError('Unable to answer question.');
+    } finally {
+      setQueryLoading(false);
+    }
+  };
 
   const buildReportHeader = () => {
     const generatedAt = metadata?.generatedAt || new Date().toISOString();
@@ -914,9 +963,9 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
                   </SectionCard>
 
                   {structuredReport.markdownReport && (
-                    <section className="bg-white border border-slate-200 rounded-xl p-4">
-                      <div className="flex items-center justify-between gap-3">
-                        <h3 className="text-sm font-black uppercase tracking-widest text-slate-500">Full Narrative Report</h3>
+                  <section className="bg-white border border-slate-200 rounded-xl p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <h3 className="text-sm font-black uppercase tracking-widest text-slate-500">Full Narrative Report</h3>
                         <button
                           onClick={() => setShowNarrative((open) => !open)}
                           className="text-xs font-semibold text-blue-700 hover:text-blue-800"
@@ -931,6 +980,79 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
                       )}
                     </section>
                   )}
+
+                  <SectionCard icon="fa-comments" title="Ask DeliveryHub AI">
+                    <div className="space-y-3">
+                      <div className="flex flex-col md:flex-row gap-2">
+                        <input
+                          value={queryInput}
+                          onChange={(e) => setQueryInput(e.target.value)}
+                          placeholder="Ask about risks, milestones, reviews, or delivery blockers..."
+                          className="flex-1 px-3 py-2 rounded-lg border border-slate-300 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                        />
+                        <button
+                          onClick={() => submitQuery()}
+                          disabled={queryLoading || !queryInput.trim()}
+                          className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:opacity-50"
+                        >
+                          {queryLoading ? 'Analyzing...' : 'Ask'}
+                        </button>
+                      </div>
+
+                      {suggestions.length > 0 && (
+                        <div className="flex flex-wrap gap-2">
+                          {suggestions.map((item) => (
+                            <button
+                              key={item.id}
+                              onClick={() => submitQuery(item.prompt)}
+                              disabled={queryLoading}
+                              className="px-3 py-1.5 rounded-full border border-slate-300 bg-slate-50 text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+                            >
+                              {item.prompt}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      {queryError && (
+                        <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{queryError}</div>
+                      )}
+
+                      {queryResponse && (
+                        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2">
+                          <p className="text-sm font-semibold text-slate-800">{queryResponse.answer}</p>
+                          <p className="text-sm text-slate-600">{queryResponse.explanation}</p>
+                          {queryResponse.evidence?.length > 0 && (
+                            <div>
+                              <p className="text-xs font-black uppercase tracking-widest text-slate-400 mb-1">Evidence</p>
+                              <ul className="list-disc pl-5 text-sm text-slate-600 space-y-1">
+                                {queryResponse.evidence.map((item, idx) => (
+                                  <li key={`qev-${idx}`}><strong>{item.label}:</strong> {item.value}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                          {queryResponse.followUps?.length > 0 && (
+                            <div>
+                              <p className="text-xs font-black uppercase tracking-widest text-slate-400 mb-1">Follow-ups</p>
+                              <div className="flex flex-wrap gap-2">
+                                {queryResponse.followUps.map((item, idx) => (
+                                  <button
+                                    key={`qfu-${idx}`}
+                                    onClick={() => submitQuery(item)}
+                                    disabled={queryLoading}
+                                    className="px-3 py-1 rounded-full border border-blue-200 bg-blue-50 text-xs font-semibold text-blue-700 hover:bg-blue-100 disabled:opacity-50"
+                                  >
+                                    {item}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </SectionCard>
                 </div>
               ) : (
                 <div className="wiki-content theme-aurora">

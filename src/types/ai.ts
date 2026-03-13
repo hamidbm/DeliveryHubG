@@ -106,3 +106,23 @@ export interface PortfolioSummaryResponse {
   snapshot?: PortfolioSnapshot;
   report?: StructuredPortfolioReport;
 }
+
+export interface PortfolioQueryEvidenceItem {
+  label: string;
+  value: string;
+}
+
+export interface PortfolioSuggestion {
+  id: string;
+  label: string;
+  prompt: string;
+  category: 'risk' | 'delivery' | 'capacity' | 'review';
+  provenance: 'deterministic' | 'ai';
+}
+
+export interface PortfolioQueryResponse {
+  answer: string;
+  explanation: string;
+  evidence: PortfolioQueryEvidenceItem[];
+  followUps: string[];
+}

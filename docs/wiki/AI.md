@@ -85,6 +85,23 @@ AI in DeliveryHub is assistive only. It never writes to the database without exp
   - action urgency normalization + evidence linkage
   - concentration/question deterministic synthesis when AI output is thin
   - normalization telemetry includes section synthesis flags
+- 12B.5 added interactive portfolio Q&A:
+  - `POST /api/ai/portfolio-query` with authenticated, cache-backed querying over the latest structured portfolio summary
+  - deterministic-first query answering with best-effort AI interpretation fallback
+  - standardized response contract:
+    - `answer`
+    - `explanation`
+    - `evidence[]` (module, label, metric/value, confidence, recommendation, source)
+    - `followUps[]`
+  - graceful behavior when provider/parsing fails: still returns useful deterministic guidance from cached structured data
+  - new query services:
+    - `src/services/ai/queryEngine.ts`
+    - `src/services/ai/suggestionGenerator.ts`
+  - AI Insights UI now includes **Ask DeliveryHub AI**:
+    - free-text question input
+    - contextual quick suggestions from report/signals
+    - evidence-backed answer rendering
+    - follow-up chips that can be clicked to immediately re-query
 
 ## Where AI Shows Up
 - Wiki page view: AI dropdown for summary, key decisions, assumptions

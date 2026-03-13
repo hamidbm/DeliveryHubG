@@ -160,6 +160,11 @@ Implemented:
   - ratio-based severity normalization
   - urgency normalization and stronger evidence linkage
   - section-level synthesis telemetry in normalization logs
+- 12B.5: conversational portfolio query surface:
+  - new endpoint `POST /api/ai/portfolio-query`
+  - deterministic-first answering over cached structured portfolio report
+  - evidence/follow-up response shape for explainable AI interaction
+  - AI Insights “Ask DeliveryHub AI” panel with dynamic quick suggestions and follow-up re-query flow
 
 Current 12B behavior:
 - structured sections are primary in AI Insights UI

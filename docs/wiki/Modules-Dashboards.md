@@ -48,6 +48,12 @@ Dashboards provide program-level rollups for milestones, risks, and delivery sta
   - risk/action/signal/question synthesis using snapshot-derived ratios and counts
   - severity/urgency normalization rules
 - Legacy cache normalization remains supported and visible, with narrative fallback available.
+- 12B.5 introduced interactive Q&A in AI Insights:
+  - **Ask DeliveryHub AI** panel for free-text portfolio questions
+  - quick suggestions generated from the current structured report/signals
+  - evidence-backed responses with concise explanation and follow-up prompts
+  - follow-up prompts are actionable chips that can be re-run as new queries
+  - API endpoint: `POST /api/ai/portfolio-query`
 
 ## Program Capacity (v1)
 - Capacity is defined per bundle as points per week or points per sprint.
