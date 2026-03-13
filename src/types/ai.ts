@@ -235,6 +235,22 @@ export interface ExecutiveSummary {
   generatedAt: string;
 }
 
+export interface ForecastSignal {
+  id: string;
+  title: string;
+  category:
+    | 'milestone_risk'
+    | 'execution_slowdown'
+    | 'backlog_growth'
+    | 'ownership_risk'
+    | 'review_bottleneck';
+  severity: 'low' | 'medium' | 'high';
+  confidence: number;
+  summary: string;
+  evidence: EvidenceItem[];
+  relatedEntities?: EntityReference[];
+}
+
 export interface PortfolioSuggestion {
   id: string;
   label: string;

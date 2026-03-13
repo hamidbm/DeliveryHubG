@@ -228,6 +228,12 @@ Implemented:
   - executive summary cache persisted in `ai_analysis_cache` under `executive-summary`
   - new UI route `/ai/executive-insights` with text-first executive summary layout
   - sections include health label/score, observations, strategic concerns, top alerts, trend highlights, and recommendations
+- 13B: portfolio forecasting and predictive delivery signals:
+  - deterministic forecast engine added (`src/services/ai/forecastEngine.ts`)
+  - new forecast API added (`GET/POST /api/ai/portfolio-forecast`)
+  - forecast cache persisted in `ai_analysis_cache` under `portfolio-forecast`
+  - executive insights page now includes forecast signal cards (severity, confidence, evidence, related entities)
+  - deterministic query + suggestions now include forecast-aware intents/prompts
 
 Current 12B behavior:
 - structured sections are primary in AI Insights UI

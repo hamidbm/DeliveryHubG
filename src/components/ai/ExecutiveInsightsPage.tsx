@@ -1,8 +1,9 @@
 'use client';
 
 import React from 'react';
-import { ExecutiveSummary } from '../../types/ai';
+import { ExecutiveSummary, ForecastSignal } from '../../types/ai';
 import ExecutiveSummaryCard from './ExecutiveSummaryCard';
+import ForecastPanel from './ForecastPanel';
 
 type ApiResponse = {
   status: 'success' | 'error';
@@ -12,6 +13,12 @@ type ApiResponse = {
     freshnessStatus?: 'fresh' | 'stale';
     cached?: boolean;
   };
+  error?: string;
+};
+
+type ForecastApiResponse = {
+  status: 'success' | 'error';
+  forecastSignals?: ForecastSignal[];
   error?: string;
 };
 
@@ -28,25 +35,45 @@ const ExecutiveInsightsPage: React.FC = () => {
   const [error, setError] = React.useState('');
   const [summary, setSummary] = React.useState<ExecutiveSummary | null>(null);
   const [meta, setMeta] = React.useState<ApiResponse['metadata']>({});
+  const [forecastSignals, setForecastSignals] = React.useState<ForecastSignal[]>([]);
+  const [forecastLoading, setForecastLoading] = React.useState(false);
+  const [forecastError, setForecastError] = React.useState('');
 
   const load = React.useCallback(async () => {
     setLoading(true);
+    setForecastLoading(true);
     setError('');
+    setForecastError('');
     try {
-      const res = await fetch('/api/ai/executive-summary');
-      const data = await res.json() as ApiResponse;
-      if (!res.ok) {
-        setError(data?.error || 'Failed to load executive insights.');
+      const [summaryRes, forecastRes] = await Promise.all([
+        fetch('/api/ai/executive-summary'),
+        fetch('/api/ai/portfolio-forecast')
+      ]);
+      const summaryData = await summaryRes.json() as ApiResponse;
+      const forecastData = await forecastRes.json() as ForecastApiResponse;
+
+      if (!summaryRes.ok) {
+        setError(summaryData?.error || 'Failed to load executive insights.');
         setSummary(null);
-        return;
+      } else {
+        setSummary(summaryData.executiveSummary || null);
+        setMeta(summaryData.metadata || {});
       }
-      setSummary(data.executiveSummary || null);
-      setMeta(data.metadata || {});
+
+      if (!forecastRes.ok) {
+        setForecastError(forecastData?.error || 'Failed to load forecast signals.');
+        setForecastSignals([]);
+      } else {
+        setForecastSignals(Array.isArray(forecastData?.forecastSignals) ? forecastData.forecastSignals : []);
+      }
     } catch {
       setError('Failed to load executive insights.');
       setSummary(null);
+      setForecastError('Failed to load forecast signals.');
+      setForecastSignals([]);
     } finally {
       setLoading(false);
+      setForecastLoading(false);
     }
   }, []);
 
@@ -57,17 +84,30 @@ const ExecutiveInsightsPage: React.FC = () => {
   const regenerate = async () => {
     setBusy(true);
     setError('');
+    setForecastError('');
     try {
-      const res = await fetch('/api/ai/executive-summary', { method: 'POST' });
-      const data = await res.json() as ApiResponse;
-      if (!res.ok) {
-        setError(data?.error || 'Failed to regenerate executive insights.');
-        return;
+      const [summaryRes, forecastRes] = await Promise.all([
+        fetch('/api/ai/executive-summary', { method: 'POST' }),
+        fetch('/api/ai/portfolio-forecast', { method: 'POST' })
+      ]);
+      const summaryData = await summaryRes.json() as ApiResponse;
+      const forecastData = await forecastRes.json() as ForecastApiResponse;
+
+      if (!summaryRes.ok) {
+        setError(summaryData?.error || 'Failed to regenerate executive insights.');
+      } else {
+        setSummary(summaryData.executiveSummary || null);
+        setMeta(summaryData.metadata || {});
       }
-      setSummary(data.executiveSummary || null);
-      setMeta(data.metadata || {});
+
+      if (!forecastRes.ok) {
+        setForecastError(forecastData?.error || 'Failed to regenerate forecast signals.');
+      } else {
+        setForecastSignals(Array.isArray(forecastData?.forecastSignals) ? forecastData.forecastSignals : []);
+      }
     } catch {
       setError('Failed to regenerate executive insights.');
+      setForecastError('Failed to regenerate forecast signals.');
     } finally {
       setBusy(false);
     }
@@ -144,6 +184,12 @@ const ExecutiveInsightsPage: React.FC = () => {
                 )}
               </div>
             </section>
+
+            <ForecastPanel
+              signals={forecastSignals}
+              loading={forecastLoading}
+              error={forecastError}
+            />
           </>
         )}
       </div>

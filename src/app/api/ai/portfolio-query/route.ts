@@ -1,15 +1,15 @@
 import { NextResponse } from 'next/server';
 import { fetchAiAnalysisCache, fetchSystemSettings } from '../../../../services/db';
 import { getAuthUserFromCookies } from '../../../../services/visibility';
-import { PortfolioQueryResponse, PortfolioSummaryResponse } from '../../../../types/ai';
+import { ForecastSignal, PortfolioQueryResponse, PortfolioSummaryResponse } from '../../../../types/ai';
 import { derivePortfolioSignals } from '../../../../services/ai/portfolioSignals';
 import { answerPortfolioQuestionDeterministically } from '../../../../services/ai/queryEngine';
 import { executeAiTextTask } from '../../../../services/aiRouting';
 import { toEvidenceItems } from '../../../../services/ai/evidenceEntities';
 import { resolveRelatedEntitiesMetaFromEvidence } from '../../../../services/entityMetaResolver';
 import { loadTrendSignals } from '../../../../services/ai/trendAnalyzer';
-
 const CACHE_KEY = 'portfolio-summary';
+const FORECAST_CACHE_KEY = 'portfolio-forecast';
 
 type AiSettings = {
   geminiProModel?: string;
@@ -55,6 +55,12 @@ const loadStructuredReport = async (): Promise<PortfolioSummaryResponse | null> 
   };
 };
 
+const loadForecastSignals = async (): Promise<ForecastSignal[]> => {
+  const cached = await fetchAiAnalysisCache(FORECAST_CACHE_KEY);
+  if (!cached || cached.status !== 'success' || !Array.isArray(cached.forecastSignals)) return [];
+  return cached.forecastSignals as ForecastSignal[];
+};
+
 export async function POST(request: Request) {
   const authUser = await getAuthUserFromCookies();
   if (!authUser?.userId) {
@@ -73,13 +79,15 @@ export async function POST(request: Request) {
 
   const signals = derivePortfolioSignals(cached.snapshot);
   const trendContext = await loadTrendSignals();
+  const forecastSignals = await loadForecastSignals();
   const deterministic = answerPortfolioQuestionDeterministically(
     question,
     signals,
     cached.report,
     cached.snapshot,
     cached.report?.trendSignals || trendContext.trendSignals,
-    trendContext.history
+    trendContext.history,
+    forecastSignals
   );
   let answer: PortfolioQueryResponse = {
     ...deterministic,

@@ -1,5 +1,6 @@
 import {
   EntityReference,
+  ForecastSignal,
   PortfolioQueryResponse,
   PortfolioSnapshot,
   PortfolioSnapshotHistory,
@@ -56,6 +57,10 @@ type Intent =
   | 'predictive-risk'
   | 'health-score'
   | 'risk-ranking'
+  | 'forecast-risks-soon'
+  | 'forecast-milestone-slip'
+  | 'forecast-execution-slowdown'
+  | 'forecast-backlog-growth'
   | 'general';
 
 const KEYWORDS: Record<Intent, string[]> = {
@@ -90,6 +95,10 @@ const KEYWORDS: Record<Intent, string[]> = {
   'predictive-risk': ['next 7 days', 'predictive risk', 'future risk', 'likely slip'],
   'health-score': ['health score', 'portfolio health score', 'execution health'],
   'risk-ranking': ['biggest risk', 'most risk', 'areas have risk', 'fix first', 'delivery risk'],
+  'forecast-risks-soon': ['impact delivery soon', 'near-term risk', 'soon risk', 'delivery soon'],
+  'forecast-milestone-slip': ['milestones likely to slip', 'milestone may slip', 'likely to slip'],
+  'forecast-execution-slowdown': ['execution slowing down', 'throughput slowdown', 'delivery slowdown'],
+  'forecast-backlog-growth': ['areas show growing backlog', 'growing backlog', 'backlog growth'],
   general: []
 };
 
@@ -120,6 +129,18 @@ const detectIntent = (q: string): Intent => {
   }
   if (q.includes('health score') || (q.includes('portfolio health') && q.includes('score'))) {
     return 'health-score';
+  }
+  if ((q.includes('risk') || q.includes('risks')) && (q.includes('impact delivery soon') || q.includes('delivery soon') || q.includes('near-term'))) {
+    return 'forecast-risks-soon';
+  }
+  if (q.includes('milestone') && (q.includes('likely') || q.includes('may')) && q.includes('slip')) {
+    return 'forecast-milestone-slip';
+  }
+  if (q.includes('execution') && q.includes('slowing down')) {
+    return 'forecast-execution-slowdown';
+  }
+  if (q.includes('growing backlog')) {
+    return 'forecast-backlog-growth';
   }
 
   const scores: Array<{ intent: Intent; score: number }> = [];
@@ -638,13 +659,62 @@ const answerAlertQuery = (
   });
 };
 
+const answerForecastQuery = (
+  forecastSignals: ForecastSignal[] = [],
+  mode: 'soon' | 'milestone-slip' | 'execution-slowdown' | 'backlog-growth'
+): PortfolioQueryResponse => {
+  if (!forecastSignals.length) {
+    return withEntities({
+      answer: 'Forecast signals are not available yet.',
+      explanation: 'Generate portfolio forecast signals first to answer this question deterministically.',
+      evidence: asEvidence(['No forecast signals were found in cache.']),
+      followUps: [
+        'Generate portfolio forecast now.',
+        'What alerts are active now?',
+        'Is delivery trend improving over time?'
+      ]
+    });
+  }
+
+  const filtered = forecastSignals.filter((signal) => {
+    if (mode === 'milestone-slip') return signal.category === 'milestone_risk';
+    if (mode === 'execution-slowdown') return signal.category === 'execution_slowdown';
+    if (mode === 'backlog-growth') return signal.category === 'backlog_growth';
+    return true;
+  });
+
+  const rows = (filtered.length > 0 ? filtered : forecastSignals).slice(0, 5);
+  const label = mode === 'milestone-slip'
+    ? 'milestone slip'
+    : mode === 'execution-slowdown'
+      ? 'execution slowdown'
+      : mode === 'backlog-growth'
+        ? 'backlog growth'
+        : 'near-term delivery';
+
+  return withEntities({
+    answer: `${rows.length} forecast signal${rows.length === 1 ? '' : 's'} identified for ${label} risk.`,
+    explanation: 'Answer is generated from deterministic forecast heuristics over snapshot, trend, and structured report signals.',
+    evidence: asEvidence(rows.flatMap((signal) => [
+      { text: `${signal.title} (${signal.severity}, ${(signal.confidence * 100).toFixed(0)}% confidence): ${signal.summary}`, entities: signal.relatedEntities || [] },
+      ...(signal.evidence || []).slice(0, 1).map((item) => ({ text: item.text, entities: item.entities || signal.relatedEntities || [] }))
+    ])),
+    followUps: [
+      'Which entities are most exposed to these forecast signals?',
+      'What should be prioritized in the next 7 days?',
+      'How do these forecasts compare with active alerts?'
+    ]
+  });
+};
+
 export const answerPortfolioQuestionDeterministically = (
   question: string,
   signals: PortfolioSignalSummary,
   report: StructuredPortfolioReport | undefined,
   snapshot: PortfolioSnapshot | undefined,
   trendSignals: PortfolioTrendSignal[] = [],
-  snapshotHistory: PortfolioSnapshotHistory[] = []
+  snapshotHistory: PortfolioSnapshotHistory[] = [],
+  forecastSignals: ForecastSignal[] = []
 ): PortfolioQueryResponse => {
   const q = normalizeQuestion(question);
   const intent = detectIntent(q);
@@ -689,6 +759,10 @@ export const answerPortfolioQuestionDeterministically = (
     case 'predictive-risk': return answerAlertQuery(report, 'predictive');
     case 'health-score': return answerHealthScoreQuery(report);
     case 'risk-ranking': return answerRiskRanking(signals, report);
+    case 'forecast-risks-soon': return answerForecastQuery(forecastSignals, 'soon');
+    case 'forecast-milestone-slip': return answerForecastQuery(forecastSignals, 'milestone-slip');
+    case 'forecast-execution-slowdown': return answerForecastQuery(forecastSignals, 'execution-slowdown');
+    case 'forecast-backlog-growth': return answerForecastQuery(forecastSignals, 'backlog-growth');
     default: {
       const risk = topRisk(report);
       const fallback = withEntities({

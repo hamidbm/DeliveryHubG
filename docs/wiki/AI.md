@@ -34,6 +34,7 @@ AI in DeliveryHub is assistive only. It never writes to the database without exp
 - Persisted wiki insights in `wiki_ai_insights`
 - Persisted AI Insights portfolio report in `ai_analysis_cache` (`_id: portfolio-summary`)
 - Persisted executive portfolio summary in `ai_analysis_cache` (`_id: executive-summary`)
+- Persisted forecast signal set in `ai_analysis_cache` (`_id: portfolio-forecast`)
 
 ## AI Insights Portfolio Summary (Phase 12A)
 - API contract split:
@@ -347,6 +348,35 @@ AI in DeliveryHub is assistive only. It never writes to the database without exp
       - `src/components/ai/ExecutiveInsightsPage.tsx`
       - `src/components/ai/ExecutiveSummaryCard.tsx`
     - AI Insights header includes quick link to Executive Insights
+- 13B added deterministic portfolio forecasting and predictive delivery signals:
+  - new forecast contract:
+    - `ForecastSignal` in `src/types/ai.ts`
+  - new forecast engine:
+    - `src/services/ai/forecastEngine.ts`
+    - forecast categories:
+      - `milestone_risk`
+      - `execution_slowdown`
+      - `backlog_growth`
+      - `ownership_risk`
+      - `review_bottleneck`
+  - forecast API:
+    - `GET /api/ai/portfolio-forecast`
+    - `POST /api/ai/portfolio-forecast` (explicit regeneration)
+  - forecast cache behavior:
+    - cache key `portfolio-forecast` in `ai_analysis_cache`
+    - freshness metadata with 24h stale window
+  - executive UI integration:
+    - forecast panel and cards added to executive insights page:
+      - `src/components/ai/ForecastPanel.tsx`
+      - `src/components/ai/ForecastSignalCard.tsx`
+  - query/suggestion integration:
+    - `portfolio-query` now reads cached forecast signals for deterministic forecast-aware answers
+    - `queryEngine.ts` supports forecast intents:
+      - “What risks may impact delivery soon?”
+      - “Which milestones are likely to slip?”
+      - “Is execution slowing down?”
+      - “Which areas show growing backlog?”
+    - `suggestionGenerator.ts` now emits forecast-aware prompts when forecast signals exist
 
 ## Visual Flows
 

@@ -135,6 +135,14 @@ Dashboards provide program-level rollups for milestones, risks, and delivery sta
     - trend highlights
     - actionable recommendations
   - summary is cache-backed via `ai_analysis_cache` using `executive-summary`
+- 13B added deterministic portfolio forecasting:
+  - forecast API endpoints:
+    - `GET /api/ai/portfolio-forecast`
+    - `POST /api/ai/portfolio-forecast`
+  - forecast signals now surface in Executive Insights via a dedicated **Forecast Signals** panel
+  - forecast cards include severity, confidence, evidence, and related entity links
+  - forecast cache is persisted in `ai_analysis_cache` using `portfolio-forecast`
+  - Ask DeliveryHub AI now supports forecast-aware deterministic prompts (delivery-soon risk, likely milestone slips, execution slowdown, backlog growth)
 - Visual sequence diagrams for cache/regenerate/query/drill-down are documented in `docs/wiki/AI.md` under **Visual Flows**.
 
 ## Program Capacity (v1)

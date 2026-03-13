@@ -1,4 +1,4 @@
-import { PortfolioSuggestion, StructuredPortfolioReport } from '../../types/ai';
+import { ForecastSignal, PortfolioSuggestion, StructuredPortfolioReport } from '../../types/ai';
 import { PortfolioSignalSummary } from './portfolioSignals';
 
 const pushUnique = (target: PortfolioSuggestion[], item: PortfolioSuggestion) => {
@@ -10,7 +10,8 @@ const pushUnique = (target: PortfolioSuggestion[], item: PortfolioSuggestion) =>
 export const generatePortfolioSuggestions = (
   signals: PortfolioSignalSummary,
   report?: StructuredPortfolioReport,
-  followUps: string[] = []
+  followUps: string[] = [],
+  forecastSignals: ForecastSignal[] = []
 ): PortfolioSuggestion[] => {
   const suggestions: PortfolioSuggestion[] = [];
 
@@ -163,6 +164,46 @@ export const generatePortfolioSuggestions = (
         provenance: 'deterministic'
       });
     }
+  }
+
+  if (forecastSignals.length > 0) {
+    pushUnique(suggestions, {
+      id: 'sugg-forecast-delivery-soon',
+      label: 'Near-term risks',
+      prompt: 'What risks may impact delivery soon?',
+      category: 'risk',
+      provenance: 'deterministic'
+    });
+  }
+
+  if (forecastSignals.some((item) => item.category === 'milestone_risk')) {
+    pushUnique(suggestions, {
+      id: 'sugg-forecast-milestone-slip',
+      label: 'Likely milestone slips',
+      prompt: 'Which milestones are likely to slip?',
+      category: 'risk',
+      provenance: 'deterministic'
+    });
+  }
+
+  if (forecastSignals.some((item) => item.category === 'execution_slowdown')) {
+    pushUnique(suggestions, {
+      id: 'sugg-forecast-execution-slowdown',
+      label: 'Execution slowdown',
+      prompt: 'Is execution slowing down?',
+      category: 'delivery',
+      provenance: 'deterministic'
+    });
+  }
+
+  if (forecastSignals.some((item) => item.category === 'backlog_growth')) {
+    pushUnique(suggestions, {
+      id: 'sugg-forecast-backlog-growth',
+      label: 'Backlog growth',
+      prompt: 'Which areas show growing backlog?',
+      category: 'capacity',
+      provenance: 'deterministic'
+    });
   }
 
   (report?.questionsToAsk || []).forEach((question, index) => {
