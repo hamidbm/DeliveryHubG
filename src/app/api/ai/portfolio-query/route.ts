@@ -6,6 +6,7 @@ import { derivePortfolioSignals } from '../../../../services/ai/portfolioSignals
 import { answerPortfolioQuestionDeterministically } from '../../../../services/ai/queryEngine';
 import { executeAiTextTask } from '../../../../services/aiRouting';
 import { toEvidenceItems } from '../../../../services/ai/evidenceEntities';
+import { resolveRelatedEntitiesMetaFromEvidence } from '../../../../services/entityMetaResolver';
 
 const CACHE_KEY = 'portfolio-summary';
 
@@ -34,7 +35,8 @@ const loadStructuredReport = async (): Promise<PortfolioSummaryResponse | null> 
     status: 'success',
     metadata: source.metadata,
     snapshot: source.snapshot,
-    report: source.report
+    report: source.report,
+    relatedEntitiesMeta: source.relatedEntitiesMeta
   };
 };
 
@@ -56,7 +58,10 @@ export async function POST(request: Request) {
 
   const signals = derivePortfolioSignals(cached.snapshot);
   const deterministic = answerPortfolioQuestionDeterministically(question, signals, cached.report);
-  let answer: PortfolioQueryResponse = deterministic;
+  let answer: PortfolioQueryResponse = {
+    ...deterministic,
+    relatedEntitiesMeta: await resolveRelatedEntitiesMetaFromEvidence(deterministic.evidence || [])
+  };
 
   try {
     const settings = await fetchSystemSettings();
@@ -105,7 +110,10 @@ Do not invent numbers.`;
         evidence: parsedEvidence.length > 0 ? parsedEvidence : deterministic.evidence,
         followUps: Array.isArray(parsed.followUps)
           ? parsed.followUps.map((item: any) => String(item || '').trim()).filter(Boolean).slice(0, 6)
-          : deterministic.followUps
+          : deterministic.followUps,
+        relatedEntitiesMeta: await resolveRelatedEntitiesMetaFromEvidence(
+          parsedEvidence.length > 0 ? parsedEvidence : deterministic.evidence
+        )
       };
     }
   } catch {

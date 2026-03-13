@@ -48,6 +48,8 @@ export interface EvidenceItem {
   provenance?: PortfolioReportProvenance;
 }
 
+export type RelatedEntitiesMeta = Partial<Record<EntityType, Record<string, string>>>;
+
 export interface StructuredRiskItem {
   id: string;
   title: string;
@@ -119,6 +121,7 @@ export interface PortfolioSummaryResponse {
   metadata?: PortfolioSummaryMetadata;
   snapshot?: PortfolioSnapshot;
   report?: StructuredPortfolioReport;
+  relatedEntitiesMeta?: RelatedEntitiesMeta;
 }
 
 export interface PortfolioSuggestion {
@@ -134,4 +137,5 @@ export interface PortfolioQueryResponse {
   explanation: string;
   evidence: EvidenceItem[];
   followUps: string[];
+  relatedEntitiesMeta?: RelatedEntitiesMeta;
 }

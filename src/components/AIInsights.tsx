@@ -1,12 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Application, Bundle } from '../types';
-import { PortfolioSummaryResponse, PortfolioQueryResponse, PortfolioSuggestion } from '../types/ai';
+import { EntityReference, EntityType, EvidenceItem, PortfolioSummaryResponse, PortfolioQueryResponse, PortfolioSuggestion, RelatedEntitiesMeta } from '../types/ai';
 import MarkdownRenderer from './MarkdownRenderer';
 import { marked } from 'marked';
 import DOMPurify from 'isomorphic-dompurify';
 import { derivePortfolioSignals } from '../services/ai/portfolioSignals';
 import { generatePortfolioSuggestions } from '../services/ai/suggestionGenerator';
 import EntityEvidenceList from './ui/EntityEvidenceList';
+import RelatedEntitiesSection from './ui/RelatedEntitiesSection';
 
 type AnalysisState = 'loading' | 'success' | 'error' | 'cached' | 'empty';
 let lastAutoLoadAt = 0;
@@ -519,6 +520,35 @@ const SnapshotMetric = ({ label, value }: { label: string; value: number | strin
   </div>
 );
 
+const buildEntityGroupsFromEvidence = (
+  evidence: EvidenceItem[] = [],
+  meta: RelatedEntitiesMeta = {}
+): Array<{ type: EntityType; entities: EntityReference[]; secondaryMeta: Record<string, string> }> => {
+  const grouped: Record<EntityType, EntityReference[]> = {
+    workitem: [],
+    milestone: [],
+    review: [],
+    application: [],
+    bundle: []
+  };
+  const seen = new Set<string>();
+  evidence.forEach((item) => {
+    (item.entities || []).forEach((entity) => {
+      const key = `${entity.type}:${entity.id}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      grouped[entity.type].push(entity);
+    });
+  });
+  return (Object.keys(grouped) as EntityType[])
+    .map((type) => ({
+      type,
+      entities: grouped[type],
+      secondaryMeta: (meta[type] || {}) as Record<string, string>
+    }))
+    .filter((group) => group.entities.length > 0);
+};
+
 const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = [] }) => {
   const [state, setState] = useState<AnalysisState>('loading');
   const [report, setReport] = useState<PortfolioSummaryResponse | null>(null);
@@ -646,6 +676,7 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
   const snapshot = report?.snapshot;
   const metadata = report?.metadata;
   const structuredReport = report?.report;
+  const relatedEntitiesMeta = report?.relatedEntitiesMeta || {};
   const reportMarkdown = structuredReport?.markdownReport || structuredReport?.executiveSummary || '';
   const hasExportableReport = Boolean(reportMarkdown && (state === 'success' || state === 'cached'));
 
@@ -882,6 +913,7 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
                               </div>
                               <p className="text-sm text-slate-600 mt-1 break-words">{summary}</p>
                               <EntityEvidenceList evidence={risk.evidence} />
+                              <RelatedEntitiesSection groups={buildEntityGroupsFromEvidence(risk.evidence || [], relatedEntitiesMeta)} />
                             </div>
                           );
                         })}
@@ -906,6 +938,7 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
                             <p className="text-sm text-slate-600 mt-1 break-words">{summary}</p>
                             {action.ownerHint && <p className="text-xs text-slate-500 mt-2">Owner Hint: {action.ownerHint}</p>}
                             <EntityEvidenceList evidence={action.evidence} />
+                            <RelatedEntitiesSection groups={buildEntityGroupsFromEvidence(action.evidence || [], relatedEntitiesMeta)} />
                           </div>
                         );
                       })}
@@ -927,6 +960,7 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
                             <p className="text-sm text-slate-600 mt-1 break-words">{summary}</p>
                             {signal.impact && <p className="text-xs text-slate-500 mt-2">Impact: {signal.impact}</p>}
                             <EntityEvidenceList evidence={signal.evidence} />
+                            <RelatedEntitiesSection groups={buildEntityGroupsFromEvidence(signal.evidence || [], relatedEntitiesMeta)} />
                           </div>
                         );
                       })}
@@ -1018,6 +1052,12 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
                             <div>
                               <p className="text-xs font-black uppercase tracking-widest text-slate-400 mb-1">Evidence</p>
                               <EntityEvidenceList evidence={queryResponse.evidence} />
+                              <RelatedEntitiesSection
+                                groups={buildEntityGroupsFromEvidence(
+                                  queryResponse.evidence || [],
+                                  queryResponse.relatedEntitiesMeta || relatedEntitiesMeta
+                                )}
+                              />
                             </div>
                           )}
                           {queryResponse.followUps?.length > 0 && (

@@ -21,14 +21,6 @@ const asString = (value: unknown, fallback = '') => {
   return trimmed || fallback;
 };
 
-const asStringArray = (value: unknown, maxItems = 5) => {
-  if (!Array.isArray(value)) return [];
-  return value
-    .map((entry) => asString(entry))
-    .filter(Boolean)
-    .slice(0, maxItems);
-};
-
 const asEvidenceTextArray = (value: unknown, maxItems = 5) => {
   if (!Array.isArray(value)) return [];
   return value

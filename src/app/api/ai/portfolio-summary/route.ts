@@ -15,6 +15,7 @@ import { getAuthUserFromCookies } from '../../../../services/visibility';
 import { AttemptedProvider, AiErrorCode } from '../../../../services/aiRouting';
 import { derivePortfolioSignals } from '../../../../services/ai/portfolioSignals';
 import { normalizePortfolioReport } from '../../../../services/ai/normalizePortfolioReport';
+import { resolveRelatedEntitiesMetaFromReport } from '../../../../services/entityMetaResolver';
 
 type AiSettings = {
   geminiProModel?: string;
@@ -87,7 +88,7 @@ const emptySnapshot: PortfolioSnapshot = {
   milestones: { total: 0, overdue: 0 }
 };
 
-const normalizeCachedReport = (cached: any): PortfolioSummaryResponse | null => {
+const normalizeCachedReport = async (cached: any): Promise<PortfolioSummaryResponse | null> => {
   if (!cached) return null;
   const legacyReport = cached?.report?.status === 'success' ? cached.report : null;
   const currentReport = cached?.status === 'success' ? cached : null;
@@ -111,7 +112,8 @@ const normalizeCachedReport = (cached: any): PortfolioSummaryResponse | null => 
     status: 'success',
     metadata,
     snapshot,
-    report: normalized.report
+    report: normalized.report,
+    relatedEntitiesMeta: source.relatedEntitiesMeta || await resolveRelatedEntitiesMetaFromReport(normalized.report)
   };
 };
 
@@ -216,6 +218,7 @@ ${JSON.stringify(snapshot, null, 2)}`;
 
     const generatedAt = new Date().toISOString();
     const snapshotHash = buildSnapshotHash(snapshot);
+    const relatedEntitiesMeta = await resolveRelatedEntitiesMetaFromReport(normalized.report);
     const response: PortfolioSummaryResponse = {
       status: 'success',
       metadata: {
@@ -227,7 +230,8 @@ ${JSON.stringify(snapshot, null, 2)}`;
         snapshotHash
       },
       snapshot,
-      report: normalized.report
+      report: normalized.report,
+      relatedEntitiesMeta
     };
 
     await saveAiAnalysisCache(CACHE_KEY, {

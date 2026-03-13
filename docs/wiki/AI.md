@@ -124,6 +124,142 @@ AI in DeliveryHub is assistive only. It never writes to the database without exp
     - used in risks/actions/signals/query-answer evidence blocks
   - fallback behavior preserved:
     - evidence still renders as plain text if no entity references are available
+- 12C.2 introduced contextual related-entity panels:
+  - response contract now includes `relatedEntitiesMeta` for both:
+    - `GET/POST /api/ai/portfolio-summary`
+    - `POST /api/ai/portfolio-query`
+  - backend entity metadata resolver:
+    - `src/services/entityMetaResolver.ts`
+    - resolves secondary metadata per entity type (work items, milestones, reviews, applications, bundles)
+  - panelized UI components:
+    - `src/components/ui/EntityGroupPanel.tsx`
+    - `src/components/ui/RelatedEntitiesSection.tsx`
+  - related entities are grouped and ordered by type relevance:
+    - `workitem -> milestone -> review -> application -> bundle`
+  - default display limits and expansion behavior:
+    - show up to 5 entities per group by default
+    - if group size > 50, show 15 initially
+    - `View all` / `Show less` toggle available when group exceeds default
+  - contextual ordering is applied within each group using available metadata (e.g., blocked/overdue/unassigned signals for work items)
+  - integrated under Top Risks, Recommended Actions, Concentration Signals, and Query Answers
+
+## Visual Flows
+
+### Portfolio Summary Load / Regenerate
+```text
+Client UI            API Route                      AI Service                  DB
+---------            ---------                      ----------                  --
+AI Insights
+    | GET /api/ai/portfolio-summary
+    |---------------------------------------------->|
+    |                              fetch ai_analysis_cache(portfolio-summary)
+    |<----------------------------------------------|
+    | cache hit?
+    |  yes -> return cached structured report
+    |  no  -> show empty state ("Generate Analysis")
+    |
+Generate/Regenerate click
+    | POST /api/ai/portfolio-summary
+    |---------------------------------------------->|
+    |                         build snapshot -> derive signals -> prompt
+    |----------------------------------------------> execute provider
+    |<---------------------------------------------- AI raw response
+    |                         normalize structured report (+ fallback synthesis)
+    |                              save ai_analysis_cache(portfolio-summary)
+    |<----------------------------------------------|
+    | render structured sections + narrative + exports
+```
+
+```mermaid
+sequenceDiagram
+  participant UI as Client UI
+  participant API as /api/ai/portfolio-summary
+  participant AI as AI Service
+  participant DB as MongoDB
+
+  UI->>API: GET portfolio-summary
+  API->>DB: fetch ai_analysis_cache(portfolio-summary)
+  DB-->>API: cached report or empty
+  API-->>UI: cached structured report / empty state
+
+  UI->>API: POST portfolio-summary (manual regenerate)
+  API->>AI: build snapshot + derive signals + provider call
+  AI-->>API: AI output
+  API->>API: normalize structured report (+ fallback synthesis)
+  API->>DB: save ai_analysis_cache(portfolio-summary)
+  DB-->>API: saved
+  API-->>UI: fresh structured report
+```
+
+### Ask DeliveryHub AI Query Flow
+```text
+Client UI            API Route                      AI Service                  DB
+---------            ---------                      ----------                  --
+Ask panel submit
+    | POST /api/ai/portfolio-query (question)
+    |---------------------------------------------->|
+    |                              fetch cached portfolio-summary
+    |<----------------------------------------------|
+    | no cached report -> 400 ("Generate analysis first")
+    | yes:
+    |   deterministic answer baseline (queryEngine)
+    |----------------------------------------------> optional AI refinement
+    |<---------------------------------------------- parsed/normalized response
+    | return answer + explanation + evidence[] + followUps[]
+    | render answer card + follow-up chips + dynamic suggestions refresh
+```
+
+```mermaid
+sequenceDiagram
+  participant UI as Ask Panel
+  participant API as /api/ai/portfolio-query
+  participant AI as AI Provider (optional)
+  participant DB as MongoDB
+
+  UI->>API: POST question
+  API->>DB: fetch cached portfolio-summary
+  DB-->>API: cached report / none
+  alt no cached report
+    API-->>UI: 400 Generate analysis first
+  else cached report exists
+    API->>API: deterministic baseline answer
+    API->>AI: optional refinement prompt
+    AI-->>API: refined JSON (best effort)
+    API-->>UI: answer + explanation + evidence[] + followUps[]
+  end
+```
+
+### Evidence Entity Drill-Down (12C.1)
+```text
+Structured Section / Query Answer
+    |
+    | evidence[] -> EvidenceItem { text, entities[] }
+    |
+EntityEvidenceList
+    |
+    | per evidence item:
+    |   - show plain text evidence
+    |   - if entities exist, show clickable chips
+    |
+    | grouped "Related Entities" subsection
+    |   workitem / application / bundle / milestone / review
+    |
+    | click chip -> resolveEntityHref(entity)
+    |             -> navigate to existing DeliveryHub page/view
+```
+
+```mermaid
+flowchart TD
+  A[Structured section or query answer] --> B[evidence: EvidenceItem[]]
+  B --> C[EntityEvidenceList]
+  C --> D[Render evidence text]
+  C --> E{entities available?}
+  E -- Yes --> F[Render clickable entity chips]
+  F --> G[Group into Related Entities by type]
+  G --> H[resolveEntityHref(entity)]
+  H --> I[Navigate to existing DeliveryHub page/view]
+  E -- No --> J[Keep plain text evidence]
+```
 
 ## Where AI Shows Up
 - Wiki page view: AI dropdown for summary, key decisions, assumptions

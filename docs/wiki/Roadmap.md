@@ -170,6 +170,11 @@ Implemented:
   - centralized entity mapping/link utility for evidence (`src/services/ai/evidenceEntities.ts`)
   - AI Insights evidence UI upgraded with clickable entity chips and grouped related-entity lists
   - graceful fallback preserved for evidence items without entity references
+- 12C.2: contextual related-entity panels and metadata:
+  - APIs now return `relatedEntitiesMeta` for summary and query responses
+  - backend resolver (`src/services/entityMetaResolver.ts`) enriches entity refs with secondary metadata strings
+  - grouped panel components (`EntityGroupPanel`, `RelatedEntitiesSection`) added to AI Insights cards
+  - relevance ordering, per-group limits, and expand/collapse behavior applied for large related-entity lists
 
 Current 12B behavior:
 - structured sections are primary in AI Insights UI

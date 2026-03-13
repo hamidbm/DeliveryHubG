@@ -60,6 +60,15 @@ Dashboards provide program-level rollups for milestones, risks, and delivery sta
   - AI Insights evidence blocks now render clickable entity chips and grouped **Related Entities**
   - drill-down links navigate to existing DeliveryHub pages/views without regenerating AI content
   - when no entity refs exist, evidence still renders as plain text
+- 12C.2 refined related-entity usability:
+  - related entities now render in bounded contextual panels per type (work items, milestones, reviews, applications, bundles)
+  - per-group ordering is relevance-first (e.g., blocked/overdue/unassigned before less urgent work items)
+  - panel limits and toggle behavior:
+    - default 5 items shown per group
+    - if group has more than 50 items, initial display is 15
+    - `View all` / `Show less` supported for oversized groups
+  - backend-driven secondary metadata is provided through `relatedEntitiesMeta` and rendered as actionable subtitles
+- Visual sequence diagrams for cache/regenerate/query/drill-down are documented in `docs/wiki/AI.md` under **Visual Flows**.
 
 ## Program Capacity (v1)
 - Capacity is defined per bundle as points per week or points per sprint.
