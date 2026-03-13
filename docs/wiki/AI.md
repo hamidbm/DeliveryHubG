@@ -142,6 +142,24 @@ AI in DeliveryHub is assistive only. It never writes to the database without exp
     - `View all` / `Show less` toggle available when group exceeds default
   - contextual ordering is applied within each group using available metadata (e.g., blocked/overdue/unassigned signals for work items)
   - integrated under Top Risks, Recommended Actions, Concentration Signals, and Query Answers
+- 12C.3 expanded deterministic portfolio query intelligence:
+  - weighted intent detection in `src/services/ai/queryEngine.ts` now supports:
+    - work-item queries (overdue, blocked, unassigned, urgent, milestone-threatening)
+    - bundle analysis/ranking
+    - application health/risk queries
+    - milestone exposure queries
+    - review cycle status queries
+    - owner/capacity workload queries
+    - risk-ranking queries
+  - new reusable extractor layer:
+    - `src/services/ai/knowledgeExtractors.ts`
+    - `extractWorkItemStats`, `extractBundleStats`, `extractMilestoneStats`, `extractApplicationStats`, `extractReviewStats`, `extractOwnerStats`
+  - `PortfolioSnapshot` now carries optional lightweight entity lists (`items[]`) for deterministic list/ranking answers without query-time DB reads
+  - query responses now include:
+    - richer `evidence[]` with entity references
+    - contextual deterministic follow-up prompts (2–4)
+    - optional top-level `entities[]` for downstream UI drill-down usage
+  - AI refinement remains optional; deterministic answer path remains primary and fast
 
 ## Visual Flows
 

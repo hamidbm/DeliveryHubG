@@ -175,6 +175,12 @@ Implemented:
   - backend resolver (`src/services/entityMetaResolver.ts`) enriches entity refs with secondary metadata strings
   - grouped panel components (`EntityGroupPanel`, `RelatedEntitiesSection`) added to AI Insights cards
   - relevance ordering, per-group limits, and expand/collapse behavior applied for large related-entity lists
+- 12C.3: expanded deterministic query intents and knowledge extraction:
+  - query engine now covers operational and ranking investigations (work items, bundles, applications, milestones, reviews, owners, risk ranking)
+  - new extractor module (`src/services/ai/knowledgeExtractors.ts`) provides reusable deterministic metrics
+  - portfolio snapshot enriched with lightweight entity lists for list/ranking answers
+  - query responses now expose richer evidence, contextual follow-ups, and optional top-level `entities[]`
+  - deterministic-first query path remains primary, with AI refinement still optional
 
 Current 12B behavior:
 - structured sections are primary in AI Insights UI

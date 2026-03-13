@@ -68,6 +68,12 @@ Dashboards provide program-level rollups for milestones, risks, and delivery sta
     - if group has more than 50 items, initial display is 15
     - `View all` / `Show less` supported for oversized groups
   - backend-driven secondary metadata is provided through `relatedEntitiesMeta` and rendered as actionable subtitles
+- 12C.3 expanded Ask DeliveryHub AI query coverage:
+  - deterministic query intents now include operational/ranking categories (work items, bundles, applications, milestones, reviews, owners, risk ranking)
+  - list-style deterministic answers are evidence-backed with entity references
+  - contextual deterministic follow-up suggestions are generated per query result
+  - extractor-backed deterministic metrics are reused across intents (`src/services/ai/knowledgeExtractors.ts`)
+  - query-time behavior remains snapshot/signals/report-based (no additional DB fetches required for deterministic answer generation)
 - Visual sequence diagrams for cache/regenerate/query/drill-down are documented in `docs/wiki/AI.md` under **Visual Flows**.
 
 ## Program Capacity (v1)

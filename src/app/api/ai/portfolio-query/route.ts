@@ -15,6 +15,20 @@ type AiSettings = {
   proModel?: string;
 };
 
+const flattenEntities = (evidence: PortfolioQueryResponse['evidence']) => {
+  const out: NonNullable<PortfolioQueryResponse['entities']> = [];
+  const seen = new Set<string>();
+  (evidence || []).forEach((item) => {
+    (item.entities || []).forEach((entity) => {
+      const key = `${entity.type}:${entity.id}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push(entity);
+    });
+  });
+  return out.slice(0, 20);
+};
+
 const parseQuestionBody = async (request: Request) => {
   try {
     const body = await request.json();
@@ -57,10 +71,11 @@ export async function POST(request: Request) {
   }
 
   const signals = derivePortfolioSignals(cached.snapshot);
-  const deterministic = answerPortfolioQuestionDeterministically(question, signals, cached.report);
+  const deterministic = answerPortfolioQuestionDeterministically(question, signals, cached.report, cached.snapshot);
   let answer: PortfolioQueryResponse = {
     ...deterministic,
-    relatedEntitiesMeta: await resolveRelatedEntitiesMetaFromEvidence(deterministic.evidence || [])
+    relatedEntitiesMeta: await resolveRelatedEntitiesMetaFromEvidence(deterministic.evidence || []),
+    entities: deterministic.entities || flattenEntities(deterministic.evidence || [])
   };
 
   try {
@@ -113,7 +128,8 @@ Do not invent numbers.`;
           : deterministic.followUps,
         relatedEntitiesMeta: await resolveRelatedEntitiesMetaFromEvidence(
           parsedEvidence.length > 0 ? parsedEvidence : deterministic.evidence
-        )
+        ),
+        entities: flattenEntities(parsedEvidence.length > 0 ? parsedEvidence : deterministic.evidence)
       };
     }
   } catch {

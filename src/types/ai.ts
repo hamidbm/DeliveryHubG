@@ -8,9 +8,19 @@ export interface PortfolioSnapshot {
       critical: number;
       unknown: number;
     };
+    items?: Array<{
+      id: string;
+      name: string;
+      health: 'healthy' | 'warning' | 'critical' | 'unknown';
+      bundleId?: string;
+    }>;
   };
   bundles: {
     total: number;
+    items?: Array<{
+      id: string;
+      name: string;
+    }>;
   };
   workItems: {
     total: number;
@@ -18,14 +28,42 @@ export interface PortfolioSnapshot {
     blocked: number;
     unassigned: number;
     byStatus: Record<string, number>;
+    items?: Array<{
+      id: string;
+      key?: string;
+      title: string;
+      status: string;
+      blocked: boolean;
+      assignee?: string;
+      dueDate?: string;
+      bundleId?: string;
+      applicationId?: string;
+      milestoneIds?: string[];
+      priority?: string;
+    }>;
   };
   reviews: {
     open: number;
     overdue: number;
+    items?: Array<{
+      id: string;
+      status: string;
+      dueDate?: string;
+      applicationId?: string;
+      bundleId?: string;
+      title?: string;
+    }>;
   };
   milestones: {
     total: number;
     overdue: number;
+    items?: Array<{
+      id: string;
+      name: string;
+      status: string;
+      targetDate?: string;
+      bundleId?: string;
+    }>;
   };
 }
 
@@ -138,4 +176,5 @@ export interface PortfolioQueryResponse {
   evidence: EvidenceItem[];
   followUps: string[];
   relatedEntitiesMeta?: RelatedEntitiesMeta;
+  entities?: EntityReference[];
 }

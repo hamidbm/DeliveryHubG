@@ -54,6 +54,33 @@ export const generatePortfolioSuggestions = (
     });
   }
 
+  if (signals.milestonesOverdue > 0) {
+    pushUnique(suggestions, {
+      id: 'sugg-milestone-risk',
+      label: 'Milestone exposure',
+      prompt: 'Which milestones are at risk or overdue?',
+      category: 'risk',
+      provenance: 'deterministic'
+    });
+  }
+
+  if (signals.totalWorkItems > 0) {
+    pushUnique(suggestions, {
+      id: 'sugg-owner-load',
+      label: 'Owner workload',
+      prompt: 'Which owners have the most blocked or overdue work?',
+      category: 'capacity',
+      provenance: 'deterministic'
+    });
+    pushUnique(suggestions, {
+      id: 'sugg-bundle-risk',
+      label: 'Bundle ranking',
+      prompt: 'Which bundles have the highest delivery risk?',
+      category: 'risk',
+      provenance: 'deterministic'
+    });
+  }
+
   (report?.questionsToAsk || []).forEach((question, index) => {
     pushUnique(suggestions, {
       id: `sugg-report-${index + 1}`,
