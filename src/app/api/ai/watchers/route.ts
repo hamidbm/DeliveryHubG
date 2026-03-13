@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getAuthUserFromCookies } from '../../../../services/visibility';
 import { WatcherType } from '../../../../types/ai';
-import { createWatcherForUser, evaluateWatchersForUser, listWatchersForUser } from '../../../../services/ai/notificationEngine';
+import { createWatcherForUser, evaluateWatchersForUser, getWatcherUsage, listWatchersForUser } from '../../../../services/ai/notificationEngine';
 import { fetchAiAnalysisCache } from '../../../../services/db';
 
 const CACHE_KEY = 'portfolio-summary';
@@ -26,8 +26,8 @@ export async function GET() {
   const userId = String(authUser?.userId || '');
   if (!userId) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
 
-  const watchers = await listWatchersForUser(userId);
-  return NextResponse.json({ status: 'success', watchers });
+  const [watchers, usage] = await Promise.all([listWatchersForUser(userId), getWatcherUsage(userId)]);
+  return NextResponse.json({ status: 'success', watchers, usage });
 }
 
 export async function POST(request: Request) {
@@ -51,15 +51,23 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'targetId is required' }, { status: 400 });
   }
 
-  const watcherId = await createWatcherForUser(userId, {
-    type: body.type,
-    targetId,
-    condition: body?.condition && typeof body.condition === 'object' ? body.condition : {},
-    enabled: body?.enabled !== false,
-    deliveryPreferences: body?.deliveryPreferences && typeof body.deliveryPreferences === 'object'
-      ? body.deliveryPreferences
-      : undefined
-  });
+  let watcherId = '';
+  try {
+    watcherId = await createWatcherForUser(userId, {
+      type: body.type,
+      targetId,
+      condition: body?.condition && typeof body.condition === 'object' ? body.condition : {},
+      enabled: body?.enabled !== false,
+      deliveryPreferences: body?.deliveryPreferences && typeof body.deliveryPreferences === 'object'
+        ? body.deliveryPreferences
+        : undefined
+    });
+  } catch (error: any) {
+    if (error?.code === 'WATCHER_QUOTA_EXCEEDED' || error?.message === 'Watcher quota exceeded') {
+      return NextResponse.json({ error: 'Watcher quota exceeded' }, { status: 400 });
+    }
+    throw error;
+  }
 
   const report = await loadPortfolioContext();
   if (report) {
@@ -71,5 +79,6 @@ export async function POST(request: Request) {
     });
   }
 
-  return NextResponse.json({ status: 'success', watcherId });
+  const usage = await getWatcherUsage(userId);
+  return NextResponse.json({ status: 'success', watcherId, usage });
 }

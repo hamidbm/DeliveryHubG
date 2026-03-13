@@ -122,6 +122,19 @@ Dashboards provide program-level rollups for milestones, risks, and delivery sta
   - notification dispatch now routes across `email`, `slack`, and `teams` with shared suppression/severity policy
   - digest mode queues notifications for scheduled summary delivery instead of immediate external sends
   - notification center now displays channel badges for Slack/Teams and a `Digest` delivery mode indicator
+- 13A added Executive Portfolio Summary:
+  - new executive page at `/ai/executive-insights`
+  - API endpoints:
+    - `GET /api/ai/executive-summary`
+    - `POST /api/ai/executive-summary`
+  - summary sections include:
+    - portfolio health (score + label)
+    - key observations
+    - strategic concerns
+    - top alerts
+    - trend highlights
+    - actionable recommendations
+  - summary is cache-backed via `ai_analysis_cache` using `executive-summary`
 - Visual sequence diagrams for cache/regenerate/query/drill-down are documented in `docs/wiki/AI.md` under **Visual Flows**.
 
 ## Program Capacity (v1)

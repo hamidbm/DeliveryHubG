@@ -33,6 +33,7 @@ AI in DeliveryHub is assistive only. It never writes to the database without exp
 - Rate limits in `ai_rate_limits`
 - Persisted wiki insights in `wiki_ai_insights`
 - Persisted AI Insights portfolio report in `ai_analysis_cache` (`_id: portfolio-summary`)
+- Persisted executive portfolio summary in `ai_analysis_cache` (`_id: executive-summary`)
 
 ## AI Insights Portfolio Summary (Phase 12A)
 - API contract split:
@@ -325,6 +326,27 @@ AI in DeliveryHub is assistive only. It never writes to the database without exp
     - `NOTIFICATION_TEAMS_MODE` (`webhook|disabled`)
     - `NOTIFICATION_DIGEST_ENABLED` (`true|false`)
     - `DIGEST_INTERVAL_MINUTES` (number)
+- 13A added executive portfolio summary intelligence:
+  - new deterministic executive summary generator:
+    - `src/services/ai/executiveSummary.ts`
+    - output contract `ExecutiveSummary` in `src/types/ai.ts`
+  - executive summary API:
+    - `GET /api/ai/executive-summary`
+    - `POST /api/ai/executive-summary` (explicit regeneration)
+  - executive summary uses:
+    - latest structured portfolio report (`portfolio-summary`)
+    - trend signals (12D)
+    - alerts + health score (12E)
+  - executive cache behavior:
+    - cache key `executive-summary` in `ai_analysis_cache`
+    - freshness metadata with 24h stale window
+    - no implicit stale regeneration; `POST` is used for refresh
+  - executive UI:
+    - route `/ai/executive-insights`
+    - components:
+      - `src/components/ai/ExecutiveInsightsPage.tsx`
+      - `src/components/ai/ExecutiveSummaryCard.tsx`
+    - AI Insights header includes quick link to Executive Insights
 
 ## Visual Flows
 
@@ -447,6 +469,68 @@ sequenceDiagram
   TREND-->>API: trendSignals[]
   API->>API: normalize structured report with trendSignals
   API-->>UI: report + trendSignals
+```
+
+### Executive Summary Load / Regenerate (13A)
+```text
+Client UI            Executive API                  Summary Service              DB
+---------            -------------                  ---------------              --
+Executive page load
+    | GET /api/ai/executive-summary
+    |---------------------------------------------->|
+    |                              fetch ai_analysis_cache(executive-summary)
+    |<----------------------------------------------|
+    | cache hit?
+    |  yes -> return cached executive summary
+    |  no:
+    |----------------------------------------------> fetch ai_analysis_cache(portfolio-summary)
+    |<----------------------------------------------|
+    |                         normalize structured report context
+    |----------------------------------------------> buildExecutiveSummary(report)
+    |<---------------------------------------------- executiveSummary
+    |                              save ai_analysis_cache(executive-summary)
+    |<----------------------------------------------|
+    | render executive summary sections
+    |
+Regenerate click
+    | POST /api/ai/executive-summary
+    |---------------------------------------------->|
+    |                         load latest portfolio-summary cache
+    |----------------------------------------------> buildExecutiveSummary(report)
+    |<---------------------------------------------- executiveSummary
+    |                              save ai_analysis_cache(executive-summary)
+    |<----------------------------------------------|
+    | render fresh executive summary
+```
+
+```mermaid
+sequenceDiagram
+  participant UI as Executive Insights UI
+  participant API as /api/ai/executive-summary
+  participant SVC as executiveSummary service
+  participant DB as MongoDB
+
+  UI->>API: GET executive-summary
+  API->>DB: fetch ai_analysis_cache(executive-summary)
+  DB-->>API: cached summary / empty
+  alt cache hit
+    API-->>UI: cached executive summary
+  else cache miss
+    API->>DB: fetch ai_analysis_cache(portfolio-summary)
+    DB-->>API: structured portfolio report
+    API->>SVC: buildExecutiveSummary(report)
+    SVC-->>API: executiveSummary
+    API->>DB: save ai_analysis_cache(executive-summary)
+    API-->>UI: executive summary
+  end
+
+  UI->>API: POST executive-summary (manual regenerate)
+  API->>DB: fetch ai_analysis_cache(portfolio-summary)
+  DB-->>API: latest structured report
+  API->>SVC: buildExecutiveSummary(report)
+  SVC-->>API: executiveSummary
+  API->>DB: save ai_analysis_cache(executive-summary)
+  API-->>UI: fresh executive summary
 ```
 
 ### Evidence Entity Drill-Down (12C.1)

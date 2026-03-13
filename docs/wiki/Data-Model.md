@@ -32,6 +32,9 @@ Observed indexes:
 ### `ai_analysis_cache`
 Top-level fields:
 - `_id`, `reportType`, `status`, `metadata`, `snapshot`, `report`, `relatedEntitiesMeta`, `updatedAt`
+- common report variants:
+  - `portfolio-summary`: includes `snapshot`, structured `report`, `relatedEntitiesMeta`
+  - `executive-summary`: includes `executiveSummary` with portfolio health, observations, concerns, alerts, trends, recommendations
 
 Observed indexes:
 - `{ _id: 1 }`

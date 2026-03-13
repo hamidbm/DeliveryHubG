@@ -21,8 +21,9 @@ import AdminDeliveryPolicy from './AdminDeliveryPolicy';
 import AdminBackupRestore from './AdminBackupRestore';
 import AdminBundleCapacity from './AdminBundleCapacity';
 import AdminOpsDashboard from './AdminOpsDashboard';
+import NotificationAdminPanel from './admin/NotificationAdminPanel';
 
-type AdminModuleId = 'home' | 'wiki-themes' | 'wiki-templates' | 'diagram-templates' | 'vendors' | 'roles' | 'bundles' | 'applications' | 'taxonomy' | 'artifact-rules' | 'milestone-templates' | 'users' | 'sharepoint' | 'ai-settings' | 'bundle-assignments' | 'admins' | 'work-blueprints' | 'work-generators' | 'samples' | 'audit-events' | 'audit-notifications' | 'notification-settings' | 'delivery-policy' | 'jira' | 'github' | 'backup' | 'bundle-capacity' | 'ops-dashboard';
+type AdminModuleId = 'home' | 'wiki-themes' | 'wiki-templates' | 'diagram-templates' | 'vendors' | 'roles' | 'bundles' | 'applications' | 'taxonomy' | 'artifact-rules' | 'milestone-templates' | 'users' | 'sharepoint' | 'ai-settings' | 'bundle-assignments' | 'admins' | 'work-blueprints' | 'work-generators' | 'samples' | 'audit-events' | 'audit-notifications' | 'notification-settings' | 'delivery-policy' | 'jira' | 'github' | 'backup' | 'bundle-capacity' | 'ops-dashboard' | 'notification-ops';
 
 interface AdminModule {
   id: AdminModuleId;
@@ -134,6 +135,7 @@ const Admin: React.FC = () => {
       title: 'Operations',
       modules: [
         { id: 'ops-dashboard', label: 'Ops Dashboard', icon: 'fa-gauge', description: 'Monitor jobs, latency, cache hit rates, and notifications.', color: 'slate' },
+        { id: 'notification-ops', label: 'Notification Ops', icon: 'fa-signal', description: 'Monitor AI watcher notifications, retries, suppression, and force-delivery controls.', color: 'slate' },
         { id: 'bundle-capacity', label: 'Bundle Capacity', icon: 'fa-gauge-high', description: 'Configure bundle-level story point capacity planning.', color: 'slate' },
         { id: 'backup', label: 'Backup & Restore', icon: 'fa-database', description: 'Export and restore configuration bundles safely.', color: 'slate' }
       ]
@@ -163,6 +165,7 @@ const Admin: React.FC = () => {
       title: 'Operations',
       modules: [
         { id: 'ops-dashboard', label: 'Ops Dashboard', icon: 'fa-gauge', description: 'Monitor jobs, latency, cache hit rates, and notifications.', color: 'slate' },
+        { id: 'notification-ops', label: 'Notification Ops', icon: 'fa-signal', description: 'Monitor AI watcher notifications, retries, suppression, and force-delivery controls.', color: 'slate' },
         { id: 'bundle-capacity', label: 'Bundle Capacity', icon: 'fa-gauge-high', description: 'Configure bundle-level story point capacity planning.', color: 'slate' },
         { id: 'backup', label: 'Backup & Restore', icon: 'fa-database', description: 'Export and restore configuration bundles safely.', color: 'slate' }
       ]
@@ -277,6 +280,8 @@ const Admin: React.FC = () => {
             onOpenNotifications={(filters) => { setNotificationFilters(filters); setActiveModule('audit-notifications'); }}
           />
         );
+      case 'notification-ops':
+        return <NotificationAdminPanel />;
       case 'jira':
         return <AdminJiraIntegration />;
       case 'github':

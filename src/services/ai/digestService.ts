@@ -4,6 +4,7 @@ import { getDb } from '../db';
 import { sendNotificationEmail } from './emailChannel';
 import { sendSlackNotification } from './slackChannel';
 import { sendTeamsNotification } from './teamsChannel';
+import { getNotificationPolicy } from './notificationPolicy';
 
 const QUEUE_COLLECTION = 'ai_notification_digest_queue';
 const NOTIFICATIONS_COLLECTION = 'ai_notifications';
@@ -22,11 +23,13 @@ const toDigestItem = (row: any): NotificationDigestItem => ({
   userId: String(row.userId || ''),
   notificationId: String(row.notificationId || ''),
   watcherId: row.watcherId ? String(row.watcherId) : undefined,
+  digestFrequency: row.digestFrequency === 'hourly' ? 'hourly' : 'daily',
+  processedAt: row.processedAt ? String(row.processedAt) : undefined,
   createdAt: String(row.createdAt || nowIso())
 });
 
 const ensureIndexes = async (db: any) => {
-  await db.collection(QUEUE_COLLECTION).createIndex({ userId: 1, createdAt: 1 });
+  await db.collection(QUEUE_COLLECTION).createIndex({ userId: 1, digestFrequency: 1, processedAt: 1, createdAt: 1 });
   await db.collection(QUEUE_COLLECTION).createIndex({ notificationId: 1 }, { unique: true });
 };
 
@@ -34,6 +37,7 @@ export const enqueueNotificationForDigest = async (input: {
   userId: string;
   notificationId: string;
   watcherId?: string;
+  digestFrequency?: 'hourly' | 'daily';
 }) => {
   const db = await getDb();
   await ensureIndexes(db);
@@ -43,6 +47,8 @@ export const enqueueNotificationForDigest = async (input: {
       userId: String(input.userId),
       notificationId: String(input.notificationId),
       watcherId: input.watcherId ? String(input.watcherId) : undefined,
+      digestFrequency: input.digestFrequency === 'hourly' ? 'hourly' : 'daily',
+      processedAt: null,
       createdAt: nowIso()
     });
   } catch {
@@ -111,11 +117,12 @@ const getWatcherPreferencesForUser = async (db: any, userId: string) => {
 
 export const processDigestQueue = async () => {
   if (String(process.env.NOTIFICATION_DIGEST_ENABLED || 'false').toLowerCase() !== 'true') return;
+  const policy = getNotificationPolicy();
 
   const db = await getDb();
   await ensureIndexes(db);
 
-  const queueRows = await db.collection(QUEUE_COLLECTION).find({}).sort({ createdAt: 1 }).limit(1000).toArray();
+  const queueRows = await db.collection(QUEUE_COLLECTION).find({ processedAt: null }).sort({ createdAt: 1 }).limit(1000).toArray();
   if (!queueRows.length) return;
 
   const grouped = new Map<string, NotificationDigestItem[]>();
@@ -160,7 +167,8 @@ export const processDigestQueue = async () => {
     if (!shouldSendNowByFrequency(items, frequency)) {
       continue;
     }
-    const summary = buildDigestSummary(notifications);
+    const summary = buildDigestSummary(notifications.slice(0, policy.maxDigestItems));
+    console.info('digest_generated', JSON.stringify({ userId, count: notifications.length, frequency, timestamp: nowIso() }));
     const synthetic: Notification = {
       id: `digest-${userId}-${Date.now()}`,
       watcherId: String(digestWatchers[0]?._id || ''),
@@ -209,8 +217,12 @@ export const processDigestQueue = async () => {
         // keep processing remaining channels
       }
     }
+    console.info('digest_sent', JSON.stringify({ userId, count: notifications.length, frequency, timestamp: nowIso() }));
 
-    await db.collection(QUEUE_COLLECTION).deleteMany({ _id: { $in: items.map((item) => toObjectId(item.id)) } } as any);
+    await db.collection(QUEUE_COLLECTION).updateMany(
+      { _id: { $in: items.map((item) => toObjectId(item.id)) } } as any,
+      { $set: { processedAt: nowIso() } }
+    );
   }
 };
 

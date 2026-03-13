@@ -221,6 +221,20 @@ export interface PortfolioSummaryResponse {
   relatedEntitiesMeta?: RelatedEntitiesMeta;
 }
 
+export interface ExecutiveSummary {
+  portfolioHealth: {
+    overallScore: number;
+    components: Record<string, number>;
+    healthLabel: 'healthy' | 'moderate_risk' | 'high_risk';
+  };
+  keyObservations: string[];
+  strategicConcerns: string[];
+  topAlerts: PortfolioAlert[];
+  trendHighlights: PortfolioTrendSignal[];
+  recommendations: string[];
+  generatedAt: string;
+}
+
 export interface PortfolioSuggestion {
   id: string;
   label: string;
@@ -265,6 +279,8 @@ export type NotificationDeliveryStatus = {
   status: 'pending' | 'sent' | 'failed' | 'suppressed';
   lastAttemptedAt?: string;
   lastErrorMessage?: string;
+  attempts?: number;
+  nextRetryAt?: string;
 };
 
 export type WatcherDeliveryPreferences = {
@@ -331,5 +347,7 @@ export interface NotificationDigestItem {
   userId: string;
   notificationId: string;
   watcherId?: string;
+  digestFrequency?: 'hourly' | 'daily';
+  processedAt?: string;
   createdAt: string;
 }

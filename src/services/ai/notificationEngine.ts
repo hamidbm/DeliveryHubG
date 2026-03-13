@@ -10,6 +10,7 @@ import {
 } from '../../types/ai';
 import { getDb } from '../db';
 import { dispatchNotification } from './notificationDispatcher';
+import { enforceWatcherQuota, getWatcherUsageForUser } from './notificationPolicy';
 
 const WATCHERS_COLLECTION = 'ai_watchers';
 const NOTIFICATIONS_COLLECTION = 'ai_notifications';
@@ -88,6 +89,7 @@ export const createWatcherForUser = async (
 ): Promise<string> => {
   const db = await getDb();
   await ensureIndexes(db);
+  await enforceWatcherQuota(String(userId));
   const now = nowIso();
   const doc = {
     userId: String(userId),
@@ -106,6 +108,12 @@ export const createWatcherForUser = async (
     lastTriggeredAt: undefined
   };
   const res = await db.collection(WATCHERS_COLLECTION).insertOne(doc);
+  console.info('notification_metric', JSON.stringify({
+    name: 'watchers.created',
+    userId: String(userId),
+    watcherId: String(res.insertedId),
+    timestamp: nowIso()
+  }));
   return String(res.insertedId);
 };
 
@@ -136,7 +144,19 @@ export const deleteWatcherForUser = async (userId: string, watcherId: string): P
   const db = await getDb();
   await ensureIndexes(db);
   const res = await db.collection(WATCHERS_COLLECTION).deleteOne({ _id: toObjectId(watcherId), userId: String(userId) } as any);
+  if (res.deletedCount > 0) {
+    console.info('notification_metric', JSON.stringify({
+      name: 'watchers.deleted',
+      userId: String(userId),
+      watcherId: String(watcherId),
+      timestamp: nowIso()
+    }));
+  }
   return res.deletedCount > 0;
+};
+
+export const getWatcherUsage = async (userId: string): Promise<{ used: number; max: number }> => {
+  return getWatcherUsageForUser(String(userId));
 };
 
 export const listNotificationsForUser = async (userId: string): Promise<Notification[]> => {
@@ -319,13 +339,16 @@ export const evaluateWatchersForUser = async (userId: string, context: EvaluateC
           deliveredAt: createdAt
         },
         email: {
-          status: emailEnabled ? 'pending' : 'suppressed'
+          status: emailEnabled ? 'pending' : 'suppressed',
+          attempts: 0
         },
         slack: {
-          status: slackEnabled ? 'pending' : 'suppressed'
+          status: slackEnabled ? 'pending' : 'suppressed',
+          attempts: 0
         },
         teams: {
-          status: teamsEnabled ? 'pending' : 'suppressed'
+          status: teamsEnabled ? 'pending' : 'suppressed',
+          attempts: 0
         }
       }
     };

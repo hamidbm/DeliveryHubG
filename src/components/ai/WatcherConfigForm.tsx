@@ -33,6 +33,7 @@ type Payload = {
 
 type Props = {
   initial?: Partial<Payload>;
+  usage?: { used: number; max: number };
   onSubmit: (payload: Payload) => Promise<void>;
   onCancel?: () => void;
 };
@@ -54,32 +55,35 @@ const stringifyCondition = (value: Record<string, any> | undefined) => {
   }
 };
 
-const WatcherConfigForm: React.FC<Props> = ({ initial, onSubmit, onCancel }) => {
+const WatcherConfigForm: React.FC<Props> = ({ initial, usage, onSubmit, onCancel }) => {
   const [type, setType] = useState<WatcherType>(initial?.type || 'trend');
   const [targetId, setTargetId] = useState(initial?.targetId || '');
   const [enabled, setEnabled] = useState(initial?.enabled !== false);
   const [conditionText, setConditionText] = useState(stringifyCondition(initial?.condition));
   const initialDelivery = initial?.deliveryPreferences as NonNullable<Payload['deliveryPreferences']> | undefined;
-  const [inAppEnabled, setInAppEnabled] = useState(initialDelivery.in_app?.enabled !== false);
-  const [emailEnabled, setEmailEnabled] = useState(Boolean(initialDelivery.email?.enabled));
+  const [inAppEnabled, setInAppEnabled] = useState(initialDelivery?.in_app?.enabled !== false);
+  const [emailEnabled, setEmailEnabled] = useState(Boolean(initialDelivery?.email?.enabled));
   const [emailSeverityMin, setEmailSeverityMin] = useState<PortfolioRiskSeverity>(
-    (initialDelivery.email?.severityMin as PortfolioRiskSeverity) || 'low'
+    (initialDelivery?.email?.severityMin as PortfolioRiskSeverity) || 'low'
   );
-  const [slackEnabled, setSlackEnabled] = useState(Boolean(initialDelivery.slack?.enabled));
-  const [slackWebhookUrl, setSlackWebhookUrl] = useState(String(initialDelivery.slack?.webhookUrl || ''));
+  const [slackEnabled, setSlackEnabled] = useState(Boolean(initialDelivery?.slack?.enabled));
+  const [slackWebhookUrl, setSlackWebhookUrl] = useState(String(initialDelivery?.slack?.webhookUrl || ''));
   const [slackSeverityMin, setSlackSeverityMin] = useState<'medium' | 'high' | 'critical'>(
-    (initialDelivery.slack?.severityMin as 'medium' | 'high' | 'critical') || 'medium'
+    (initialDelivery?.slack?.severityMin as 'medium' | 'high' | 'critical') || 'medium'
   );
-  const [teamsEnabled, setTeamsEnabled] = useState(Boolean(initialDelivery.teams?.enabled));
-  const [teamsWebhookUrl, setTeamsWebhookUrl] = useState(String(initialDelivery.teams?.webhookUrl || ''));
+  const [teamsEnabled, setTeamsEnabled] = useState(Boolean(initialDelivery?.teams?.enabled));
+  const [teamsWebhookUrl, setTeamsWebhookUrl] = useState(String(initialDelivery?.teams?.webhookUrl || ''));
   const [teamsSeverityMin, setTeamsSeverityMin] = useState<'medium' | 'high' | 'critical'>(
-    (initialDelivery.teams?.severityMin as 'medium' | 'high' | 'critical') || 'medium'
+    (initialDelivery?.teams?.severityMin as 'medium' | 'high' | 'critical') || 'medium'
   );
-  const [digestEnabled, setDigestEnabled] = useState(Boolean(initialDelivery.digest?.enabled));
+  const [digestEnabled, setDigestEnabled] = useState(Boolean(initialDelivery?.digest?.enabled));
   const [digestFrequency, setDigestFrequency] = useState<'hourly' | 'daily'>(
-    (initialDelivery.digest?.frequency as 'hourly' | 'daily') || 'daily'
+    (initialDelivery?.digest?.frequency as 'hourly' | 'daily') || 'daily'
   );
   const [busy, setBusy] = useState(false);
+  const quotaUsed = Number(usage?.used || 0);
+  const quotaMax = Number(usage?.max || 100);
+  const quotaReached = quotaUsed >= quotaMax;
 
   useEffect(() => {
     setType(initial?.type || 'trend');
@@ -101,7 +105,7 @@ const WatcherConfigForm: React.FC<Props> = ({ initial, onSubmit, onCancel }) => 
   }, [initial]);
 
   const submit = async () => {
-    if (!targetId.trim()) return;
+    if (!targetId.trim() || quotaReached) return;
     setBusy(true);
     try {
       await onSubmit({
@@ -322,11 +326,14 @@ const WatcherConfigForm: React.FC<Props> = ({ initial, onSubmit, onCancel }) => 
       <div>
         <button
           onClick={submit}
-          disabled={busy || !targetId.trim()}
+          disabled={busy || !targetId.trim() || quotaReached}
           className="px-3 py-1.5 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:opacity-50"
         >
           {busy ? 'Saving...' : 'Save Watcher'}
         </button>
+        {quotaReached && (
+          <p className="text-xs text-rose-600 mt-2">Watcher quota exceeded ({quotaUsed}/{quotaMax}). Delete or disable existing watchers before creating a new one.</p>
+        )}
       </div>
     </section>
   );

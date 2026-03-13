@@ -598,7 +598,9 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
   const [savedInvestigations, setSavedInvestigations] = useState<SavedInvestigation[]>([]);
   const [investigationBusyId, setInvestigationBusyId] = useState<string | null>(null);
   const [watchers, setWatchers] = useState<Watcher[]>([]);
+  const [watcherUsage, setWatcherUsage] = useState<{ used: number; max: number }>({ used: 0, max: 100 });
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [isAdminUser, setIsAdminUser] = useState(false);
   const [watcherFormOpen, setWatcherFormOpen] = useState(false);
   const [watcherPreset, setWatcherPreset] = useState<WatcherPreset | undefined>(undefined);
   const hasAutoLoadedRef = useRef(false);
@@ -736,6 +738,20 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
   }, []);
 
   useEffect(() => {
+    const checkAdmin = async () => {
+      try {
+        const res = await fetch('/api/admin/check');
+        if (!res.ok) return;
+        const data = await res.json();
+        setIsAdminUser(Boolean(data?.isAdmin || data?.isCmo));
+      } catch {
+        // Ignore admin check failures.
+      }
+    };
+    checkAdmin();
+  }, []);
+
+  useEffect(() => {
     const loadAuroraTheme = async () => {
       try {
         const res = await fetch('/api/wiki/themes?active=true');
@@ -767,6 +783,9 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
     const data = await res.json();
     if (data?.status === 'success' && Array.isArray(data.watchers)) {
       setWatchers(data.watchers);
+      if (data.usage && Number.isFinite(data.usage.used) && Number.isFinite(data.usage.max)) {
+        setWatcherUsage({ used: Number(data.usage.used), max: Number(data.usage.max) });
+      }
     }
   };
 
@@ -888,7 +907,13 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
-    if (!res.ok) return;
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({} as any));
+      if (data?.error) {
+        setQueryError(String(data.error));
+      }
+      return;
+    }
     await Promise.all([refreshWatchers(), refreshNotifications()]);
     setWatcherFormOpen(false);
     setWatcherPreset(undefined);
@@ -1092,10 +1117,17 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
           <p className="text-slate-500">Automated risk assessment and delivery forecasting powered by the configured AI provider.</p>
         </div>
         <div className="flex items-center gap-2">
+          <a
+            href="/ai/executive-insights"
+            className="px-3 py-2 rounded-lg border border-slate-300 bg-white text-slate-700 text-xs font-bold uppercase tracking-widest hover:bg-slate-50"
+          >
+            Executive Insights
+          </a>
           <NotificationCenter
             notifications={notifications}
             onRefresh={refreshNotifications}
             onMarkRead={markNotificationRead}
+            isAdmin={isAdminUser}
           />
           <button
             onClick={generateAIReport}
@@ -1133,6 +1165,7 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         <WatcherList
           watchers={watchers}
+          usage={watcherUsage}
           onCreate={() => setWatcherFormOpen((value) => !value)}
           onToggle={toggleWatcher}
           onDelete={deleteWatcher}
@@ -1140,6 +1173,7 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
         {watcherFormOpen ? (
           <WatcherConfigForm
             initial={watcherPreset}
+            usage={watcherUsage}
             onCancel={() => {
               setWatcherFormOpen(false);
               setWatcherPreset(undefined);

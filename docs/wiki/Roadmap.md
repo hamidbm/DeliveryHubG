@@ -222,6 +222,12 @@ Implemented:
   - watcher delivery preferences expanded with Slack/Teams thresholds and digest frequency
   - notification dispatcher now handles `email|slack|teams` and digest deferral centrally
   - notification center expanded with Slack/Teams delivery badges and digest-mode visibility
+- 13A: executive portfolio summary:
+  - deterministic executive summary generator added (`src/services/ai/executiveSummary.ts`)
+  - new executive summary API added (`GET/POST /api/ai/executive-summary`)
+  - executive summary cache persisted in `ai_analysis_cache` under `executive-summary`
+  - new UI route `/ai/executive-insights` with text-first executive summary layout
+  - sections include health label/score, observations, strategic concerns, top alerts, trend highlights, and recommendations
 
 Current 12B behavior:
 - structured sections are primary in AI Insights UI

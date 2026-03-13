@@ -3,18 +3,30 @@ import { Watcher } from '../../types/ai';
 
 type Props = {
   watchers: Watcher[];
+  usage?: { used: number; max: number };
   onToggle: (watcher: Watcher, enabled: boolean) => void;
   onDelete: (watcher: Watcher) => void;
   onCreate: () => void;
 };
 
-const WatcherList: React.FC<Props> = ({ watchers, onToggle, onDelete, onCreate }) => {
+const WatcherList: React.FC<Props> = ({ watchers, usage, onToggle, onDelete, onCreate }) => {
+  const quotaUsed = Number(usage?.used || watchers.length);
+  const quotaMax = Number(usage?.max || 100);
+  const quotaReached = quotaUsed >= quotaMax;
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-3 space-y-3">
       <div className="flex items-center justify-between">
         <p className="text-xs font-black uppercase tracking-widest text-slate-500">Watchers</p>
-        <button onClick={onCreate} className="text-xs font-semibold text-blue-700 hover:text-blue-800">New Watcher</button>
+        <button
+          onClick={onCreate}
+          disabled={quotaReached}
+          className="text-xs font-semibold text-blue-700 hover:text-blue-800 disabled:opacity-50"
+          title={quotaReached ? 'Watcher quota exceeded' : 'Create watcher'}
+        >
+          New Watcher
+        </button>
       </div>
+      <p className="text-[11px] text-slate-500">{quotaUsed}/{quotaMax} watchers used</p>
       {watchers.length === 0 && (
         <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-3 text-sm text-slate-500">
           No watcher subscriptions configured.

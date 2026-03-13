@@ -5,6 +5,7 @@ type Props = {
   notifications: Notification[];
   onRefresh: () => void;
   onMarkRead: (notificationId: string, read: boolean) => void;
+  isAdmin?: boolean;
 };
 
 const statusStyle = (status?: string) => {
@@ -54,9 +55,14 @@ const ChannelStatus = ({ item }: { item: Notification }) => {
   );
 };
 
-const NotificationCenter: React.FC<Props> = ({ notifications, onRefresh, onMarkRead }) => {
+const NotificationCenter: React.FC<Props> = ({ notifications, onRefresh, onMarkRead, isAdmin }) => {
   const [open, setOpen] = useState(false);
   const unreadCount = useMemo(() => notifications.filter((item) => !item.read).length, [notifications]);
+  const failedCount = useMemo(() => notifications.filter((item) =>
+    item.delivery?.email?.status === 'failed' ||
+    item.delivery?.slack?.status === 'failed' ||
+    item.delivery?.teams?.status === 'failed'
+  ).length, [notifications]);
   const unread = notifications.filter((item) => !item.read);
   const read = notifications.filter((item) => item.read);
 
@@ -79,7 +85,18 @@ const NotificationCenter: React.FC<Props> = ({ notifications, onRefresh, onMarkR
         <div className="absolute right-0 mt-2 w-[380px] max-w-[90vw] rounded-xl border border-slate-200 bg-white shadow-xl z-40">
           <div className="px-3 py-2 border-b border-slate-100 flex items-center justify-between">
             <p className="text-xs font-black uppercase tracking-widest text-slate-500">Notifications Center</p>
-            <button onClick={onRefresh} className="text-xs font-semibold text-blue-700 hover:text-blue-800">Refresh</button>
+            <div className="flex items-center gap-2">
+              {isAdmin && (
+                <a
+                  href="/dashboards?tab=admin"
+                  className="text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded border border-slate-300 text-slate-600 hover:bg-slate-50"
+                  title="Open Admin Notification Ops"
+                >
+                  Ops {failedCount > 0 ? `(${failedCount})` : ''}
+                </a>
+              )}
+              <button onClick={onRefresh} className="text-xs font-semibold text-blue-700 hover:text-blue-800">Refresh</button>
+            </div>
           </div>
           <div className="max-h-[420px] overflow-y-auto p-3 space-y-3">
             {unread.length > 0 && (
