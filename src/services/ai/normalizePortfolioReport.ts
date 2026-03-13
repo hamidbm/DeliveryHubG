@@ -5,7 +5,8 @@ import {
   StructuredRiskItem,
   StructuredActionItem,
   StructuredConcentrationSignal,
-  StructuredQuestionItem
+  StructuredQuestionItem,
+  PortfolioTrendSignal
 } from '../../types/ai';
 import { PortfolioSignalSummary } from './portfolioSignals';
 import { formatPortfolioReportAsMarkdown } from './formatPortfolioReportAsMarkdown';
@@ -14,6 +15,14 @@ import { toEvidenceItems } from './evidenceEntities';
 const HEALTH_VALUES: PortfolioHealthSignal[] = ['green', 'amber', 'red', 'unknown'];
 const RISK_VALUES: PortfolioRiskSeverity[] = ['low', 'medium', 'high', 'critical'];
 const URGENCY_VALUES = ['now', '7d', '30d', 'later'] as const;
+const TREND_METRICS: PortfolioTrendSignal['metric'][] = [
+  'unassignedWorkItems',
+  'blockedWorkItems',
+  'overdueWorkItems',
+  'activeWorkItems',
+  'criticalApplications',
+  'overdueMilestones'
+];
 
 const asString = (value: unknown, fallback = '') => {
   if (typeof value !== 'string') return fallback;
@@ -307,7 +316,39 @@ const parseBulletLines = (section: string) => section
   .filter((line) => Boolean(line) && (/^[-*+]\s+/.test(line) || /^\d+\.\s+/.test(line)))
   .map((line) => line.replace(/^[-*+]\s+/, '').replace(/^\d+\.\s+/, '').trim());
 
-const normalizeLegacyMarkdownReport = (raw: unknown, signals: PortfolioSignalSummary): StructuredPortfolioReport => {
+const normalizeTrendSignals = (
+  raw: unknown,
+  fallback: PortfolioTrendSignal[] = []
+): PortfolioTrendSignal[] => {
+  const parsed = (Array.isArray(raw) ? raw : [])
+    .slice(0, 12)
+    .map((item: any) => {
+      const metric = asString(item?.metric, '') as PortfolioTrendSignal['metric'];
+      if (!TREND_METRICS.includes(metric)) return null;
+      const direction = asString(item?.direction, '').toLowerCase();
+      const normalizedDirection: PortfolioTrendSignal['direction'] = direction === 'rising' || direction === 'falling' || direction === 'stable'
+        ? direction
+        : 'stable';
+      const delta = Number(item?.delta || 0);
+      const timeframeDays = Math.max(1, Number(item?.timeframeDays || 7));
+      return {
+        metric,
+        direction: normalizedDirection,
+        delta: Number.isFinite(delta) ? delta : 0,
+        timeframeDays: Number.isFinite(timeframeDays) ? timeframeDays : 7,
+        summary: asString(item?.summary, '') || undefined
+      };
+    })
+    .filter(Boolean) as PortfolioTrendSignal[];
+
+  return parsed.length > 0 ? parsed : fallback.slice(0, 12);
+};
+
+const normalizeLegacyMarkdownReport = (
+  raw: unknown,
+  signals: PortfolioSignalSummary,
+  trendSignals: PortfolioTrendSignal[] = []
+): StructuredPortfolioReport => {
   const markdown = typeof raw === 'string'
     ? raw
     : asString((raw as any)?.markdownReport || (raw as any)?.executiveSummary || '', '');
@@ -361,6 +402,7 @@ const normalizeLegacyMarkdownReport = (raw: unknown, signals: PortfolioSignalSum
     topRisks: mergedRisks,
     recommendedActions: mergedActions,
     concentrationSignals: mergedSignals,
+    trendSignals: trendSignals.slice(0, 12),
     questionsToAsk: mergedQuestions,
     markdownReport: markdown || formatPortfolioReportAsMarkdown({
       overallHealth: inferHealthFallback(signals),
@@ -368,6 +410,7 @@ const normalizeLegacyMarkdownReport = (raw: unknown, signals: PortfolioSignalSum
       topRisks: mergedRisks,
       recommendedActions: mergedActions,
       concentrationSignals: mergedSignals,
+      trendSignals: trendSignals.slice(0, 12),
       questionsToAsk: mergedQuestions
     })
   };
@@ -375,7 +418,8 @@ const normalizeLegacyMarkdownReport = (raw: unknown, signals: PortfolioSignalSum
 
 export const normalizePortfolioReport = (
   raw: unknown,
-  signals: PortfolioSignalSummary
+  signals: PortfolioSignalSummary,
+  fallbackTrendSignals: PortfolioTrendSignal[] = []
 ): {
   report: StructuredPortfolioReport;
   normalizationFallbackUsed: boolean;
@@ -384,7 +428,7 @@ export const normalizePortfolioReport = (
   const parsed = parseRawToObject(raw);
   if (!parsed) {
     return {
-      report: normalizeLegacyMarkdownReport(raw, signals),
+      report: normalizeLegacyMarkdownReport(raw, signals, fallbackTrendSignals),
       normalizationFallbackUsed: true,
       sectionsSynthesized: { risks: true, actions: true, signals: true, questions: true }
     };
@@ -398,7 +442,7 @@ export const normalizePortfolioReport = (
 
   if (!hasStructuredShape) {
     return {
-      report: normalizeLegacyMarkdownReport(parsed, signals),
+      report: normalizeLegacyMarkdownReport(parsed, signals, fallbackTrendSignals),
       normalizationFallbackUsed: true,
       sectionsSynthesized: { risks: true, actions: true, signals: true, questions: true }
     };
@@ -481,6 +525,7 @@ export const normalizePortfolioReport = (
   const mergedActions = recommendedActions.length > 0 ? recommendedActions : synthesizeActions(signals);
   const mergedSignals = concentrationSignals.length > 0 ? concentrationSignals : synthesizeConcentrationSignals(signals);
   const mergedQuestions = questionsToAsk.length >= 2 ? questionsToAsk : synthesizeQuestions(signals);
+  const mergedTrends = normalizeTrendSignals(parsed.trendSignals, fallbackTrendSignals);
   const sectionsSynthesized = {
     risks: topRisks.length === 0,
     actions: recommendedActions.length === 0,
@@ -494,6 +539,7 @@ export const normalizePortfolioReport = (
     topRisks: mergedRisks,
     recommendedActions: mergedActions,
     concentrationSignals: mergedSignals,
+    trendSignals: mergedTrends,
     questionsToAsk: mergedQuestions,
     markdownReport: asString(parsed.markdownReport, '')
   };

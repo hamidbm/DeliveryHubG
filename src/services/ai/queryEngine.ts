@@ -1,11 +1,22 @@
-import { EntityReference, PortfolioQueryResponse, PortfolioSnapshot, StructuredPortfolioReport } from '../../types/ai';
+import {
+  EntityReference,
+  PortfolioQueryResponse,
+  PortfolioSnapshot,
+  PortfolioSnapshotHistory,
+  PortfolioTrendSignal,
+  StructuredPortfolioReport
+} from '../../types/ai';
 import { PortfolioSignalSummary } from './portfolioSignals';
 import {
   extractApplicationStats,
   extractBundleStats,
+  extractMilestoneTrend,
   extractMilestoneStats,
   extractOwnerStats,
+  extractRiskTrend,
   extractReviewStats,
+  extractTrendMetrics,
+  extractWorkloadTrend,
   extractWorkItemStats
 } from './knowledgeExtractors';
 import { toEvidenceItems } from './evidenceEntities';
@@ -35,6 +46,11 @@ type Intent =
   | 'owner-workload'
   | 'owner-blocked'
   | 'owner-overdue'
+  | 'trend-delivery-improving'
+  | 'trend-risk-increasing'
+  | 'trend-blocked-increasing'
+  | 'trend-backlog-growing'
+  | 'trend-milestone-health'
   | 'risk-ranking'
   | 'general';
 
@@ -60,11 +76,32 @@ const KEYWORDS: Record<Intent, string[]> = {
   'owner-workload': ['owner', 'most work', 'workload', 'capacity'],
   'owner-blocked': ['owner', 'blocked'],
   'owner-overdue': ['owner', 'overdue'],
+  'trend-delivery-improving': ['delivery improving', 'delivery trend', 'execution improving', 'improving over time'],
+  'trend-risk-increasing': ['risk increasing', 'risk worsening', 'risk trend'],
+  'trend-blocked-increasing': ['blocked tasks increasing', 'blocked trend', 'blocked tasks trend'],
+  'trend-backlog-growing': ['backlog growing', 'unassigned increasing', 'ownerless increasing', 'workload growing'],
+  'trend-milestone-health': ['milestones getting healthier', 'milestone trend', 'milestone health trend'],
   'risk-ranking': ['biggest risk', 'most risk', 'areas have risk', 'fix first', 'delivery risk'],
   general: []
 };
 
 const detectIntent = (q: string): Intent => {
+  if ((q.includes('delivery') || q.includes('execution')) && (q.includes('improving') || q.includes('getting better') || q.includes('improvement'))) {
+    return 'trend-delivery-improving';
+  }
+  if (q.includes('risk') && (q.includes('increasing') || q.includes('worsening') || q.includes('getting worse'))) {
+    return 'trend-risk-increasing';
+  }
+  if (q.includes('blocked') && (q.includes('increasing') || q.includes('upward') || q.includes('trending up'))) {
+    return 'trend-blocked-increasing';
+  }
+  if ((q.includes('backlog') || q.includes('unassigned') || q.includes('ownerless')) && (q.includes('growing') || q.includes('increasing') || q.includes('rising'))) {
+    return 'trend-backlog-growing';
+  }
+  if (q.includes('milestone') && (q.includes('healthier') || q.includes('improving') || q.includes('trend'))) {
+    return 'trend-milestone-health';
+  }
+
   const scores: Array<{ intent: Intent; score: number }> = [];
   (Object.keys(KEYWORDS) as Intent[]).forEach((intent) => {
     if (intent === 'general') return;
@@ -113,6 +150,18 @@ const defaultEvidence = (signals: PortfolioSignalSummary) => asEvidence([
   `Open reviews: ${signals.reviewsOpen}`,
   `Overdue milestones: ${signals.milestonesOverdue}`
 ]);
+
+const findTrendSignal = (
+  trendSignals: PortfolioTrendSignal[] = [],
+  metric: PortfolioTrendSignal['metric']
+) => trendSignals.find((item) => item.metric === metric);
+
+const trendEvidenceLine = (signal?: PortfolioTrendSignal) => {
+  if (!signal) return null;
+  const absDelta = Math.abs(signal.delta);
+  const deltaLabel = signal.delta > 0 ? `+${signal.delta}` : `${signal.delta}`;
+  return `${signal.metric}: ${signal.direction} (${deltaLabel}) over ${signal.timeframeDays} days${absDelta > 0 ? '' : ' (no material change)'}.`;
+};
 
 const answerWorkItemList = (
   snapshot: PortfolioSnapshot,
@@ -347,11 +396,155 @@ const answerRiskRanking = (
   });
 };
 
+const answerTrendQuery = (
+  mode: 'delivery-improving' | 'risk-increasing' | 'blocked-increasing' | 'backlog-growing' | 'milestone-health',
+  trendSignals: PortfolioTrendSignal[] = [],
+  snapshotHistory: PortfolioSnapshotHistory[] = []
+): PortfolioQueryResponse => {
+  const trendMetrics = extractTrendMetrics(snapshotHistory, trendSignals);
+  const effectiveTrendSignals: PortfolioTrendSignal[] = trendSignals.length > 0
+    ? trendSignals
+    : trendMetrics.map((item) => ({
+      metric: item.metric,
+      direction: item.direction,
+      delta: item.delta,
+      timeframeDays: item.timeframeDays
+    }));
+  if (trendMetrics.length === 0) {
+    return withEntities({
+      answer: 'Trend analysis is not available yet.',
+      explanation: 'At least two historical portfolio snapshots are required. Generate additional reports to establish time-based trend intelligence.',
+      evidence: asEvidence(['Snapshot history currently has fewer than two entries.']),
+      followUps: [
+        'Generate another AI Insights report and ask again.',
+        'Which areas currently show the highest immediate risk?',
+        'Which bundles have the most blocked work right now?'
+      ]
+    });
+  }
+
+  const risk = extractRiskTrend(snapshotHistory, trendSignals);
+  const workload = extractWorkloadTrend(snapshotHistory, trendSignals);
+  const milestone = extractMilestoneTrend(snapshotHistory, trendSignals);
+  const blockedTrend = findTrendSignal(effectiveTrendSignals, 'blockedWorkItems');
+  const unassignedTrend = findTrendSignal(effectiveTrendSignals, 'unassignedWorkItems');
+
+  if (mode === 'delivery-improving') {
+    const improving = risk.verdict === 'improving' || workload.verdict === 'improving';
+    return withEntities({
+      answer: improving
+        ? 'Delivery is improving based on recent trend signals.'
+        : risk.verdict === 'worsening' || workload.verdict === 'worsening'
+          ? 'Delivery is not improving; trend signals indicate increasing execution pressure.'
+          : 'Delivery trend appears stable based on recent snapshots.',
+      explanation: 'Delivery trend is computed deterministically from historical changes in unassigned, blocked, overdue, and active work metrics.',
+      evidence: asEvidence([
+        risk.summary,
+        workload.summary,
+        trendEvidenceLine(blockedTrend),
+        trendEvidenceLine(unassignedTrend)
+      ].filter(Boolean) as string[]),
+      followUps: [
+        'Which bundles are driving the negative trend?',
+        'Which owners can absorb unassigned work next?',
+        'Which milestones are now newly exposed?'
+      ]
+    });
+  }
+
+  if (mode === 'risk-increasing') {
+    const increasing = risk.verdict === 'worsening';
+    return withEntities({
+      answer: increasing
+        ? 'Yes, portfolio risk is increasing across recent snapshots.'
+        : risk.verdict === 'improving'
+          ? 'No, portfolio risk is improving based on recent snapshots.'
+          : 'Portfolio risk trend is currently stable.',
+      explanation: 'Risk trend uses historical movement in unassigned, blocked, overdue work, critical applications, and overdue milestones.',
+      evidence: asEvidence([
+        risk.summary,
+        trendEvidenceLine(findTrendSignal(effectiveTrendSignals, 'overdueWorkItems')),
+        trendEvidenceLine(findTrendSignal(effectiveTrendSignals, 'criticalApplications')),
+        trendEvidenceLine(findTrendSignal(effectiveTrendSignals, 'overdueMilestones'))
+      ].filter(Boolean) as string[]),
+      followUps: [
+        'Which bundles contributed most to increased risk?',
+        'Which milestones are now red or overdue?',
+        'What should be fixed in the next 7 days?'
+      ]
+    });
+  }
+
+  if (mode === 'blocked-increasing') {
+    const blockedIncreasing = blockedTrend?.direction === 'rising';
+    return withEntities({
+      answer: blockedIncreasing
+        ? `Yes, blocked tasks are increasing (${blockedTrend?.delta && blockedTrend.delta > 0 ? `+${blockedTrend.delta}` : blockedTrend?.delta || 0} over ${blockedTrend?.timeframeDays || 7} days).`
+        : blockedTrend?.direction === 'falling'
+          ? 'No, blocked tasks are decreasing across recent snapshots.'
+          : 'Blocked tasks are stable across recent snapshots.',
+      explanation: 'The answer is derived from historical blocked-work snapshot deltas.',
+      evidence: asEvidence([
+        trendEvidenceLine(blockedTrend) || 'Blocked work trend is unavailable.',
+        `Historical snapshots analyzed: ${snapshotHistory.length}`
+      ]),
+      followUps: [
+        'Which bundles contain the newly blocked tasks?',
+        'Which blocked tasks threaten milestones?',
+        'Which owners are carrying most blocked work?'
+      ]
+    });
+  }
+
+  if (mode === 'backlog-growing') {
+    const backlogGrowing = unassignedTrend?.direction === 'rising';
+    return withEntities({
+      answer: backlogGrowing
+        ? `Yes, backlog/ownerless workload is growing (${unassignedTrend?.delta && unassignedTrend.delta > 0 ? `+${unassignedTrend.delta}` : unassignedTrend?.delta || 0} over ${unassignedTrend?.timeframeDays || 7} days).`
+        : unassignedTrend?.direction === 'falling'
+          ? 'No, ownerless backlog is shrinking over time.'
+          : 'Backlog trend is stable in recent snapshots.',
+      explanation: 'Backlog growth is proxied by unassigned work-item trend over historical snapshots.',
+      evidence: asEvidence([
+        trendEvidenceLine(unassignedTrend) || 'Unassigned-work trend is unavailable.',
+        workload.summary
+      ]),
+      followUps: [
+        'Which bundles drove the backlog increase?',
+        'Which unassigned items are highest priority?',
+        'Which teams can absorb this workload next?'
+      ]
+    });
+  }
+
+  return withEntities({
+    answer: milestone.verdict === 'improving'
+      ? 'Milestones are getting healthier over recent snapshots.'
+      : milestone.verdict === 'worsening'
+        ? 'Milestone health is deteriorating; overdue milestone exposure is increasing.'
+        : milestone.verdict === 'stable'
+          ? 'Milestone health trend is stable.'
+          : 'Milestone trend is not yet available.',
+    explanation: 'Milestone health trend is derived from historical overdue-milestone movement.',
+    evidence: asEvidence([
+      milestone.summary,
+      trendEvidenceLine(findTrendSignal(effectiveTrendSignals, 'overdueMilestones'))
+    ].filter(Boolean) as string[]),
+    followUps: [
+      'Which milestones are newly overdue?',
+      'Which blocked work items threaten those milestones?',
+      'Which bundles are most exposed to milestone slippage?'
+    ]
+  });
+};
+
 export const answerPortfolioQuestionDeterministically = (
   question: string,
   signals: PortfolioSignalSummary,
   report?: StructuredPortfolioReport,
-  snapshot?: PortfolioSnapshot
+  snapshot?: PortfolioSnapshot,
+  trendSignals: PortfolioTrendSignal[] = [],
+  snapshotHistory: PortfolioSnapshotHistory[] = []
 ): PortfolioQueryResponse => {
   const q = normalizeQuestion(question);
   const intent = detectIntent(q);
@@ -386,6 +579,11 @@ export const answerPortfolioQuestionDeterministically = (
     case 'owner-workload': return answerOwnerQuery(safeSnapshot, 'workload');
     case 'owner-blocked': return answerOwnerQuery(safeSnapshot, 'blocked');
     case 'owner-overdue': return answerOwnerQuery(safeSnapshot, 'overdue');
+    case 'trend-delivery-improving': return answerTrendQuery('delivery-improving', trendSignals, snapshotHistory);
+    case 'trend-risk-increasing': return answerTrendQuery('risk-increasing', trendSignals, snapshotHistory);
+    case 'trend-blocked-increasing': return answerTrendQuery('blocked-increasing', trendSignals, snapshotHistory);
+    case 'trend-backlog-growing': return answerTrendQuery('backlog-growing', trendSignals, snapshotHistory);
+    case 'trend-milestone-health': return answerTrendQuery('milestone-health', trendSignals, snapshotHistory);
     case 'risk-ranking': return answerRiskRanking(signals, report);
     default: {
       const risk = topRisk(report);

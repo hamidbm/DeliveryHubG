@@ -182,6 +182,32 @@ AI in DeliveryHub is assistive only. It never writes to the database without exp
     - `Saved Investigations` panel (run, refresh, pin/unpin, delete)
     - `Query History` panel (session-scoped, up to 20 recent entries, run again, save)
   - investigations are private to the authenticated owner and do not introduce cross-user sharing
+- 12D added temporal intelligence with portfolio trend analysis:
+  - new persisted collection: `portfolio_snapshots`
+  - snapshots are persisted on portfolio-summary regeneration and retained for the last 90 days
+  - trend analyzer service (`src/services/ai/trendAnalyzer.ts`) computes metric deltas over recent history (max 14 snapshots, default 7-snapshot trend window)
+  - structured report contract now supports `trendSignals[]` with:
+    - `metric`, `direction`, `delta`, `timeframeDays`, optional `summary`
+  - supported trend metrics:
+    - `unassignedWorkItems`
+    - `blockedWorkItems`
+    - `overdueWorkItems`
+    - `activeWorkItems`
+    - `criticalApplications`
+    - `overdueMilestones`
+  - trend extraction helpers added in `src/services/ai/knowledgeExtractors.ts`:
+    - `extractTrendMetrics`
+    - `extractRiskTrend`
+    - `extractWorkloadTrend`
+    - `extractMilestoneTrend`
+  - deterministic query engine now answers trend-oriented questions, including:
+    - “Is delivery improving?”
+    - “Is risk increasing?”
+    - “Are blocked tasks increasing?”
+    - “Is backlog growing?”
+    - “Are milestones getting healthier?”
+  - AI Insights UI now includes a dedicated **Portfolio Trends** section with directional cards (`↑`, `↓`, `→`)
+  - quick suggestions are trend-aware when rising trend signals are detected
 
 ## Visual Flows
 
@@ -267,6 +293,43 @@ sequenceDiagram
     AI-->>API: refined JSON (best effort)
     API-->>UI: answer + explanation + evidence[] + followUps[]
   end
+```
+
+### Trend Snapshot and Analysis Flow (12D)
+```text
+Client UI            Summary API                    Trend Service                DB
+---------            -----------                    -------------                --
+Regenerate click
+    | POST /api/ai/portfolio-summary
+    |---------------------------------------------->|
+    |                         build snapshot (current portfolio state)
+    |----------------------------------------------> persistPortfolioSnapshot
+    |----------------------------------------------> insert summary row
+    |----------------------------------------------> delete rows older than 90 days
+    |----------------------------------------------> load recent snapshots (<=14)
+    |----------------------------------------------> compute trend signals
+    |                         normalize report with trendSignals[]
+    |<----------------------------------------------|
+    | render structured sections + Portfolio Trends cards
+```
+
+```mermaid
+sequenceDiagram
+  participant UI as Client UI
+  participant API as /api/ai/portfolio-summary
+  participant TREND as trendAnalyzer
+  participant DB as MongoDB
+
+  UI->>API: POST portfolio-summary
+  API->>API: build portfolio snapshot
+  API->>TREND: persistPortfolioSnapshot(snapshot)
+  TREND->>DB: insert portfolio_snapshots row
+  TREND->>DB: delete snapshots older than 90 days
+  API->>TREND: loadTrendSignals()
+  TREND->>DB: read recent snapshots (max 14)
+  TREND-->>API: trendSignals[]
+  API->>API: normalize structured report with trendSignals
+  API-->>UI: report + trendSignals
 ```
 
 ### Evidence Entity Drill-Down (12C.1)

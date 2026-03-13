@@ -7,6 +7,7 @@ import { answerPortfolioQuestionDeterministically } from '../../../../services/a
 import { executeAiTextTask } from '../../../../services/aiRouting';
 import { toEvidenceItems } from '../../../../services/ai/evidenceEntities';
 import { resolveRelatedEntitiesMetaFromEvidence } from '../../../../services/entityMetaResolver';
+import { loadTrendSignals } from '../../../../services/ai/trendAnalyzer';
 
 const CACHE_KEY = 'portfolio-summary';
 
@@ -71,7 +72,15 @@ export async function POST(request: Request) {
   }
 
   const signals = derivePortfolioSignals(cached.snapshot);
-  const deterministic = answerPortfolioQuestionDeterministically(question, signals, cached.report, cached.snapshot);
+  const trendContext = await loadTrendSignals();
+  const deterministic = answerPortfolioQuestionDeterministically(
+    question,
+    signals,
+    cached.report,
+    cached.snapshot,
+    cached.report?.trendSignals || trendContext.trendSignals,
+    trendContext.history
+  );
   let answer: PortfolioQueryResponse = {
     ...deterministic,
     relatedEntitiesMeta: await resolveRelatedEntitiesMetaFromEvidence(deterministic.evidence || []),
@@ -89,6 +98,9 @@ ${JSON.stringify(deterministic, null, 2)}
 
 Deterministic signals:
 ${JSON.stringify(signals, null, 2)}
+
+Trend signals:
+${JSON.stringify(cached.report?.trendSignals || trendContext.trendSignals || [], null, 2)}
 
 Structured report:
 ${JSON.stringify(cached.report || {}, null, 2)}

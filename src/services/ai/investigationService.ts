@@ -3,6 +3,7 @@ import { getDb, fetchAiAnalysisCache } from '../db';
 import { SavedInvestigation, PortfolioQueryResponse, PortfolioSummaryResponse } from '../../types/ai';
 import { detectPortfolioQueryIntent, answerPortfolioQuestionDeterministically } from './queryEngine';
 import { derivePortfolioSignals } from './portfolioSignals';
+import { loadTrendSignals } from './trendAnalyzer';
 import { resolveRelatedEntitiesMetaFromEvidence } from '../entityMetaResolver';
 
 const COLLECTION = 'ai_saved_queries';
@@ -123,12 +124,15 @@ export const refreshInvestigation = async (userId: string, id: string) => {
 
   const cached = await loadPortfolioContext();
   if (!cached?.snapshot) return current;
+  const trendContext = await loadTrendSignals();
 
   const deterministic = answerPortfolioQuestionDeterministically(
     current.question,
     derivePortfolioSignals(cached.snapshot),
     cached.report,
-    cached.snapshot
+    cached.snapshot,
+    cached.report?.trendSignals || trendContext.trendSignals,
+    trendContext.history
   );
   const relatedEntitiesMeta = await resolveRelatedEntitiesMetaFromEvidence(deterministic.evidence || []);
   const update = {

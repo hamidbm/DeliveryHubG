@@ -80,6 +80,13 @@ Dashboards provide program-level rollups for milestones, risks, and delivery sta
   - pinned investigations are surfaced at the top of AI Insights (`max 6`)
   - query history is kept per browser session and supports run-again + save
   - refresh re-runs deterministic query logic and updates the saved answer snapshot
+- 12D added portfolio trend intelligence:
+  - historical summary snapshots are persisted in `portfolio_snapshots` on manual regenerate
+  - retention policy keeps the last 90 days of snapshot history
+  - trend signals are computed from recent snapshots (max 14 loaded, default 7-snapshot window)
+  - structured report now includes `trendSignals[]` and UI renders a **Portfolio Trends** section
+  - trend-aware deterministic query support added for delivery/risk/backlog/milestone trend questions
+  - quick suggestions now include trend investigations when rising signals are present
 - Visual sequence diagrams for cache/regenerate/query/drill-down are documented in `docs/wiki/AI.md` under **Visual Flows**.
 
 ## Program Capacity (v1)

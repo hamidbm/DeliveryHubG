@@ -187,6 +187,13 @@ Implemented:
   - deterministic refresh of saved investigations against current portfolio context
   - AI Insights now includes Pinned Insights, Saved Investigations, and Query History panels
   - owner-scoped access enforcement for investigation records
+- 12D: portfolio trend analysis and temporal intelligence:
+  - new snapshot history collection `portfolio_snapshots` with 90-day retention
+  - trend analyzer service computes directional deltas across recent snapshots
+  - structured report extended with `trendSignals[]`
+  - AI Insights UI includes Portfolio Trends cards under Concentration Signals
+  - deterministic query engine now supports trend questions (delivery/risk/blocked/backlog/milestones)
+  - trend-aware quick suggestions integrated into Ask DeliveryHub AI
 
 Current 12B behavior:
 - structured sections are primary in AI Insights UI

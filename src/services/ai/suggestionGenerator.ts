@@ -81,6 +81,52 @@ export const generatePortfolioSuggestions = (
     });
   }
 
+  const trendSignals = report?.trendSignals || [];
+  const trendByMetric = (metric: string) => trendSignals.find((item) => item.metric === metric);
+  const unassignedTrend = trendByMetric('unassignedWorkItems');
+  const blockedTrend = trendByMetric('blockedWorkItems');
+  const milestoneTrend = trendByMetric('overdueMilestones');
+
+  if (unassignedTrend?.direction === 'rising') {
+    pushUnique(suggestions, {
+      id: 'sugg-trend-unassigned',
+      label: 'Unassigned trend',
+      prompt: 'Why is unassigned work increasing over time?',
+      category: 'capacity',
+      provenance: 'deterministic'
+    });
+  }
+
+  if (blockedTrend?.direction === 'rising') {
+    pushUnique(suggestions, {
+      id: 'sugg-trend-blocked',
+      label: 'Blocked trend',
+      prompt: 'Which bundles caused the rise in blocked tasks?',
+      category: 'risk',
+      provenance: 'deterministic'
+    });
+  }
+
+  if (milestoneTrend?.direction === 'rising') {
+    pushUnique(suggestions, {
+      id: 'sugg-trend-milestones',
+      label: 'Milestone trend',
+      prompt: 'Which milestones are newly at risk?',
+      category: 'risk',
+      provenance: 'deterministic'
+    });
+  }
+
+  if (trendSignals.length > 0) {
+    pushUnique(suggestions, {
+      id: 'sugg-trend-delivery',
+      label: 'Delivery trend',
+      prompt: 'Is delivery improving over time?',
+      category: 'delivery',
+      provenance: 'deterministic'
+    });
+  }
+
   (report?.questionsToAsk || []).forEach((question, index) => {
     pushUnique(suggestions, {
       id: `sugg-report-${index + 1}`,

@@ -29,6 +29,30 @@ Top-level fields:
 Observed indexes:
 - `{ _id: 1 }`
 
+### `ai_analysis_cache`
+Top-level fields:
+- `_id`, `reportType`, `status`, `metadata`, `snapshot`, `report`, `relatedEntitiesMeta`, `updatedAt`
+
+Observed indexes:
+- `{ _id: 1 }`
+
+### `ai_saved_queries`
+Top-level fields:
+- `_id`, `userId`, `question`, `normalizedIntent`, `answer`, `explanation`, `evidence`, `entities`, `followUps`, `relatedEntitiesMeta`, `pinned`, `createdAt`, `updatedAt`
+
+Observed indexes:
+- `{ _id: 1 }`
+- `{ userId: 1, createdAt: -1 }`
+- `{ userId: 1, pinned: 1, updatedAt: -1 }`
+
+### `portfolio_snapshots`
+Top-level fields:
+- `_id`, `createdAt`, `totalApplications`, `criticalApplications`, `totalWorkItems`, `unassignedWorkItems`, `blockedWorkItems`, `overdueWorkItems`, `activeWorkItems`, `openReviews`, `overdueMilestones`
+
+Observed indexes:
+- `{ _id: 1 }`
+- `{ createdAt: -1 }`
+
 ### `applications`
 Top-level fields:
 - `_id`, `aid`, `bundleId`, `cloudMetadata`, `createdAt`, `createdBy`, `isActive`, `lifecycle`, `name`, `status`, `updatedAt`, `updatedBy`

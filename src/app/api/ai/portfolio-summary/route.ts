@@ -16,6 +16,7 @@ import { AttemptedProvider, AiErrorCode } from '../../../../services/aiRouting';
 import { derivePortfolioSignals } from '../../../../services/ai/portfolioSignals';
 import { normalizePortfolioReport } from '../../../../services/ai/normalizePortfolioReport';
 import { resolveRelatedEntitiesMetaFromReport } from '../../../../services/entityMetaResolver';
+import { loadTrendSignals, persistPortfolioSnapshot } from '../../../../services/ai/trendAnalyzer';
 
 type AiSettings = {
   geminiProModel?: string;
@@ -97,7 +98,8 @@ const normalizeCachedReport = async (cached: any): Promise<PortfolioSummaryRespo
   if (!source) return null;
   const snapshot = source.snapshot || emptySnapshot;
   const signals = derivePortfolioSignals(snapshot);
-  const normalized = normalizePortfolioReport(source.report, signals);
+  const trendContext = await loadTrendSignals();
+  const normalized = normalizePortfolioReport(source.report, signals, trendContext.trendSignals);
   const generatedAt = source.metadata?.generatedAt || cached.updatedAt || new Date().toISOString();
   const metadata = {
     provider: source.metadata?.provider || 'UNKNOWN',
@@ -175,11 +177,18 @@ export async function POST(request: Request) {
     ) {
       throw new Error('Portfolio snapshot has no data to analyze.');
     }
+    try {
+      await persistPortfolioSnapshot(snapshot);
+    } catch {
+      // Trend history persistence should not fail report generation.
+    }
+    const preGenerationTrendContext = await loadTrendSignals();
 
     const prompt = `You are an enterprise delivery portfolio analyst.
 You will receive:
 1. A deterministic portfolio snapshot
 2. A deterministic signal summary
+3. Historical portfolio trend signals (if available)
 
 Return STRICT JSON only (no markdown fences) matching this schema:
 {
@@ -188,6 +197,7 @@ Return STRICT JSON only (no markdown fences) matching this schema:
   "topRisks": [{ "title": "string", "severity": "low|medium|high|critical", "summary": "string", "evidence": ["string"] }],
   "recommendedActions": [{ "title": "string", "urgency": "now|7d|30d|later", "summary": "string", "ownerHint": "string", "evidence": ["string"] }],
   "concentrationSignals": [{ "title": "string", "summary": "string", "impact": "string", "evidence": ["string"] }],
+  "trendSignals": [{ "metric": "unassignedWorkItems|blockedWorkItems|overdueWorkItems|activeWorkItems|criticalApplications|overdueMilestones", "direction": "rising|falling|stable", "delta": 0, "timeframeDays": 7, "summary": "string" }],
   "questionsToAsk": [{ "question": "string", "rationale": "string" }]
 }
 
@@ -196,11 +206,15 @@ Constraints:
 - topRisks max 5
 - recommendedActions max 5
 - concentrationSignals max 5
+- trendSignals max 6
 - questionsToAsk between 2 and 6
 - Ground statements in provided data
 
 Deterministic signal summary:
 ${JSON.stringify(derivePortfolioSignals(snapshot), null, 2)}
+
+Historical trend signals:
+${JSON.stringify(preGenerationTrendContext.trendSignals, null, 2)}
 
 Portfolio snapshot:
 ${JSON.stringify(snapshot, null, 2)}`;
@@ -214,7 +228,8 @@ ${JSON.stringify(snapshot, null, 2)}`;
       timeoutMs: 20000
     });
     const signals = derivePortfolioSignals(snapshot);
-    const normalized = normalizePortfolioReport(execution.text, signals);
+    const trendContext = await loadTrendSignals();
+    const normalized = normalizePortfolioReport(execution.text, signals, trendContext.trendSignals);
 
     const generatedAt = new Date().toISOString();
     const snapshotHash = buildSnapshotHash(snapshot);

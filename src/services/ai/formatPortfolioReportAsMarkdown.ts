@@ -1,5 +1,6 @@
 import {
   EvidenceItem,
+  PortfolioTrendSignal,
   StructuredPortfolioReport,
   StructuredActionItem,
   StructuredConcentrationSignal,
@@ -78,6 +79,40 @@ const formatQuestions = (items: StructuredQuestionItem[]) => {
     .join('\n');
 };
 
+const trendMetricLabel = (metric: PortfolioTrendSignal['metric']) => {
+  const labels: Record<PortfolioTrendSignal['metric'], string> = {
+    unassignedWorkItems: 'Unassigned Workload',
+    blockedWorkItems: 'Blocked Tasks',
+    overdueWorkItems: 'Overdue Work',
+    activeWorkItems: 'Active Work',
+    criticalApplications: 'Critical Applications',
+    overdueMilestones: 'Overdue Milestones'
+  };
+  return labels[metric] || metric;
+};
+
+const formatTrendSignals = (items: PortfolioTrendSignal[] = []) => {
+  if (items.length === 0) return '_No trend signals available yet. Generate additional reports over time to unlock trend analysis._';
+  return items
+    .map((item, index) => {
+      const direction = item.direction === 'stable'
+        ? 'Stable'
+        : item.direction === 'rising'
+          ? 'Rising'
+          : 'Falling';
+      const deltaText = item.delta > 0 ? `+${item.delta}` : `${item.delta}`;
+      const summary = item.summary || `${trendMetricLabel(item.metric)} is ${item.direction}.`;
+      return [
+        `### ${index + 1}. ${trendMetricLabel(item.metric)}`,
+        `- Direction: ${direction}`,
+        `- Delta: ${deltaText}`,
+        `- Timeframe: ${item.timeframeDays} days`,
+        `- Summary: ${summary}`
+      ].join('\n');
+    })
+    .join('\n\n');
+};
+
 export const formatPortfolioReportAsMarkdown = (report: StructuredPortfolioReport) => {
   return [
     `## Overall Health: ${healthLabel(report.overallHealth)}`,
@@ -93,6 +128,9 @@ export const formatPortfolioReportAsMarkdown = (report: StructuredPortfolioRepor
     '',
     '## Concentration Signals',
     formatSignals(report.concentrationSignals || []),
+    '',
+    '## Portfolio Trends',
+    formatTrendSignals(report.trendSignals || []),
     '',
     '## Questions To Ask',
     formatQuestions(report.questionsToAsk || [])

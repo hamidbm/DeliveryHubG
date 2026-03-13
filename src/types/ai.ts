@@ -67,6 +67,28 @@ export interface PortfolioSnapshot {
   };
 }
 
+export interface PortfolioSnapshotHistory {
+  id?: string;
+  createdAt: string;
+  totalApplications: number;
+  criticalApplications: number;
+  totalWorkItems: number;
+  unassignedWorkItems: number;
+  blockedWorkItems: number;
+  overdueWorkItems: number;
+  activeWorkItems: number;
+  openReviews: number;
+  overdueMilestones: number;
+}
+
+export interface PortfolioTrendSignal {
+  metric: 'unassignedWorkItems' | 'blockedWorkItems' | 'overdueWorkItems' | 'activeWorkItems' | 'criticalApplications' | 'overdueMilestones';
+  direction: 'rising' | 'falling' | 'stable';
+  delta: number;
+  timeframeDays: number;
+  summary?: string;
+}
+
 export type PortfolioSummaryStatus = 'success' | 'error' | 'empty';
 export type PortfolioHealthSignal = 'green' | 'amber' | 'red' | 'unknown';
 export type PortfolioRiskSeverity = 'low' | 'medium' | 'high' | 'critical';
@@ -129,6 +151,7 @@ export interface StructuredPortfolioReport {
   topRisks: StructuredRiskItem[];
   recommendedActions: StructuredActionItem[];
   concentrationSignals: StructuredConcentrationSignal[];
+  trendSignals?: PortfolioTrendSignal[];
   questionsToAsk: StructuredQuestionItem[];
   markdownReport?: string;
 }

@@ -1,4 +1,5 @@
-import { PortfolioSnapshot } from '../../types/ai';
+import { PortfolioSnapshot, PortfolioSnapshotHistory, PortfolioTrendSignal } from '../../types/ai';
+import { computePortfolioTrendSignals } from './trendAnalyzer';
 
 const asIso = (value?: string) => {
   if (!value) return undefined;
@@ -262,4 +263,127 @@ export const extractOwnerStats = (snapshot: PortfolioSnapshot): OwnerMetric[] =>
     byOwner.set(owner, acc);
   });
   return Array.from(byOwner.values());
+};
+
+export type TrendMetric = {
+  metric: PortfolioTrendSignal['metric'];
+  direction: PortfolioTrendSignal['direction'];
+  delta: number;
+  timeframeDays: number;
+};
+
+type TrendSummary = {
+  verdict: 'improving' | 'worsening' | 'stable' | 'insufficient';
+  summary: string;
+  metrics: TrendMetric[];
+};
+
+const trendByMetric = (
+  trendSignals: Array<{ metric: PortfolioTrendSignal['metric']; direction: PortfolioTrendSignal['direction']; delta: number; timeframeDays: number }>,
+  metric: PortfolioTrendSignal['metric']
+) => trendSignals.find((item) => item.metric === metric);
+
+export const extractTrendMetrics = (
+  history: PortfolioSnapshotHistory[],
+  trendSignals?: PortfolioTrendSignal[]
+): TrendMetric[] => {
+  const computed = trendSignals && trendSignals.length > 0
+    ? trendSignals
+    : computePortfolioTrendSignals(history, 7);
+  return computed.map((item) => ({
+    metric: item.metric,
+    direction: item.direction,
+    delta: item.delta,
+    timeframeDays: item.timeframeDays
+  }));
+};
+
+export const extractRiskTrend = (
+  history: PortfolioSnapshotHistory[],
+  trendSignals?: PortfolioTrendSignal[]
+): TrendSummary => {
+  const metrics = extractTrendMetrics(history, trendSignals).filter((item) => (
+    item.metric === 'unassignedWorkItems'
+    || item.metric === 'blockedWorkItems'
+    || item.metric === 'overdueWorkItems'
+    || item.metric === 'criticalApplications'
+    || item.metric === 'overdueMilestones'
+  ));
+  if (metrics.length === 0) {
+    return {
+      verdict: 'insufficient',
+      summary: 'Trend data is insufficient. Generate additional reports to establish a baseline.',
+      metrics: []
+    };
+  }
+  const worsening = metrics.filter((item) => item.direction === 'rising').length;
+  const improving = metrics.filter((item) => item.direction === 'falling').length;
+  const verdict = worsening > improving ? 'worsening' : improving > worsening ? 'improving' : 'stable';
+  return {
+    verdict,
+    summary: verdict === 'worsening'
+      ? 'Risk indicators are trending upward across recent snapshots.'
+      : verdict === 'improving'
+        ? 'Risk indicators are trending downward across recent snapshots.'
+        : 'Risk indicators are mostly stable across recent snapshots.',
+    metrics
+  };
+};
+
+export const extractWorkloadTrend = (
+  history: PortfolioSnapshotHistory[],
+  trendSignals?: PortfolioTrendSignal[]
+): TrendSummary => {
+  const metrics = extractTrendMetrics(history, trendSignals).filter((item) => (
+    item.metric === 'unassignedWorkItems'
+    || item.metric === 'activeWorkItems'
+    || item.metric === 'blockedWorkItems'
+  ));
+  if (metrics.length === 0) {
+    return {
+      verdict: 'insufficient',
+      summary: 'Workload trend data is insufficient.',
+      metrics: []
+    };
+  }
+  const unassigned = trendByMetric(metrics, 'unassignedWorkItems');
+  const active = trendByMetric(metrics, 'activeWorkItems');
+  const blocked = trendByMetric(metrics, 'blockedWorkItems');
+  const worsening = Number(unassigned?.direction === 'rising') + Number(blocked?.direction === 'rising') + Number(active?.direction === 'falling');
+  const improving = Number(unassigned?.direction === 'falling') + Number(blocked?.direction === 'falling') + Number(active?.direction === 'rising');
+  const verdict = worsening > improving ? 'worsening' : improving > worsening ? 'improving' : 'stable';
+  return {
+    verdict,
+    summary: verdict === 'worsening'
+      ? 'Workload pressure is increasing (ownership/blocker pressure outpaces active execution).'
+      : verdict === 'improving'
+        ? 'Workload execution is improving (ownership and active throughput are trending in the right direction).'
+        : 'Workload pressure is stable.',
+    metrics
+  };
+};
+
+export const extractMilestoneTrend = (
+  history: PortfolioSnapshotHistory[],
+  trendSignals?: PortfolioTrendSignal[]
+): TrendSummary => {
+  const metrics = extractTrendMetrics(history, trendSignals).filter((item) => item.metric === 'overdueMilestones');
+  if (metrics.length === 0) {
+    return {
+      verdict: 'insufficient',
+      summary: 'Milestone trend data is insufficient.',
+      metrics: []
+    };
+  }
+  const overdue = metrics[0];
+  const verdict = overdue.direction === 'rising' ? 'worsening' : overdue.direction === 'falling' ? 'improving' : 'stable';
+  return {
+    verdict,
+    summary: verdict === 'worsening'
+      ? 'Milestone exposure is worsening (more milestones are overdue).'
+      : verdict === 'improving'
+        ? 'Milestone exposure is improving (overdue milestones are declining).'
+        : 'Milestone exposure is stable.',
+    metrics
+  };
 };

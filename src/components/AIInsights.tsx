@@ -8,6 +8,7 @@ import { derivePortfolioSignals } from '../services/ai/portfolioSignals';
 import { generatePortfolioSuggestions } from '../services/ai/suggestionGenerator';
 import EntityEvidenceList from './ui/EntityEvidenceList';
 import RelatedEntitiesSection from './ui/RelatedEntitiesSection';
+import TrendSignalCard from './ui/TrendSignalCard';
 import QueryHistoryPanel, { QueryHistoryItem } from './ai/QueryHistoryPanel';
 import InvestigationPanel from './ai/InvestigationPanel';
 import PinnedInsightsPanel from './ai/PinnedInsightsPanel';
@@ -1109,6 +1110,22 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
                       {(structuredReport.concentrationSignals || []).length === 0 && (
                         <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
                           No concentration signals identified.
+                        </div>
+                      )}
+                    </div>
+                  </SectionCard>
+
+                  <SectionCard icon="fa-chart-line" title="Portfolio Trends">
+                    <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
+                      {(structuredReport.trendSignals || []).map((signal, index) => (
+                        <TrendSignalCard
+                          key={`${signal.metric}-${signal.timeframeDays}-${index}`}
+                          signal={signal}
+                        />
+                      ))}
+                      {(structuredReport.trendSignals || []).length === 0 && (
+                        <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
+                          Trend analysis needs at least two historical snapshots. Generate more reports over time to unlock this section.
                         </div>
                       )}
                     </div>
