@@ -110,6 +110,18 @@ Dashboards provide program-level rollups for milestones, risks, and delivery sta
     - after report regeneration
     - after investigation refresh
   - contextual watch actions available from alerts, trends, health threshold, and saved investigations
+- 12F.2 added external delivery + delivery preferences:
+  - watcher config now supports channel preferences (`in_app`, `email`) and email minimum severity
+  - notification dispatch pipeline evaluates preferences and dispatches email via centralized channel adapter
+  - notification center now displays per-channel delivery status (in-app/email)
+  - delivery outcomes tracked as `pending|sent|failed|suppressed` with attempt/error metadata
+  - cooldown suppression prevents noisy repeated email sends for the same watcher context
+- 12F.3 expanded notifications to Slack/Teams and digest mode:
+  - watcher config now supports `slack` and `teams` webhooks with per-channel severity thresholds
+  - watcher config now supports digest delivery (`enabled`, `hourly|daily`)
+  - notification dispatch now routes across `email`, `slack`, and `teams` with shared suppression/severity policy
+  - digest mode queues notifications for scheduled summary delivery instead of immediate external sends
+  - notification center now displays channel badges for Slack/Teams and a `Digest` delivery mode indicator
 - Visual sequence diagrams for cache/regenerate/query/drill-down are documented in `docs/wiki/AI.md` under **Visual Flows**.
 
 ## Program Capacity (v1)

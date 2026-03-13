@@ -40,6 +40,14 @@ interface AIInsightsProps {
   bundles?: Bundle[];
 }
 
+type WatcherPreset = Partial<{
+  type: WatcherType;
+  targetId: string;
+  condition: Record<string, any>;
+  enabled: boolean;
+  deliveryPreferences: Watcher['deliveryPreferences'];
+}>;
+
 type WikiTheme = {
   key: string;
   css?: string;
@@ -592,7 +600,7 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
   const [watchers, setWatchers] = useState<Watcher[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [watcherFormOpen, setWatcherFormOpen] = useState(false);
-  const [watcherPreset, setWatcherPreset] = useState<Partial<{ type: WatcherType; targetId: string; condition: Record<string, any>; enabled: boolean }> | undefined>(undefined);
+  const [watcherPreset, setWatcherPreset] = useState<WatcherPreset | undefined>(undefined);
   const hasAutoLoadedRef = useRef(false);
   const inFlightRef = useRef(false);
 
@@ -873,6 +881,7 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
     targetId: string;
     condition: Record<string, any>;
     enabled: boolean;
+    deliveryPreferences?: Watcher['deliveryPreferences'];
   }) => {
     const res = await fetch('/api/ai/watchers', {
       method: 'POST',
@@ -885,7 +894,7 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
     setWatcherPreset(undefined);
   };
 
-  const openWatcherWithPreset = (preset: Partial<{ type: WatcherType; targetId: string; condition: Record<string, any>; enabled: boolean }>) => {
+  const openWatcherWithPreset = (preset: WatcherPreset) => {
     setWatcherPreset(preset);
     setWatcherFormOpen(true);
   };

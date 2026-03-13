@@ -55,7 +55,10 @@ export async function POST(request: Request) {
     type: body.type,
     targetId,
     condition: body?.condition && typeof body.condition === 'object' ? body.condition : {},
-    enabled: body?.enabled !== false
+    enabled: body?.enabled !== false,
+    deliveryPreferences: body?.deliveryPreferences && typeof body.deliveryPreferences === 'object'
+      ? body.deliveryPreferences
+      : undefined
   });
 
   const report = await loadPortfolioContext();

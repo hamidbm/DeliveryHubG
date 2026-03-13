@@ -7,6 +7,53 @@ type Props = {
   onMarkRead: (notificationId: string, read: boolean) => void;
 };
 
+const statusStyle = (status?: string) => {
+  if (status === 'sent') return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+  if (status === 'failed') return 'bg-rose-50 text-rose-700 border-rose-200';
+  if (status === 'suppressed') return 'bg-amber-50 text-amber-700 border-amber-200';
+  return 'bg-slate-50 text-slate-700 border-slate-200';
+};
+
+const ChannelStatus = ({ item }: { item: Notification }) => {
+  const inApp = item.delivery?.in_app?.status || 'sent';
+  const emailStatus = item.delivery?.email?.status || 'suppressed';
+  const slackStatus = item.delivery?.slack?.status || 'suppressed';
+  const teamsStatus = item.delivery?.teams?.status || 'suppressed';
+  const emailError = item.delivery?.email?.lastErrorMessage;
+  const slackError = item.delivery?.slack?.lastErrorMessage;
+  const teamsError = item.delivery?.teams?.lastErrorMessage;
+  return (
+    <div className="mt-2 flex flex-wrap gap-2">
+      <span className={`text-[10px] font-bold uppercase border rounded-full px-2 py-0.5 ${statusStyle(inApp)}`}>
+        In-App: {inApp}
+      </span>
+      <span
+        title={emailStatus === 'failed' && emailError ? emailError : undefined}
+        className={`text-[10px] font-bold uppercase border rounded-full px-2 py-0.5 ${statusStyle(emailStatus)}`}
+      >
+        Email: {emailStatus}
+      </span>
+      <span
+        title={slackStatus === 'failed' && slackError ? slackError : undefined}
+        className={`text-[10px] font-bold uppercase border rounded-full px-2 py-0.5 ${statusStyle(slackStatus)}`}
+      >
+        Slack: {slackStatus}
+      </span>
+      <span
+        title={teamsStatus === 'failed' && teamsError ? teamsError : undefined}
+        className={`text-[10px] font-bold uppercase border rounded-full px-2 py-0.5 ${statusStyle(teamsStatus)}`}
+      >
+        Teams: {teamsStatus}
+      </span>
+      {item.deliveryMode === 'digest' && (
+        <span className="text-[10px] font-bold uppercase border rounded-full px-2 py-0.5 bg-indigo-50 text-indigo-700 border-indigo-200">
+          Delivery Mode: Digest
+        </span>
+      )}
+    </div>
+  );
+};
+
 const NotificationCenter: React.FC<Props> = ({ notifications, onRefresh, onMarkRead }) => {
   const [open, setOpen] = useState(false);
   const unreadCount = useMemo(() => notifications.filter((item) => !item.read).length, [notifications]);
@@ -43,6 +90,7 @@ const NotificationCenter: React.FC<Props> = ({ notifications, onRefresh, onMarkR
                     <article key={item.id} className="rounded-lg border border-blue-200 bg-blue-50 p-3">
                       <p className="text-sm font-semibold text-slate-800 break-words">{item.title}</p>
                       <p className="text-xs text-slate-600 mt-1 break-words">{item.message}</p>
+                      <ChannelStatus item={item} />
                       <p className="text-[11px] text-slate-500 mt-1">{new Date(item.createdAt).toLocaleString()}</p>
                       <div className="mt-2 flex gap-2">
                         <button
@@ -66,6 +114,7 @@ const NotificationCenter: React.FC<Props> = ({ notifications, onRefresh, onMarkR
                     <article key={item.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
                       <p className="text-sm font-semibold text-slate-700 break-words">{item.title}</p>
                       <p className="text-xs text-slate-500 mt-1 break-words">{item.message}</p>
+                      <ChannelStatus item={item} />
                       <p className="text-[11px] text-slate-400 mt-1">{new Date(item.createdAt).toLocaleString()}</p>
                     </article>
                   ))}

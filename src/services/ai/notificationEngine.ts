@@ -9,6 +9,7 @@ import {
   WatcherType
 } from '../../types/ai';
 import { getDb } from '../db';
+import { dispatchNotification } from './notificationDispatcher';
 
 const WATCHERS_COLLECTION = 'ai_watchers';
 const NOTIFICATIONS_COLLECTION = 'ai_notifications';
@@ -38,6 +39,13 @@ const toWatcher = (row: any): Watcher => ({
   type: String(row.type || 'trend') as WatcherType,
   targetId: String(row.targetId || ''),
   condition: row.condition || {},
+  deliveryPreferences: row.deliveryPreferences || {
+    in_app: { enabled: true },
+    email: { enabled: false },
+    slack: { enabled: false },
+    teams: { enabled: false },
+    digest: { enabled: false, frequency: 'daily' }
+  },
   enabled: row.enabled !== false,
   createdAt: String(row.createdAt || nowIso()),
   lastTriggeredAt: row.lastTriggeredAt ? String(row.lastTriggeredAt) : undefined
@@ -49,10 +57,13 @@ const toNotification = (row: any): Notification => ({
   userId: String(row.userId || ''),
   title: String(row.title || ''),
   message: String(row.message || ''),
+  severity: row.severity,
   relatedEntities: Array.isArray(row.relatedEntities) ? row.relatedEntities : [],
   relatedInvestigationId: row.relatedInvestigationId ? String(row.relatedInvestigationId) : undefined,
   createdAt: String(row.createdAt || nowIso()),
-  read: Boolean(row.read)
+  read: Boolean(row.read),
+  deliveryMode: row.deliveryMode || 'immediate',
+  delivery: row.delivery || undefined
 });
 
 export const listWatchersForUser = async (userId: string): Promise<Watcher[]> => {
@@ -67,7 +78,13 @@ export const listWatchersForUser = async (userId: string): Promise<Watcher[]> =>
 
 export const createWatcherForUser = async (
   userId: string,
-  payload: { type: WatcherType; targetId: string; condition?: Record<string, any>; enabled?: boolean }
+  payload: {
+    type: WatcherType;
+    targetId: string;
+    condition?: Record<string, any>;
+    enabled?: boolean;
+    deliveryPreferences?: Watcher['deliveryPreferences'];
+  }
 ): Promise<string> => {
   const db = await getDb();
   await ensureIndexes(db);
@@ -77,6 +94,13 @@ export const createWatcherForUser = async (
     type: payload.type,
     targetId: String(payload.targetId || '').trim(),
     condition: payload.condition || {},
+    deliveryPreferences: payload.deliveryPreferences || {
+      in_app: { enabled: true },
+      email: { enabled: false },
+      slack: { enabled: false },
+      teams: { enabled: false },
+      digest: { enabled: false, frequency: 'daily' }
+    },
     enabled: payload.enabled !== false,
     createdAt: now,
     lastTriggeredAt: undefined
@@ -88,7 +112,7 @@ export const createWatcherForUser = async (
 export const updateWatcherForUser = async (
   userId: string,
   watcherId: string,
-  patch: Partial<Pick<Watcher, 'enabled' | 'condition' | 'targetId'>>
+  patch: Partial<Pick<Watcher, 'enabled' | 'condition' | 'targetId' | 'deliveryPreferences'>>
 ): Promise<boolean> => {
   const db = await getDb();
   await ensureIndexes(db);
@@ -96,6 +120,9 @@ export const updateWatcherForUser = async (
   if (typeof patch.enabled === 'boolean') setData.enabled = patch.enabled;
   if (typeof patch.targetId === 'string') setData.targetId = patch.targetId.trim();
   if (patch.condition && typeof patch.condition === 'object') setData.condition = patch.condition;
+  if (patch.deliveryPreferences && typeof patch.deliveryPreferences === 'object') {
+    setData.deliveryPreferences = patch.deliveryPreferences;
+  }
   if (!Object.keys(setData).length) return false;
 
   const res = await db.collection(WATCHERS_COLLECTION).updateOne(
@@ -166,6 +193,7 @@ const evaluateWatcher = (
 ): null | {
   title: string;
   message: string;
+  severity?: Notification['severity'];
   relatedEntities?: Notification['relatedEntities'];
   relatedInvestigationId?: string;
 } => {
@@ -193,6 +221,7 @@ const evaluateWatcher = (
     return {
       title: `Alert watcher triggered: ${top.title}`,
       message: `${top.summary} (severity: ${top.severity})`,
+      severity: top.severity,
       relatedEntities: top.entities || []
     };
   }
@@ -204,7 +233,8 @@ const evaluateWatcher = (
     if (trend.direction !== desiredDirection) return null;
     return {
       title: `Trend watcher triggered: ${trend.metric}`,
-      message: trend.summary || `${trend.metric} is ${trend.direction} (${trend.delta >= 0 ? '+' : ''}${trend.delta}) over ${trend.timeframeDays} days.`
+      message: trend.summary || `${trend.metric} is ${trend.direction} (${trend.delta >= 0 ? '+' : ''}${trend.delta}) over ${trend.timeframeDays} days.`,
+      severity: Math.abs(trend.delta) >= 12 ? 'critical' : Math.abs(trend.delta) >= 6 ? 'high' : Math.abs(trend.delta) >= 2 ? 'medium' : 'low'
     };
   }
 
@@ -213,7 +243,8 @@ const evaluateWatcher = (
     if (!meetsHealthCondition(healthScore.overall, watcher.condition || {})) return null;
     return {
       title: 'Health watcher triggered',
-      message: `Portfolio health score is ${healthScore.overall}/100 and met condition ${JSON.stringify(watcher.condition || {})}.`
+      message: `Portfolio health score is ${healthScore.overall}/100 and met condition ${JSON.stringify(watcher.condition || {})}.`,
+      severity: healthScore.overall <= 40 ? 'critical' : healthScore.overall <= 60 ? 'high' : 'medium'
     };
   }
 
@@ -228,6 +259,7 @@ const evaluateWatcher = (
       return {
         title: 'Investigation watcher triggered',
         message: `Investigation ${watcher.targetId} was refreshed and produced an updated answer.`,
+        severity: 'medium',
         relatedInvestigationId: watcher.targetId
       };
     }
@@ -240,6 +272,7 @@ const evaluateWatcher = (
     return {
       title: 'Investigation watcher triggered',
       message: `Tracked metric ${metric} is ${trend.direction} (${trend.delta >= 0 ? '+' : ''}${trend.delta}) after investigation refresh.`,
+      severity: trend.direction === 'rising' ? 'high' : trend.direction === 'falling' ? 'low' : 'medium',
       relatedInvestigationId: watcher.targetId
     };
   }
@@ -259,6 +292,12 @@ export const evaluateWatchersForUser = async (userId: string, context: EvaluateC
   const created: Notification[] = [];
 
   for (const watcher of watchers) {
+    const inAppEnabled = watcher.deliveryPreferences?.in_app?.enabled !== false;
+    const emailEnabled = watcher.deliveryPreferences?.email?.enabled === true;
+    const slackEnabled = watcher.deliveryPreferences?.slack?.enabled === true;
+    const teamsEnabled = watcher.deliveryPreferences?.teams?.enabled === true;
+    if (!inAppEnabled && !emailEnabled && !slackEnabled && !teamsEnabled) continue;
+
     if (!canTrigger(watcher)) continue;
     const result = evaluateWatcher(watcher, context);
     if (!result) continue;
@@ -269,10 +308,26 @@ export const evaluateWatchersForUser = async (userId: string, context: EvaluateC
       userId: String(userId),
       title: result.title,
       message: result.message,
+      severity: result.severity || 'medium',
       relatedEntities: result.relatedEntities || [],
       relatedInvestigationId: result.relatedInvestigationId,
       createdAt,
-      read: false
+      read: inAppEnabled ? false : true,
+      delivery: {
+        in_app: {
+          status: 'sent',
+          deliveredAt: createdAt
+        },
+        email: {
+          status: emailEnabled ? 'pending' : 'suppressed'
+        },
+        slack: {
+          status: slackEnabled ? 'pending' : 'suppressed'
+        },
+        teams: {
+          status: teamsEnabled ? 'pending' : 'suppressed'
+        }
+      }
     };
 
     const insertRes = await db.collection(NOTIFICATIONS_COLLECTION).insertOne(notificationDoc);
@@ -281,7 +336,9 @@ export const evaluateWatchersForUser = async (userId: string, context: EvaluateC
       { $set: { lastTriggeredAt: createdAt } }
     );
 
-    created.push(toNotification({ ...notificationDoc, _id: insertRes.insertedId }));
+    const notification = toNotification({ ...notificationDoc, _id: insertRes.insertedId });
+    created.push(notification);
+    void dispatchNotification(notification.id);
   }
 
   return created;

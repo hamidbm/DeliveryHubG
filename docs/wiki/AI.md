@@ -273,6 +273,58 @@ AI in DeliveryHub is assistive only. It never writes to the database without exp
       - trend cards (`Watch this trend`)
       - health score card (`Watch health <= 60`)
       - saved investigations (`Watch`)
+- 12F.2 added external delivery and per-watcher delivery preferences:
+  - new dispatcher and channel adapter services:
+    - `src/services/ai/notificationDispatcher.ts`
+    - `src/services/ai/emailChannel.ts`
+  - watcher contract now includes `deliveryPreferences`:
+    - `in_app.enabled`
+    - `email.enabled`
+    - `email.severityMin` (`low|medium|high|critical`)
+  - notification contract now includes per-channel `delivery` tracking:
+    - `in_app.status`, `in_app.deliveredAt`
+    - `email.status` (`pending|sent|failed|suppressed`)
+    - `email.lastAttemptedAt`, `email.lastErrorMessage`
+  - dispatch pipeline behavior:
+    - resolves watcher delivery preferences before channel send
+    - applies severity gating for email (`severityMin`)
+    - applies cooldown suppression for repeated sends
+    - resolves user email/name from `users`
+    - updates channel delivery status on success/failure/suppression
+  - watcher APIs now accept `deliveryPreferences` payloads:
+    - `POST /api/ai/watchers`
+    - `PATCH /api/ai/watchers/:id`
+  - Notification Center now shows channel delivery badges for in-app and email, including failed-email error tooltip
+  - Watcher Config form now supports delivery preference editing (in-app toggle, email toggle, minimum email severity)
+- 12F.3 added multi-channel external delivery and digest scheduling:
+  - new channel adapters:
+    - `src/services/ai/slackChannel.ts`
+    - `src/services/ai/teamsChannel.ts`
+  - new digest service:
+    - `src/services/ai/digestService.ts`
+    - digest queue collection: `ai_notification_digest_queue`
+    - queue/process API: `enqueueNotificationForDigest(...)`, `processDigestQueue()`, scheduler start/stop
+  - dispatcher upgrades (`src/services/ai/notificationDispatcher.ts`):
+    - supports `email`, `slack`, `teams`
+    - channel-level severity gating and cooldown suppression
+    - per-channel delivery state updates (`pending|sent|failed|suppressed`) with `lastAttemptedAt` and `lastErrorMessage`
+    - digest-aware routing: when watcher digest is enabled, external immediate sends are suppressed and queued for digest
+  - watcher delivery preferences now include:
+    - `slack.enabled`, `slack.webhookUrl`, `slack.severityMin`
+    - `teams.enabled`, `teams.webhookUrl`, `teams.severityMin`
+    - `digest.enabled`, `digest.frequency` (`hourly|daily`)
+  - notification contract now includes:
+    - `delivery.slack`
+    - `delivery.teams`
+    - `deliveryMode` (`immediate|digest`)
+  - AI Insights UI updates:
+    - `WatcherConfigForm` now supports Slack, Teams, and Digest options
+    - `NotificationCenter` now renders delivery badges for Slack/Teams and shows digest mode chip
+  - environment configuration used by channel/digest services:
+    - `NOTIFICATION_SLACK_MODE` (`webhook|disabled`)
+    - `NOTIFICATION_TEAMS_MODE` (`webhook|disabled`)
+    - `NOTIFICATION_DIGEST_ENABLED` (`true|false`)
+    - `DIGEST_INTERVAL_MINUTES` (number)
 
 ## Visual Flows
 

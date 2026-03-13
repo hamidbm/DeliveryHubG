@@ -47,7 +47,13 @@ Observed indexes:
 
 ### `ai_watchers`
 Top-level fields:
-- `_id`, `userId`, `type`, `targetId`, `condition`, `enabled`, `createdAt`, `lastTriggeredAt`
+- `_id`, `userId`, `type`, `targetId`, `condition`, `deliveryPreferences`, `enabled`, `createdAt`, `lastTriggeredAt`
+- `deliveryPreferences` commonly includes:
+  - `in_app.enabled`
+  - `email.enabled`, `email.severityMin`
+  - `slack.enabled`, `slack.webhookUrl`, `slack.severityMin`
+  - `teams.enabled`, `teams.webhookUrl`, `teams.severityMin`
+  - `digest.enabled`, `digest.frequency` (`hourly|daily`)
 
 Observed indexes:
 - `{ _id: 1 }`
@@ -55,12 +61,25 @@ Observed indexes:
 
 ### `ai_notifications`
 Top-level fields:
-- `_id`, `watcherId`, `userId`, `title`, `message`, `relatedEntities`, `relatedInvestigationId`, `createdAt`, `read`
+- `_id`, `watcherId`, `userId`, `title`, `message`, `severity`, `relatedEntities`, `relatedInvestigationId`, `createdAt`, `read`, `delivery`, `deliveryMode`
+- `delivery` commonly includes:
+  - `in_app.status`, `in_app.deliveredAt`
+  - `email.status`, `email.lastAttemptedAt`, `email.lastErrorMessage`
+  - `slack.status`, `slack.lastAttemptedAt`, `slack.lastErrorMessage`
+  - `teams.status`, `teams.lastAttemptedAt`, `teams.lastErrorMessage`
 
 Observed indexes:
 - `{ _id: 1 }`
 - `{ userId: 1, watcherId: 1, read: 1 }`
 - `{ userId: 1, createdAt: -1 }`
+
+### `ai_notification_digest_queue`
+Top-level fields:
+- `_id`, `notificationId`, `watcherId`, `userId`, `createdAt`, `digestFrequency`, `processedAt`
+
+Observed indexes:
+- `{ _id: 1 }`
+- `{ userId: 1, digestFrequency: 1, processedAt: 1, createdAt: 1 }`
 
 ### `portfolio_snapshots`
 Top-level fields:

@@ -209,6 +209,19 @@ Implemented:
   - evaluation trigger points integrated into report regeneration and investigation refresh
   - AI Insights now includes Notification Center and Watcher Management panels
   - contextual watcher creation available from alerts, trends, health score, and saved investigations
+- 12F.2: external delivery dispatch and channel preferences:
+  - first external channel support added for email delivery
+  - centralized notification dispatcher + email channel adapter introduced
+  - watcher-level delivery preferences added (in-app/email + email severity threshold)
+  - per-channel delivery status tracking added on notifications (`pending|sent|failed|suppressed`)
+  - cooldown suppression and severity filtering added to reduce notification noise
+  - notification center now surfaces channel delivery state and email error details
+- 12F.3: multi-channel delivery and digest scheduling:
+  - Slack and Teams channel adapters added with webhook-mode dispatch
+  - digest queue + scheduler added for hourly/daily watcher digests
+  - watcher delivery preferences expanded with Slack/Teams thresholds and digest frequency
+  - notification dispatcher now handles `email|slack|teams` and digest deferral centrally
+  - notification center expanded with Slack/Teams delivery badges and digest-mode visibility
 
 Current 12B behavior:
 - structured sections are primary in AI Insights UI
@@ -238,8 +251,8 @@ Problem: single-point ETA misses distribution and hit probability. Value: P50/P8
 3. Baseline + Scope Delta accounting.
 Problem: drift lacks attribution. Value: explain drift via added/removed scope and estimate changes since commit. Dependencies: commitment review snapshots + scope tracking. Deliverables: baseline snapshots, delta computation, UI panels and drift attribution. Verify: delta panel shows added/removed/estimate changes and drift includes scope summary.
 
-4. Notification routing v2.
-Problem: current watcher support is in-app only and scoped to AI Insights context. Value: targeted delivery beyond in-app surfaces. Dependencies: 12F.1 watcher/notification foundation. Deliverables: watcher templates for broader domains (bundle/milestone), digest automation, and external channel adapters. Verify: watcher events route to digest/external channels without duplicate triggers.
+4. Watcher templates for broader domains.
+Problem: watchers are currently created manually per context. Value: faster setup and broader operational coverage. Dependencies: 12F.3 dispatch + digest foundation. Deliverables: reusable watcher templates for bundle/milestone/application contexts. Verify: users can apply templates and receive routed notifications with expected suppression behavior.
 
 ### Long-term
 1. External integrations.

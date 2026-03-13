@@ -261,12 +261,43 @@ export type WatcherType =
   | 'trend'
   | 'health';
 
+export type NotificationDeliveryStatus = {
+  status: 'pending' | 'sent' | 'failed' | 'suppressed';
+  lastAttemptedAt?: string;
+  lastErrorMessage?: string;
+};
+
+export type WatcherDeliveryPreferences = {
+  in_app?: {
+    enabled: boolean;
+  };
+  email?: {
+    enabled: boolean;
+    severityMin?: PortfolioRiskSeverity;
+  };
+  slack?: {
+    enabled: boolean;
+    webhookUrl?: string;
+    severityMin?: 'medium' | 'high' | 'critical';
+  };
+  teams?: {
+    enabled: boolean;
+    webhookUrl?: string;
+    severityMin?: 'medium' | 'high' | 'critical';
+  };
+  digest?: {
+    enabled: boolean;
+    frequency: 'hourly' | 'daily';
+  };
+};
+
 export interface Watcher {
   id: string;
   userId: string;
   type: WatcherType;
   targetId: string;
   condition: Record<string, any>;
+  deliveryPreferences?: WatcherDeliveryPreferences;
   enabled: boolean;
   createdAt: string;
   lastTriggeredAt?: string;
@@ -278,8 +309,27 @@ export interface Notification {
   userId: string;
   title: string;
   message: string;
+  severity?: PortfolioRiskSeverity;
   relatedEntities?: EntityReference[];
   relatedInvestigationId?: string;
   createdAt: string;
   read: boolean;
+  deliveryMode?: 'immediate' | 'digest';
+  delivery?: {
+    email?: NotificationDeliveryStatus;
+    slack?: NotificationDeliveryStatus;
+    teams?: NotificationDeliveryStatus;
+    in_app?: {
+      status: 'sent';
+      deliveredAt: string;
+    };
+  };
+}
+
+export interface NotificationDigestItem {
+  id: string;
+  userId: string;
+  notificationId: string;
+  watcherId?: string;
+  createdAt: string;
 }

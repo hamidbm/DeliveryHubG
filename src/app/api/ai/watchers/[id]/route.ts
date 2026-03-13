@@ -18,7 +18,10 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   const ok = await updateWatcherForUser(userId, String(id), {
     enabled: typeof body?.enabled === 'boolean' ? body.enabled : undefined,
     targetId: typeof body?.targetId === 'string' ? body.targetId : undefined,
-    condition: body?.condition && typeof body.condition === 'object' ? body.condition : undefined
+    condition: body?.condition && typeof body.condition === 'object' ? body.condition : undefined,
+    deliveryPreferences: body?.deliveryPreferences && typeof body.deliveryPreferences === 'object'
+      ? body.deliveryPreferences
+      : undefined
   });
 
   if (!ok) return NextResponse.json({ error: 'Watcher not found or no changes applied' }, { status: 404 });
