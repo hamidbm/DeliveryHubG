@@ -57,6 +57,35 @@ AI in DeliveryHub is assistive only. It never writes to the database without exp
   - Markdown download available
   - PDF download is direct file download with styled report layout (no popup viewer tab)
 
+## AI Insights Structured Intelligence (Phase 12B)
+- 12B.1 introduced structured report contracts in `PortfolioSummaryResponse.report`:
+  - `overallHealth`
+  - `executiveSummary`
+  - `topRisks`
+  - `recommendedActions`
+  - `concentrationSignals`
+  - `questionsToAsk`
+  - `markdownReport` (compatibility/export)
+- 12B.1 also added:
+  - deterministic signal derivation (`src/services/ai/portfolioSignals.ts`)
+  - structured normalization + legacy conversion (`src/services/ai/normalizePortfolioReport.ts`)
+  - structured-to-markdown formatter (`src/services/ai/formatPortfolioReportAsMarkdown.ts`)
+- 12B.1.1 bugfix pass:
+  - improved legacy markdown section extraction
+  - deterministic enrichment when legacy extraction is weak
+  - collapsible **Full Narrative Report** retained in UI
+- 12B.2 refined presentation quality:
+  - section cards and badges (health/severity/urgency)
+  - clearer evidence rendering and empty-state messaging
+  - responsive overflow-safe section layouts
+- 12B.3 strengthened explainability and deterministic anchoring:
+  - per-item `provenance`: `ai | deterministic | legacy`
+  - risk evidence enforcement (minimum evidence grounding)
+  - deterministic severity normalization using ratio thresholds
+  - action urgency normalization + evidence linkage
+  - concentration/question deterministic synthesis when AI output is thin
+  - normalization telemetry includes section synthesis flags
+
 ## Where AI Shows Up
 - Wiki page view: AI dropdown for summary, key decisions, assumptions
 - Wiki assets: same AI dropdown plus Q&A panel

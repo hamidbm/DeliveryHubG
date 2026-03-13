@@ -250,6 +250,7 @@ ${JSON.stringify(snapshot, null, 2)}`;
       duration: Date.now() - startedAt,
       success: true,
       normalizationFallbackUsed: normalized.normalizationFallbackUsed,
+      sectionsSynthesized: normalized.sectionsSynthesized,
       structuredReportGenerated: true
     });
     return NextResponse.json(response);

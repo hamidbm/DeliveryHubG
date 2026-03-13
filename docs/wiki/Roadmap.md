@@ -148,6 +148,24 @@ Current behavior:
 - stale reports still display with clear stale-state messaging
 - exports are direct downloads with executive-readable formatting
 
+## AI Insights Structured Intelligence (Phase 12B)
+Structured intelligence reporting has progressed through the first three 12B subphases.
+
+Implemented:
+- 12B.1: structured report contract + deterministic signal grounding + normalization pipeline
+- 12B.1.1: legacy cache normalization bugfix + full narrative fallback visibility
+- 12B.2: UI refinement (section cards, badges, evidence readability, responsive empty states)
+- 12B.3: evidence-backed enforcement and deterministic fallback enrichment:
+  - risk/action/signal/question provenance (`ai | deterministic | legacy`)
+  - ratio-based severity normalization
+  - urgency normalization and stronger evidence linkage
+  - section-level synthesis telemetry in normalization logs
+
+Current 12B behavior:
+- structured sections are primary in AI Insights UI
+- legacy narrative remains accessible via collapsible section
+- thin/malformed AI output is enriched deterministically before persistence/return
+
 ### Near-term (next 2–4 weeks)
 1. Inline storyPoints edits in planning surfaces.
 Problem: editing storyPoints requires opening the detail drawer. Value: faster planning and fewer context switches. Dependencies: existing milestone planning and roadmap views. Deliverables: inline edit controls in planning and roadmap rows, with optimistic update + validation. Verify: edit storyPoints inline and see rollups update without page reload.

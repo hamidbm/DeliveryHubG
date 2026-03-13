@@ -47,6 +47,35 @@ const inferHealthFallback = (signals: PortfolioSignalSummary): PortfolioHealthSi
   return 'green';
 };
 
+const deterministicSeverityFromSignals = (signals: PortfolioSignalSummary): PortfolioRiskSeverity => {
+  if (signals.unassignedRatio >= 0.75) return 'critical';
+  if (signals.overdueRatio >= 0.15) return 'high';
+  if (signals.blockedRatio >= 0.10) return 'medium';
+  return 'low';
+};
+
+const ensureRiskEvidence = (evidence: string[], signals: PortfolioSignalSummary) => {
+  const seeded = [...evidence];
+  if (seeded.length === 0) {
+    seeded.push(`${signals.unassignedWorkItems} out of ${signals.totalWorkItems} work items are unassigned.`);
+  }
+  if (seeded.length < 2) {
+    seeded.push(`Only ${signals.inProgressWorkItems} work items (${(signals.activeWorkRatio * 100).toFixed(1)}%) are in progress.`);
+  }
+  return seeded.slice(0, 5);
+};
+
+const ensureActionEvidence = (evidence: string[], fallbackEvidence: string[]) => {
+  const seeded = [...evidence];
+  if (seeded.length === 0 && fallbackEvidence.length > 0) {
+    seeded.push(fallbackEvidence[0]);
+  }
+  if (seeded.length < 2 && fallbackEvidence.length > 1) {
+    seeded.push(fallbackEvidence[1]);
+  }
+  return seeded.slice(0, 5);
+};
+
 const defaultExecutiveSummary = (signals: PortfolioSignalSummary) => [
   `Portfolio includes ${signals.applicationsTotal} applications and ${signals.workItemsTotal} tracked work items.`,
   `${signals.unassignedWorkItems} work items are unassigned, ${signals.blockedWorkItems} are blocked, and ${signals.overdueWorkItems} are overdue.`,
@@ -55,34 +84,44 @@ const defaultExecutiveSummary = (signals: PortfolioSignalSummary) => [
 
 const synthesizeRisks = (signals: PortfolioSignalSummary): StructuredRiskItem[] => {
   const risks: StructuredRiskItem[] = [];
+  const defaultSeverity = deterministicSeverityFromSignals(signals);
   if (signals.unassignedWorkItems > 0) {
     risks.push({
       id: 'risk-1',
       title: 'High unassigned workload',
-      severity: signals.unassignedWorkItems > 50 ? 'high' : 'medium',
+      severity: defaultSeverity === 'low' ? 'medium' : defaultSeverity,
       summary: 'A large share of portfolio work is unassigned, reducing execution predictability.',
-      evidence: [`${signals.unassignedWorkItems} of ${signals.workItemsTotal} work items are unassigned.`]
+      evidence: ensureRiskEvidence([
+        `${signals.unassignedWorkItems} out of ${signals.totalWorkItems} work items are unassigned.`,
+        `Unassigned ratio is ${(signals.unassignedRatio * 100).toFixed(1)}%.`
+      ], signals),
+      provenance: 'deterministic'
     });
   }
   if (signals.blockedWorkItems > 0) {
     risks.push({
       id: `risk-${risks.length + 1}`,
       title: 'Blocked delivery trend',
-      severity: signals.blockedWorkItems >= 5 ? 'high' : 'medium',
+      severity: signals.blockedRatio >= 0.1 ? 'high' : 'medium',
       summary: 'Blocked work is creating delivery friction and potential milestone slippage.',
-      evidence: [`${signals.blockedWorkItems} work items are blocked.`]
+      evidence: ensureRiskEvidence([
+        `${signals.blockedWorkItems} work items are currently blocked.`,
+        `Blocked ratio is ${(signals.blockedRatio * 100).toFixed(1)}%.`
+      ], signals),
+      provenance: 'deterministic'
     });
   }
   if (signals.overdueWorkItems > 0 || signals.milestonesOverdue > 0) {
     risks.push({
       id: `risk-${risks.length + 1}`,
       title: 'Schedule pressure',
-      severity: signals.milestonesOverdue > 0 ? 'high' : 'medium',
+      severity: signals.overdueRatio >= 0.15 || signals.milestonesOverdue > 0 ? 'high' : 'medium',
       summary: 'Overdue execution artifacts indicate schedule compression risk.',
-      evidence: [
+      evidence: ensureRiskEvidence([
         `${signals.overdueWorkItems} work items are overdue.`,
         `${signals.milestonesOverdue} milestones are overdue.`
-      ].filter((item) => !item.startsWith('0 '))
+      ].filter((item) => !item.startsWith('0 ')), signals),
+      provenance: 'deterministic'
     });
   }
   return risks.slice(0, 5);
@@ -90,14 +129,20 @@ const synthesizeRisks = (signals: PortfolioSignalSummary): StructuredRiskItem[] 
 
 const synthesizeActions = (signals: PortfolioSignalSummary): StructuredActionItem[] => {
   const actions: StructuredActionItem[] = [];
+  const severity = deterministicSeverityFromSignals(signals);
+  const mappedUrgency = severity === 'critical' ? 'now' : severity === 'high' ? '7d' : severity === 'medium' ? '30d' : 'later';
   if (signals.unassignedWorkItems > 0) {
     actions.push({
       id: 'action-1',
       title: 'Assign owners to priority unassigned work',
-      urgency: 'now',
+      urgency: mappedUrgency,
       summary: 'Assign accountable owners to the highest-impact unassigned work items.',
       ownerHint: 'Delivery Leads',
-      evidence: [`${signals.unassignedWorkItems} work items are currently unassigned.`]
+      evidence: [
+        `${signals.unassignedWorkItems} work items are currently unassigned.`,
+        `Unassigned ratio is ${(signals.unassignedRatio * 100).toFixed(1)}%.`
+      ],
+      provenance: 'deterministic'
     });
   }
   if (signals.blockedWorkItems > 0) {
@@ -107,7 +152,11 @@ const synthesizeActions = (signals: PortfolioSignalSummary): StructuredActionIte
       urgency: '7d',
       summary: 'Run a cross-functional unblock review to clear blockers tied to milestone delivery.',
       ownerHint: 'Program Manager',
-      evidence: [`${signals.blockedWorkItems} work items are blocked.`]
+      evidence: [
+        `${signals.blockedWorkItems} work items are blocked.`,
+        `Blocked ratio is ${(signals.blockedRatio * 100).toFixed(1)}%.`
+      ],
+      provenance: 'deterministic'
     });
   }
   if (signals.reviewsOpen > 0 || signals.reviewsOverdue > 0) {
@@ -117,7 +166,11 @@ const synthesizeActions = (signals: PortfolioSignalSummary): StructuredActionIte
       urgency: '30d',
       summary: 'Rebalance reviewer capacity and tighten SLAs for open review cycles.',
       ownerHint: 'Review Governance Lead',
-      evidence: [`${signals.reviewsOpen} reviews are open, ${signals.reviewsOverdue} are overdue.`]
+      evidence: [
+        `${signals.reviewsOpen} review cycles are open.`,
+        `${signals.reviewsOverdue} review cycles are overdue.`
+      ],
+      provenance: 'deterministic'
     });
   }
   return actions.slice(0, 5);
@@ -130,7 +183,11 @@ const synthesizeConcentrationSignals = (signals: PortfolioSignalSummary): Struct
       id: 'signal-1',
       title: 'Execution throughput concentrated in a small active subset',
       summary: 'Only a small subset of total work is actively progressing.',
-      evidence: [`${signals.inProgressWorkItems} work items are in progress out of ${signals.workItemsTotal}.`]
+      evidence: [
+        `${signals.inProgressWorkItems} work items are in progress out of ${signals.totalWorkItems}.`,
+        `Active work ratio is ${(signals.activeWorkRatio * 100).toFixed(1)}%.`
+      ],
+      provenance: 'deterministic'
     });
   }
   if (signals.unassignedWorkItems > 0) {
@@ -138,7 +195,11 @@ const synthesizeConcentrationSignals = (signals: PortfolioSignalSummary): Struct
       id: `signal-${items.length + 1}`,
       title: 'Portfolio workload concentrated in unowned items',
       summary: 'Delivery capacity risk is concentrated in work without assigned owners.',
-      evidence: [`${signals.unassignedWorkItems} work items are unassigned.`]
+      evidence: [
+        `${signals.unassignedWorkItems} work items are unassigned.`,
+        `Unassigned ratio is ${(signals.unassignedRatio * 100).toFixed(1)}%.`
+      ],
+      provenance: 'deterministic'
     });
   }
   if (signals.criticalApplications === 0 && (signals.blockedWorkItems > 0 || signals.overdueWorkItems > 0)) {
@@ -149,31 +210,35 @@ const synthesizeConcentrationSignals = (signals: PortfolioSignalSummary): Struct
       evidence: [
         `${signals.criticalApplications} applications are critical.`,
         `${signals.blockedWorkItems} items are blocked and ${signals.overdueWorkItems} are overdue.`
-      ]
+      ],
+      provenance: 'deterministic'
     });
   }
   return items.slice(0, 5);
 };
 
-const synthesizeQuestions = (signals: PortfolioSignalSummary): StructuredQuestionItem[] => [
+const synthesizeQuestions = (signals: PortfolioSignalSummary): StructuredQuestionItem[] => ([
   {
     id: 'question-1',
     question: 'Which bundles contain the largest share of unassigned work?',
-    rationale: 'Unassigned work is a leading execution risk.'
+    rationale: `Unassigned ratio is ${(signals.unassignedRatio * 100).toFixed(1)}%, which indicates ownership risk.`,
+    provenance: 'deterministic' as const
   },
   {
     id: 'question-2',
     question: 'Which blocked work items threaten near-term milestones?',
-    rationale: 'Blocked work may delay committed delivery.'
+    rationale: `${signals.blockedWorkItems} items are blocked and may delay committed delivery.`,
+    provenance: 'deterministic' as const
   },
   ...(signals.reviewsOpen > 0
     ? [{
         id: 'question-3',
         question: 'Where is review capacity most constrained?',
-        rationale: 'Open reviews can become delivery bottlenecks.'
+        rationale: `${signals.reviewsOpen} open reviews can become delivery bottlenecks.`,
+        provenance: 'deterministic' as const
       }]
     : [])
-].slice(0, 6);
+]).slice(0, 6);
 
 const parseRawToObject = (raw: unknown): any => {
   if (!raw) return null;
@@ -245,24 +310,31 @@ const normalizeLegacyMarkdownReport = (raw: unknown, signals: PortfolioSignalSum
   const topRisks = riskBullets.slice(0, 5).map((entry, index) => ({
     id: `risk-${index + 1}`,
     title: entry.slice(0, 100),
-    severity: 'medium' as PortfolioRiskSeverity,
+    severity: deterministicSeverityFromSignals(signals),
     summary: entry,
-    evidence: []
+    evidence: ensureRiskEvidence([entry], signals),
+    provenance: 'legacy' as const
   }));
   const recommendedActions = actionBullets.slice(0, 5).map((entry, index) => ({
     id: `action-${index + 1}`,
     title: entry.slice(0, 100),
     urgency: '7d' as const,
-    summary: entry
+    summary: entry,
+    evidence: ensureActionEvidence([entry], signals.notableSignals),
+    provenance: 'legacy' as const
   }));
   const concentrationSignals = signalBullets.slice(0, 5).map((entry, index) => ({
     id: `signal-${index + 1}`,
     title: entry.slice(0, 100),
-    summary: entry
+    summary: entry,
+    evidence: [entry, ...signals.notableSignals].slice(0, 2),
+    provenance: 'legacy' as const
   }));
   const questionsToAsk = questionBullets.slice(0, 6).map((entry, index) => ({
     id: `question-${index + 1}`,
-    question: entry
+    question: entry,
+    rationale: 'Inferred from legacy narrative content.',
+    provenance: 'legacy' as const
   }));
 
   const mergedRisks = topRisks.length > 0 ? topRisks : synthesizeRisks(signals);
@@ -291,10 +363,18 @@ const normalizeLegacyMarkdownReport = (raw: unknown, signals: PortfolioSignalSum
 export const normalizePortfolioReport = (
   raw: unknown,
   signals: PortfolioSignalSummary
-): { report: StructuredPortfolioReport; normalizationFallbackUsed: boolean } => {
+): {
+  report: StructuredPortfolioReport;
+  normalizationFallbackUsed: boolean;
+  sectionsSynthesized: { risks: boolean; actions: boolean; signals: boolean; questions: boolean };
+} => {
   const parsed = parseRawToObject(raw);
   if (!parsed) {
-    return { report: normalizeLegacyMarkdownReport(raw, signals), normalizationFallbackUsed: true };
+    return {
+      report: normalizeLegacyMarkdownReport(raw, signals),
+      normalizationFallbackUsed: true,
+      sectionsSynthesized: { risks: true, actions: true, signals: true, questions: true }
+    };
   }
 
   const hasStructuredShape = Object.prototype.hasOwnProperty.call(parsed, 'overallHealth')
@@ -304,7 +384,11 @@ export const normalizePortfolioReport = (
     || Object.prototype.hasOwnProperty.call(parsed, 'questionsToAsk');
 
   if (!hasStructuredShape) {
-    return { report: normalizeLegacyMarkdownReport(parsed, signals), normalizationFallbackUsed: true };
+    return {
+      report: normalizeLegacyMarkdownReport(parsed, signals),
+      normalizationFallbackUsed: true,
+      sectionsSynthesized: { risks: true, actions: true, signals: true, questions: true }
+    };
   }
 
   const healthCandidate = asString(parsed.overallHealth, '').toLowerCase() as PortfolioHealthSignal;
@@ -315,12 +399,18 @@ export const normalizePortfolioReport = (
     .slice(0, 5)
     .map((item: any, index: number) => {
       const severityCandidate = asString(item?.severity, 'medium').toLowerCase() as PortfolioRiskSeverity;
+      const deterministicSeverity = deterministicSeverityFromSignals(signals);
+      const chosenSeverity = RISK_VALUES.includes(severityCandidate) ? severityCandidate : 'medium';
+      const effectiveSeverity = RISK_VALUES.indexOf(chosenSeverity) < RISK_VALUES.indexOf(deterministicSeverity)
+        ? deterministicSeverity
+        : chosenSeverity;
       return {
         id: `risk-${index + 1}`,
         title: asString(item?.title, `Risk ${index + 1}`),
-        severity: RISK_VALUES.includes(severityCandidate) ? severityCandidate : 'medium',
+        severity: effectiveSeverity,
         summary: asString(item?.summary, 'No summary provided.'),
-        evidence: asStringArray(item?.evidence, 5)
+        evidence: ensureRiskEvidence(asStringArray(item?.evidence, 5), signals),
+        provenance: 'ai' as const
       };
     });
 
@@ -328,13 +418,21 @@ export const normalizePortfolioReport = (
     .slice(0, 5)
     .map((item: any, index: number) => {
       const urgencyCandidate = asString(item?.urgency, '30d').toLowerCase();
+      const defaultUrgency = deterministicSeverityFromSignals(signals) === 'critical'
+        ? 'now'
+        : deterministicSeverityFromSignals(signals) === 'high'
+          ? '7d'
+          : deterministicSeverityFromSignals(signals) === 'medium'
+            ? '30d'
+            : 'later';
       return {
         id: `action-${index + 1}`,
         title: asString(item?.title, `Action ${index + 1}`),
-        urgency: (URGENCY_VALUES as readonly string[]).includes(urgencyCandidate) ? urgencyCandidate as (typeof URGENCY_VALUES)[number] : '30d',
+        urgency: (URGENCY_VALUES as readonly string[]).includes(urgencyCandidate) ? urgencyCandidate as (typeof URGENCY_VALUES)[number] : defaultUrgency,
         summary: asString(item?.summary, 'No summary provided.'),
         ownerHint: asString(item?.ownerHint, '') || undefined,
-        evidence: asStringArray(item?.evidence, 5)
+        evidence: ensureActionEvidence(asStringArray(item?.evidence, 5), signals.notableSignals),
+        provenance: 'ai' as const
       };
     });
 
@@ -345,7 +443,10 @@ export const normalizePortfolioReport = (
       title: asString(item?.title, `Signal ${index + 1}`),
       summary: asString(item?.summary, 'No summary provided.'),
       impact: asString(item?.impact, '') || undefined,
-      evidence: asStringArray(item?.evidence, 5)
+      evidence: asStringArray(item?.evidence, 5).length > 0
+        ? asStringArray(item?.evidence, 5)
+        : signals.notableSignals.slice(0, 2),
+      provenance: 'ai' as const
     }));
 
   const questionsToAsk = (Array.isArray(parsed.questionsToAsk) ? parsed.questionsToAsk : [])
@@ -353,13 +454,20 @@ export const normalizePortfolioReport = (
     .map((item: any, index: number) => ({
       id: `question-${index + 1}`,
       question: asString(item?.question, `Question ${index + 1}`),
-      rationale: asString(item?.rationale, '') || undefined
+      rationale: asString(item?.rationale, '') || 'Question generated from current portfolio signals.',
+      provenance: 'ai' as const
     }));
 
   const mergedRisks = topRisks.length > 0 ? topRisks : synthesizeRisks(signals);
   const mergedActions = recommendedActions.length > 0 ? recommendedActions : synthesizeActions(signals);
   const mergedSignals = concentrationSignals.length > 0 ? concentrationSignals : synthesizeConcentrationSignals(signals);
   const mergedQuestions = questionsToAsk.length >= 2 ? questionsToAsk : synthesizeQuestions(signals);
+  const sectionsSynthesized = {
+    risks: topRisks.length === 0,
+    actions: recommendedActions.length === 0,
+    signals: concentrationSignals.length === 0,
+    questions: questionsToAsk.length < 2
+  };
 
   const report: StructuredPortfolioReport = {
     overallHealth,
@@ -382,5 +490,5 @@ export const normalizePortfolioReport = (
     || !Array.isArray(parsed.concentrationSignals)
     || !Array.isArray(parsed.questionsToAsk);
 
-  return { report, normalizationFallbackUsed: fallbackUsed };
+  return { report, normalizationFallbackUsed: fallbackUsed, sectionsSynthesized };
 };

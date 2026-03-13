@@ -32,6 +32,7 @@ export interface PortfolioSnapshot {
 export type PortfolioSummaryStatus = 'success' | 'error' | 'empty';
 export type PortfolioHealthSignal = 'green' | 'amber' | 'red' | 'unknown';
 export type PortfolioRiskSeverity = 'low' | 'medium' | 'high' | 'critical';
+export type PortfolioReportProvenance = 'ai' | 'deterministic' | 'legacy';
 
 export interface StructuredRiskItem {
   id: string;
@@ -39,6 +40,7 @@ export interface StructuredRiskItem {
   severity: PortfolioRiskSeverity;
   summary: string;
   evidence: string[];
+  provenance: PortfolioReportProvenance;
 }
 
 export interface StructuredActionItem {
@@ -48,6 +50,7 @@ export interface StructuredActionItem {
   summary: string;
   ownerHint?: string;
   evidence?: string[];
+  provenance: PortfolioReportProvenance;
 }
 
 export interface StructuredConcentrationSignal {
@@ -56,12 +59,14 @@ export interface StructuredConcentrationSignal {
   summary: string;
   impact?: string;
   evidence?: string[];
+  provenance: PortfolioReportProvenance;
 }
 
 export interface StructuredQuestionItem {
   id: string;
   question: string;
   rationale?: string;
+  provenance: PortfolioReportProvenance;
 }
 
 export interface StructuredPortfolioReport {

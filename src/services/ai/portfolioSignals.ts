@@ -1,6 +1,9 @@
 import { PortfolioSnapshot } from '../../types/ai';
 
 export interface PortfolioSignalSummary {
+  totalApps: number;
+  criticalApps: number;
+  totalWorkItems: number;
   applicationsTotal: number;
   healthyApplications: number;
   warningApplications: number;
@@ -14,6 +17,10 @@ export interface PortfolioSignalSummary {
   reviewsOverdue: number;
   milestonesTotal: number;
   milestonesOverdue: number;
+  unassignedRatio: number;
+  overdueRatio: number;
+  blockedRatio: number;
+  activeWorkRatio: number;
   notableSignals: string[];
 }
 
@@ -24,6 +31,7 @@ export const derivePortfolioSignals = (snapshot: PortfolioSnapshot): PortfolioSi
   const blocked = snapshot.workItems.blocked || 0;
   const overdue = snapshot.workItems.overdue || 0;
   const inProgress = snapshot.workItems.byStatus?.IN_PROGRESS || 0;
+  const safeTotal = total > 0 ? total : 1;
 
   if (total > 0) {
     notableSignals.push(`${unassigned} of ${total} work items are unassigned.`);
@@ -36,6 +44,9 @@ export const derivePortfolioSignals = (snapshot: PortfolioSnapshot): PortfolioSi
   notableSignals.push(`${snapshot.applications.byHealth.critical} applications are rated critical health.`);
 
   return {
+    totalApps: snapshot.applications.total || 0,
+    criticalApps: snapshot.applications.byHealth.critical || 0,
+    totalWorkItems: total,
     applicationsTotal: snapshot.applications.total || 0,
     healthyApplications: snapshot.applications.byHealth.healthy || 0,
     warningApplications: snapshot.applications.byHealth.warning || 0,
@@ -49,6 +60,10 @@ export const derivePortfolioSignals = (snapshot: PortfolioSnapshot): PortfolioSi
     reviewsOverdue: snapshot.reviews.overdue || 0,
     milestonesTotal: snapshot.milestones.total || 0,
     milestonesOverdue: snapshot.milestones.overdue || 0,
+    unassignedRatio: total > 0 ? unassigned / safeTotal : 0,
+    overdueRatio: total > 0 ? overdue / safeTotal : 0,
+    blockedRatio: total > 0 ? blocked / safeTotal : 0,
+    activeWorkRatio: total > 0 ? inProgress / safeTotal : 0,
     notableSignals
   };
 };
