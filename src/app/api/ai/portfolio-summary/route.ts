@@ -17,6 +17,7 @@ import { derivePortfolioSignals } from '../../../../services/ai/portfolioSignals
 import { normalizePortfolioReport } from '../../../../services/ai/normalizePortfolioReport';
 import { resolveRelatedEntitiesMetaFromReport } from '../../../../services/entityMetaResolver';
 import { loadTrendSignals, persistPortfolioSnapshot } from '../../../../services/ai/trendAnalyzer';
+import { evaluateWatchersForUser } from '../../../../services/ai/notificationEngine';
 
 type AiSettings = {
   geminiProModel?: string;
@@ -252,6 +253,12 @@ ${JSON.stringify(snapshot, null, 2)}`;
     await saveAiAnalysisCache(CACHE_KEY, {
       ...response,
       reportType: CACHE_KEY
+    });
+    await evaluateWatchersForUser(authUser.userId, {
+      report: normalized.report,
+      trendSignals: normalized.report.trendSignals,
+      healthScore: normalized.report.healthScore,
+      alerts: normalized.report.alerts
     });
     await saveAiAuditLog({
       task: 'portfolioSummary',

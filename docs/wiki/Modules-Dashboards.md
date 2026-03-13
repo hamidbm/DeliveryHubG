@@ -97,6 +97,19 @@ Dashboards provide program-level rollups for milestones, risks, and delivery sta
   - query support expanded for active alerts, emerging risks, predictive near-term risk, and health score questions
   - alert-aware quick suggestions now surface health/alert investigations
   - each alert card supports direct **Save as Investigation** using the existing saved investigation workflow
+- 12F.1 added watcher subscriptions + in-app notifications:
+  - notification center added to AI Insights header with unread badge and read/unread grouping
+  - watcher management added in AI Insights (`Watchers` list + `Watcher Config` form)
+  - new watcher APIs:
+    - `GET/POST /api/ai/watchers`
+    - `PATCH/DELETE /api/ai/watchers/:id`
+  - new notification APIs:
+    - `GET /api/ai/notifications`
+    - `PATCH /api/ai/notifications/:id`
+  - trigger points currently evaluate watchers:
+    - after report regeneration
+    - after investigation refresh
+  - contextual watch actions available from alerts, trends, health threshold, and saved investigations
 - Visual sequence diagrams for cache/regenerate/query/drill-down are documented in `docs/wiki/AI.md` under **Visual Flows**.
 
 ## Program Capacity (v1)

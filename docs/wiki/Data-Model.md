@@ -45,6 +45,23 @@ Observed indexes:
 - `{ userId: 1, createdAt: -1 }`
 - `{ userId: 1, pinned: 1, updatedAt: -1 }`
 
+### `ai_watchers`
+Top-level fields:
+- `_id`, `userId`, `type`, `targetId`, `condition`, `enabled`, `createdAt`, `lastTriggeredAt`
+
+Observed indexes:
+- `{ _id: 1 }`
+- `{ userId: 1, type: 1 }`
+
+### `ai_notifications`
+Top-level fields:
+- `_id`, `watcherId`, `userId`, `title`, `message`, `relatedEntities`, `relatedInvestigationId`, `createdAt`, `read`
+
+Observed indexes:
+- `{ _id: 1 }`
+- `{ userId: 1, watcherId: 1, read: 1 }`
+- `{ userId: 1, createdAt: -1 }`
+
 ### `portfolio_snapshots`
 Top-level fields:
 - `_id`, `createdAt`, `totalApplications`, `criticalApplications`, `totalWorkItems`, `unassignedWorkItems`, `blockedWorkItems`, `overdueWorkItems`, `activeWorkItems`, `openReviews`, `overdueMilestones`

@@ -18,7 +18,13 @@ const directionIcon = (direction: PortfolioTrendSignal['direction']) => {
 
 const deltaText = (value: number) => (value > 0 ? `+${value}` : `${value}`);
 
-const TrendSignalCard = ({ signal }: { signal: PortfolioTrendSignal }) => {
+const TrendSignalCard = ({
+  signal,
+  onWatch
+}: {
+  signal: PortfolioTrendSignal;
+  onWatch?: (signal: PortfolioTrendSignal) => void;
+}) => {
   const direction = directionIcon(signal.direction);
   const metric = metricLabel[signal.metric] || signal.metric;
   const summary = signal.summary
@@ -37,6 +43,16 @@ const TrendSignalCard = ({ signal }: { signal: PortfolioTrendSignal }) => {
       </div>
       <p className="text-sm text-slate-600 mt-1 break-words">{summary}</p>
       <p className="text-xs text-slate-500 mt-2">Delta: {deltaText(signal.delta)} over {signal.timeframeDays} day{signal.timeframeDays === 1 ? '' : 's'}</p>
+      {onWatch && (
+        <div className="mt-2">
+          <button
+            onClick={() => onWatch(signal)}
+            className="px-2 py-1 rounded border border-blue-200 bg-blue-50 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+          >
+            Watch this trend
+          </button>
+        </div>
+      )}
     </article>
   );
 };

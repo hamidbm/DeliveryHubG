@@ -254,3 +254,32 @@ export interface SavedInvestigation {
   createdAt: string;
   updatedAt: string;
 }
+
+export type WatcherType =
+  | 'alert'
+  | 'investigation'
+  | 'trend'
+  | 'health';
+
+export interface Watcher {
+  id: string;
+  userId: string;
+  type: WatcherType;
+  targetId: string;
+  condition: Record<string, any>;
+  enabled: boolean;
+  createdAt: string;
+  lastTriggeredAt?: string;
+}
+
+export interface Notification {
+  id: string;
+  watcherId: string;
+  userId: string;
+  title: string;
+  message: string;
+  relatedEntities?: EntityReference[];
+  relatedInvestigationId?: string;
+  createdAt: string;
+  read: boolean;
+}

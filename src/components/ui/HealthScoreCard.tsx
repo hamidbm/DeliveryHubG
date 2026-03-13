@@ -25,7 +25,13 @@ const Bar = ({ label, value }: { label: string; value: number }) => {
   );
 };
 
-const HealthScoreCard = ({ score }: { score?: HealthScore }) => {
+const HealthScoreCard = ({
+  score,
+  onWatchThreshold
+}: {
+  score?: HealthScore;
+  onWatchThreshold?: (threshold: number) => void;
+}) => {
   if (!score) {
     return (
       <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
@@ -50,6 +56,16 @@ const HealthScoreCard = ({ score }: { score?: HealthScore }) => {
         <Bar label="Critical Apps" value={score.components.criticalApps} />
         <Bar label="Milestone Overdue" value={score.components.milestoneOverdue} />
       </div>
+      {onWatchThreshold && (
+        <div className="pt-1">
+          <button
+            onClick={() => onWatchThreshold(60)}
+            className="px-2 py-1 rounded border border-blue-200 bg-blue-50 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+          >
+            Watch health {'<='} 60
+          </button>
+        </div>
+      )}
     </article>
   );
 };

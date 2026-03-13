@@ -1,6 +1,20 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Application, Bundle } from '../types';
-import { EntityReference, EntityType, EvidenceItem, PortfolioAlert, PortfolioSummaryResponse, PortfolioQueryResponse, PortfolioSuggestion, RelatedEntitiesMeta, SavedInvestigation } from '../types/ai';
+import {
+  EntityReference,
+  EntityType,
+  EvidenceItem,
+  Notification,
+  PortfolioAlert,
+  PortfolioQueryResponse,
+  PortfolioSuggestion,
+  PortfolioSummaryResponse,
+  PortfolioTrendSignal,
+  RelatedEntitiesMeta,
+  SavedInvestigation,
+  Watcher,
+  WatcherType
+} from '../types/ai';
 import MarkdownRenderer from './MarkdownRenderer';
 import { marked } from 'marked';
 import DOMPurify from 'isomorphic-dompurify';
@@ -14,6 +28,9 @@ import AlertCard from './ui/AlertCard';
 import QueryHistoryPanel, { QueryHistoryItem } from './ai/QueryHistoryPanel';
 import InvestigationPanel from './ai/InvestigationPanel';
 import PinnedInsightsPanel from './ai/PinnedInsightsPanel';
+import NotificationCenter from './ai/NotificationCenter';
+import WatcherList from './ai/WatcherList';
+import WatcherConfigForm from './ai/WatcherConfigForm';
 
 type AnalysisState = 'loading' | 'success' | 'error' | 'cached' | 'empty';
 let lastAutoLoadAt = 0;
@@ -572,6 +589,10 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
   const [queryHistory, setQueryHistory] = useState<QueryHistoryItem[]>([]);
   const [savedInvestigations, setSavedInvestigations] = useState<SavedInvestigation[]>([]);
   const [investigationBusyId, setInvestigationBusyId] = useState<string | null>(null);
+  const [watchers, setWatchers] = useState<Watcher[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [watcherFormOpen, setWatcherFormOpen] = useState(false);
+  const [watcherPreset, setWatcherPreset] = useState<Partial<{ type: WatcherType; targetId: string; condition: Record<string, any>; enabled: boolean }> | undefined>(undefined);
   const hasAutoLoadedRef = useRef(false);
   const inFlightRef = useRef(false);
 
@@ -696,6 +717,17 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
   }, []);
 
   useEffect(() => {
+    const loadWatcherAndNotifications = async () => {
+      try {
+        await Promise.all([refreshWatchers(), refreshNotifications()]);
+      } catch {
+        // Ignore watcher/notification load failures
+      }
+    };
+    loadWatcherAndNotifications();
+  }, []);
+
+  useEffect(() => {
     const loadAuroraTheme = async () => {
       try {
         const res = await fetch('/api/wiki/themes?active=true');
@@ -720,6 +752,24 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
   const reportMarkdown = structuredReport?.markdownReport || structuredReport?.executiveSummary || '';
   const hasExportableReport = Boolean(reportMarkdown && (state === 'success' || state === 'cached'));
   const pinnedItems = savedInvestigations.filter((item) => item.pinned).slice(0, 6);
+
+  const refreshWatchers = async () => {
+    const res = await fetch('/api/ai/watchers');
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data?.status === 'success' && Array.isArray(data.watchers)) {
+      setWatchers(data.watchers);
+    }
+  };
+
+  const refreshNotifications = async () => {
+    const res = await fetch('/api/ai/notifications');
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data?.status === 'success' && Array.isArray(data.notifications)) {
+      setNotifications(data.notifications);
+    }
+  };
 
   const toQueryResponseFromSaved = (item: SavedInvestigation): PortfolioQueryResponse => ({
     answer: item.answer,
@@ -816,6 +866,81 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
       entities: alert.entities || []
     };
     await saveInvestigation(alert.title, queryResult);
+  };
+
+  const createWatcher = async (payload: {
+    type: WatcherType;
+    targetId: string;
+    condition: Record<string, any>;
+    enabled: boolean;
+  }) => {
+    const res = await fetch('/api/ai/watchers', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) return;
+    await Promise.all([refreshWatchers(), refreshNotifications()]);
+    setWatcherFormOpen(false);
+    setWatcherPreset(undefined);
+  };
+
+  const openWatcherWithPreset = (preset: Partial<{ type: WatcherType; targetId: string; condition: Record<string, any>; enabled: boolean }>) => {
+    setWatcherPreset(preset);
+    setWatcherFormOpen(true);
+  };
+
+  const handleWatchAlert = (alert: PortfolioAlert) => {
+    openWatcherWithPreset({
+      type: 'alert',
+      targetId: alert.id,
+      condition: { minSeverity: alert.severity },
+      enabled: true
+    });
+  };
+
+  const handleWatchTrend = (signal: PortfolioTrendSignal) => {
+    openWatcherWithPreset({
+      type: 'trend',
+      targetId: signal.metric,
+      condition: { direction: 'rising' },
+      enabled: true
+    });
+  };
+
+  const handleWatchHealth = (threshold: number) => {
+    openWatcherWithPreset({
+      type: 'health',
+      targetId: 'healthScore',
+      condition: { operator: '<=', threshold },
+      enabled: true
+    });
+  };
+
+  const toggleWatcher = async (watcher: Watcher, enabled: boolean) => {
+    const res = await fetch(`/api/ai/watchers/${encodeURIComponent(watcher.id)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled })
+    });
+    if (!res.ok) return;
+    await refreshWatchers();
+  };
+
+  const deleteWatcher = async (watcher: Watcher) => {
+    const res = await fetch(`/api/ai/watchers/${encodeURIComponent(watcher.id)}`, { method: 'DELETE' });
+    if (!res.ok) return;
+    await refreshWatchers();
+  };
+
+  const markNotificationRead = async (notificationId: string, read: boolean) => {
+    const res = await fetch(`/api/ai/notifications/${encodeURIComponent(notificationId)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ read })
+    });
+    if (!res.ok) return;
+    await refreshNotifications();
   };
 
   const handleRunSaved = async (item: SavedInvestigation) => {
@@ -949,7 +1074,7 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
         onRefresh={handleRefreshSaved}
         onUnpin={(item) => handleTogglePinSaved(item, false)}
       />
-      <div className="flex justify-between items-center">
+      <div className="flex justify-between items-center gap-3">
         <div>
           <h1 className="text-2xl font-bold text-slate-800 flex items-center space-x-2">
             <i className="fas fa-robot text-blue-600"></i>
@@ -957,14 +1082,21 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
           </h1>
           <p className="text-slate-500">Automated risk assessment and delivery forecasting powered by the configured AI provider.</p>
         </div>
-        <button
-          onClick={generateAIReport}
-          disabled={state === 'loading'}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition disabled:opacity-50 flex items-center space-x-2"
-        >
-          <i className={`fas ${state === 'loading' ? 'fa-spinner fa-spin' : 'fa-sync-alt'}`}></i>
-          <span>{state === 'empty' ? 'Generate Analysis' : 'Regenerate Analysis'}</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <NotificationCenter
+            notifications={notifications}
+            onRefresh={refreshNotifications}
+            onMarkRead={markNotificationRead}
+          />
+          <button
+            onClick={generateAIReport}
+            disabled={state === 'loading'}
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition disabled:opacity-50 flex items-center space-x-2"
+          >
+            <i className={`fas ${state === 'loading' ? 'fa-spinner fa-spin' : 'fa-sync-alt'}`}></i>
+            <span>{state === 'empty' ? 'Generate Analysis' : 'Regenerate Analysis'}</span>
+          </button>
+        </div>
       </div>
 
       {state === 'cached' && (
@@ -988,6 +1120,29 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
           <SnapshotMetric label="Open Reviews" value={snapshot.reviews.open} />
         </div>
       )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+        <WatcherList
+          watchers={watchers}
+          onCreate={() => setWatcherFormOpen((value) => !value)}
+          onToggle={toggleWatcher}
+          onDelete={deleteWatcher}
+        />
+        {watcherFormOpen ? (
+          <WatcherConfigForm
+            initial={watcherPreset}
+            onCancel={() => {
+              setWatcherFormOpen(false);
+              setWatcherPreset(undefined);
+            }}
+            onSubmit={createWatcher}
+          />
+        ) : (
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
+            Configure watcher subscriptions to receive in-app notifications when alerts, trends, investigations, or health thresholds trigger.
+          </div>
+        )}
+      </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden min-h-[420px]">
         <div className="p-4 border-b border-slate-100 bg-slate-50 flex items-center space-x-2">
@@ -1137,7 +1292,10 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
                   </SectionCard>
 
                   <SectionCard icon="fa-gauge-high" title="Portfolio Health">
-                    <HealthScoreCard score={structuredReport.healthScore} />
+                    <HealthScoreCard
+                      score={structuredReport.healthScore}
+                      onWatchThreshold={handleWatchHealth}
+                    />
                   </SectionCard>
 
                   <SectionCard icon="fa-chart-line" title="Portfolio Trends">
@@ -1146,6 +1304,7 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
                         <TrendSignalCard
                           key={`${signal.metric}-${signal.timeframeDays}-${index}`}
                           signal={signal}
+                          onWatch={handleWatchTrend}
                         />
                       ))}
                       {(structuredReport.trendSignals || []).length === 0 && (
@@ -1167,6 +1326,7 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
                             alert={alert}
                             relatedEntitiesMeta={relatedEntitiesMeta}
                             onSaveInvestigation={saveAlertAsInvestigation}
+                            onWatchAlert={handleWatchAlert}
                           />
                         ))}
                       {(structuredReport.alerts || []).length === 0 && (
@@ -1306,6 +1466,12 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
                           onRefresh={handleRefreshSaved}
                           onTogglePin={handleTogglePinSaved}
                           onDelete={handleDeleteSaved}
+                          onWatch={(item) => openWatcherWithPreset({
+                            type: 'investigation',
+                            targetId: item.id,
+                            condition: {},
+                            enabled: true
+                          })}
                         />
                       </div>
                     </div>

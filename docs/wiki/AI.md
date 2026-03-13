@@ -243,6 +243,36 @@ AI in DeliveryHub is assistive only. It never writes to the database without exp
     - **Portfolio Health** card with component breakdown bars
     - **Alerts** panel with severity ordering, rationale, evidence, and related entities
     - **Save as Investigation** action directly from each alert card
+- 12F.1 added watcher subscriptions and in-app notifications:
+  - new watcher + notification contracts in `src/types/ai.ts`:
+    - `WatcherType`: `alert | investigation | trend | health`
+    - `Watcher`
+    - `Notification`
+  - new persisted collections:
+    - `ai_watchers`
+    - `ai_notifications`
+  - new notification/watcher engine:
+    - `src/services/ai/notificationEngine.ts`
+    - watcher CRUD helpers
+    - notification read/list helpers
+    - `evaluateWatchersForUser(...)` with condition evaluation + trigger cooldown + `lastTriggeredAt` updates
+  - new authenticated APIs:
+    - `GET/POST /api/ai/watchers`
+    - `PATCH/DELETE /api/ai/watchers/:id`
+    - `GET /api/ai/notifications`
+    - `PATCH /api/ai/notifications/:id`
+  - watcher evaluation entry points:
+    - after AI Insights report regeneration (`POST /api/ai/portfolio-summary`)
+    - after saved investigation refresh (`POST /api/ai/investigations/:id/refresh`)
+  - AI Insights UI now includes:
+    - `NotificationCenter` (unread badge, unread/read grouping, mark as read)
+    - `WatcherList` (list, enable/disable, delete)
+    - `WatcherConfigForm` (create with type/target/condition)
+    - contextual watcher creation actions from:
+      - alert cards (`Watch this alert`)
+      - trend cards (`Watch this trend`)
+      - health score card (`Watch health <= 60`)
+      - saved investigations (`Watch`)
 
 ## Visual Flows
 

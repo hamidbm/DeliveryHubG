@@ -201,6 +201,14 @@ Implemented:
   - query engine extended for alert- and health-centric prompts
   - AI Insights UI now includes Portfolio Health and Alerts sections
   - alerts can be converted directly into saved investigations from the UI
+- 12F.1: watcher subscriptions and in-app notification center:
+  - watcher + notification data contracts added to AI types
+  - new persistence collections: `ai_watchers`, `ai_notifications`
+  - watcher evaluation engine added with condition checks and cooldown handling
+  - watcher/notification APIs added for CRUD + read-state updates
+  - evaluation trigger points integrated into report regeneration and investigation refresh
+  - AI Insights now includes Notification Center and Watcher Management panels
+  - contextual watcher creation available from alerts, trends, health score, and saved investigations
 
 Current 12B behavior:
 - structured sections are primary in AI Insights UI
@@ -231,7 +239,7 @@ Problem: single-point ETA misses distribution and hit probability. Value: P50/P8
 Problem: drift lacks attribution. Value: explain drift via added/removed scope and estimate changes since commit. Dependencies: commitment review snapshots + scope tracking. Deliverables: baseline snapshots, delta computation, UI panels and drift attribution. Verify: delta panel shows added/removed/estimate changes and drift includes scope summary.
 
 4. Notification routing v2.
-Problem: no watcher/subscription model. Value: targeted delivery of notifications. Dependencies: current notification policy and prefs. Deliverables: watchers for bundles/milestones and cron-ready digest automation. Verify: watcher receives targeted notifications; digest can be scheduled.
+Problem: current watcher support is in-app only and scoped to AI Insights context. Value: targeted delivery beyond in-app surfaces. Dependencies: 12F.1 watcher/notification foundation. Deliverables: watcher templates for broader domains (bundle/milestone), digest automation, and external channel adapters. Verify: watcher events route to digest/external channels without duplicate triggers.
 
 ### Long-term
 1. External integrations.

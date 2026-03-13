@@ -37,11 +37,13 @@ const groupByType = (alert: PortfolioAlert, relatedEntitiesMeta?: RelatedEntitie
 const AlertCard = ({
   alert,
   relatedEntitiesMeta,
-  onSaveInvestigation
+  onSaveInvestigation,
+  onWatchAlert
 }: {
   alert: PortfolioAlert;
   relatedEntitiesMeta?: RelatedEntitiesMeta;
   onSaveInvestigation?: (alert: PortfolioAlert) => void;
+  onWatchAlert?: (alert: PortfolioAlert) => void;
 }) => {
   const groups = groupByType(alert, relatedEntitiesMeta);
 
@@ -58,14 +60,24 @@ const AlertCard = ({
       <p className="text-xs text-slate-500">Type: {alert.resultOf}</p>
       <EntityEvidenceList evidence={alert.evidence} />
       <RelatedEntitiesSection groups={groups} />
-      {onSaveInvestigation && (
-        <div className="pt-1">
-          <button
-            onClick={() => onSaveInvestigation(alert)}
-            className="px-2 py-1 rounded border border-blue-200 bg-blue-50 text-xs font-semibold text-blue-700 hover:bg-blue-100"
-          >
-            Save as Investigation
-          </button>
+      {(onSaveInvestigation || onWatchAlert) && (
+        <div className="pt-1 flex gap-2">
+          {onSaveInvestigation && (
+            <button
+              onClick={() => onSaveInvestigation(alert)}
+              className="px-2 py-1 rounded border border-blue-200 bg-blue-50 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+            >
+              Save as Investigation
+            </button>
+          )}
+          {onWatchAlert && (
+            <button
+              onClick={() => onWatchAlert(alert)}
+              className="px-2 py-1 rounded border border-slate-300 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-100"
+            >
+              Watch this alert
+            </button>
+          )}
         </div>
       )}
     </article>
