@@ -3,6 +3,7 @@ import { fetchWorkItemById, getDb, emitEvent } from '../../../../../services/db'
 import { jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
 import { ObjectId } from 'mongodb';
+import { invalidateWorkItemScopesFromCandidates } from '../../../../../services/workItemCache';
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
 
@@ -38,6 +39,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     await db.collection('workitems').updateOne(
       { _id: new ObjectId(id) },
       { $set: { isArchived: false, updatedAt: now }, $unset: { archivedAt: '', archivedBy: '' } }
+    );
+    await invalidateWorkItemScopesFromCandidates(
+      [{ bundleId: item?.bundleId, applicationId: item?.applicationId }],
+      'workitems.restore'
     );
 
     try {

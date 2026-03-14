@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs';
 import { ObjectId } from 'mongodb';
 import { createDeliveryPlan, previewDeliveryPlan } from './deliveryPlanGenerator';
 import { getDb } from './db';
+import { invalidateAllWorkItemCaches, primeWorkItemScope } from './workItemCache';
 import { DeliveryPlanInput, WorkItemStatus, WorkItemType } from '../types';
 import {
   BuiltBundlePlanInput,
@@ -887,6 +888,11 @@ export const installDemoScenario = async (
     return acc;
   }, { milestones: 0, sprints: 0, roadmapPhases: 0, workItems: 0 });
 
+  await invalidateAllWorkItemCaches('sample.install');
+  for (const bundle of context.bundles.byTempId.values()) {
+    await primeWorkItemScope({ scopeType: 'BUNDLE', scopeId: String(bundle._id) });
+  }
+
   return {
     scenarioKey: scenario.scenarioKey,
     scenarioName: scenario.scenarioName,
@@ -928,6 +934,8 @@ export const resetDemoScenarioData = async (demoTag?: string) => {
       // ignore missing/non-existing collections
     }
   }
+
+  await invalidateAllWorkItemCaches('sample.reset');
 
   return { success: true, demoTag: demoTag || null };
 };

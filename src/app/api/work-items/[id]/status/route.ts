@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { updateWorkItemStatus, fetchWorkItemById } from '../../../../../services/db';
 import { jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
+import { invalidateWorkItemScopesFromCandidates } from '../../../../../services/workItemCache';
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
 
@@ -39,6 +40,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
 
     const result = await updateWorkItemStatus(id, toStatus, newRank, payload);
+    await invalidateWorkItemScopesFromCandidates(
+      [{ bundleId: item?.bundleId, applicationId: item?.applicationId }],
+      'workitems.status'
+    );
     return NextResponse.json({ success: true });
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'Update failed' }, { status: 500 });

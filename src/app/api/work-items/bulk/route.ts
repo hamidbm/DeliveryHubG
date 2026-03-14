@@ -8,6 +8,7 @@ import { evaluateCapacity } from '../../../../services/milestoneGovernance';
 import { createNotificationsForEvent } from '../../../../services/notifications';
 import { createDecision } from '../../../../services/decisionLog';
 import { canOverrideCapacity, canCreateBlocksDependency, isAdminOrCmo, canEditRiskSeverity } from '../../../../services/authz';
+import { invalidateWorkItemScopesFromCandidates } from '../../../../services/workItemCache';
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
 
@@ -287,6 +288,13 @@ export async function PATCH(request: Request) {
         $set: { ...updates, updatedAt: now, updatedBy: userName },
         $push: { activity: auditEntry }
       } as any
+    );
+    await invalidateWorkItemScopesFromCandidates(
+      itemsForChecks.map((item: any) => ({
+        bundleId: item?.bundleId || updates?.bundleId,
+        applicationId: item?.applicationId || updates?.applicationId
+      })),
+      'workitems.bulk'
     );
 
     if (directScopeChanges.length) {

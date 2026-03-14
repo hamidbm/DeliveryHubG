@@ -9,6 +9,7 @@ import { canCreateBlocksDependency, canEditRiskSeverity, canOverrideCapacity, ca
 import { createNotificationsForEvent } from '../../../../services/notifications';
 import { createDecision } from '../../../../services/decisionLog';
 import { createVisibilityContext, getAuthUserFromCookies } from '../../../../services/visibility';
+import { invalidateWorkItemScopesFromCandidates } from '../../../../services/workItemCache';
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
 
@@ -342,6 +343,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
 
     const result = await saveWorkItem({ ...itemData, links: normalizedLinks, _id: id }, payload);
+    await invalidateWorkItemScopesFromCandidates(
+      [
+        { bundleId: originalItem?.bundleId, applicationId: originalItem?.applicationId },
+        { bundleId: itemData?.bundleId, applicationId: itemData?.applicationId }
+      ],
+      'workitems.patch'
+    );
 
     if (criticalPathAction?.type) {
       const actor = {
@@ -525,6 +533,10 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     await db.collection('workitems').updateOne(
       { _id: new ObjectId(id) },
       { $set: { isArchived: true, archivedAt: now, archivedBy: userName, updatedAt: now } }
+    );
+    await invalidateWorkItemScopesFromCandidates(
+      [{ bundleId: item?.bundleId, applicationId: item?.applicationId }],
+      'workitems.archive'
     );
 
     try {

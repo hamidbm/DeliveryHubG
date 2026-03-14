@@ -7,6 +7,7 @@ import {
   addWorkItemLink,
   emitEvent
 } from './db';
+import { invalidateWorkItemScope, primeWorkItemScope } from './workItemCache';
 import { suggestOwnersForMilestoneScope, suggestOwnersForGeneratedArtifact } from './ownership';
 import { buildDeliveryPlanPreview } from './planningEngine';
 import { getDependencySkeletonPairs } from './dependencyPlanner';
@@ -364,6 +365,15 @@ export const createDeliveryPlan = async (previewId: string, user: { userId: stri
     context: { bundleId: scope.bundleId, appId: scope.applicationId },
     payload: { previewId, milestoneCount: milestoneIdMap.size, sprintCount: sprintIdMap.size, workItemCount: workItemIds.length }
   });
+
+  if (scope.bundleId) {
+    await invalidateWorkItemScope({ scopeType: 'BUNDLE', scopeId: String(scope.bundleId) }, 'delivery-plan.create');
+    await primeWorkItemScope({ scopeType: 'BUNDLE', scopeId: String(scope.bundleId) });
+  }
+  if (scope.applicationId) {
+    await invalidateWorkItemScope({ scopeType: 'APPLICATION', scopeId: String(scope.applicationId) }, 'delivery-plan.create');
+    await primeWorkItemScope({ scopeType: 'APPLICATION', scopeId: String(scope.applicationId) });
+  }
 
   return {
     runId: String(runId),
