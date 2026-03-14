@@ -176,6 +176,22 @@ const detectIntent = (q: string): Intent => {
 
 export const detectPortfolioQueryIntent = (question: string): string => detectIntent(normalizeQuestion(question));
 
+export const isStrategicPortfolioQuestion = (question: string) => {
+  const q = normalizeQuestion(question);
+  return (
+    q.includes('strategic')
+    || q.includes('recommend')
+    || q.includes('prioritize')
+    || q.includes('compare')
+    || q.includes('reallocate')
+    || q.includes('resource allocation')
+    || q.includes('leadership')
+    || q.includes('trade-off')
+    || q.includes('tradeoff')
+    || (q.includes('top') && q.includes('risk'))
+  );
+};
+
 const topRisk = (report?: StructuredPortfolioReport) => {
   const risks = (report?.topRisks || []).slice().sort((a, b) => (severityScore[b.severity] || 0) - (severityScore[a.severity] || 0));
   return risks[0];

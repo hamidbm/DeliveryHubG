@@ -403,6 +403,29 @@ AI in DeliveryHub is assistive only. It never writes to the database without exp
     - `portfolio-query` now reads cached propagation signals
     - deterministic intents added for cascade/dependency/path questions
     - suggestion generator now emits propagation-aware prompts when signals exist
+- 13D added Strategic AI Advisor for high-level portfolio Q&A:
+  - new strategic contracts in `src/types/ai.ts`:
+    - `StrategicQueryResponse`
+    - strategic suggestion category support
+  - new strategic advisor backend services:
+    - `src/services/ai/strategicPromptBuilder.ts` (grounded prompt construction from deterministic context)
+    - `src/services/ai/strategicDeterministicEngine.ts` (deterministic strategic first-pass answers)
+    - `src/services/ai/strategicResponseNormalizer.ts` (strict JSON normalization + safe fallback)
+    - `src/services/ai/strategicAdvisor.ts` (orchestration, cache, LLM refinement, and fallback)
+  - new strategic endpoints:
+    - `POST /api/ai/strategic-query`
+    - `GET /api/ai/strategic-suggestions`
+  - strategic cache behavior:
+    - cache key format: `strategic-query:{queryHash}`
+    - `queryHash = sha256(normalizedQuestion + snapshotHash)`
+    - 24h freshness window in `ai_analysis_cache`
+  - AI Insights UI integration:
+    - new panel: `src/components/ai/StrategicAdvisorPanel.tsx`
+    - answer rendering: `src/components/ai/StrategicAnswerCard.tsx`
+    - follow-up chips: `src/components/ai/StrategicFollowUpChips.tsx`
+    - integrated in `src/components/AIInsights.tsx`
+  - query routing integration:
+    - `portfolio-query` now detects strategic intent and routes those questions through strategic advisor for grounded high-level answers
 
 ## Visual Flows
 
@@ -488,6 +511,57 @@ sequenceDiagram
     AI-->>API: refined JSON (best effort)
     API-->>UI: answer + explanation + evidence[] + followUps[]
   end
+```
+
+### Strategic Advisor Query Flow (13D)
+```text
+Client UI            Strategic API                  Strategic Service            DB / AI Provider
+---------            -------------                  ----------------            ----------------
+Strategic panel
+    | GET /api/ai/strategic-suggestions
+    |---------------------------------------------->|
+    |                              load portfolio/forecast/propagation context
+    |<---------------------------------------------- suggestions[]
+    |
+Ask strategic question
+    | POST /api/ai/strategic-query
+    |---------------------------------------------->|
+    |                         load deterministic context + build deterministic baseline
+    |                         compute queryHash(question + snapshotHash)
+    |                         check ai_analysis_cache(strategic-query:{hash})
+    |                         cache hit -> return cached response
+    |                         cache miss -> build strategic prompt
+    |----------------------------------------------> configured AI provider (optional refinement)
+    |<---------------------------------------------- normalized strategic response (or deterministic fallback)
+    |                              persist ai_analysis_cache(strategic-query:{hash})
+    |<----------------------------------------------|
+    | render answer + evidence + related entities + follow-up chips
+```
+
+```mermaid
+sequenceDiagram
+  participant UI as Strategic Panel
+  participant API as /api/ai/strategic-query
+  participant SRV as strategicAdvisor
+  participant DB as MongoDB
+  participant LLM as AI Provider
+
+  UI->>API: POST question (+options)
+  API->>SRV: runStrategicAdvisorQuery()
+  SRV->>DB: load portfolio-summary/forecast/propagation
+  SRV->>DB: fetch strategic-query:{queryHash}
+  alt fresh cache hit
+    DB-->>SRV: cached strategic response
+    SRV-->>API: return cached
+  else cache miss
+    SRV->>SRV: deterministic strategic baseline
+    SRV->>LLM: grounded prompt (deterministic context)
+    LLM-->>SRV: JSON answer (best effort)
+    SRV->>SRV: normalize or deterministic fallback
+    SRV->>DB: save strategic-query:{queryHash}
+    SRV-->>API: return response
+  end
+  API-->>UI: answer + explanation + evidence + entities + followUps
 ```
 
 ### Trend Snapshot and Analysis Flow (12D)

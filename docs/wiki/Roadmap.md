@@ -240,6 +240,14 @@ Implemented:
   - propagation cache persisted in `ai_analysis_cache` under `risk-propagation`
   - executive insights page now includes cross-project propagation cards with paths/evidence/entity links
   - deterministic query + suggestions now include propagation-aware intents/prompts
+- 13D: Strategic AI Advisor and high-level strategic Q&A:
+  - strategic advisor service stack added (`strategicAdvisor.ts`, `strategicPromptBuilder.ts`, `strategicDeterministicEngine.ts`, `strategicResponseNormalizer.ts`)
+  - new strategic APIs added:
+    - `POST /api/ai/strategic-query`
+    - `GET /api/ai/strategic-suggestions`
+  - AI Insights now includes a dedicated Strategic AI Advisor panel with quick prompts, evidence-backed answers, related entities, and follow-up chips
+  - strategic answers are cache-backed in `ai_analysis_cache` using `strategic-query:{queryHash}` with 24h freshness
+  - `portfolio-query` now routes strategic-intent questions through strategic advisor
 
 Current 12B behavior:
 - structured sections are primary in AI Insights UI

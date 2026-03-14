@@ -286,8 +286,19 @@ export interface PortfolioSuggestion {
   id: string;
   label: string;
   prompt: string;
-  category: 'risk' | 'delivery' | 'capacity' | 'review' | 'alert' | 'trend' | 'health';
+  category: 'risk' | 'delivery' | 'capacity' | 'review' | 'alert' | 'trend' | 'health' | 'strategic';
   provenance: 'deterministic' | 'ai';
+}
+
+export interface StrategicQueryResponse {
+  answer: string;
+  explanation: string;
+  evidence: EvidenceItem[];
+  relatedEntities: EntityReference[];
+  followUps: string[];
+  success: boolean;
+  errorMessage?: string;
+  warning?: string;
 }
 
 export interface PortfolioQueryResponse {

@@ -246,3 +246,46 @@ export const generatePortfolioSuggestions = (
 
   return suggestions.slice(0, 6);
 };
+
+const pushSuggestionText = (target: string[], value: string) => {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return;
+  if (!target.some((item) => item.toLowerCase() === normalized)) {
+    target.push(value.trim());
+  }
+};
+
+export const generateStrategicQuickSuggestions = (
+  report?: StructuredPortfolioReport,
+  forecastSignals: ForecastSignal[] = [],
+  riskPropagationSignals: RiskPropagationSignal[] = []
+): string[] => {
+  const suggestions: string[] = [];
+
+  [
+    'What are the top 3 strategic delivery risks this quarter?',
+    'Which milestones are most at risk and why?',
+    'Where should resources be reallocated for maximal impact?',
+    'How does backlog growth affect delivery timelines?',
+    'Summarize the forecasted delivery outcomes.'
+  ].forEach((item) => pushSuggestionText(suggestions, item));
+
+  const topRisk = report?.topRisks?.[0];
+  if (topRisk?.title) {
+    pushSuggestionText(suggestions, `Summarize why "${topRisk.title}" is at risk and recommend the most impactful actions.`);
+  }
+
+  if ((report?.topRisks || []).length > 1) {
+    pushSuggestionText(suggestions, 'Compare the risk profiles of the top bundles and recommend leadership interventions.');
+  }
+
+  if (forecastSignals.some((item) => item.category === 'milestone_risk')) {
+    pushSuggestionText(suggestions, 'Which forecasted milestone slips should leadership address first?');
+  }
+
+  if (riskPropagationSignals.length > 0) {
+    pushSuggestionText(suggestions, 'Which dependency cascades create the biggest downstream delivery risk?');
+  }
+
+  return suggestions.slice(0, 8);
+};

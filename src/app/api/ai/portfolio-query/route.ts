@@ -3,11 +3,12 @@ import { fetchAiAnalysisCache, fetchSystemSettings } from '../../../../services/
 import { getAuthUserFromCookies } from '../../../../services/visibility';
 import { ForecastSignal, PortfolioQueryResponse, PortfolioSummaryResponse } from '../../../../types/ai';
 import { derivePortfolioSignals } from '../../../../services/ai/portfolioSignals';
-import { answerPortfolioQuestionDeterministically } from '../../../../services/ai/queryEngine';
+import { answerPortfolioQuestionDeterministically, isStrategicPortfolioQuestion } from '../../../../services/ai/queryEngine';
 import { executeAiTextTask } from '../../../../services/aiRouting';
 import { toEvidenceItems } from '../../../../services/ai/evidenceEntities';
 import { resolveRelatedEntitiesMetaFromEvidence } from '../../../../services/entityMetaResolver';
 import { loadTrendSignals } from '../../../../services/ai/trendAnalyzer';
+import { runStrategicAdvisorQuery } from '../../../../services/ai/strategicAdvisor';
 const CACHE_KEY = 'portfolio-summary';
 const FORECAST_CACHE_KEY = 'portfolio-forecast';
 const RISK_PROPAGATION_CACHE_KEY = 'risk-propagation';
@@ -94,6 +95,29 @@ export async function POST(request: Request) {
   const trendContext = await loadTrendSignals();
   const forecastSignals = await loadForecastSignals();
   const riskPropagationSignals = await loadRiskPropagationSignals();
+
+  if (isStrategicPortfolioQuestion(question)) {
+    const strategic = await runStrategicAdvisorQuery({ question, useLLM: true });
+    if (!strategic.response.success) {
+      return NextResponse.json(
+        { error: strategic.response.errorMessage || 'Unable to answer strategic question.' },
+        { status: 422 }
+      );
+    }
+    const strategicEvidence = Array.isArray(strategic.response.evidence) ? strategic.response.evidence : [];
+    const strategicMeta = await resolveRelatedEntitiesMetaFromEvidence(strategicEvidence);
+    return NextResponse.json({
+      answer: strategic.response.answer,
+      explanation: strategic.response.explanation,
+      evidence: strategicEvidence,
+      followUps: strategic.response.followUps || [],
+      relatedEntitiesMeta: strategicMeta,
+      entities: (strategic.response.relatedEntities || []).length > 0
+        ? strategic.response.relatedEntities
+        : flattenEntities(strategicEvidence)
+    } satisfies PortfolioQueryResponse);
+  }
+
   const deterministic = answerPortfolioQuestionDeterministically(
     question,
     signals,

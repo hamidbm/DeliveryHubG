@@ -31,6 +31,7 @@ import PinnedInsightsPanel from './ai/PinnedInsightsPanel';
 import NotificationCenter from './ai/NotificationCenter';
 import WatcherList from './ai/WatcherList';
 import WatcherConfigForm from './ai/WatcherConfigForm';
+import StrategicAdvisorPanel from './ai/StrategicAdvisorPanel';
 
 type AnalysisState = 'loading' | 'success' | 'error' | 'cached' | 'empty';
 let lastAutoLoadAt = 0;
@@ -1414,6 +1415,8 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
                       )}
                     </section>
                   )}
+
+                  <StrategicAdvisorPanel relatedEntitiesMeta={relatedEntitiesMeta} />
 
                   <SectionCard icon="fa-comments" title="Ask DeliveryHub AI">
                     <div className="space-y-3">

@@ -37,6 +37,7 @@ Top-level fields:
   - `executive-summary`: includes `executiveSummary` with portfolio health, observations, concerns, alerts, trends, recommendations
   - `portfolio-forecast`: includes `forecastSignals[]` with category, severity, confidence, evidence, and related entities
   - `risk-propagation`: includes `riskPropagationSignals[]` with propagation paths, severity, evidence, and related entities
+  - `strategic-query:{queryHash}`: includes `queryHash`, `questionNormalized`, `strategicResponse` (`answer`, `explanation`, `evidence`, `relatedEntities`, `followUps`, `success`) and metadata (`snapshotHash`, provider/model)
 
 Observed indexes:
 - `{ _id: 1 }`

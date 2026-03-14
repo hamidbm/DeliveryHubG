@@ -156,6 +156,19 @@ Dashboards provide program-level rollups for milestones, risks, and delivery sta
     - related entity drill-down chips
   - propagation cache is persisted in `ai_analysis_cache` using `risk-propagation`
   - Ask DeliveryHub AI now supports deterministic propagation questions (cascade risk, dependency-contributing risk, propagation paths)
+- 13D added Strategic AI Advisor in AI Insights:
+  - new strategic panel in AI Insights for leadership-style natural language Q&A
+  - new endpoints:
+    - `POST /api/ai/strategic-query`
+    - `GET /api/ai/strategic-suggestions`
+  - strategic responses include:
+    - concise answer
+    - reasoning/explanation
+    - evidence items
+    - related entities
+    - follow-up prompts
+  - strategic queries are cache-backed in `ai_analysis_cache` under `strategic-query:{queryHash}` (24h window)
+  - existing Ask DeliveryHub AI flow now routes strategic-intent questions through the strategic advisor path
 - Visual sequence diagrams for cache/regenerate/query/drill-down are documented in `docs/wiki/AI.md` under **Visual Flows**.
 
 ## Program Capacity (v1)
