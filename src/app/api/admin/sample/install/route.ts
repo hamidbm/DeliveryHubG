@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { jwtVerify } from 'jose';
 import { isAdmin } from '../../../../../services/db';
+import { getDefaultDemoScenario } from '../../../../../services/sampleScenarioService';
 import { runSampleBootstrap } from '../../../../../lib/bootstrap/seed';
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
@@ -28,7 +29,8 @@ export async function POST(request: Request) {
     if (!auth.ok) return NextResponse.json({ error: 'Unauthorized' }, { status: auth.status });
     const body = await request.json().catch(() => ({}));
     const collections = Array.isArray(body?.collections) && body.collections.length ? body.collections.map(String) : undefined;
-    const result = await runSampleBootstrap(auth.userId || 'admin', collections);
+    const scenario = body?.scenario || getDefaultDemoScenario();
+    const result = await runSampleBootstrap(auth.userId || 'admin', collections, scenario);
     return NextResponse.json({ success: true, result });
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'Failed to install sample data' }, { status: 500 });

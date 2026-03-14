@@ -44,8 +44,8 @@ export const run = async () => {
       { _id: legacyTargetId, key: 'L-2', title: 'Legacy Target', status: 'TODO', links: [] }
     ]);
 
-    execSync('node scripts/migrate-workitem-links-canonical.js', { stdio: 'ignore', env: { ...process.env, MONGODB_URI: uri } });
-    execSync('node scripts/migrate-workitem-links-canonical.js', { stdio: 'ignore', env: { ...process.env, MONGODB_URI: uri } });
+    execSync('node scripts/migrate-workitem-links-canonical.js', { stdio: 'ignore', env: { ...process.env, MONGO_URL: uri } });
+    execSync('node scripts/migrate-workitem-links-canonical.js', { stdio: 'ignore', env: { ...process.env, MONGO_URL: uri } });
 
     const legacySource = await workitems.findOne({ _id: legacySourceId });
     const legacyTarget = await workitems.findOne({ _id: legacyTargetId });

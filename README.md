@@ -84,7 +84,7 @@ Auth and Access
 - `ADMIN_BOOTSTRAP_EMAILS`
 
 Database
-- `MONGODB_URI`
+- `MONGO_URL`
 
 AI Providers and Routing
 - `AI_DEFAULT_PROVIDER`

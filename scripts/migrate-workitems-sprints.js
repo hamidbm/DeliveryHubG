@@ -1,9 +1,9 @@
 /* eslint-disable no-console */
 const { MongoClient } = require('mongodb');
 
-const uri = process.env.MONGODB_URI;
+const uri = process.env.MONGO_URL;
 if (!uri) {
-  console.error('Missing MONGODB_URI in environment.');
+  console.error('Missing MONGO_URL in environment.');
   process.exit(1);
 }
 

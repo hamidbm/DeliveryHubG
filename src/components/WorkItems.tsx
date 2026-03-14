@@ -128,6 +128,38 @@ const WorkItems: React.FC<WorkItemsProps> = (props) => {
     includeArchived
   };
 
+  const renderActiveView = () => {
+    switch (activeView) {
+      case 'roadmap':
+        return <WorkItemsRoadmapView {...sanitizedProps} />;
+      case 'portfolio':
+        return <PortfolioDashboard />;
+      case 'sprints':
+        return <WorkItemsSprintsView {...sanitizedProps} />;
+      case 'board':
+        return <WorkItemsBoardView {...sanitizedProps} />;
+      case 'list':
+        return <WorkItemsListView {...sanitizedProps} />;
+      case 'analytics':
+        return <WorkItemsAnalyticsView {...sanitizedProps} />;
+      case 'backlog':
+        return <WorkItemsBacklogView {...sanitizedProps} />;
+      case 'milestone-plan':
+        return <WorkItemsMilestonePlanningView {...sanitizedProps} />;
+      case 'milestones':
+        return (
+          <Milestones
+            applications={props.applications}
+            bundles={props.bundles}
+            activeBundleId={props.selBundleId}
+            activeAppId={props.selAppId}
+          />
+        );
+      default:
+        return <WorkItemsTreeView {...sanitizedProps} />;
+    }
+  };
+
   return (
     <div className="flex flex-col gap-6 relative">
       <div className="sticky top-0 z-40 bg-white/95 backdrop-blur px-6 py-3 rounded-[2rem] border border-slate-200 shadow-sm space-y-3">
@@ -295,33 +327,8 @@ const WorkItems: React.FC<WorkItemsProps> = (props) => {
           <p className="text-slate-400 font-bold text-[10px] uppercase tracking-widest animate-pulse">Initializing Hub...</p>
         </div>
       }>
-        <div className="animate-fadeIn">
-          {activeView === 'roadmap' ? (
-            <WorkItemsRoadmapView {...sanitizedProps} />
-          ) : activeView === 'portfolio' ? (
-            <PortfolioDashboard />
-          ) : activeView === 'sprints' ? (
-            <WorkItemsSprintsView {...sanitizedProps} />
-          ) : activeView === 'board' ? (
-            <WorkItemsBoardView {...sanitizedProps} />
-          ) : activeView === 'list' ? (
-            <WorkItemsListView {...sanitizedProps} />
-          ) : activeView === 'analytics' ? (
-            <WorkItemsAnalyticsView {...sanitizedProps} />
-          ) : activeView === 'backlog' ? (
-            <WorkItemsBacklogView {...sanitizedProps} />
-          ) : activeView === 'milestone-plan' ? (
-            <WorkItemsMilestonePlanningView {...sanitizedProps} />
-          ) : activeView === 'milestones' ? (
-            <Milestones 
-              applications={props.applications} 
-              bundles={props.bundles} 
-              activeBundleId={props.selBundleId}
-              activeAppId={props.selAppId}
-            />
-          ) : (
-            <WorkItemsTreeView {...sanitizedProps} />
-          )}
+        <div key={activeView} className="animate-fadeIn">
+          {renderActiveView()}
         </div>
       </Suspense>
 

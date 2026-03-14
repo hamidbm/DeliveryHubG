@@ -64,9 +64,9 @@ const signToken = async (payload: any) => {
 };
 
 export const runTest = async (name: string, fn: (ctx: TestContext) => Promise<void>) => {
-  const baseUri = process.env.MONGODB_URI;
+  const baseUri = process.env.MONGO_URL;
   if (!baseUri) {
-    throw new Error('Missing MONGODB_URI in environment.');
+    throw new Error('Missing MONGO_URL in environment.');
   }
   const baseDb = resolveDbName(baseUri);
   const hash = createHash('sha1')
@@ -76,7 +76,7 @@ export const runTest = async (name: string, fn: (ctx: TestContext) => Promise<vo
   const safeName = name.replace(/[^a-z0-9_]/gi, '_').slice(0, 18);
   const testDb = `${baseDb.slice(0, 20)}_t_${safeName}_${hash}`;
   const testUri = withDbName(baseUri, testDb);
-  process.env.MONGODB_URI = testUri;
+  process.env.MONGO_URL = testUri;
 
   await ensureWorkUnitMock();
   await ensureCookiesMock();

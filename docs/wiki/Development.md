@@ -27,12 +27,12 @@ Run the API regression suite with:
 - `npm run test:api`
 
 Required environment:
-- `MONGODB_URI` (test harness will create isolated test DBs)
+- `MONGO_URL` (test harness will create isolated test DBs)
 - `JWT_SECRET` (optional; defaults to dev secret if omitted)
 
 Notes:
 - Tests create temporary databases and drop them after completion.
-- If running in CI, ensure MongoDB is reachable and `MONGODB_URI` is set.
+- If running in CI, ensure MongoDB is reachable and `MONGO_URL` is set.
 
 ## Source Layout
 - `src/app`: Next.js routes and API handlers

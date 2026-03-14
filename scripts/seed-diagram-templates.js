@@ -1,6 +1,6 @@
 const { MongoClient } = require('mongodb');
 
-const uri = process.env.MONGODB_URI || 'mongodb://admin:secretpassword@localhost:27017/deliveryhub?authSource=admin';
+const uri = process.env.MONGO_URL || 'mongodb://admin:secretpassword@localhost:27017/deliveryhub?authSource=admin';
 
 const templates = [
   {

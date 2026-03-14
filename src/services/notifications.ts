@@ -88,7 +88,7 @@ const ensureDigestQueueIndexes = async (db: any) => {
 
 export const getNotificationSettings = async () => {
   const now = Date.now();
-  const cacheKey = process.env.MONGODB_URI || 'default';
+  const cacheKey = process.env.MONGO_URL || 'default';
   if (cachedSettings && cachedSettingsKey === cacheKey && now - cachedSettings.ts < SETTINGS_TTL_MS) {
     return cachedSettings.value;
   }
@@ -134,7 +134,7 @@ export const saveNotificationSettings = async (input: any, userId: string) => {
     { upsert: true }
   );
   cachedSettings = { value: next, ts: Date.now() };
-  cachedSettingsKey = process.env.MONGODB_URI || 'default';
+  cachedSettingsKey = process.env.MONGO_URL || 'default';
   return next;
 };
 

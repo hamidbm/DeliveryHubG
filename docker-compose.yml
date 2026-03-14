@@ -22,7 +22,7 @@ services:
     ports:
       - "3000:3000"
     environment:
-      MONGODB_URI: mongodb://admin:secretpassword@mongodb:27017/deliveryhub?authSource=admin
+      MONGO_URL: mongodb://admin:secretpassword@mongodb:27017/deliveryhub?authSource=admin
       API_KEY: ${API_KEY}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       ADMIN_BOOTSTRAP_EMAILS: hamid@benmalek.net

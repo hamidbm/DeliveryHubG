@@ -19,9 +19,9 @@ const listSeedFiles = () => {
 };
 
 const importSeed = async () => {
-  const uri = process.env.MONGO_URL || process.env.MONGO_PUBLIC_URL || process.env.MONGODB_URI;
+  const uri = process.env.MONGO_URL || process.env.MONGO_PUBLIC_URL;
   if (!uri) {
-    throw new Error('Missing MONGO_URL or MONGODB_URI for import');
+    throw new Error('Missing MONGO_URL or MONGO_PUBLIC_URL for import');
   }
 
   const files = listSeedFiles();

@@ -43,9 +43,9 @@ const listCollections = async (db) => {
 };
 
 const exportSeed = async () => {
-  const uri = process.env.MONGODB_URI;
+  const uri = process.env.MONGO_URL;
   if (!uri) {
-    throw new Error('Missing MONGODB_URI for export');
+    throw new Error('Missing MONGO_URL for export');
   }
 
   ensureDir(OUTPUT_DIR);

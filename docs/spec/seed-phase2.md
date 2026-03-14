@@ -2,7 +2,7 @@ Codex — proceed with Phase 2: export baseline seed data from my existing DB in
 Requirements:
 
 1. Implement an export script (new) scripts/export-baseline.ts that:
-  - connects using MONGODB_URI
+  - connects using MONGO_URL
   - exports these collections into one JSON file per collection (array of docs):
     - taxonomy_categories → seed/baseline/taxonomy_categories.json
     - taxonomy_document_types → seed/baseline/taxonomy_document_types.json

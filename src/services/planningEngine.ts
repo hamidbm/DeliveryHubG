@@ -135,7 +135,9 @@ export const buildDeliveryPlanPreview = async (
     roadmapPhases: roadmap.length,
     milestones: milestoneRecords.length,
     sprints: sprintRecords.length,
-    epics: artifacts.reduce((sum, a) => sum + a.epicCount, 0),
+    epics: input.scopeType === 'BUNDLE'
+      ? (artifacts.length ? 1 : 0)
+      : artifacts.reduce((sum, a) => sum + a.epicCount, 0),
     features: artifacts.reduce((sum, a) => sum + a.featureCount, 0),
     stories: artifacts.reduce((sum, a) => sum + a.storyCount, 0),
     tasks: artifacts.reduce((sum, a) => sum + a.taskCount, 0)

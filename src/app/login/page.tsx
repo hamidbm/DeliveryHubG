@@ -3,7 +3,6 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -13,13 +12,13 @@ export default function LoginPage() {
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
   
-  const searchParams = useSearchParams();
-
   useEffect(() => {
-    if (searchParams.get('registered') === 'true') {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('registered') === 'true') {
       setSuccess('Account provisioned successfully. Please sign in.');
     }
-  }, [searchParams]);
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();

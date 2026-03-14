@@ -2,7 +2,13 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { EJSON } from 'bson';
+import { ObjectId } from 'mongodb';
+import bcrypt from 'bcryptjs';
 import { getDb } from '../../services/db';
+import { createDeliveryPlan, previewDeliveryPlan } from '../../services/deliveryPlanGenerator';
+import { DeliveryPlanInput } from '../../types';
+import { DemoScenario } from '../../types/demoScenario';
+import { getDefaultDemoScenario, installDemoScenario, resetDemoScenarioData } from '../../services/sampleScenarioService';
 
 export const BASELINE_VERSION = '1.0.0';
 export const SAMPLE_VERSION = '1.0.0';
@@ -611,6 +617,272 @@ const loadSampleFiles = (collections?: string[]) => {
   });
 };
 
+type DemoBundleBlueprint = {
+  key: string;
+  name: string;
+  apps: Array<{ aid: string; name: string; status: any['status'] }>;
+  input: Omit<DeliveryPlanInput, 'scopeType' | 'scopeId'>;
+};
+
+const DEMO_USERS = [
+  { name: 'Nina Architect', username: 'nina.architect', email: 'nina.architect@demo.deliveryhub.local', team: 'CMO', role: 'CMO Architect' },
+  { name: 'Sam PM', username: 'sam.pm', email: 'sam.pm@demo.deliveryhub.local', team: 'ENGINEERING_PM', role: 'Engineering PM' },
+  { name: 'Iris Engineer', username: 'iris.engineer', email: 'iris.engineer@demo.deliveryhub.local', team: 'ENGINEERING', role: 'Engineering' },
+  { name: 'Ravi Director', username: 'ravi.director', email: 'ravi.director@demo.deliveryhub.local', team: 'SVP_PM', role: 'Director' }
+];
+
+const DEMO_BUNDLE_BLUEPRINTS: DemoBundleBlueprint[] = [
+  {
+    key: 'DEMO-PAY',
+    name: 'Demo Payments Platform',
+    apps: [
+      { aid: 'APP-DEMO-PAY-001', name: 'Payments API', status: { phase: 'MIGRATION', health: 'Risk' } },
+      { aid: 'APP-DEMO-PAY-002', name: 'Billing Orchestrator', status: { phase: 'MODERNIZATION', health: 'Healthy' } }
+    ],
+    input: {
+      plannedStartDate: '2026-01-05',
+      devStartDate: '2026-01-05',
+      integrationStartDate: '2026-02-02',
+      uatStartDate: '2026-03-09',
+      goLiveDate: '2026-04-20',
+      stabilizationEndDate: '2026-05-08',
+      milestoneCount: 5,
+      sprintDurationWeeks: 2,
+      milestoneDurationStrategy: 'AUTO_DISTRIBUTE',
+      deliveryPattern: 'MIGRATION',
+      backlogShape: 'DETAILED',
+      projectSize: 'LARGE',
+      capacityMode: 'TEAM_VELOCITY',
+      deliveryTeams: 3,
+      sprintVelocityPerTeam: 28,
+      createTasksUnderStories: true,
+      environmentFlow: 'DEV_SIT_UAT_PROD',
+      releaseType: 'PHASED',
+      suggestMilestoneOwners: true,
+      suggestWorkItemOwners: true,
+      createDependencySkeleton: true,
+      preallocateStoriesToSprints: true,
+      autoLinkMilestonesToRoadmap: true,
+      generateDraftOnly: true
+    }
+  },
+  {
+    key: 'DEMO-MEM',
+    name: 'Demo Member Experience',
+    apps: [
+      { aid: 'APP-DEMO-MEM-001', name: 'Member Portal', status: { phase: 'ENHANCEMENT', health: 'Risk' } },
+      { aid: 'APP-DEMO-MEM-002', name: 'Identity Service', status: { phase: 'MIGRATION', health: 'Critical' } }
+    ],
+    input: {
+      plannedStartDate: '2026-02-02',
+      devStartDate: '2026-02-02',
+      integrationStartDate: '2026-03-02',
+      uatStartDate: '2026-04-06',
+      goLiveDate: '2026-05-18',
+      stabilizationEndDate: '2026-06-01',
+      milestoneCount: 4,
+      sprintDurationWeeks: 2,
+      milestoneDurationStrategy: 'AUTO_DISTRIBUTE',
+      deliveryPattern: 'PRODUCT_INCREMENT',
+      backlogShape: 'STANDARD',
+      projectSize: 'MEDIUM',
+      capacityMode: 'TEAM_VELOCITY',
+      deliveryTeams: 2,
+      sprintVelocityPerTeam: 24,
+      createTasksUnderStories: true,
+      environmentFlow: 'DEV_SIT_UAT_PROD',
+      releaseType: 'INCREMENTAL',
+      suggestMilestoneOwners: true,
+      suggestWorkItemOwners: true,
+      createDependencySkeleton: true,
+      preallocateStoriesToSprints: true,
+      autoLinkMilestonesToRoadmap: true,
+      generateDraftOnly: true
+    }
+  },
+  {
+    key: 'DEMO-RISK',
+    name: 'Demo Risk & Compliance',
+    apps: [
+      { aid: 'APP-DEMO-RISK-001', name: 'Audit Ledger', status: { phase: 'MODERNIZATION', health: 'Healthy' } },
+      { aid: 'APP-DEMO-RISK-002', name: 'Compliance Rules Engine', status: { phase: 'ENHANCEMENT', health: 'Risk' } }
+    ],
+    input: {
+      plannedStartDate: '2026-01-19',
+      devStartDate: '2026-01-19',
+      integrationStartDate: '2026-02-16',
+      uatStartDate: '2026-03-16',
+      goLiveDate: '2026-04-27',
+      stabilizationEndDate: '2026-05-15',
+      milestoneCount: 5,
+      sprintDurationWeeks: 2,
+      milestoneDurationStrategy: 'AUTO_DISTRIBUTE',
+      deliveryPattern: 'COMPLIANCE',
+      backlogShape: 'STANDARD',
+      projectSize: 'LARGE',
+      capacityMode: 'TEAM_VELOCITY',
+      deliveryTeams: 3,
+      sprintVelocityPerTeam: 22,
+      createTasksUnderStories: true,
+      environmentFlow: 'DEV_SIT_UAT_PROD',
+      releaseType: 'PHASED',
+      suggestMilestoneOwners: true,
+      suggestWorkItemOwners: true,
+      createDependencySkeleton: true,
+      preallocateStoriesToSprints: true,
+      autoLinkMilestonesToRoadmap: true,
+      generateDraftOnly: true
+    }
+  }
+];
+
+const ensureDemoUsers = async (db: any, demoTag: string) => {
+  const hashed = await bcrypt.hash('DemoUser!123', 10);
+  const now = new Date().toISOString();
+  for (const user of DEMO_USERS) {
+    await db.collection('users').updateOne(
+      { email: user.email },
+      {
+        $set: {
+          name: user.name,
+          username: user.username,
+          team: user.team,
+          role: user.role,
+          isActive: true,
+          demoTag,
+          updatedAt: now
+        },
+        $setOnInsert: {
+          email: user.email,
+          password: hashed,
+          createdAt: now
+        }
+      },
+      { upsert: true }
+    );
+  }
+  return await db.collection('users').find({ email: { $in: DEMO_USERS.map((u) => u.email) } }).toArray();
+};
+
+const ensureDemoBundlesAndApps = async (db: any, demoTag: string) => {
+  const now = new Date().toISOString();
+  const out: Array<{ bundleId: string; bundleName: string }> = [];
+  for (const blueprint of DEMO_BUNDLE_BLUEPRINTS) {
+    await db.collection('bundles').updateOne(
+      { key: blueprint.key },
+      {
+        $set: {
+          key: blueprint.key,
+          name: blueprint.name,
+          demoTag,
+          updatedAt: now
+        },
+        $setOnInsert: { createdAt: now }
+      },
+      { upsert: true }
+    );
+    const bundle = await db.collection('bundles').findOne({ key: blueprint.key });
+    if (!bundle?._id) continue;
+    const bundleId = String(bundle._id);
+
+    for (const app of blueprint.apps) {
+      await db.collection('applications').updateOne(
+        { aid: app.aid },
+        {
+          $set: {
+            aid: app.aid,
+            key: app.aid,
+            name: app.name,
+            bundleId,
+            isActive: true,
+            status: app.status,
+            demoTag,
+            updatedAt: now
+          },
+          $setOnInsert: { createdAt: now }
+        },
+        { upsert: true }
+      );
+    }
+    out.push({ bundleId, bundleName: blueprint.name });
+  }
+  return out;
+};
+
+const markGeneratedPlanArtifactsDemo = async (db: any, result: any, demoTag: string) => {
+  const now = new Date().toISOString();
+  if (Array.isArray(result?.milestoneIds) && result.milestoneIds.length) {
+    await db.collection('milestones').updateMany(
+      { _id: { $in: result.milestoneIds.map((id: string) => new ObjectId(id)) } as any },
+      { $set: { demoTag, updatedAt: now } }
+    );
+  }
+  if (Array.isArray(result?.sprintIds) && result.sprintIds.length) {
+    await db.collection('workitems_sprints').updateMany(
+      { _id: { $in: result.sprintIds.map((id: string) => new ObjectId(id)) } as any },
+      { $set: { demoTag } }
+    );
+  }
+  if (Array.isArray(result?.workItemIds) && result.workItemIds.length) {
+    await db.collection('workitems').updateMany(
+      { _id: { $in: result.workItemIds.map((id: string) => new ObjectId(id)) } as any },
+      { $set: { demoTag, updatedAt: now } }
+    );
+  }
+  if (Array.isArray(result?.roadmapPhaseIds) && result.roadmapPhaseIds.length) {
+    await db.collection('work_roadmap_phases').updateMany(
+      { _id: { $in: result.roadmapPhaseIds.map((id: string) => new ObjectId(id)) } as any },
+      { $set: { demoTag, updatedAt: now } }
+    );
+  }
+  if (result?.runId) {
+    await db.collection('work_delivery_plan_runs').updateOne(
+      { _id: new ObjectId(result.runId) as any },
+      { $set: { demoTag, updatedAt: now } }
+    );
+  }
+};
+
+const runGeneratedSampleBootstrap = async (db: any, installedBy: string) => {
+  const demoTag = 'sample-v1';
+  const actor = ObjectId.isValid(installedBy)
+    ? await db.collection('users').findOne({ _id: new ObjectId(installedBy) as any }).catch(() => null)
+    : null;
+  const actorEmail = String(actor?.email || 'admin@deliveryhub.local');
+
+  await ensureDemoUsers(db, demoTag);
+  const bundles = await ensureDemoBundlesAndApps(db, demoTag);
+
+  const runs: any[] = [];
+  for (const bundle of bundles) {
+    const blueprint = DEMO_BUNDLE_BLUEPRINTS.find((item) => item.name === bundle.bundleName);
+    if (!blueprint) continue;
+    const input: DeliveryPlanInput = {
+      scopeType: 'BUNDLE',
+      scopeId: bundle.bundleId,
+      ...blueprint.input
+    };
+    const preview = await previewDeliveryPlan(input, { userId: installedBy, email: actorEmail });
+    const created = await createDeliveryPlan(String(preview.previewId), { userId: installedBy, email: actorEmail });
+    await markGeneratedPlanArtifactsDemo(db, created, demoTag);
+    runs.push({
+      bundleId: bundle.bundleId,
+      bundleName: bundle.bundleName,
+      previewId: String(preview.previewId),
+      runId: created.runId,
+      milestones: created.milestoneIds?.length || 0,
+      workItems: created.workItemIds?.length || 0
+    });
+  }
+
+  return {
+    mode: 'delivery-plan-generated',
+    bundles: bundles.length,
+    plansCreated: runs.length,
+    runs
+  };
+};
+
 export const runBaselineBootstrap = async (installedBy = 'system') => {
   const db = await getDb();
   await ensureBootstrapDoc(db);
@@ -667,7 +939,7 @@ export const runBaselineBootstrap = async (installedBy = 'system') => {
   }
 };
 
-export const runSampleBootstrap = async (installedBy = 'system', collections?: string[]) => {
+export const runSampleBootstrap = async (installedBy = 'system', collections?: string[], scenario?: DemoScenario) => {
   const db = await getDb();
   await ensureBootstrapDoc(db);
 
@@ -681,46 +953,13 @@ export const runSampleBootstrap = async (installedBy = 'system', collections?: s
   if (!lock.ok) return { skipped: true, reason: 'locked' };
 
   try {
-    await ensureBundleEpics(db);
     await setTierStatus(db, 'sample', {
       version: SAMPLE_VERSION,
       status: 'installing',
       installedAt: new Date(),
       installedBy
     });
-
-    const demoTag = 'sample-v1';
-    const files = loadSampleFiles(collections);
-    const lookup = await buildSampleLookup(db);
-    for (const entry of files) {
-      if (entry.collection === 'workitems') {
-        const docs = entry.docs || [];
-        const byType = (type) => docs.filter((d) => String(d.type || '').toUpperCase() === type);
-        const orderedBatches = [
-          byType('FEATURE'),
-          byType('STORY'),
-          byType('TASK'),
-          byType('RISK'),
-          byType('DEPENDENCY'),
-          docs.filter((d) => !['FEATURE', 'STORY', 'TASK', 'RISK', 'DEPENDENCY', 'EPIC'].includes(String(d.type || '').toUpperCase()))
-        ];
-        for (const batch of orderedBatches) {
-          if (!batch.length) continue;
-          const resolved = [];
-          for (const doc of batch) {
-            resolved.push(await resolveSampleRefs(db, entry.collection, doc, lookup));
-          }
-          await upsertSampleDocs(db, entry.collection, resolved, demoTag);
-        }
-        continue;
-      }
-
-      const resolvedDocs = [];
-      for (const doc of entry.docs) {
-        resolvedDocs.push(await resolveSampleRefs(db, entry.collection, doc, lookup));
-      }
-      await upsertSampleDocs(db, entry.collection, resolvedDocs, demoTag);
-    }
+    const result = await installDemoScenario(scenario || getDefaultDemoScenario(), { userId: installedBy });
 
     await setTierStatus(db, 'sample', {
       version: SAMPLE_VERSION,
@@ -728,7 +967,7 @@ export const runSampleBootstrap = async (installedBy = 'system', collections?: s
       installedAt: new Date(),
       installedBy
     });
-    return { skipped: false };
+    return { skipped: false, result };
   } catch (error) {
     await setTierStatus(db, 'sample', {
       version: SAMPLE_VERSION,
@@ -742,13 +981,10 @@ export const runSampleBootstrap = async (installedBy = 'system', collections?: s
   }
 };
 
-export const resetSampleData = async (installedBy = 'system') => {
+export const resetSampleData = async (installedBy = 'system', demoTag?: string) => {
   const db = await getDb();
   await ensureBootstrapDoc(db);
-  const demoTag = 'sample-v1';
-  for (const entry of SAMPLE_FILES) {
-    await db.collection(entry.collection).deleteMany({ demoTag });
-  }
+  await resetDemoScenarioData(demoTag);
 
   await setTierStatus(db, 'sample', {
     version: SAMPLE_VERSION,

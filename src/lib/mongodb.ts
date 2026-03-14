@@ -4,9 +4,9 @@ let cachedPromise: Promise<MongoClient> | null = null;
 let cachedUri: string | null = null;
 
 export const getMongoClientPromise = () => {
-  const uri = process.env.MONGODB_URI;
+  const uri = process.env.MONGO_URL;
   if (!uri) {
-    throw new Error('Invalid/Missing environment variable: "MONGODB_URI"');
+    throw new Error('Invalid/Missing environment variable: "MONGO_URL"');
   }
 
   if (cachedPromise && cachedUri === uri) return cachedPromise;

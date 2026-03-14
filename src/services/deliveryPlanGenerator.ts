@@ -203,13 +203,40 @@ export const createDeliveryPlan = async (previewId: string, user: { userId: stri
     ? await suggestOwnersForGeneratedArtifact({ bundleId: scope.bundleId })
     : null;
   const ownerCandidate = ownerSuggestion?.candidates?.[0];
+  let singleBundleEpicId: string | null = null;
+
+  if (scope.scopeType === 'BUNDLE') {
+    const epicTitle = `${scope.scopeName} Epic`;
+    const epicRes = await saveWorkItem({
+      type: WorkItemType.EPIC,
+      title: epicTitle,
+      description: '',
+      status: WorkItemStatus.TODO,
+      priority: 'MEDIUM',
+      bundleId: scope.bundleId || '',
+      applicationId: scope.applicationId,
+      scopeRef: scope.scopeRef,
+      scopeDerivation: 'direct',
+      generator,
+      assignedTo: ownerCandidate?.email || ownerCandidate?.userId,
+      assigneeUserIds: ownerCandidate?.userId ? [ownerCandidate.userId] : undefined
+    }, { userId: user.userId, email: user.email, name: user.email || user.userId });
+    singleBundleEpicId = String((epicRes as any)?.insertedId || (epicRes as any)?._id || '');
+    if (singleBundleEpicId) workItemIds.push(singleBundleEpicId);
+  }
 
   for (const msArtifact of preview.artifacts) {
     const milestoneId = milestoneIdMap.get(msArtifact.milestoneIndex);
     if (!milestoneId) continue;
     const sprintsForMilestone = preview.sprints.filter((s) => s.milestoneIndex === msArtifact.milestoneIndex);
     let storyCounter = 0;
-    for (const epic of msArtifact.epics) {
+    const epicBuckets = scope.scopeType === 'BUNDLE'
+      ? [{ name: `${scope.scopeName} Epic`, features: msArtifact.epics.flatMap((epic) => epic.features || []) }]
+      : msArtifact.epics;
+
+    for (const epic of epicBuckets) {
+      let epicId = singleBundleEpicId || '';
+      if (scope.scopeType !== 'BUNDLE') {
         const epicRes = await saveWorkItem({
           type: WorkItemType.EPIC,
           title: epic.name,
@@ -225,8 +252,9 @@ export const createDeliveryPlan = async (previewId: string, user: { userId: stri
           assignedTo: ownerCandidate?.email || ownerCandidate?.userId,
           assigneeUserIds: ownerCandidate?.userId ? [ownerCandidate.userId] : undefined
         }, { userId: user.userId, email: user.email, name: user.email || user.userId });
-      const epicId = String((epicRes as any)?.insertedId || (epicRes as any)?._id || '');
-      if (epicId) workItemIds.push(epicId);
+        epicId = String((epicRes as any)?.insertedId || (epicRes as any)?._id || '');
+        if (epicId) workItemIds.push(epicId);
+      }
 
       for (const feature of epic.features) {
         const featureRes = await saveWorkItem({

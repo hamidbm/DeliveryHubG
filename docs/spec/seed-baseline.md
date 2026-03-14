@@ -366,7 +366,7 @@ For each baseline collection:
 
 All scripts must:
 
-* Read `MONGODB_URI` at runtime
+* Read `MONGO_URL` at runtime
 * Never require DB at build
 * Work in container environments
 
