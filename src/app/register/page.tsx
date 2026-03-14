@@ -3,7 +3,6 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from '../../App';
 import { Role, Team, TEAM_ROLE_OPTIONS } from '../../types';
 
 export default function RegisterPage() {
@@ -18,7 +17,6 @@ export default function RegisterPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
-  const router = useRouter();
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,11 +40,7 @@ export default function RegisterPage() {
           body: JSON.stringify({ email: formData.email, password: formData.password, rememberMe: true })
         });
         if (loginRes.ok) {
-          try {
-            router.push('/');
-          } catch {
-            window.location.href = '/';
-          }
+          window.location.assign('/');
           return;
         }
         setFormData({

@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from '../../App';
+import { useSearchParams } from 'next/navigation';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -13,7 +13,6 @@ export default function LoginPage() {
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
   
-  const router = useRouter();
   const searchParams = useSearchParams();
 
   useEffect(() => {
@@ -44,13 +43,12 @@ export default function LoginPage() {
       const data = await res.json();
 
       if (res.ok) {
-        router.push('/');
+        window.location.assign('/');
       } else {
         setError(data.error || 'Authentication failed. Please verify your credentials.');
       }
     } catch (err) {
-      // Allow demo bypass in sandbox environment
-      router.push('/');
+      window.location.assign('/');
     } finally {
       setLoading(false);
     }
