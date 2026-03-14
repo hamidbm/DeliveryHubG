@@ -169,6 +169,27 @@ Dashboards provide program-level rollups for milestones, risks, and delivery sta
     - follow-up prompts
   - strategic queries are cache-backed in `ai_analysis_cache` under `strategic-query:{queryHash}` (24h window)
   - existing Ask DeliveryHub AI flow now routes strategic-intent questions through the strategic advisor path
+- 13E added Scenario Planner and What-If Simulation in AI Insights:
+  - new scenario planner UI integrated under Strategic AI Advisor:
+    - create scenario definitions with change types:
+      - `reassignWorkItems`
+      - `adjustMilestoneDate`
+      - `adjustPriority`
+      - `bundleResourceShift`
+    - save/list/delete scenarios
+    - run deterministic simulations
+  - new APIs:
+    - `POST /api/ai/scenario`
+    - `GET /api/ai/scenarios`
+    - `POST /api/ai/scenarios`
+    - `DELETE /api/ai/scenarios/:id`
+  - scenario results include:
+    - simulated health score
+    - delta metrics vs baseline
+    - recomputed forecast and propagation signals
+    - optimization recommendations
+  - scenario runs are cache-backed in `ai_analysis_cache` under `scenario-result:{scenarioHash}` (`reportType: scenarioResult`)
+  - strategic advisor now includes recent scenario outcomes in context for what-if and scenario comparison questions
 - Visual sequence diagrams for cache/regenerate/query/drill-down are documented in `docs/wiki/AI.md` under **Visual Flows**.
 
 ## Program Capacity (v1)

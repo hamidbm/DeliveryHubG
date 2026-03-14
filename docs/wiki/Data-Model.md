@@ -38,6 +38,7 @@ Top-level fields:
   - `portfolio-forecast`: includes `forecastSignals[]` with category, severity, confidence, evidence, and related entities
   - `risk-propagation`: includes `riskPropagationSignals[]` with propagation paths, severity, evidence, and related entities
   - `strategic-query:{queryHash}`: includes `queryHash`, `questionNormalized`, `strategicResponse` (`answer`, `explanation`, `evidence`, `relatedEntities`, `followUps`, `success`) and metadata (`snapshotHash`, provider/model)
+  - `scenario-result:{scenarioHash}`: includes `scenario`, `scenarioResult` (`simulatedSnapshot`, `healthScore`, `metricDeltas`, `forecastSignals`, `riskPropagationSignals`, `recommendations`) and metadata (`snapshotHash`, `generatedAt`)
 
 Observed indexes:
 - `{ _id: 1 }`
@@ -50,6 +51,13 @@ Observed indexes:
 - `{ _id: 1 }`
 - `{ userId: 1, createdAt: -1 }`
 - `{ userId: 1, pinned: 1, updatedAt: -1 }`
+
+### `ai_scenarios`
+Top-level fields:
+- `_id`, `id`, `userId`, `description`, `changes`, `createdAt`, `updatedAt`
+
+Observed indexes:
+- `{ _id: 1 }`
 
 ### `ai_watchers`
 Top-level fields:

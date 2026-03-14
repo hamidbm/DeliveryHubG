@@ -186,6 +186,8 @@ export const isStrategicPortfolioQuestion = (question: string) => {
     || q.includes('reallocate')
     || q.includes('resource allocation')
     || q.includes('leadership')
+    || q.includes('scenario')
+    || q.includes('what if')
     || q.includes('trade-off')
     || q.includes('tradeoff')
     || (q.includes('top') && q.includes('risk'))

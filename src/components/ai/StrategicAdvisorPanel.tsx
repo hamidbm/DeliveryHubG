@@ -1,6 +1,7 @@
 import React from 'react';
 import { EntityReference, EvidenceItem, RelatedEntitiesMeta } from '../../types/ai';
 import StrategicAnswerCard from './StrategicAnswerCard';
+import ScenarioPlannerPanel from './ScenarioPlannerPanel';
 
 type StrategicResult = {
   answer: string;
@@ -135,6 +136,8 @@ const StrategicAdvisorPanel: React.FC<Props> = ({ relatedEntitiesMeta }) => {
           }}
         />
       )}
+
+      <ScenarioPlannerPanel />
     </section>
   );
 };

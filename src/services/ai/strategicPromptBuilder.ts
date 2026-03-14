@@ -4,6 +4,7 @@ import {
   PortfolioSnapshot,
   PortfolioTrendSignal,
   RiskPropagationSignal,
+  ScenarioResult,
   StructuredPortfolioReport
 } from '../../types/ai';
 
@@ -16,6 +17,7 @@ export type StrategicPromptContext = {
   riskPropagationSignals: RiskPropagationSignal[];
   alerts: PortfolioAlert[];
   healthScore?: StructuredPortfolioReport['healthScore'];
+  scenarioResults?: ScenarioResult[];
   deterministicBaseline: {
     answer: string;
     explanation: string;
@@ -31,6 +33,13 @@ export const buildStrategicPrompt = (context: StrategicPromptContext) => {
   const forecastSignals = trimList(context.forecastSignals || [], 8);
   const propagationSignals = trimList(context.riskPropagationSignals || [], 6);
   const alerts = trimList(context.alerts || [], 8);
+  const scenarioResults = trimList(context.scenarioResults || [], 5).map((item) => ({
+    scenarioId: item.scenarioId,
+    description: item.description,
+    metricDeltas: item.metricDeltas,
+    healthScore: item.healthScore?.overall,
+    recommendations: item.recommendations?.slice(0, 3) || []
+  }));
 
   return `SYSTEM:\nYou are DeliveryHub Strategic AI Advisor.\nYou must remain grounded in provided deterministic data only.\nDo not speculate beyond the context.\nIf data is insufficient, say so clearly.\n\nCONTEXT:\n-- Portfolio Health --\n${JSON.stringify({
     overallHealth: report?.overallHealth || 'unknown',
@@ -48,5 +57,5 @@ export const buildStrategicPrompt = (context: StrategicPromptContext) => {
     },
     reviews: context.snapshot.reviews,
     milestones: context.snapshot.milestones
-  }, null, 2)}\n\n-- Deterministic Baseline --\n${JSON.stringify(context.deterministicBaseline, null, 2)}\n\nQUESTION:\n${context.question}\n\nOUTPUT INSTRUCTIONS:\nReturn strict JSON only with shape:\n{\n  "answer": "string",\n  "explanation": "string",\n  "evidence": [{"text":"string","entities":[{"type":"workitem|application|bundle|milestone|review","id":"string","label":"string","secondary":"optional"}]}],\n  "relatedEntities": [{"type":"workitem|application|bundle|milestone|review","id":"string","label":"string","secondary":"optional"}],\n  "followUps": ["string"]\n}\nConstraints:\n- answer concise and executive-ready\n- explanation can be multi-sentence but factual\n- include 3 to 8 evidence entries\n- include at most 12 relatedEntities\n- include 3 to 6 followUps\n- never invent entity ids or numeric metrics.`;
+  }, null, 2)}\n\n-- Scenario Outcomes (if available) --\n${JSON.stringify(scenarioResults, null, 2)}\n\n-- Deterministic Baseline --\n${JSON.stringify(context.deterministicBaseline, null, 2)}\n\nQUESTION:\n${context.question}\n\nOUTPUT INSTRUCTIONS:\nReturn strict JSON only with shape:\n{\n  "answer": "string",\n  "explanation": "string",\n  "evidence": [{"text":"string","entities":[{"type":"workitem|application|bundle|milestone|review","id":"string","label":"string","secondary":"optional"}]}],\n  "relatedEntities": [{"type":"workitem|application|bundle|milestone|review","id":"string","label":"string","secondary":"optional"}],\n  "followUps": ["string"]\n}\nConstraints:\n- answer concise and executive-ready\n- explanation can be multi-sentence but factual\n- include 3 to 8 evidence entries\n- include at most 12 relatedEntities\n- include 3 to 6 followUps\n- never invent entity ids or numeric metrics.`;
 };

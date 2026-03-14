@@ -248,6 +248,17 @@ Implemented:
   - AI Insights now includes a dedicated Strategic AI Advisor panel with quick prompts, evidence-backed answers, related entities, and follow-up chips
   - strategic answers are cache-backed in `ai_analysis_cache` using `strategic-query:{queryHash}` with 24h freshness
   - `portfolio-query` now routes strategic-intent questions through strategic advisor
+- 13E: AI-driven optimization and what-if scenario planning:
+  - deterministic scenario engine added (`src/services/ai/scenarioEngine.ts`) for simulation over cloned portfolio snapshots
+  - scenario APIs added:
+    - `POST /api/ai/scenario`
+    - `GET /api/ai/scenarios`
+    - `POST /api/ai/scenarios`
+    - `DELETE /api/ai/scenarios/:id`
+  - Scenario Planner UI added under Strategic Advisor (`ScenarioPlannerPanel`, `ScenarioCard`, `ScenarioResultPanel`)
+  - scenario runs now return health/forecast/propagation deltas plus optimization recommendations
+  - scenario results are cache-backed in `ai_analysis_cache` using `scenario-result:{scenarioHash}` (`reportType: scenarioResult`)
+  - strategic advisor context now ingests recent scenario outcomes for scenario-aware answers and comparisons
 
 Current 12B behavior:
 - structured sections are primary in AI Insights UI

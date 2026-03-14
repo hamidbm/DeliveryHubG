@@ -1,4 +1,4 @@
-import { ForecastSignal, PortfolioSuggestion, RiskPropagationSignal, StructuredPortfolioReport } from '../../types/ai';
+import { ForecastSignal, PortfolioSuggestion, RiskPropagationSignal, ScenarioResult, StructuredPortfolioReport } from '../../types/ai';
 import { PortfolioSignalSummary } from './portfolioSignals';
 
 const pushUnique = (target: PortfolioSuggestion[], item: PortfolioSuggestion) => {
@@ -258,7 +258,8 @@ const pushSuggestionText = (target: string[], value: string) => {
 export const generateStrategicQuickSuggestions = (
   report?: StructuredPortfolioReport,
   forecastSignals: ForecastSignal[] = [],
-  riskPropagationSignals: RiskPropagationSignal[] = []
+  riskPropagationSignals: RiskPropagationSignal[] = [],
+  scenarioResults: ScenarioResult[] = []
 ): string[] => {
   const suggestions: string[] = [];
 
@@ -285,6 +286,13 @@ export const generateStrategicQuickSuggestions = (
 
   if (riskPropagationSignals.length > 0) {
     pushSuggestionText(suggestions, 'Which dependency cascades create the biggest downstream delivery risk?');
+  }
+
+  pushSuggestionText(suggestions, 'What happens if we delay a high-risk milestone by 2 weeks?');
+  pushSuggestionText(suggestions, 'Create a scenario that shifts ownership from overloaded bundles and estimate impact.');
+
+  if (scenarioResults.length > 0) {
+    pushSuggestionText(suggestions, 'Compare my latest scenarios and recommend the best one.');
   }
 
   return suggestions.slice(0, 8);

@@ -1,11 +1,12 @@
 import { createHash } from 'crypto';
-import { fetchAiAnalysisCache, fetchSystemSettings, saveAiAnalysisCache } from '../db';
+import { fetchAiAnalysisCache, fetchSystemSettings, getDb, saveAiAnalysisCache } from '../db';
 import {
   ForecastSignal,
   PortfolioAlert,
   PortfolioSnapshot,
   PortfolioTrendSignal,
   RiskPropagationSignal,
+  ScenarioResult,
   StrategicQueryResponse,
   StructuredPortfolioReport
 } from '../../types/ai';
@@ -26,6 +27,7 @@ type AiSettings = {
 const PORTFOLIO_CACHE_KEY = 'portfolio-summary';
 const FORECAST_CACHE_KEY = 'portfolio-forecast';
 const RISK_PROPAGATION_CACHE_KEY = 'risk-propagation';
+const SCENARIO_CACHE_PREFIX = 'scenario-result:';
 const STRATEGIC_CACHE_PREFIX = 'strategic-query:';
 const FRESH_WINDOW_MS = 24 * 60 * 60 * 1000;
 
@@ -46,6 +48,7 @@ export type StrategicAdvisorContext = {
   forecastSignals: ForecastSignal[];
   riskPropagationSignals: RiskPropagationSignal[];
   alerts: PortfolioAlert[];
+  scenarioResults: ScenarioResult[];
 };
 
 export type StrategicAdvisorResult = {
@@ -115,12 +118,31 @@ const loadRiskPropagationSignals = async () => {
   return cached.riskPropagationSignals as RiskPropagationSignal[];
 };
 
+const loadRecentScenarioResults = async () => {
+  const db = await getDb();
+  const rows = await db.collection('ai_analysis_cache')
+    .find({ reportType: 'scenarioResult' } as any)
+    .sort({ updatedAt: -1 })
+    .limit(30)
+    .toArray();
+
+  return rows
+    .filter((row: any) => String(row?._id || '').startsWith(SCENARIO_CACHE_PREFIX))
+    .map((row: any) => {
+      const source = row?.scenarioResult ? row : (row?.report?.scenarioResult ? row.report : null);
+      if (!source?.scenarioResult) return null;
+      return source.scenarioResult as ScenarioResult;
+    })
+    .filter(Boolean) as ScenarioResult[];
+};
+
 const gatherContext = async (): Promise<StrategicAdvisorContext | null> => {
   const portfolio = await loadPortfolioContext();
   if (!portfolio) return null;
   const trendContext = await loadTrendSignals();
   const forecastSignals = await loadForecastSignals();
   const riskPropagationSignals = await loadRiskPropagationSignals();
+  const scenarioResults = await loadRecentScenarioResults();
 
   return {
     snapshot: portfolio.snapshot,
@@ -129,7 +151,8 @@ const gatherContext = async (): Promise<StrategicAdvisorContext | null> => {
     trendSignals: portfolio.report?.trendSignals || trendContext.trendSignals || [],
     forecastSignals,
     riskPropagationSignals,
-    alerts: portfolio.report?.alerts || []
+    alerts: portfolio.report?.alerts || [],
+    scenarioResults
   };
 };
 
@@ -259,7 +282,8 @@ export const runStrategicAdvisorQuery = async (params: {
     report: context.report,
     trendSignals: context.trendSignals,
     forecastSignals: context.forecastSignals,
-    riskPropagationSignals: context.riskPropagationSignals
+    riskPropagationSignals: context.riskPropagationSignals,
+    scenarioResults: context.scenarioResults
   });
 
   const deterministicResponse: StrategicQueryResponse = {
@@ -308,6 +332,7 @@ export const runStrategicAdvisorQuery = async (params: {
       riskPropagationSignals: context.riskPropagationSignals,
       alerts: context.alerts,
       healthScore: context.report?.healthScore,
+      scenarioResults: context.scenarioResults,
       deterministicBaseline: {
         answer: deterministic.answer,
         explanation: deterministic.explanation,
@@ -382,5 +407,10 @@ export const getStrategicSuggestions = async (): Promise<string[]> => {
   if (!context) {
     return generateStrategicQuickSuggestions();
   }
-  return generateStrategicQuickSuggestions(context.report, context.forecastSignals, context.riskPropagationSignals);
+  return generateStrategicQuickSuggestions(
+    context.report,
+    context.forecastSignals,
+    context.riskPropagationSignals,
+    context.scenarioResults
+  );
 };

@@ -36,6 +36,8 @@ AI in DeliveryHub is assistive only. It never writes to the database without exp
 - Persisted executive portfolio summary in `ai_analysis_cache` (`_id: executive-summary`)
 - Persisted forecast signal set in `ai_analysis_cache` (`_id: portfolio-forecast`)
 - Persisted cross-project propagation signals in `ai_analysis_cache` (`_id: risk-propagation`)
+- Persisted strategic advisor answers in `ai_analysis_cache` (`_id: strategic-query:{queryHash}`)
+- Persisted scenario simulation results in `ai_analysis_cache` (`_id: scenario-result:{scenarioHash}`)
 
 ## AI Insights Portfolio Summary (Phase 12A)
 - API contract split:
@@ -426,6 +428,37 @@ AI in DeliveryHub is assistive only. It never writes to the database without exp
     - integrated in `src/components/AIInsights.tsx`
   - query routing integration:
     - `portfolio-query` now detects strategic intent and routes those questions through strategic advisor for grounded high-level answers
+- 13E added AI-driven optimization and what-if scenario planning:
+  - new scenario contracts in `src/types/ai.ts`:
+    - `ScenarioChange`
+    - `ScenarioDefinition`
+    - `ScenarioResult`
+  - deterministic scenario simulation engine:
+    - `src/services/ai/scenarioEngine.ts`
+    - simulates hypothetical changes over cloned snapshot state
+    - recomputes health score, forecast signals, and propagation signals
+    - computes delta metrics and optimization recommendations
+  - new scenario APIs:
+    - `POST /api/ai/scenario` (run scenario simulation)
+    - `GET /api/ai/scenarios` (list saved scenarios)
+    - `POST /api/ai/scenarios` (save/upsert scenario)
+    - `DELETE /api/ai/scenarios/:id` (delete scenario)
+  - scenario cache behavior:
+    - cache key format: `scenario-result:{scenarioHash}`
+    - `scenarioHash = sha256(snapshotHash + normalizedScenarioDefinition)`
+    - report type: `scenarioResult`
+    - 24h freshness window
+  - strategic advisor integration:
+    - strategic context now includes recent scenario outcomes
+    - strategic prompt grounding includes scenario deltas/recommendations
+    - deterministic strategic engine can answer scenario/what-if questions
+  - AI Insights UI integration:
+    - `src/components/ai/ScenarioPlannerPanel.tsx`
+    - `src/components/ai/ScenarioCard.tsx`
+    - `src/components/ai/ScenarioResultPanel.tsx`
+    - integrated within `StrategicAdvisorPanel`
+  - strategic suggestions:
+    - scenario-oriented prompts added (what-if delay, resource shift, compare scenarios)
 
 ## Visual Flows
 
@@ -562,6 +595,49 @@ sequenceDiagram
     SRV-->>API: return response
   end
   API-->>UI: answer + explanation + evidence + entities + followUps
+```
+
+### Scenario Simulation Flow (13E)
+```text
+Client UI            Scenario API                   Scenario Engine             DB / AI Cache
+---------            ------------                   ---------------             -------------
+Scenario planner
+    | POST /api/ai/scenario
+    |---------------------------------------------->|
+    |                              load portfolio-summary context
+    |                              compute scenarioHash(snapshotHash + scenario)
+    |                              fetch ai_analysis_cache(scenario-result:{hash})
+    |<---------------------------------------------- cache hit? cached result
+    | cache miss:
+    |----------------------------------------------> simulateScenario()
+    |                           apply changes on cloned snapshot
+    |                           recompute health + forecast + propagation
+    |                           compute metric deltas + recommendations
+    |<---------------------------------------------- scenarioResult
+    |                              save ai_analysis_cache(scenario-result:{hash})
+    |<----------------------------------------------|
+    | render scenario result panel (deltas + recommendations)
+```
+
+```mermaid
+sequenceDiagram
+  participant UI as Scenario Planner
+  participant API as /api/ai/scenario
+  participant ENG as scenarioEngine
+  participant DB as MongoDB
+
+  UI->>API: POST scenario definition
+  API->>DB: fetch portfolio-summary
+  API->>DB: fetch scenario-result:{scenarioHash}
+  alt fresh cache hit
+    DB-->>API: cached scenarioResult
+    API-->>UI: scenarioResult (cached)
+  else cache miss
+    API->>ENG: simulateScenario(snapshot, scenario, report, trends)
+    ENG-->>API: scenarioResult
+    API->>DB: save scenario-result:{scenarioHash}
+    API-->>UI: scenarioResult (fresh)
+  end
 ```
 
 ### Trend Snapshot and Analysis Flow (12D)

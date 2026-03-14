@@ -5,6 +5,7 @@ import {
   PortfolioSnapshot,
   PortfolioTrendSignal,
   RiskPropagationSignal,
+  ScenarioResult,
   StrategicQueryResponse,
   StructuredPortfolioReport
 } from '../../types/ai';
@@ -16,11 +17,12 @@ type StrategicDeterministicContext = {
   trendSignals: PortfolioTrendSignal[];
   forecastSignals: ForecastSignal[];
   riskPropagationSignals: RiskPropagationSignal[];
+  scenarioResults?: ScenarioResult[];
 };
 
 export type DeterministicStrategicResult = StrategicQueryResponse & {
   confidence: 'high' | 'medium' | 'low';
-  matchedIntent: 'top-risks' | 'compare-bundles' | 'resource-allocation' | 'milestone-risk' | 'summary';
+  matchedIntent: 'top-risks' | 'compare-bundles' | 'resource-allocation' | 'milestone-risk' | 'scenario-analysis' | 'summary';
 };
 
 const severityScore: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1 };
@@ -271,6 +273,52 @@ const summaryAdvice = (context: StrategicDeterministicContext): DeterministicStr
   });
 };
 
+const scenarioAdvice = (context: StrategicDeterministicContext): DeterministicStrategicResult => {
+  const scenarioResults = (context.scenarioResults || []).slice(0, 5);
+  if (!scenarioResults.length) {
+    return withDefaults({
+      answer: 'No recent scenario simulations are available to answer this what-if question.',
+      explanation: 'Run a scenario from the Scenario Planner panel first, then ask strategic comparison or impact questions.',
+      evidence: [{ text: 'Scenario result cache is empty for the current workspace context.', entities: [] }],
+      relatedEntities: [],
+      followUps: [
+        'Run a scenario that reassigns work and compare health impact.',
+        'What happens if we delay a high-risk milestone by one week?',
+        'Which scenario gives the best risk reduction trade-off?'
+      ],
+      confidence: 'low',
+      matchedIntent: 'scenario-analysis'
+    });
+  }
+
+  const ranked = scenarioResults.slice().sort((a, b) => (b.metricDeltas?.healthOverall || 0) - (a.metricDeltas?.healthOverall || 0));
+  const best = ranked[0];
+  const worst = ranked[ranked.length - 1];
+
+  const evidence = ranked.map((item) => ({
+    text: `${item.description}: health delta ${item.metricDeltas?.healthOverall || 0}, forecast high-risk delta ${item.metricDeltas?.forecastHighRisks || 0}, propagation high-risk delta ${item.metricDeltas?.propagationHighRisks || 0}.`,
+    entities: []
+  }));
+
+  return withDefaults({
+    answer: best
+      ? `Best recent scenario is "${best.description}" with a health score change of ${best.metricDeltas?.healthOverall || 0}.`
+      : 'Scenario comparisons are available once at least one scenario result exists.',
+    explanation: worst && best && worst.scenarioId !== best.scenarioId
+      ? `Compared with "${worst.description}", the best scenario has stronger delivery health and lower projected systemic risk.`
+      : 'Scenario recommendation is ranked by deterministic health, forecast-risk, and propagation-risk deltas.',
+    evidence: evidence.slice(0, 5),
+    relatedEntities: [],
+    followUps: [
+      'Compare the top two scenarios and list trade-offs.',
+      'Which scenario reduces propagation risk the most?',
+      'Should we save the best scenario as the next execution plan?'
+    ],
+    confidence: scenarioResults.length >= 2 ? 'high' : 'medium',
+    matchedIntent: 'scenario-analysis'
+  });
+};
+
 export const isStrategicIntentQuestion = (question: string) => {
   const q = normalizeQuestion(question);
   const strategicKeywords = [
@@ -283,6 +331,8 @@ export const isStrategicIntentQuestion = (question: string) => {
     'reallocate',
     'compare',
     'leadership',
+    'scenario',
+    'what if',
     'trade-off',
     'tradeoff',
     'intervene',
@@ -296,6 +346,10 @@ export const generateDeterministicStrategicAnswer = (
   context: StrategicDeterministicContext
 ): DeterministicStrategicResult => {
   const q = normalizeQuestion(context.question);
+
+  if (q.includes('scenario') || q.includes('what if')) {
+    return scenarioAdvice(context);
+  }
 
   if (q.includes('compare') && q.includes('bundle')) {
     return compareBundles(context);

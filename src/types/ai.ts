@@ -301,6 +301,31 @@ export interface StrategicQueryResponse {
   warning?: string;
 }
 
+export type ScenarioChange =
+  | { type: 'reassignWorkItems'; workItemIds: string[]; toOwner: string }
+  | { type: 'adjustMilestoneDate'; milestoneId: string; newDate: string }
+  | { type: 'adjustPriority'; workItemIds: string[]; newPriority: number }
+  | { type: 'bundleResourceShift'; fromBundleId: string; toBundleId: string; count: number };
+
+export interface ScenarioDefinition {
+  id: string;
+  description: string;
+  changes: ScenarioChange[];
+}
+
+export interface ScenarioResult {
+  scenarioId: string;
+  description: string;
+  simulatedSnapshot: Partial<PortfolioSnapshot>;
+  forecastSignals: ForecastSignal[];
+  riskPropagationSignals: RiskPropagationSignal[];
+  healthScore: HealthScore;
+  metricDeltas: {
+    [metric: string]: number;
+  };
+  recommendations: string[];
+}
+
 export interface PortfolioQueryResponse {
   answer: string;
   explanation: string;
