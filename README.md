@@ -71,6 +71,29 @@ Steps
 3. Run the app: `npm run dev`
 4. Run lint (CI-safe): `npm run lint:ci`
 
+## Docker Helper Script (`run.sh`)
+`run.sh` provides local Docker run commands for either MongoDB or the DeliveryHub web app.
+
+Prerequisites
+- Docker
+
+Usage
+- Show help: `./run.sh --help`
+- Start MongoDB container: `./run.sh mongo`
+- Run DeliveryHub web app container: `./run.sh`
+- Force rebuild DeliveryHub image, then run app: `./run.sh --rebuild`
+
+Behavior
+- `./run.sh mongo`
+  - Ensures Docker network `delivery-network` exists.
+  - Starts/restarts container `mongo` on port `27017`.
+  - Uses volume `mongo-data` for persistence.
+- `./run.sh` (app)
+  - Builds image `deliveryhub` if missing.
+  - Removes/replaces container `deliveryhub`.
+  - Runs app on `http://localhost:3000`.
+  - Injects `MONGO_URL` into the app container (configured in `run.sh`).
+
 ## Environment Variables
 Auth and Access
 - `AUTH_MODE`

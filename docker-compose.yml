@@ -11,13 +11,13 @@ services:
       MONGO_INITDB_ROOT_USERNAME: admin
       MONGO_INITDB_ROOT_PASSWORD: secretpassword
     networks:
-      - aura-network
+      - delivery-network
 
   app:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: aura-portal
+    container_name: deliveryhub
     restart: unless-stopped
     ports:
       - "3000:3000"
@@ -25,15 +25,18 @@ services:
       MONGO_URL: mongodb://admin:secretpassword@mongodb:27017/deliveryhub?authSource=admin
       API_KEY: ${API_KEY}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      AI_DEFAULT_PROVIDER: OPEN_ROUTER
       ADMIN_BOOTSTRAP_EMAILS: hamid@benmalek.net
     depends_on:
       - mongodb
     networks:
-      - aura-network
+      - delivery-network
 
 volumes:
   mongo-data:
 
 networks:
-  aura-network:
+  delivery-network:
     driver: bridge
