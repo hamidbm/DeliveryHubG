@@ -1,4 +1,4 @@
-import getMongoClientPromise from '../lib/mongodb';
+import getMongoClientPromise, { getMongoDbName } from '../lib/mongodb';
 import { ObjectId } from 'mongodb';
 import { WikiPage, WikiSpace, WikiTheme, WikiTemplate, CommentThread, CommentMessage, EventRecord, ReviewRecord, ReviewCycle, ReviewReviewer, FeedbackPackage, UserEventState, Bundle, Application, TaxonomyCategory, TaxonomyDocumentType, WorkItem, WorkItemType, WorkItemStatus, WorkItemActivity, Sprint, Milestone, Notification, ArchitectureDiagram, BusinessCapability, AppInterface, WikiAsset, BundleAssignment, AssignmentType, BundleProfile, AttachmentRef, CommentAuthor } from '../types';
 import { computeBundleVelocity, forecastMilestoneCompletion } from './forecasting';
@@ -11,7 +11,7 @@ import { computeMilestoneCriticalPath } from './criticalPath';
 export const getDb = async () => {
   try {
     const client = await getMongoClientPromise();
-    return client.db();
+    return client.db(getMongoDbName());
   } catch (e) {
     console.error("CRITICAL: Database connection failed.", e);
     throw new Error("DB_OFFLINE");

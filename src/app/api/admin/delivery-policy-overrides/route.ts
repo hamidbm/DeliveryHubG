@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { jwtVerify } from 'jose';
 import { isAdminOrCmo } from '../../../../services/authz';
-import { getMongoClientPromise } from '../../../../lib/mongodb';
+import { getMongoClientPromise, getMongoDbName } from '../../../../lib/mongodb';
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
 
@@ -29,7 +29,7 @@ export async function GET() {
     }
 
     const client = await getMongoClientPromise();
-    const db = client.db();
+    const db = client.db(getMongoDbName());
     const overrides = await db.collection('delivery_policy_overrides')
       .find({}, { projection: { _id: 0, bundleId: 1, version: 1, updatedAt: 1, updatedBy: 1 } })
       .toArray();

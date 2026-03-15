@@ -1,4 +1,4 @@
-import { getMongoClientPromise } from '../lib/mongodb';
+import { getMongoClientPromise, getMongoDbName } from '../lib/mongodb';
 import { getDeliveryPolicy, DeliveryPolicy } from './policy';
 import { WorkItemStatus } from '../types';
 
@@ -6,7 +6,7 @@ const DEFAULT_SPRINT_LENGTH_DAYS = 14;
 
 const getDb = async () => {
   const client = await getMongoClientPromise();
-  return client.db();
+  return client.db(getMongoDbName());
 };
 
 export const computeBundleVelocity = async (bundleId: string, windowSprints = 5) => {

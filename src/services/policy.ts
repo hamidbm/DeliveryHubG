@@ -1,5 +1,5 @@
 import { ObjectId } from 'mongodb';
-import { getMongoClientPromise } from '../lib/mongodb';
+import { getMongoClientPromise, getMongoDbName } from '../lib/mongodb';
 import { recordCacheHit, recordCacheMiss } from './perfStats';
 
 export type DeliveryPolicy = {
@@ -217,7 +217,7 @@ const CACHE_TTL_MS = 30_000;
 
 const getDb = async () => {
   const client = await getMongoClientPromise();
-  return client.db();
+  return client.db(getMongoDbName());
 };
 
 const ensureOverrideIndexes = async (db: any) => {

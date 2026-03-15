@@ -3,6 +3,29 @@ import { MongoClient } from 'mongodb';
 let cachedPromise: Promise<MongoClient> | null = null;
 let cachedUri: string | null = null;
 
+const DEFAULT_DB_NAME = 'delivery';
+
+const resolveDbNameFromUri = (uri: string) => {
+  try {
+    const parsed = new URL(uri);
+    const path = (parsed.pathname || '').replace(/^\/+/, '').trim();
+    if (!path) return DEFAULT_DB_NAME;
+    const dbName = decodeURIComponent(path.split('/')[0] || '').trim();
+    return dbName || DEFAULT_DB_NAME;
+  } catch {
+    // If URI parsing fails for any reason, keep app behavior deterministic.
+    return DEFAULT_DB_NAME;
+  }
+};
+
+export const getMongoDbName = () => {
+  const uri = process.env.MONGO_URL;
+  if (!uri) {
+    throw new Error('Invalid/Missing environment variable: "MONGO_URL"');
+  }
+  return resolveDbNameFromUri(uri);
+};
+
 export const getMongoClientPromise = () => {
   const uri = process.env.MONGO_URL;
   if (!uri) {
