@@ -266,6 +266,45 @@ export interface ForecastSignal {
   relatedEntities?: EntityReference[];
 }
 
+export interface ActionStep {
+  id: string;
+  description: string;
+  relatedEntities: EntityReference[];
+  priority: 'critical' | 'high' | 'medium' | 'low';
+  suggestedBy: 'deterministic' | 'AI';
+  evidence: EvidenceItem[];
+}
+
+export interface TaskSuggestion {
+  id: string;
+  title: string;
+  description: string;
+  relatedEntities: EntityReference[];
+  priority: 'critical' | 'high' | 'medium' | 'low';
+  evidence: EvidenceItem[];
+}
+
+export interface WorkflowRule {
+  id: string;
+  description: string;
+  condition: string;
+  recommendedAction: string;
+  enabled?: boolean;
+  suggestedBy?: 'deterministic' | 'AI';
+}
+
+export interface ActionPlan {
+  generatedAt: string;
+  summary: string;
+  steps: ActionStep[];
+  suggestTasks: TaskSuggestion[];
+  relatedSignals: {
+    alerts: PortfolioAlert[];
+    forecast: ForecastSignal[];
+    propagation: RiskPropagationSignal[];
+  };
+}
+
 export interface PropagationPath {
   from: EntityReference;
   to: EntityReference;
@@ -296,6 +335,7 @@ export interface StrategicQueryResponse {
   evidence: EvidenceItem[];
   relatedEntities: EntityReference[];
   followUps: string[];
+  actionPlan?: ActionPlan;
   success: boolean;
   errorMessage?: string;
   warning?: string;

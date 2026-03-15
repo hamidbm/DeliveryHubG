@@ -39,6 +39,7 @@ Top-level fields:
   - `risk-propagation`: includes `riskPropagationSignals[]` with propagation paths, severity, evidence, and related entities
   - `strategic-query:{queryHash}`: includes `queryHash`, `questionNormalized`, `strategicResponse` (`answer`, `explanation`, `evidence`, `relatedEntities`, `followUps`, `success`) and metadata (`snapshotHash`, provider/model)
   - `scenario-result:{scenarioHash}`: includes `scenario`, `scenarioResult` (`simulatedSnapshot`, `healthScore`, `metricDeltas`, `forecastSignals`, `riskPropagationSignals`, `recommendations`) and metadata (`snapshotHash`, `generatedAt`)
+  - `ai-action-plan`: includes `actionPlan` (`summary`, prioritized `steps[]`, `suggestTasks[]`, and related signals) with metadata (`snapshotHash`, `generatedAt`)
 
 Observed indexes:
 - `{ _id: 1 }`
@@ -51,6 +52,15 @@ Observed indexes:
 - `{ _id: 1 }`
 - `{ userId: 1, createdAt: -1 }`
 - `{ userId: 1, pinned: 1, updatedAt: -1 }`
+
+### `ai_workflow_rules`
+Top-level fields:
+- `_id`, `id`, `description`, `condition`, `recommendedAction`, `enabled`, `suggestedBy`, `createdAt`, `updatedAt`
+
+Observed indexes:
+- `{ _id: 1 }`
+- `{ id: 1 }` unique
+- `{ enabled: 1, updatedAt: -1 }`
 
 ### `ai_scenarios`
 Top-level fields:

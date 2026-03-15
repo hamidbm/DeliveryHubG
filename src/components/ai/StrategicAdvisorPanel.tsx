@@ -1,7 +1,9 @@
 import React from 'react';
-import { EntityReference, EvidenceItem, RelatedEntitiesMeta } from '../../types/ai';
+import { ActionPlan, EntityReference, EvidenceItem, RelatedEntitiesMeta } from '../../types/ai';
 import StrategicAnswerCard from './StrategicAnswerCard';
 import ScenarioPlannerPanel from './ScenarioPlannerPanel';
+import ActionPlanPanel from './ActionPlanPanel';
+import WorkflowRulePanel from './WorkflowRulePanel';
 
 type StrategicResult = {
   answer: string;
@@ -9,6 +11,7 @@ type StrategicResult = {
   evidence: EvidenceItem[];
   relatedEntities: EntityReference[];
   followUps: string[];
+  actionPlan?: ActionPlan;
   success: boolean;
   errorMessage?: string;
   warning?: string;
@@ -66,6 +69,7 @@ const StrategicAdvisorPanel: React.FC<Props> = ({ relatedEntitiesMeta }) => {
         evidence: Array.isArray(data?.evidence) ? data.evidence : [],
         relatedEntities: Array.isArray(data?.relatedEntities) ? data.relatedEntities : [],
         followUps: Array.isArray(data?.followUps) ? data.followUps : [],
+        actionPlan: data?.actionPlan || undefined,
         success: true,
         warning: typeof data?.warning === 'string' ? data.warning : undefined
       });
@@ -121,22 +125,27 @@ const StrategicAdvisorPanel: React.FC<Props> = ({ relatedEntitiesMeta }) => {
       )}
 
       {result && (
-        <StrategicAnswerCard
-          answer={result.answer}
-          explanation={result.explanation}
-          evidence={result.evidence}
-          relatedEntities={result.relatedEntities}
-          relatedEntitiesMeta={relatedEntitiesMeta}
-          followUps={result.followUps}
-          warning={result.warning}
-          busy={loading}
-          onFollowUp={(nextQuestion) => {
-            setQuestion(nextQuestion);
-            void askStrategicQuestion(nextQuestion);
-          }}
-        />
+        <div className="space-y-3">
+          <StrategicAnswerCard
+            answer={result.answer}
+            explanation={result.explanation}
+            evidence={result.evidence}
+            relatedEntities={result.relatedEntities}
+            relatedEntitiesMeta={relatedEntitiesMeta}
+            followUps={result.followUps}
+            warning={result.warning}
+            busy={loading}
+            onFollowUp={(nextQuestion) => {
+              setQuestion(nextQuestion);
+              void askStrategicQuestion(nextQuestion);
+            }}
+          />
+          <ActionPlanPanel embeddedPlan={result.actionPlan} />
+        </div>
       )}
 
+      {!result && <ActionPlanPanel />}
+      <WorkflowRulePanel />
       <ScenarioPlannerPanel />
     </section>
   );

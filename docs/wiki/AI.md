@@ -459,6 +459,41 @@ AI in DeliveryHub is assistive only. It never writes to the database without exp
     - integrated within `StrategicAdvisorPanel`
   - strategic suggestions:
     - scenario-oriented prompts added (what-if delay, resource shift, compare scenarios)
+- 14 added collaborative workflow automation and execution guidance:
+  - new action recommendation contracts in `src/types/ai.ts`:
+    - `ActionStep`
+    - `ActionPlan`
+    - `TaskSuggestion`
+    - `WorkflowRule`
+    - `StrategicQueryResponse.actionPlan` (strategic answers now carry execution plan context)
+  - action recommendation engine:
+    - `src/services/ai/actionRecommender.ts`
+    - deterministic heuristics map portfolio trends/forecast/propagation to prioritized execution steps
+    - outputs evidence-backed `steps[]` and `suggestTasks[]` linked to entities
+  - workflow rule engine:
+    - `src/services/ai/workflowRuleEngine.ts`
+    - deterministic rule suggestion, enable/disable persistence, and enforcement
+    - current rule actions include:
+      - auto-assign unowned work
+      - notify stakeholders for milestone risk escalation
+      - auto-flag high slip-risk work items
+  - new APIs:
+    - `GET /api/ai/action-plan` (cache-backed load)
+    - `POST /api/ai/action-plan` (manual regenerate)
+    - `POST /api/ai/tasks/batch` (batch create work items from task suggestions)
+    - `POST /api/tasks/batch` (alias endpoint)
+    - `GET /api/ai/workflow-rules` (suggestions + enabled state)
+    - `POST /api/ai/workflow-rules` (toggle rule and/or enforce active rules)
+  - strategic advisor integration:
+    - strategic responses now include action-plan context from the latest deterministic signals
+    - action-plan-intent strategic questions include step-by-step execution guidance in the answer text
+  - AI Insights UI integration:
+    - new panels:
+      - `src/components/ai/ActionPlanPanel.tsx`
+      - `src/components/ai/TaskSuggestionCard.tsx`
+      - `src/components/ai/WorkflowRulePanel.tsx`
+    - integrated in `src/components/ai/StrategicAdvisorPanel.tsx`
+    - users can create single suggested tasks or batch-create selected suggestions directly from AI Insights
 
 ## Visual Flows
 
@@ -638,6 +673,44 @@ sequenceDiagram
     API->>DB: save scenario-result:{scenarioHash}
     API-->>UI: scenarioResult (fresh)
   end
+```
+
+### Action Plan / Task Suggestion / Workflow Rule Flow (14)
+```text
+Client UI            Phase 14 APIs                  Services                     DB
+---------            -------------                  --------                     --
+Strategic/AI panel
+    | GET /api/ai/action-plan
+    |---------------------------------------------->|
+    |                         load ai_analysis_cache(ai-action-plan)
+    |                         cache miss -> gather summary/forecast/propagation context
+    |----------------------------------------------> generateActionPlan()
+    |<---------------------------------------------- actionPlan
+    |                         persist ai-action-plan cache
+    |<----------------------------------------------|
+    | render prioritized steps + suggested tasks
+    |
+Create selected suggestions
+    | POST /api/ai/tasks/batch
+    |---------------------------------------------->|
+    |                         map task suggestions -> WorkItem TASK documents
+    |----------------------------------------------> saveWorkItem(...)
+    |<---------------------------------------------- createdTaskIds[]
+    | confirm created tasks
+    |
+Workflow automation
+    | GET /api/ai/workflow-rules
+    |---------------------------------------------->|
+    |                         suggestWorkflowRules(context)
+    |                         merge with ai_workflow_rules enabled states
+    |<---------------------------------------------- rules[]
+    |
+Toggle or Run Active Rules
+    | POST /api/ai/workflow-rules
+    |---------------------------------------------->|
+    |                         persist enable/disable (optional)
+    |                         enforceActiveWorkflowRules (optional)
+    |<---------------------------------------------- enforcement actions
 ```
 
 ### Trend Snapshot and Analysis Flow (12D)

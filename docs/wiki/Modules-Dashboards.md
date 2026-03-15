@@ -190,6 +190,20 @@ Dashboards provide program-level rollups for milestones, risks, and delivery sta
     - optimization recommendations
   - scenario runs are cache-backed in `ai_analysis_cache` under `scenario-result:{scenarioHash}` (`reportType: scenarioResult`)
   - strategic advisor now includes recent scenario outcomes in context for what-if and scenario comparison questions
+- 14 added Collaborative Workflow Automation in AI Insights:
+  - new **Action Plan** panel shows prioritized execution steps with linked evidence
+  - new **Task Suggestions** cards allow:
+    - single task creation
+    - batch creation of selected suggestions
+  - new **Workflow Rules** panel provides:
+    - deterministic rule suggestions
+    - enable/disable toggles persisted in `ai_workflow_rules`
+    - on-demand rule enforcement from UI
+  - new APIs:
+    - `GET/POST /api/ai/action-plan`
+    - `POST /api/ai/tasks/batch` (`/api/tasks/batch` alias)
+    - `GET/POST /api/ai/workflow-rules`
+  - strategic advisor answers now include action-plan context so strategic and operational guidance stay aligned
 - Visual sequence diagrams for cache/regenerate/query/drill-down are documented in `docs/wiki/AI.md` under **Visual Flows**.
 
 ## Program Capacity (v1)

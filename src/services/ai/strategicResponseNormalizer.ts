@@ -97,6 +97,7 @@ export const normalizeStrategicModelResponse = (
       evidence: resolvedEvidence,
       relatedEntities: resolvedRelated,
       followUps: followUps.length > 0 ? followUps : deterministicFallback.followUps,
+      actionPlan: deterministicFallback.actionPlan,
       success: true,
       warning: followUps.length === 0 ? 'Model omitted follow-ups; deterministic follow-ups were applied.' : undefined
     };

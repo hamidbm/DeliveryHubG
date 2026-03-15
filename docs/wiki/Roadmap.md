@@ -259,6 +259,20 @@ Implemented:
   - scenario runs now return health/forecast/propagation deltas plus optimization recommendations
   - scenario results are cache-backed in `ai_analysis_cache` using `scenario-result:{scenarioHash}` (`reportType: scenarioResult`)
   - strategic advisor context now ingests recent scenario outcomes for scenario-aware answers and comparisons
+- 14: collaborative workflow automation and execution guidance:
+  - new deterministic action recommendation engine added (`src/services/ai/actionRecommender.ts`)
+  - new workflow rule engine added (`src/services/ai/workflowRuleEngine.ts`) with suggestion, persistence, and enforcement
+  - new APIs:
+    - `GET/POST /api/ai/action-plan`
+    - `POST /api/ai/tasks/batch` and alias `POST /api/tasks/batch`
+    - `GET/POST /api/ai/workflow-rules`
+  - strategic advisor now returns action plan context (`StrategicQueryResponse.actionPlan`)
+  - AI Insights Strategic panel now exposes:
+    - prioritized action steps
+    - single/batch task creation from suggestions
+    - workflow rule toggles and manual run
+  - workflow rule persistence uses `ai_workflow_rules`
+  - action plan cache persists in `ai_analysis_cache` under `ai-action-plan`
 
 Current 12B behavior:
 - structured sections are primary in AI Insights UI

@@ -18,6 +18,7 @@ import { executeAiTextTask } from '../aiRouting';
 import { generateDeterministicStrategicAnswer } from './strategicDeterministicEngine';
 import { normalizeStrategicModelResponse } from './strategicResponseNormalizer';
 import { generateStrategicQuickSuggestions } from './suggestionGenerator';
+import { generateActionPlan } from './actionRecommender';
 
 type AiSettings = {
   geminiProModel?: string;
@@ -70,6 +71,17 @@ const resolveFreshness = (generatedAt?: string) => {
 };
 
 const normalizeQuestion = (question: string) => question.trim().toLowerCase().replace(/\s+/g, ' ');
+const isActionPlanIntent = (question: string) => {
+  const q = normalizeQuestion(question);
+  return (
+    q.includes('action plan') ||
+    q.includes('step-by-step') ||
+    q.includes('step by step') ||
+    q.includes('execution plan') ||
+    (q.includes('generate') && q.includes('tasks')) ||
+    (q.includes('suggest') && q.includes('plan'))
+  );
+};
 
 const buildHash = (value: string) => createHash('sha256').update(value).digest('hex');
 
@@ -286,12 +298,26 @@ export const runStrategicAdvisorQuery = async (params: {
     scenarioResults: context.scenarioResults
   });
 
+  const actionPlan = generateActionPlan(
+    context.report,
+    context.trendSignals || [],
+    context.forecastSignals || [],
+    context.riskPropagationSignals || []
+  );
+  const actionIntent = isActionPlanIntent(question);
+  const actionLead = actionPlan.steps.slice(0, 3).map((step, index) => `${index + 1}) ${step.description}`).join(' ');
+
   const deterministicResponse: StrategicQueryResponse = {
-    answer: deterministic.answer,
-    explanation: deterministic.explanation,
+    answer: actionIntent && actionLead
+      ? `${deterministic.answer} Recommended execution sequence: ${actionLead}`
+      : deterministic.answer,
+    explanation: actionIntent
+      ? `${deterministic.explanation} The action plan below links each step to evidence and related entities for execution traceability.`
+      : deterministic.explanation,
     evidence: deterministic.evidence,
     relatedEntities: deterministic.relatedEntities,
     followUps: deterministic.followUps,
+    actionPlan,
     success: true
   };
 

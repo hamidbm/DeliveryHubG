@@ -14,6 +14,7 @@ services:
       - delivery-network
 
   app:
+    image: deliveryhub
     build:
       context: .
       dockerfile: Dockerfile
@@ -21,14 +22,15 @@ services:
     restart: unless-stopped
     ports:
       - "3000:3000"
+    env_file:
+      - .env.local
     environment:
-      MONGO_URL: mongodb://admin:secretpassword@mongodb:27017/deliveryhub?authSource=admin
+      MONGO_URL: mongodb://admin:secretpassword@mongodb:27017/delivery?authSource=admin
       API_KEY: ${API_KEY}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       GEMINI_API_KEY: ${GEMINI_API_KEY}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
       AI_DEFAULT_PROVIDER: OPEN_ROUTER
-      ADMIN_BOOTSTRAP_EMAILS: hamid@benmalek.net
     depends_on:
       - mongodb
     networks:

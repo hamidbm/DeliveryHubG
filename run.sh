@@ -108,6 +108,7 @@ function start_deliveryhub() {
   echo "🚀 Starting DeliveryHub on http://localhost:3000 ..."
   docker run --name "$CONTAINER_NAME" \
     -p 3000:3000 \
+    --env-file .env.local \
     -e MONGO_URL="$MONGO_URL" \
     -e OPENAI_API_KEY="${OPENAI_API_KEY}" \
     -e GEMINI_API_KEY="${GEMINI_API_KEY}" \
