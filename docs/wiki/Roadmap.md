@@ -273,6 +273,26 @@ Implemented:
     - workflow rule toggles and manual run
   - workflow rule persistence uses `ai_workflow_rules`
   - action plan cache persists in `ai_analysis_cache` under `ai-action-plan`
+- 14 Dashboard: executive decision dashboard redesign:
+  - new centralized dashboard aggregation service (`src/services/dashboardService.ts`)
+  - new dashboard contracts in `src/types/dashboard.ts`
+  - new aggregated APIs:
+    - `GET /api/dashboard/executive`
+    - `GET /api/dashboard/bundle/:bundleId`
+    - `GET /api/dashboard/milestone/:milestoneId`
+  - Delivery -> Dashboards now renders a row-based executive decision surface with:
+    - KPI strip
+    - progress trend
+    - forecast
+    - at-risk bundles
+    - blocker heatmap
+    - risk trend
+    - velocity trend
+    - capacity utilization
+    - aging
+    - distribution + health pulse
+    - AI summary recommendations
+  - dashboard payload caching added (short TTL, filter-context key) to keep dashboard responsive under repeated loads
 
 Current 12B behavior:
 - structured sections are primary in AI Insights UI

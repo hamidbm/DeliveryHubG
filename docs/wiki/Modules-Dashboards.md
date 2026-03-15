@@ -9,6 +9,7 @@ Dashboards provide program-level rollups for milestones, risks, and delivery sta
 - Executive rollups across applications, bundles, and milestones
 - Visual summaries for risks and progress
 - Program Capacity planning (bundle capacity vs. committed milestone demand)
+- Executive Decision Dashboard (Phase 14 dashboard redesign)
 
 ## Data
 - Stored in module-specific collections
@@ -16,6 +17,10 @@ Dashboards provide program-level rollups for milestones, risks, and delivery sta
 - AI Insights portfolio report persistence uses `ai_analysis_cache` (`portfolio-summary`)
 - Bundle capacity configuration stored in `bundle_capacity`
 - Capacity planning uses milestone rollups (`remainingPoints`) and committed milestone dates
+- Executive dashboard aggregation service:
+  - `src/services/dashboardService.ts`
+  - one aggregated payload per dashboard view
+  - short in-memory cache (~45s) keyed by filter context
 
 ## AI Insights (Phase 12A)
 - Page load is cache-first (`GET /api/ai/portfolio-summary`), with no automatic live generation.
@@ -204,6 +209,36 @@ Dashboards provide program-level rollups for milestones, risks, and delivery sta
     - `POST /api/ai/tasks/batch` (`/api/tasks/batch` alias)
     - `GET/POST /api/ai/workflow-rules`
   - strategic advisor answers now include action-plan context so strategic and operational guidance stay aligned
+- 14 Dashboard redesign added Executive Decision Dashboard under Delivery -> Dashboards:
+  - new aggregated API endpoints:
+    - `GET /api/dashboard/executive`
+    - `GET /api/dashboard/bundle/:bundleId`
+    - `GET /api/dashboard/milestone/:milestoneId`
+  - global dashboard controls:
+    - bundle/application/team filters
+    - time window (`7d|30d|90d|quarter`)
+    - comparison selector (`prev_week|prev_month|prev_quarter`)
+    - view mode (`executive|delivery|risk`)
+  - row-based executive layout now includes:
+    - program health KPI strip (Bundles, Milestones, Work Items, Blocked, High/Critical Risks, Overdue)
+    - delivery progress trend (planned vs actual)
+    - delivery forecast by bundle (planned/forecast go-live, variance, confidence, risk level)
+    - at-risk bundles ranking
+    - blocker heatmap
+    - risk trend
+    - velocity trend
+    - capacity utilization
+    - work item aging
+    - application distribution
+    - health pulse
+    - AI summary panel with actionable recommendations
+  - drill-down behavior:
+    - KPI cards and risk/forecast rows deep-link to Program scope views
+    - bundle and milestone dashboard APIs are available for deeper phase expansion
+  - frontend components:
+    - `src/components/dashboard/ExecutiveDashboard.tsx`
+    - `src/components/dashboard/MetricCard.tsx`
+    - `src/components/Dashboard.tsx` now wraps the executive dashboard
 - Visual sequence diagrams for cache/regenerate/query/drill-down are documented in `docs/wiki/AI.md` under **Visual Flows**.
 
 ## Program Capacity (v1)

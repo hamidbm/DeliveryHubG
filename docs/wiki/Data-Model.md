@@ -113,6 +113,9 @@ Observed indexes:
 - `{ _id: 1 }`
 - `{ createdAt: -1 }`
 
+Used by:
+- executive dashboard risk trend fallback/series generation in `src/services/dashboardService.ts`
+
 ### `applications`
 Top-level fields:
 - `_id`, `aid`, `bundleId`, `cloudMetadata`, `createdAt`, `createdBy`, `isActive`, `lifecycle`, `name`, `status`, `updatedAt`, `updatedBy`
