@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+
+{% block extrahead %}
+  <meta name="theme-color"
+        media="(prefers-color-scheme: light)"
+        content="#0288d1">
+  <meta name="theme-color"
+        media="(prefers-color-scheme: dark)"
+        content="#f44336">
+  <meta name="theme-color" id="theme-color-dynamic" content="#0288d1">
+  <script>
+    (function() {
+      try {
+        var scope = new URL(".", location).pathname;
+        var palette = JSON.parse(localStorage.getItem(scope + ".__palette"));
+        var scheme = palette && palette.color && palette.color.scheme;
+        var meta = document.getElementById("theme-color-dynamic");
+        if (meta) {
+          meta.content = scheme === "slate" ? "#f44336" : "#0288d1";
+        }
+      } catch(e) {}
+    })();
+  </script>
+{% endblock %}
+
+{% block scripts %}
+  {{ super() }}
+  <script>
+    function updateThemeColor() {
+      var scheme = document.body.getAttribute("data-md-color-scheme");
+      var color = scheme === "slate" ? "#f44336" : "#0288d1";
+      var meta = document.getElementById("theme-color-dynamic");
+      if (meta) meta.content = color;
+    }
+
+    document$.subscribe(function() {
+      updateThemeColor();
+      var observer = new MutationObserver(function(mutations) {
+        mutations.forEach(function(mutation) {
+          if (mutation.attributeName === "data-md-color-scheme") {
+            updateThemeColor();
+          }
+        });
+      });
+      observer.observe(document.body, { attributes: true });
+    });
+  </script>
+{% endblock %}

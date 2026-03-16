@@ -5,6 +5,7 @@ import { cookies } from 'next/headers';
 import bcrypt from 'bcryptjs';
 import { ObjectId } from 'mongodb';
 import { getDb } from '../../../../services/db';
+import { normalizeAccountType } from '../../../../services/authPrincipal';
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
 
@@ -56,6 +57,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
+    const accountType = normalizeAccountType((result as any).accountType);
+
     // Re-issue JWT with updated data
     const newToken = await new SignJWT({ 
       id: userId, 
@@ -63,7 +66,8 @@ export async function POST(request: Request) {
       name: result.name, 
       username: result.username,
       role: result.role,
-      team: result.team
+      team: result.team,
+      accountType
     })
       .setProtectedHeader({ alg: 'HS256' })
       .setIssuedAt()
@@ -72,7 +76,7 @@ export async function POST(request: Request) {
 
     const response = NextResponse.json({ 
       message: 'Profile updated successfully',
-      user: { name: result.name, email: result.email, role: result.role, team: result.team, username: result.username }
+      user: { name: result.name, email: result.email, role: result.role, team: result.team, username: result.username, accountType }
     });
 
     response.cookies.set('nexus_auth_token', newToken, {

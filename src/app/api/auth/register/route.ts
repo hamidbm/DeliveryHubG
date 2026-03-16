@@ -40,6 +40,7 @@ export async function POST(request: Request) {
       password: hashedPassword,
       team: normalizedTeam,
       role: normalizedRole,
+      accountType: 'STANDARD',
       createdAt: new Date(),
     });
 

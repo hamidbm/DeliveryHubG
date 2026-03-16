@@ -1,0 +1,65 @@
+:root > * {
+    --md-footer-fg-color: hsla(0, 0%, 100%, 1);
+    --md-footer-fg-color--light: hsla(0, 0%, 100%, 0.7);
+    --md-footer-fg-color--lighter: hsla(0, 0%, 100%, 0.3);
+    /*--md-accent-fg-color: #CD5C5C;*/
+    /*--md-typeset-a-color: #CD5C5C;*/
+  }
+
+.md-footer {
+    background-color: var(--md-primary-fg-color);
+}
+
+.md-nav__link--active {
+  font-weight: bold;
+}
+
+details.faq summary {
+    background-color: #D98880;
+    color: white;
+}
+details.faq {
+    border: 1px solid #CD5C5C;
+}
+
+blockquote {
+    #border-left-color: #4A67A9;
+    background: #EBF5FB; /* #f9f9f9; */
+    color: royalblue;
+    #border-left: 2px royalblue solid;
+    border-left: 5px solid #CD5C5C;
+}
+
+/*
+.md-header {
+    background-color: var(--md-primary-fg-color)
+}
+.md-footer {
+    background-color: var(--md-primary-fg-color); /* Optional */
+}
+*/
+
+/* =============================================
+   Safari overscroll / rubber-band bleed fix
+   ============================================= */
+
+/* Header & footer — scheme-aware so switching works correctly */
+[data-md-color-scheme="default"] .md-header,
+[data-md-color-scheme="default"] .md-footer {
+  background-color: var(--md-primary-fg-color); /* light blue */
+}
+
+[data-md-color-scheme="slate"] .md-header,
+[data-md-color-scheme="slate"] .md-footer {
+  background-color: var(--md-primary-fg-color); /* red, as defined in mkdocs.yml */
+}
+
+/* Fix the gap between top of window and top of header in Safari */
+html {
+  background-color: #0288d1; /* light blue — Material "light blue" primary exact value */
+  overscroll-behavior-y: none;
+}
+
+html:has([data-md-color-scheme="slate"]) {
+  background-color: #f44336; /* red — Material "red" primary exact value */
+}

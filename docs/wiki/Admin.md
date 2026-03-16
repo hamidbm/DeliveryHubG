@@ -1,93 +1,75 @@
 # Admin Module
 
-The Admin module configures global settings, reference data, and governance controls.
+The Admin module is the governance and configuration backbone of DeliveryHub.
 
-## Modules
-- Bundles
-- Applications
-- Taxonomy (categories, document types)
-- Wiki themes
-- Wiki templates
-- Diagram templates
-- AI settings
-- Admin registry
-- Bundle assignments (ownership mapping)
-- Work blueprints
-- Work generators
-- Samples (import curated seed data)
-- Audit • Events
-- Audit • Notifications
-- Notification Policy (global notification settings)
-- Delivery Policy (governance thresholds)
-- Jira integration (one-way sync)
-- GitHub integration (one-way PR enrichment)
-- Backup & Restore (config export/import)
+It defines the shared rules, templates, ownership mappings, policy settings, and operational controls that make the rest of the platform consistent.
 
-## Access
-- Admin-only for configuration and governance sections.
-- Admin/CMO can access Audit consoles (events + notifications).
+## What This Module Is For
 
-## Samples Import
-The Samples module allows admins to import curated seed data from `seed/sample` into the database.
+Every connected product needs a controlled place where core standards are managed.
 
-- Idempotent upsert by `_id` (or `_seedKey` fallback)
-- Optional collection checklist
-- “Import All” for full dataset
-- “Reset Sample” removes only `demoTag: "sample-v1"`
+In DeliveryHub, the Admin module is where that happens.
 
-## Data
-- Stored in collections such as `taxonomy_document_types`, `taxonomy_categories`, `bundles`, `wiki_themes`, `diagram_templates`, `ai_settings`, `bundle_assignments`, and `admins`.
+It supports:
 
-## Notifications Policy
-Admins/CMO can configure notification policy in Admin → Settings → Notifications. This controls:
-- Which notification types are enabled
-- Routing rules (admins, bundle owners, actor-on-blocked)
-- Digest behavior (daily, hour)
+- reference data management
+- template and theme management
+- ownership mapping
+- AI controls
+- delivery policy configuration
+- sample data operations
+- audit and operational utilities
 
-## Delivery Policy
-Admins/CMO can configure global governance thresholds in Admin → Settings → Delivery Policy. This controls:
-- readiness thresholds for milestones and sprints
-- data quality scoring weights and caps
-- forecasting band thresholds
-- Monte Carlo forecasting controls (P50/P80/P90 + hit probability)
-- critical path slack and external defaults
-- commitment review gate (P80 + hit probability + capacity + quality)
-- staleness thresholds and nudge/digest behavior
+## Core Capabilities
 
-### Bundle Policy Overrides
-Admins/CMO can set bundle-specific overrides that inherit from the global policy.
+### Reference data and product setup
 
-- Overrides are stored per bundle and only include the fields you change.
-- Effective policy = global policy merged with bundle overrides.
-- Rollups and readiness calculations show which policy versions were used.
-- Use “Reset to Global” to remove the override and revert to global policy.
+Admins can manage the shared structures that the rest of the product depends on, such as bundles, applications, categories, document types, themes, and templates.
 
-## Backup & Restore
-Admin → Operations → Backup & Restore provides safe export/import for config and planning metadata:
-- Export JSON bundles for policies, bundles, milestones, assignments, and scope requests
-- Dry-run diffs before applying
-- Apply requires confirmation phrase `IMPORT_BACKUP`
+### Ownership and accountability mapping
 
-## Jira Integration (v1)
-DeliveryHub supports a one-way Jira sync (Jira → DeliveryHub) from Admin → Integrations → Jira.
+Bundle assignments and related mappings help define who is responsible for which delivery area.
 
-Required environment variables:
-- `JIRA_HOST`
-- `JIRA_EMAIL`
-- `JIRA_API_TOKEN`
-- `JIRA_PROJECT_KEYS` (comma-separated)
+This is important because ownership influences visibility, governance routing, and escalation clarity.
 
-Optional:
-- `JIRA_STORY_POINTS_FIELD_ID`
-- `JIRA_STATUS_MAPPING` (JSON map from Jira status to DeliveryHub status)
+### AI governance
 
-Admins can preview and run a manual sync. Sync updates titles, status, story points, and assignee, and creates new work items when needed.
+Admin controls how AI is used across the platform, including provider routing, defaults, and guardrails.
 
-## GitHub Integration (v1)
-DeliveryHub supports a one-way GitHub PR enrichment from Admin → Integrations → GitHub.
+This keeps AI usage controlled instead of ad hoc.
 
-Required environment variables:
-- `GITHUB_TOKEN`
-- `GITHUB_REPOS` (comma-separated `owner/repo`)
+### Delivery policy
 
-Admins can preview and run a manual sync. Sync links pull requests to work items when the PR title/body/branch contains a work item key (e.g., `ABC-123`). Linked PRs appear on work item details and GitHub activity signals appear in critical path panels.
+The product supports configurable policy for planning and governance thresholds so delivery discipline can be applied consistently and adjusted when needed.
+
+### Sample and bootstrap operations
+
+Admins can prepare environments for demos, testing, and onboarding by installing or resetting curated data.
+
+### Audit and operational visibility
+
+The module provides audit-oriented visibility into events, notifications, and related governance surfaces.
+
+### Integration support
+
+Admin is also the place where external integrations and operational utilities are controlled.
+
+## Typical Ways Teams Use It
+
+### For admins and governance leads
+
+Use Admin to keep the platform coherent, enforce standards, and manage the reference structures that other modules depend on.
+
+### For PMO and senior leadership
+
+Rely on Admin-governed ownership, policy, and audit controls to trust what the rest of the platform is showing.
+
+### For architects and content stewards
+
+Use templates, taxonomies, and assignments to keep architecture and knowledge content consistent across the program.
+
+## Why This Module Matters
+
+Without strong administration, a platform like DeliveryHub quickly becomes inconsistent.
+
+The Admin module prevents that by making governance, standards, and operational controls explicit and manageable.

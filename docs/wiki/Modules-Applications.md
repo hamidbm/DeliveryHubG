@@ -1,169 +1,102 @@
 # Applications Module
 
-The Applications module is the portfolio inventory and APM context layer for systems and services, with bundle-level profiles for executive visibility.
+The Applications module is the Application Portfolio Management layer of DeliveryHub.
 
-## Core Features
-- Application registry and metadata
-- Bundle profiles and ownership mapping
-- Lifecycle, criticality, and migration status fields
-- Portfolio-level search and filtering
-- Cross-linking to architecture and wiki artifacts
-- Application portfolio management (Phase 11):
-  - portfolios
-  - release trains
-  - cross-application dependencies
-  - lifecycle records
-  - environment strategy
+It gives the product its portfolio memory by keeping track of the systems, bundles, ownership, lifecycle context, dependencies, and delivery impact that surround the work being executed.
 
-## Bundle Profiles
-- Bundle summary and key metrics
-- Ownership and executive accountability (driven by Admin → Bundle Assignments)
-- Milestone status rollups
-- Recent activity feed for bundle-scoped governance, scope, and dependency changes
-- Weekly Executive Brief card (bundle-level narrative and drivers)
-- Bundle-level APM tabs (Phase 11C):
-  - Overview
-  - Environments (bundle baseline schedule/defaults)
-  - Ownership
-  - Dependencies (application dependency rollups + cross-bundle visibility)
-  - Lifecycle (rollup across apps in bundle)
-  - Delivery Impact (bundle impact summary + at-risk app drilldown)
-  - Notes
-- "Apps in this bundle" panel with direct `Open App Detail` actions
+## What This Module Is For
 
-## Application Planning Metadata (Phase 9.2A Extension)
-- Planning metadata is stored in `application_planning_metadata` with **bundle scope** and **application scope**
-- Bundle metadata provides shared defaults across apps; application metadata overrides bundle values when set
-- Bundle profile → Schedule edits the bundle-level defaults directly
-- Applications → Schedule uses an environment grid (DEV, SIT, INT, UAT, PROD) with Edit/Save/Cancel
-- Go‑Live has a dedicated planned/actual field (separate from PROD)
-- Planning defaults, capacity defaults, and notes are persisted in the same metadata record
-- Core application records remain in `applications`
-- This metadata will drive Work Items delivery plan intake defaults in Phase 9.2B
+In large delivery programs, work plans alone are not enough. Teams also need to know:
 
-## APM Deep Build (Phase 11)
-Phase 11 extends Applications into an Application Portfolio Management surface.
+- which applications are affected
+- which applications move together as a bundle
+- which systems are business-critical
+- where dependencies can create drag or risk
+- how release and lifecycle context should influence delivery decisions
 
-### Application Dashboard (Apps View)
-Implemented summary cards:
-- Applications count
-- Lifecycle-tracked count
-- Critical systems count
-- Dependency count
+The Applications module provides that context.
 
-### Application Detail Tabs
-Implemented tabs:
-- Overview
-- Environments
-- Dependencies
-- Lifecycle
-- Delivery Impact
+## Core Capabilities
 
-### Bundle Profile Tabs (Phase 11C)
-Implemented bundle runtime tabs:
-- Overview
-- Environments
-- Ownership
-- Dependencies
-- Lifecycle
-- Delivery Impact
-- Notes
+### Application registry
 
-Implemented bundle-level APM exposure:
-- header badges for status, app count, current milestone, planned go-live
-- actions: `Open Roadmap`, `Open Program`, `View Apps in Bundle`
-- dependency rollups (inbound, outbound, internal, critical, cross-bundle)
-- lifecycle distribution and app lifecycle table
-- delivery impact rollups and at-risk applications table
-- consistent bundle-to-app drilldown (`Open App Detail`)
+DeliveryHub maintains a structured inventory of applications so users can understand the systems inside the program, not just the tasks being performed.
 
-### Overview (Context Metadata)
-Implemented editable context fields:
-- `portfolioId`
-- `releaseTrain`
-- `lifecycleStatus`
-- `businessCriticality`
-- `availabilityTier`
-- `dataSensitivity`
-- `operationalOwner`
-- `businessOwner`
-- `technicalOwner`
+### Bundle profiles
 
-### Environments
-Implemented:
-- Schedule metadata editor (bundle/application scope behavior preserved)
-- Environment grid and Go-Live fields
-- Persisted planning and capacity defaults
+Bundle profiles are a major management surface in this module.
 
-### Dependencies
-Implemented:
-- Create/delete cross-application dependencies
-- Dependency types: `API`, `DATA`, `EVENT`, `SHARED_INFRA`
-- Criticality: `LOW`, `MEDIUM`, `HIGH`, `CRITICAL`
-- Inbound/outbound display in application detail
+They bring together:
 
-### Lifecycle
-Implemented:
-- Lifecycle record API + UI persistence
-- Stages: `ACTIVE`, `MAINTENANCE`, `SUNSETTING`, `RETIRED`
-- Lifecycle owner and notes
-- Sync of lifecycle stage to `applications.lifecycleStatus`
+- ownership and accountability
+- current milestone posture
+- planned go-live context
+- notes and operational context
+- links into roadmap and application detail
 
-### Delivery Impact
-Implemented:
-- App-level impact summary:
-  - inbound/outbound dependency counts
-  - connected applications
-  - shared release-train applications
-  - impacted milestones
-  - related work item count
+This allows leadership to review a delivery grouping as a business object, not only as a technical grouping.
 
-## APIs (Implemented)
-Applications:
-- `GET /api/applications`
-- `POST /api/applications`
-- `GET /api/applications/{id}`
-- `PUT /api/applications/{id}`
-- `PATCH /api/applications/{id}`
+### Environment and planning context
 
-Application portfolios:
-- `GET /api/application-portfolios`
-- `POST /api/application-portfolios`
-- `GET /api/application-portfolios/{id}`
-- `PUT /api/application-portfolios/{id}`
+Applications and bundles can carry planning context such as environment schedules, go-live timing, defaults, and application-level overrides.
 
-Release trains:
-- `GET /api/release-trains`
-- `POST /api/release-trains`
-- `GET /api/release-trains/{id}`
-- `PUT /api/release-trains/{id}`
+This makes delivery planning more repeatable and reduces manual re-entry of the same planning assumptions.
 
-Application dependencies:
-- `GET /api/application-dependencies`
-- `POST /api/application-dependencies`
-- `DELETE /api/application-dependencies/{id}`
-- `GET /api/applications/{id}/dependencies`
+### Portfolio and release train structure
 
-Lifecycle / environment strategy / impact:
-- `GET /api/applications/{id}/lifecycle`
-- `PUT /api/applications/{id}/lifecycle`
-- `GET /api/applications/{id}/environment-strategy`
-- `PUT /api/applications/{id}/environment-strategy`
-- `GET /api/applications/{id}/delivery-impact`
+The module supports portfolio-level grouping and release-train style organization so applications can be reasoned about at more than one planning level.
 
-## Data
-- Applications stored in `applications`
-- Bundles stored in `bundles`
-- Bundle profiles stored in `bundle_profiles`
-- Bundle assignments stored in `bundle_assignments`
-- Application planning metadata stored in `application_planning_metadata`
-- Application portfolios stored in `application_portfolios`
-- Application dependencies stored in `application_dependencies`
-- Lifecycle records stored in `application_lifecycle`
-- Environment strategy stored in `application_environment_strategy`
-- Release trains stored in `release_trains`
+### Cross-application dependencies
 
-## Tests (Implemented)
-- `scripts/test-application-portfolios.ts`
-- `scripts/test-application-dependencies.ts`
-- `scripts/test-environment-strategy.ts`
+Dependencies between applications are visible in the module so leaders can see where one system constrains another.
+
+This helps explain why apparently simple plans may still be fragile.
+
+### Lifecycle and criticality context
+
+Applications can be tracked with lifecycle and business importance context, allowing teams to distinguish between routine systems and high-consequence systems.
+
+### Delivery impact views
+
+The module can surface how an application relates to:
+
+- connected applications
+- impacted milestones
+- related work
+- broader delivery risk
+
+### Bundle health and risk context
+
+The module is designed to surface bundle health, including signals related to milestones, overdue work, risks, and dependencies, so upper management does not need to inspect raw work-item detail to understand exposure.
+
+## Typical Ways Teams Use It
+
+### For upper management
+
+Use bundle profiles to understand which bundles matter most, who owns them, which milestones are active, and where dependency concentration is becoming dangerous.
+
+### For PMO and program leadership
+
+Use this module to explain why a delivery issue matters in business terms, not only in task terms.
+
+### For architects and engineering leaders
+
+Use dependencies, environment strategy, lifecycle context, and delivery impact to reason about sequencing, cutover, and operational consequences.
+
+## How This Module Connects to the Rest of DeliveryHub
+
+- **Work Items** owns execution workflow, while Applications provides the business and system context around that work.
+- **Architecture** can link diagrams and reviews back to applications and bundles.
+- **Dashboards** use bundle and application context to make portfolio views meaningful.
+- **AI Insights** uses application and bundle relationships to explain concentration risk and propagation.
+
+## Why This Module Matters
+
+Without the Applications module, DeliveryHub would still know that work exists, but it would be much harder to answer:
+
+- what systems are in scope
+- which business services are affected
+- where dependencies create structural risk
+- who should care most about a delivery issue
+
+That is why Applications is one of the four major apps in the platform.

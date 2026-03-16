@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { SignJWT } from 'jose';
 import { ensureUserIndexes, getAdminBootstrapEmails, getDb, upsertAdmin } from '../../../../services/db';
+import { normalizeAccountType } from '../../../../services/authPrincipal';
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
 
@@ -18,6 +19,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 });
     }
 
+    const accountType = normalizeAccountType((user as any).accountType);
+
     // Determine session duration based on 'Remember Me'
     const expirationTime = rememberMe ? '30d' : '24h';
     const cookieMaxAge = rememberMe ? 60 * 60 * 24 * 30 : 60 * 60 * 24;
@@ -28,7 +31,8 @@ export async function POST(request: Request) {
       name: user.name, 
       username: user.username,
       role: user.role,
-      team: user.team
+      team: user.team,
+      accountType
     })
       .setProtectedHeader({ alg: 'HS256' })
       .setIssuedAt()
@@ -43,7 +47,7 @@ export async function POST(request: Request) {
 
     const response = NextResponse.json({ 
       message: 'Logged in successfully',
-      user: { name: user.name, role: user.role, team: user.team, username: user.username, email: user.email }
+      user: { name: user.name, role: user.role, team: user.team, username: user.username, email: user.email, accountType }
     });
 
     response.cookies.set('nexus_auth_token', token, {

@@ -4,6 +4,16 @@ import { jwtVerify } from 'jose';
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
 
+const READ_ONLY_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+const normalizeAccountType = (value?: string | null) => String(value || '').trim().toUpperCase() === 'GUEST' ? 'GUEST' : 'STANDARD';
+
+const isGuestCommentMutationPath = (pathname: string, method: string) => {
+  if (method !== 'POST') return false;
+  if (/^\/api\/resources\/[^/]+\/[^/]+\/comment-threads$/.test(pathname)) return true;
+  if (/^\/api\/comment-threads\/[^/]+\/messages$/.test(pathname)) return true;
+  return false;
+};
+
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const token = request.cookies.get('nexus_auth_token')?.value;
@@ -33,7 +43,7 @@ export async function proxy(request: NextRequest) {
   }
 
   // 4. Handle Protected Paths (Dashboard and other APIs)
-  const isProtectedPath = pathname === '/' || (pathname.startsWith('/api/') && !isPublicApi);
+  const isProtectedPath = !isAuthPage && !isStaticFile && !isPublicApi;
 
   if (isProtectedPath) {
     if (!token) {
@@ -46,7 +56,20 @@ export async function proxy(request: NextRequest) {
 
     try {
       // Verify the JWT
-      await jwtVerify(token, JWT_SECRET);
+      const { payload } = await jwtVerify(token, JWT_SECRET);
+      const accountType = normalizeAccountType(String((payload as any).accountType || ''));
+      const isGuest = accountType === 'GUEST';
+
+      if (isGuest && pathname.startsWith('/api/admin')) {
+        return NextResponse.json({ error: 'Forbidden: Guest accounts cannot access admin APIs' }, { status: 403 });
+      }
+
+      if (isGuest && pathname.startsWith('/api/') && !READ_ONLY_METHODS.has(request.method)) {
+        if (!isGuestCommentMutationPath(pathname, request.method)) {
+          return NextResponse.json({ error: 'Forbidden: Guest accounts are read-only except for comments' }, { status: 403 });
+        }
+      }
+
       return NextResponse.next();
     } catch (error) {
       // Token verification failed (expired or tampered)

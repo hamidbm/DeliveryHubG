@@ -3,6 +3,7 @@ import { cookies } from 'next/headers';
 import { jwtVerify } from 'jose';
 import { getDb } from './db';
 import { isAdminOrCmo } from './authz';
+import { normalizeAccountType } from './authPrincipal';
 import type { WorkItem, Bundle } from '../types';
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
@@ -12,6 +13,7 @@ type AuthUser = {
   id?: string;
   role?: string;
   email?: string;
+  accountType?: 'STANDARD' | 'GUEST';
 };
 
 type VisibilityLevel = 'PRIVATE' | 'INTERNAL' | 'PUBLIC';
@@ -35,7 +37,8 @@ export const getAuthUserFromCookies = async (): Promise<AuthUser | null> => {
     return {
       userId: String((payload as any).id || (payload as any).userId || ''),
       role: (payload as any).role ? String((payload as any).role) : undefined,
-      email: (payload as any).email ? String((payload as any).email) : undefined
+      email: (payload as any).email ? String((payload as any).email) : undefined,
+      accountType: normalizeAccountType((payload as any).accountType)
     };
   }
   const cookieStore = await cookies();
@@ -45,7 +48,8 @@ export const getAuthUserFromCookies = async (): Promise<AuthUser | null> => {
   return {
     userId: String((payload as any).id || (payload as any).userId || ''),
     role: (payload as any).role ? String((payload as any).role) : undefined,
-    email: (payload as any).email ? String((payload as any).email) : undefined
+    email: (payload as any).email ? String((payload as any).email) : undefined,
+    accountType: normalizeAccountType((payload as any).accountType)
   };
 };
 

@@ -164,6 +164,15 @@ export default function LoginPage() {
                 Create Account
               </Link>
             </p>
+            <p className="text-slate-400 text-xs mt-3">
+              Need read-only access with comments only?{' '}
+              <Link
+                href="/register?accountType=guest"
+                className="text-blue-600 font-bold hover:text-blue-500 transition cursor-pointer"
+              >
+                Register Guest Account
+              </Link>
+            </p>
           </div>
         </div>
       </div>

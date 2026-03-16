@@ -1,56 +1,75 @@
-# DeliveryHub Wiki
+# DeliveryHub Documentation
 
-Welcome to the DeliveryHub product documentation. DeliveryHub is an internal Software Delivery + Application Portfolio Management portal that consolidates program governance, technical architecture, work execution, and documentation in one place.
+DeliveryHub is an internal software delivery and application portfolio management platform used to coordinate migration programs, delivery governance, architecture reviews, portfolio visibility, and executive reporting in one place.
 
-Use this wiki to understand what the app does today, how it is structured, and how to extend it safely.
+This documentation is now organized by audience instead of by internal implementation topics.
 
-Baseline bootstrap runs automatically on startup to install required reference data (taxonomy, themes, templates, bundles/apps). Sample data is optional and may change during development.
+## Start Here
 
-## Recent Updates (Last Few Days)
-- Work Items: Generate Delivery Plan wizard (preview → draft creation)
-- Work Items: Read‑first details panel with explicit Edit mode
-- Work Items: Provider‑neutral AI tab and compact action row
-- Work Items: Sprint label shows name + dates and links to the Sprint view
+Choose the path that best matches what you need:
 
-## Quick Navigation
-- Architecture and structure: see `docs/wiki/Architecture.md`
-- Modules overview: see `docs/wiki/Modules-Overview.md`
-- Wiki module: see `docs/wiki/Modules-Wiki.md`
-- Work Items module: see `docs/wiki/Modules-WorkItems.md`
-- Applications module: see `docs/wiki/Modules-Applications.md`
-- Architecture module: see `docs/wiki/Modules-Architecture.md`
-- Reviews: see `docs/wiki/Reviews.md`
-- Dashboards and AI Insights: see `docs/wiki/Modules-Dashboards.md`
-- Admin module: see `docs/wiki/Admin.md`
-- AI capabilities and governance: see `docs/wiki/AI.md`
-- Data model and collections: see `docs/wiki/Data-Model.md`
-- Operations and deployment: see `docs/wiki/Operations.md`
-- Development workflow: see `docs/wiki/Development.md`
-- Known gaps and next steps: see `docs/wiki/Roadmap.md`
+- **Quick Setup**: for anyone who needs to get DeliveryHub running locally on a laptop.
+- **Product Guide**: for business users, delivery teams, architects, and upper management who want to understand the product, its features, and the value it provides.
+- **Technical Documentation**: for engineers and developers working on DeliveryHub itself.
+
+## Documentation Structure
+
+### Quick Setup
+
+Use this section when you need a detailed local setup tutorial:
+
+- what to install first
+- which environment variables matter
+- how to start MongoDB and the app
+- how to confirm the system is working
+
+### Product Guide
+
+Use this section when you want to understand what DeliveryHub does and how to use it well:
+
+- what each module means
+- what business problem it solves
+- what benefits it provides
+- how to get the most value from the workflow
+
+### Technical Documentation
+
+Use this section when you are building or maintaining the product:
+
+- architecture and source layout
+- operations and deployment
+- data model and collections
+- development workflow
+- current implementation gaps and inconsistencies
 
 ## About DeliveryHub
-DeliveryHub is an internal MVP web application used to manage a large migration program with hundreds of applications moving to cloud platforms. It replaces or complements several tools with a unified experience.
 
-What it consolidates:
-- Jira-like Work Items
-- Confluence-like Wiki
-- LeanIX-like Architecture
-- Planview-like Applications
-- Dashboards and AI Insights
+DeliveryHub consolidates several capabilities that are usually spread across multiple tools:
 
-Key principles:
-- Next.js App Router with server-side MongoDB access
-- BFF architecture (no separate backend service)
-- Assistive AI only, with explicit user actions
-- Strong focus on governance and auditability
+- Jira-like work planning and execution tracking
+- Confluence-like wiki and document collaboration
+- LeanIX-like architecture and dependency visibility
+- Planview-like application portfolio management
+- Dashboards, reporting, and AI-assisted insights
 
-User preferences:
-- Notification preferences are managed under Profile Settings (mute types + opt into daily digest).
+## Core Principles
 
-## Guided Onboarding
-DeliveryHub includes a role-based “Start Here” card on the dashboard to reduce time-to-value for new users. It provides:
-- Role selector (PM / Engineer / Exec / Admin)
-- Progress checklist with direct links into the relevant modules
-- Embedded metric explanations (P80, drift, data quality, critical path, overcommit, staleness)
+- MongoDB access stays server-side
+- AI is assistive only and must not silently change business data
+- Governance, traceability, and auditability are first-class concerns
+- Work Items remain the execution system of record
 
-Progress and dismissals are stored per user in the `user_onboarding` collection.
+## Recommended Reading Order
+
+If you are new to the product:
+
+1. Quick Setup
+2. Product Guide overview
+3. Product Guide pages for the modules relevant to your role
+
+If you are a developer joining the project:
+
+1. Quick Setup
+2. Technical Documentation overview
+3. Architecture, Data Model, Operations, Development Workflow
+4. Implementation Gaps

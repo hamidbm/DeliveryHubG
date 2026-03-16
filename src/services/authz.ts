@@ -6,7 +6,10 @@ type AuthUser = {
   id?: string;
   role?: string;
   team?: string;
+  accountType?: 'STANDARD' | 'GUEST';
 };
+
+export const isGuestAccount = (user?: AuthUser | null) => String(user?.accountType || '').toUpperCase() === 'GUEST';
 
 const ENGINEERING_ROLES = new Set<Role>([
   Role.ENGG_LEADER,
@@ -60,6 +63,7 @@ const isBundleOwner = async (user?: AuthUser, bundleId?: string) => {
 
 export const isAdminOrCmo = async (user?: AuthUser) => {
   if (!user) return false;
+  if (isGuestAccount(user)) return false;
   if (isAdminOrCmoRole(user.role)) return true;
   const userId = String(user.userId || user.id || '');
   if (!userId) return false;
@@ -68,12 +72,14 @@ export const isAdminOrCmo = async (user?: AuthUser) => {
 
 export const canSubmitForReview = (user?: AuthUser) => {
   if (!user) return false;
+  if (isGuestAccount(user)) return false;
   return Boolean(user.userId || user.id || user.role);
 };
 
 export const canMarkFeedbackSent = (user?: AuthUser) => user?.role === Role.CMO_MEMBER;
 
 export const canResubmit = (user?: AuthUser) => {
+  if (isGuestAccount(user)) return false;
   const role = user?.role;
   return Boolean(role && (isEngineeringRole(role) || isVendorRole(role)));
 };
@@ -92,8 +98,14 @@ export const canViewArchitectureDiagram = (user?: AuthUser, _diagram?: any) => {
   return Boolean(user.userId || user.id);
 };
 
+export const canComment = (user?: AuthUser) => {
+  if (!user) return false;
+  return Boolean(user.userId || user.id);
+};
+
 export const canEditBundleProfile = async (user?: AuthUser) => {
   if (!user) return false;
+  if (isGuestAccount(user)) return false;
   if (user.team === 'Management') return true;
   const userId = String(user.userId || user.id || '');
   if (!userId) return false;
@@ -117,37 +129,45 @@ export const isPrivilegedMilestoneRole = (role?: string) => {
 };
 
 export const canCommitMilestone = async (user?: AuthUser) => {
+  if (isGuestAccount(user)) return false;
   return await isAdminOrCmo(user);
 };
 
 export const canStartMilestone = async (user?: AuthUser) => {
+  if (isGuestAccount(user)) return false;
   return await isAdminOrCmo(user);
 };
 
 export const canCompleteMilestone = async (user?: AuthUser) => {
+  if (isGuestAccount(user)) return false;
   return await isAdminOrCmo(user);
 };
 
 export const canOverrideMilestoneReadiness = async (user?: AuthUser) => {
+  if (isGuestAccount(user)) return false;
   return await isAdminOrCmo(user);
 };
 
 export const canOverrideCapacity = async (user?: AuthUser) => {
+  if (isGuestAccount(user)) return false;
   return await isAdminOrCmo(user);
 };
 
 export const canManageSprints = async (user?: AuthUser) => {
+  if (isGuestAccount(user)) return false;
   return await isAdminOrCmo(user);
 };
 
 export const canEditCommittedMilestoneScope = async (user?: AuthUser, milestone?: any) => {
   if (!user || !milestone?.bundleId) return false;
+  if (isGuestAccount(user)) return false;
   if (await isAdminOrCmo(user)) return true;
   return await isBundleOwner(user, String(milestone.bundleId));
 };
 
 export const canEditMilestoneOwner = async (user?: AuthUser, bundleIds: string[] = []) => {
   if (!user) return false;
+  if (isGuestAccount(user)) return false;
   if (await isAdminOrCmo(user)) return true;
   const userId = String(user.userId || user.id || '');
   if (!userId) return false;
@@ -157,6 +177,7 @@ export const canEditMilestoneOwner = async (user?: AuthUser, bundleIds: string[]
 
 export const canCreateBlocksDependency = async (user?: AuthUser, sourceItem?: any, targetItem?: any) => {
   if (!user) return false;
+  if (isGuestAccount(user)) return false;
   if (await isAdminOrCmo(user)) return true;
   if (!sourceItem || !targetItem) return false;
   const sourceBundle = sourceItem.bundleId ? String(sourceItem.bundleId) : '';
@@ -171,6 +192,7 @@ export const canRemoveBlocksDependency = async (user?: AuthUser, sourceItem?: an
 
 export const canEditRiskSeverity = async (user?: AuthUser, item?: any) => {
   if (!user || !item?.bundleId) return false;
+  if (isGuestAccount(user)) return false;
   if (await isAdminOrCmo(user)) return true;
   return await isBundleOwner(user, String(item.bundleId));
 };

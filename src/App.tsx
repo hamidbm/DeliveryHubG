@@ -219,6 +219,13 @@ function HomeContent() {
   }, [pathname]);
 
   useEffect(() => {
+    if (String(user?.accountType || '').toUpperCase() === 'GUEST' && activeTab === 'admin') {
+      setActiveTab('dashboard');
+      router.push('/');
+    }
+  }, [activeTab, user?.accountType]);
+
+  useEffect(() => {
     const fetchData = async () => {
       try {
         const [bRes, aRes, eRes, uRes] = await Promise.all([
@@ -313,7 +320,9 @@ function HomeContent() {
       case 'ai-insights':
         return <AIInsights applications={applications} bundles={bundles} />;
       case 'admin':
-        return <Admin />;
+        return String(user?.accountType || '').toUpperCase() === 'GUEST'
+          ? <Dashboard applications={applications} bundles={bundles} />
+          : <Admin />;
       default:
         return <Dashboard applications={applications} bundles={bundles} />;
     }
@@ -364,6 +373,7 @@ function HomeContent() {
       epics={epics}
       userName={user?.name}
       userRole={user?.role}
+      userAccountType={user?.accountType}
       onLogout={handleLogout}
       onCreateWikiArtifact={() => { handleSetActiveTab('wiki'); setExternalTrigger('create-wiki-artifact'); }}
       onCreateWorkItem={() => { handleSetActiveTab('work-items'); setExternalTrigger('create-item'); }}

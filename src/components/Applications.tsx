@@ -1998,6 +1998,7 @@ const BundleProfileView: React.FC<{
   const [intelModal, setIntelModal] = useState<{ title: string; content: React.ReactNode } | null>(null);
   const [isWatching, setIsWatching] = useState(false);
   const [watchMessage, setWatchMessage] = useState<string | null>(null);
+  const isGuestUser = String(user?.accountType || '').toUpperCase() === 'GUEST';
 
   useEffect(() => {
     if (activeTab !== 'dependencies') return;
@@ -2801,10 +2802,12 @@ const BundleProfileView: React.FC<{
 
           {activeTab === 'dependencies' && (
             <div className="space-y-6">
-              <div className="flex items-center gap-3">
-                <button onClick={onAddRisk} className="px-4 py-2 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest rounded-xl">Add Risk</button>
-                <button onClick={onAddDependency} className="px-4 py-2 bg-slate-100 text-slate-600 text-[10px] font-black uppercase tracking-widest rounded-xl">Add Dependency</button>
-              </div>
+              {!isGuestUser && (
+                <div className="flex items-center gap-3">
+                  <button onClick={onAddRisk} className="px-4 py-2 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest rounded-xl">Add Risk</button>
+                  <button onClick={onAddDependency} className="px-4 py-2 bg-slate-100 text-slate-600 text-[10px] font-black uppercase tracking-widest rounded-xl">Add Dependency</button>
+                </div>
+              )}
 
               <div className="bg-white border border-slate-200 rounded-2xl p-6">
                 <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-4">Bundle Dependency Rollup</div>

@@ -3,6 +3,7 @@ import { jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
 import { getAdminBootstrapEmails, upsertAdmin } from '../../../../services/db';
 import { getBundleOwnership, isAdminOrCmo } from '../../../../services/authz';
+import { normalizeAccountType } from '../../../../services/authPrincipal';
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
 
@@ -26,17 +27,23 @@ export async function GET() {
       }
     }
     const userId = String(payload.id || payload.userId || '');
+    const accountType = normalizeAccountType(String(payload.accountType || ''));
     const bundleOwnership = await getBundleOwnership(userId);
     const isAdminOrCMO = await isAdminOrCmo({
       userId,
-      role: payload.role as string | undefined
+      role: payload.role as string | undefined,
+      accountType
     });
     return NextResponse.json({
-      user: payload,
+      user: {
+        ...payload,
+        accountType
+      },
       permissions: {
         role: payload.role,
         isAdminOrCMO,
-        bundleOwnership
+        bundleOwnership,
+        isGuest: accountType === 'GUEST'
       }
     });
   } catch (error) {

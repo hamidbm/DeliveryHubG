@@ -1,16 +1,19 @@
 
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Role, Team, TEAM_ROLE_OPTIONS } from '../../types';
 
 export default function RegisterPage() {
+  const [accountMode, setAccountMode] = useState<'standard' | 'guest'>('standard');
+  const isGuestMode = accountMode === 'guest';
   const [formData, setFormData] = useState({
     name: '',
     username: '',
     email: '',
     password: '',
+    confirmPassword: '',
     team: Team.ENGINEERING,
     role: TEAM_ROLE_OPTIONS[Team.ENGINEERING][0]
   });
@@ -18,17 +21,41 @@ export default function RegisterPage() {
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    setAccountMode(String(params.get('accountType') || '').toLowerCase() === 'guest' ? 'guest' : 'standard');
+  }, []);
+
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
     setSuccess('');
 
+    if (formData.password !== formData.confirmPassword) {
+      setError('Passwords do not match.');
+      setLoading(false);
+      return;
+    }
+
     try {
-      const res = await fetch('/api/auth/register', {
+      const endpoint = isGuestMode ? '/api/auth/register-guest' : '/api/auth/register';
+      const payload = isGuestMode
+        ? { fullName: formData.name, email: formData.email, password: formData.password }
+        : {
+            name: formData.name,
+            username: formData.username,
+            email: formData.email,
+            password: formData.password,
+            team: formData.team,
+            role: formData.role
+          };
+
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(payload),
       });
 
       const data = await res.json();
@@ -48,6 +75,7 @@ export default function RegisterPage() {
           username: '',
           email: '',
           password: '',
+          confirmPassword: '',
           team: Team.ENGINEERING,
           role: TEAM_ROLE_OPTIONS[Team.ENGINEERING][0]
         });
@@ -74,7 +102,9 @@ export default function RegisterPage() {
             <i className="fas fa-id-card text-4xl text-white"></i>
           </div>
           <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Access Provisioning</h1>
-          <p className="text-slate-500 mt-2 font-medium">Register for DeliveryHub</p>
+          <p className="text-slate-500 mt-2 font-medium">
+            {isGuestMode ? 'Register a guest account for read-only access and comments' : 'Register for DeliveryHub'}
+          </p>
         </div>
 
         <div className="bg-white/80 backdrop-blur-xl border border-slate-200 rounded-[2.5rem] p-10 shadow-2xl">
@@ -110,10 +140,11 @@ export default function RegisterPage() {
                 <input
                   type="text"
                   required
+                  disabled={isGuestMode}
                   value={formData.username}
                   onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                  className="w-full bg-white border border-slate-200 rounded-2xl px-4 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition-all placeholder:text-slate-400"
-                  placeholder="first.last"
+                  className="w-full bg-white border border-slate-200 rounded-2xl px-4 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition-all placeholder:text-slate-400 disabled:bg-slate-50 disabled:text-slate-400"
+                  placeholder={isGuestMode ? 'Assigned automatically' : 'first.last'}
                 />
               </div>
 
@@ -129,7 +160,7 @@ export default function RegisterPage() {
                 />
               </div>
 
-              <div className="space-y-2">
+              <div className={`space-y-2 ${isGuestMode ? 'hidden' : ''}`}>
                 <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest ml-1">Team</label>
                 <div className="relative">
                   <select
@@ -156,7 +187,7 @@ export default function RegisterPage() {
                 </div>
               </div>
 
-              <div className="space-y-2">
+              <div className={`space-y-2 ${isGuestMode ? 'hidden' : ''}`}>
                 <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest ml-1">Role</label>
                 <div className="relative">
                   <select
@@ -188,6 +219,19 @@ export default function RegisterPage() {
                   placeholder="••••••••"
                 />
               </div>
+
+              <div className="space-y-2">
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest ml-1">Confirm Password</label>
+                <input
+                  type="password"
+                  required
+                  minLength={8}
+                  value={formData.confirmPassword}
+                  onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
+                  className="w-full bg-white border border-slate-200 rounded-2xl px-4 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition-all placeholder:text-slate-400 max-w-[300px]"
+                  placeholder="••••••••"
+                />
+              </div>
             </div>
 
             <div className="flex justify-center">
@@ -200,7 +244,7 @@ export default function RegisterPage() {
                   <i className="fas fa-circle-notch fa-spin"></i>
                 ) : (
                   <div className="flex items-center justify-center gap-2">
-                    <span>Register Account</span>
+                    <span>{isGuestMode ? 'Register Guest Account' : 'Register Account'}</span>
                     <i className="fas fa-arrow-right text-xs group-hover:translate-x-1 transition-transform"></i>
                   </div>
                 )}
@@ -217,6 +261,17 @@ export default function RegisterPage() {
               >
                 Sign In
               </Link>
+            </p>
+            <p className="text-slate-400 text-xs mt-3">
+              {isGuestMode ? (
+                <Link href="/register" className="text-blue-600 font-bold hover:text-blue-500 transition cursor-pointer">
+                  Need a standard account instead?
+                </Link>
+              ) : (
+                <Link href="/register?accountType=guest" className="text-blue-600 font-bold hover:text-blue-500 transition cursor-pointer">
+                  Register a guest account
+                </Link>
+              )}
             </p>
           </div>
         </div>

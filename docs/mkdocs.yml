@@ -1,0 +1,141 @@
+site_name: DeliveryHub Docs
+site_description: Authoritative product documentation for DeliveryHub
+site_dir: site
+docs_dir: wiki
+nav:
+  - Home: Home.md
+  - Quick Setup:
+      - Overview: quick-setup/index.md
+      - Laptop Requirements and First Run: quick-setup/local-development.md
+      - Local Workflow and Troubleshooting: quick-setup/workflow.md
+  - Product Guide:
+      - Overview: product-guide/index.md
+      - Executive Overview: product-guide/executive-overview.md
+      - Application Portfolio Management: product-guide/application-portfolio-management.md
+      - Task Management and Delivery Planning: product-guide/task-management-and-delivery-planning.md
+      - Architecture and Review Management: product-guide/architecture-and-review-management.md
+      - Knowledge and Documentation Management: product-guide/knowledge-and-documentation-management.md
+      - Dashboards and Executive Visibility: product-guide/dashboards-and-executive-visibility.md
+      - AI Insights and Decision Support: product-guide/ai-insights-and-decision-support.md
+      - Administration and Governance: product-guide/administration-and-governance.md
+  - Technical Documentation:
+      - Overview: technical/index.md
+      - Architecture and Structure: technical/architecture-and-structure.md
+      - Operations and Deployment: technical/operations-and-deployment.md
+      - Development Workflow: technical/development-workflow.md
+      - Data Model and Collections: technical/data-model-and-collections.md
+      - Implementation Gaps: technical/implementation-gaps.md
+      - Existing Technical Reference:
+          - Architecture: Architecture.md
+          - Modules Overview: Modules-Overview.md
+          - Wiki Module: Modules-Wiki.md
+          - Work Items Module: Modules-WorkItems.md
+          - Applications Module: Modules-Applications.md
+          - Architecture Module: Modules-Architecture.md
+          - Dashboards and AI: Modules-Dashboards.md
+          - Reviews: Reviews.md
+          - Admin: Admin.md
+          - AI Capabilities and Governance: AI.md
+          - Data Model: Data-Model.md
+          - Operations: Operations.md
+          - Development: Development.md
+          - Roadmap: Roadmap.md
+
+#navigation:
+#  tabs:
+#    - Business Requirements
+#    - Technical Documentation
+#    - User Guides
+#    - Development
+
+
+theme:
+  name: material
+  custom_dir: overrides
+  palette:
+    - scheme: default
+      # possible background colors: red, pink, purple, deep purple, indigo, blue, light blue, cyan, teal, green,
+      # light green, lime, yellow, amber, orange, deep orange, brown, grey, blue grey
+      # Best colors: red, light blue, green, indigo, purple
+      primary: light blue # '#9FE2BF' indigo
+      accent: blue
+      toggle:
+        icon: material/toggle-switch-off-outline
+        name: Switch to dark mode
+    - scheme: slate
+      primary: red
+      accent: purple
+      toggle:
+        icon: material/toggle-switch
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    #- navigation.tabs.sticky
+    - navigation.path
+    - toc.follow
+    - navigation.expand
+    - search.highlight
+    - search.suggest
+    - search.share
+    - content.code.copy
+    - content.code.select
+    - content.code.annotate
+    - navigation.instant
+    - navigation.instant.prefetch
+    - navigation.instant.progress
+    - navigation.tracking
+    - navigation.path
+    - navigation.indexes
+    - header.autohide
+    - navigation.footer
+
+plugins:
+  - search
+  #- offline
+  #- tags
+  - glightbox
+
+extra:
+  generator: false
+
+markdown_extensions:
+  - admonition
+  - codehilite
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.highlight
+  - pymdownx.details
+  - pymdownx.superfences:
+     custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+
+  - attr_list
+  - md_in_html
+  - pymdownx.highlight:
+      auto_title: true
+      linenums: true
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.arithmatex:
+      generic: true
+  - toc:
+      permalink: true
+  - mdx_math
+  - def_list
+
+extra_javascript:
+  - assets/js/custom2.js
+  - https://unpkg.com/katex@0/dist/katex.min.js
+  - https://unpkg.com/katex@0/dist/contrib/auto-render.min.js
+  - assets/js/katex-init.js
+
+extra_css:
+  - https://unpkg.com/katex@0/dist/katex.min.css
+  - assets/css/extra.css
+  #- assets/css/overrides.css

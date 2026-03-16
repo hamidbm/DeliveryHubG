@@ -1,0 +1,84 @@
+/* Custom styles for a clean, modern look */
+:root {
+    --md-primary-fg-color: #7F52FF; /* Primary color (purple) */
+    --md-accent-fg-color: #FF6F00; /* Accent color (orange) */
+}
+
+
+/* Header and navigation */
+.md-header {
+    background-color: var(--md-primary-fg-color);
+}
+
+.md-tabs {
+    background-color: var(--md-primary-fg-color);
+}
+
+/* Sidebar */
+.md-sidebar {
+    border-right: 1px solid #e0e0e0;
+}
+
+/* Content area */
+.md-content {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+/* Code blocks */
+.highlight {
+    background-color: #f5f5f5;
+    border-radius: 4px;
+    padding: 10px;
+}
+
+/* Links */
+a {
+    color: var(--md-primary-fg-color);
+    text-decoration: none;
+}
+
+a:hover {
+    text-decoration: underline;
+}
+
+/* Buttons */
+.md-button {
+    background-color: var(--md-primary-fg-color);
+    color: white;
+    border-radius: 4px;
+    padding: 8px 16px;
+    text-transform: uppercase;
+}
+
+.md-button:hover {
+    background-color: var(--md-accent-fg-color);
+}
+
+/*!* Custom styles for navigation panel *!*/
+/*.md-nav__item .md-nav__link {*/
+/*    display: block; !* Ensure the link takes up the full width *!*/
+/*    padding: 0.5rem 1rem; !* Add padding for better spacing *!*/
+/*    transition: background-color 0.2s, color 0.2s;*/
+/*}*/
+
+/*!* Hover state *!*/
+/*.md-nav__item .md-nav__link:hover {*/
+/*    background-color: var(--md-accent-fg-color);*/
+/*    !*background-color: #e0e0e0; !* Light gray background *!*!*/
+/*    color: #7F52FF; !* Purple text *!*/
+/*}*/
+
+/*!* Selected state *!*/
+/*.md-nav__item .md-nav__link--active {*/
+/*    background-color: var(--md-accent-fg-color);*/
+/*    !*background-color: #7F52FF; !* Purple background *!*!*/
+/*    color: white; !* White text *!*/
+/*}*/
+
+/*!* Ensure the selected state is visible *!*/
+/*.md-nav__item--active > .md-nav__link {*/
+/*    background-color: #7F52FF; !* Purple background *!*/
+/*    color: white; !* White text *!*/
+/*}*/

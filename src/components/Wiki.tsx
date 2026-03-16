@@ -790,8 +790,10 @@ const Wiki: React.FC<WikiProps> = ({
 
   const currentRole = currentUser?.role;
   const currentUserId = String((currentUser as any)?.userId || (currentUser as any)?.id || '');
-  const canSubmitReview = canSubmitForReviewClient(currentRole);
-  const canResubmitReview = canResubmitClient(currentRole);
+  const isGuestUser = String((currentUser as any)?.accountType || '').toUpperCase() === 'GUEST';
+  const canEditKnowledge = !isGuestUser && Boolean(currentUserId);
+  const canSubmitReview = canSubmitForReviewClient(currentRole, (currentUser as any)?.accountType);
+  const canResubmitReview = canResubmitClient(currentRole, (currentUser as any)?.accountType);
   const canCloseReview = isEngineeringRoleClient(currentRole) || isVendorRoleClient(currentRole) || isAdminUser;
 
   useEffect(() => {
@@ -1467,12 +1469,12 @@ const Wiki: React.FC<WikiProps> = ({
                        </button>
                      </div>
                    )}
-                   {('content' in activeArtifact) && !('file' in activeArtifact) && (
+                   {canEditKnowledge && ('content' in activeArtifact) && !('file' in activeArtifact) && (
                      <button onClick={() => setIsEditing(true)} className="px-4 py-2 bg-white border border-slate-200 text-slate-600 text-[9px] font-black uppercase tracking-widest rounded-lg hover:bg-slate-50 transition-all flex items-center gap-2">
                        <i className="fas fa-edit"></i> Edit
                      </button>
                    )}
-                   {('file' in activeArtifact) && canEditAssetMarkdown(activeArtifact as WikiAsset) && (
+                   {canEditKnowledge && ('file' in activeArtifact) && canEditAssetMarkdown(activeArtifact as WikiAsset) && (
                      <button onClick={() => setIsEditingAsset(true)} className="px-4 py-2 bg-white border border-slate-200 text-slate-600 text-[9px] font-black uppercase tracking-widest rounded-lg hover:bg-slate-50 transition-all flex items-center gap-2">
                        <i className="fas fa-pen-nib"></i> Edit
                      </button>

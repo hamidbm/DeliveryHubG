@@ -27,6 +27,8 @@ export enum Role {
   BUSINESS = 'Business'
 }
 
+export type AccountType = 'STANDARD' | 'GUEST';
+
 export type OnboardingRole = 'PM' | 'ENGINEER' | 'EXEC' | 'ADMIN';
 
 export interface UserOnboarding {
@@ -572,8 +574,9 @@ export interface User {
   name: string;
   username: string;
   email: string;
-  role: Role;
-  team: Team;
+  role: Role | string;
+  team: Team | string;
+  accountType?: AccountType;
   createdAt?: string;
   updatedAt?: string;
 }

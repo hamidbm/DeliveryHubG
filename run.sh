@@ -9,6 +9,9 @@ MONGO_CONTAINER_NAME="mongo"
 MONGO_NETWORK="delivery-network"
 MONGO_URL="mongodb://admin:secretpassword@host.docker.internal:27017/delivery?authSource=admin"
 
+DOCS_SITE_NAME="delivery"
+DOCS_FOLDER="docs"
+
 # ─────────────────────────────────────────────
 # Functions
 # ─────────────────────────────────────────────
@@ -19,6 +22,8 @@ function show_help() {
   echo "Commands:"
   echo "  (none)       Build (if needed) and run the DeliveryHub web app"
   echo "  mongo        Start the MongoDB container"
+  echo "  docinit         Initial Netlify setup: login, create site and link to it"
+  echo "  docs            Build the MkDocs site and deploy it to Netlify production"
   echo ""
   echo "Options:"
   echo "  --rebuild, -r    Force delete and rebuild the DeliveryHub Docker image"
@@ -28,6 +33,8 @@ function show_help() {
   echo "  ./run.sh              # Run DeliveryHub"
   echo "  ./run.sh -r           # Force rebuild and run DeliveryHub"
   echo "  ./run.sh mongo        # Start MongoDB"
+  echo "  ./run.sh docinit      # Initial Netlify docs setup (site: $DOCS_SITE_NAME, folder: $DOCS_FOLDER)"
+  echo "  ./run.sh docs         # Build and deploy docs to Netlify"
 }
 
 function ensure_network() {
@@ -118,6 +125,69 @@ function start_deliveryhub() {
     "$IMAGE_NAME"
 }
 
+function docs_setup() {
+  # Check dependencies
+  if ! command -v netlify &>/dev/null; then
+    echo "❌ Netlify CLI not found. Install it with: npm install -g netlify-cli"
+    exit 1
+  fi
+  if ! command -v mkdocs &>/dev/null; then
+    echo "❌ mkdocs not found. Install it with: pip install mkdocs"
+    exit 1
+  fi
+  if [[ ! -f "${DOCS_FOLDER}/mkdocs.yml" ]]; then
+    echo "❌ mkdocs.yml not found in '${DOCS_FOLDER}/'. Are you in the repo root?"
+    exit 1
+  fi
+
+  echo "🔐 Logging in to Netlify..."
+  netlify login || { echo "❌ Login failed"; exit 1; }
+
+  echo "🌐 Creating Netlify site: ${DOCS_SITE_NAME}..."
+  netlify sites:create --name "${DOCS_SITE_NAME}" || { echo "❌ Site creation failed"; exit 1; }
+
+  echo "🔗 Linking project to site: ${DOCS_SITE_NAME}..."
+  netlify link --name "${DOCS_SITE_NAME}" || { echo "❌ Linking failed"; exit 1; }
+
+  echo ""
+  echo "✅ Setup complete!"
+  echo "   Site URL : https://${DOCS_SITE_NAME}.netlify.app"
+  echo "   Run './run.sh docs' whenever you want to publish your docs."
+}
+
+function docs_deploy() {
+  local docs_dir="${1:-docs}"
+
+  # Check dependencies
+  if ! command -v netlify &>/dev/null; then
+    echo "❌ Netlify CLI not found. Install it with: npm install -g netlify-cli"
+    exit 1
+  fi
+  if ! command -v mkdocs &>/dev/null; then
+    echo "❌ mkdocs not found. Install it with: pip install mkdocs"
+    exit 1
+  fi
+  if [[ ! -f "${docs_dir}/mkdocs.yml" ]]; then
+    echo "❌ mkdocs.yml not found in '${docs_dir}/'. Are you in the repo root?"
+    exit 1
+  fi
+  if [[ ! -f ".netlify/state.json" ]]; then
+    echo "❌ No linked Netlify site found. Run './run.sh docinit <site-name>' first."
+    exit 1
+  fi
+
+  echo "🔨 Building docs from '${docs_dir}'..."
+  mkdocs build --config-file "${docs_dir}/mkdocs.yml" --site-dir "${docs_dir}/site" \
+    || { echo "❌ Build failed"; exit 1; }
+
+  echo "🚀 Deploying to Netlify (production)..."
+  netlify deploy --dir="${docs_dir}/site" --prod \
+    || { echo "❌ Deployment failed"; exit 1; }
+
+  echo ""
+  echo "✅ Docs deployed successfully!"
+}
+
 # ─────────────────────────────────────────────
 # Argument parsing
 # ─────────────────────────────────────────────
@@ -128,6 +198,12 @@ for arg in "$@"; do
   case $arg in
     mongo)
       COMMAND="mongo"
+      ;;
+    docinit)
+      COMMAND="docinit"
+      ;;
+    docs)
+      COMMAND="docs"
       ;;
     --rebuild|-r)
       FORCE_REBUILD=true
@@ -150,6 +226,12 @@ done
 case $COMMAND in
   mongo)
     start_mongo
+    ;;
+  docinit)
+    docs_setup
+    ;;
+  docs)
+    docs_deploy
     ;;
   *)
     start_deliveryhub "$FORCE_REBUILD"

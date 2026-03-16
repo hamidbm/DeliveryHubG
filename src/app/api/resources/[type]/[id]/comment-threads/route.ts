@@ -3,6 +3,8 @@ import { cookies } from 'next/headers';
 import { jwtVerify } from 'jose';
 import { createCommentThread, fetchCommentThreads, emitEvent, fetchReviewById, resolveMentionUsers, ensureInReview, syncReviewCycleWorkItem } from '../../../../../../services/db';
 import { extractMentionTokens } from '../../../../../../lib/mentions';
+import { canComment } from '../../../../../../services/authz';
+import { normalizeAccountType } from '../../../../../../services/authPrincipal';
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
 
@@ -14,7 +16,8 @@ const getUserFromCookies = async () => {
   return {
     userId: String(payload.id || payload.userId || ''),
     displayName: String(payload.name || 'Unknown'),
-    email: payload.email ? String(payload.email) : undefined
+    email: payload.email ? String(payload.email) : undefined,
+    accountType: normalizeAccountType(String(payload.accountType || ''))
   };
 };
 
@@ -32,6 +35,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ typ
   try {
     const user = await getUserFromCookies();
     if (!user?.userId) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
+    if (!canComment(user as any)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
     const { type, id } = await params;
     const body = await request.json();

@@ -1546,8 +1546,9 @@ const ArchitectureDesigner: React.FC<{
 
   const currentRole = currentUser?.role;
   const currentUserId = String(currentUser?.userId || currentUser?.id || '');
-  const canSubmitReview = canSubmitForReviewClient(currentRole);
-  const canResubmitReview = canResubmitClient(currentRole);
+  const guestAccountType = (currentUser as any)?.accountType;
+  const canSubmitReview = canSubmitForReviewClient(currentRole, guestAccountType);
+  const canResubmitReview = canResubmitClient(currentRole, guestAccountType);
   const canMarkFeedbackSent = canMarkFeedbackSentClient(currentRole);
 
   const currentCycle = review?.cycles?.find((c) => c.cycleId === review.currentCycleId);

@@ -31,6 +31,7 @@ interface LayoutProps {
   onCreateWorkItem?: () => void;
   userName?: string;
   userRole?: string;
+  userAccountType?: string;
   onLogout?: () => void;
 }
 
@@ -38,7 +39,7 @@ const Layout: React.FC<LayoutProps> = ({
   children, activeTab, setActiveTab, selSpaceId = 'all', setSelSpaceId, activeBundle, setActiveBundle, activeApp = 'all', setActiveApp,
   activeVendor = 'all', setActiveVendor, selMilestone = 'all', setSelMilestone, activeEpic = 'all', setActiveEpic, searchQuery = '',
   setSearchQuery, includeFeedbackAssets = false, setIncludeFeedbackAssets, bundles = [], applications = [], epics = [], onCreateSpace, onCreateWikiArtifact, onCreateWorkItem, userName = 'Alex Architect',
-  userRole = 'Enterprise Architect', onLogout
+  userRole = 'Enterprise Architect', userAccountType = 'STANDARD', onLogout
 }) => {
   const router = useRouter();
   const pathname = usePathname();
@@ -97,6 +98,7 @@ const Layout: React.FC<LayoutProps> = ({
 
   const filteredApps = (applications || []).filter(a => activeBundle === 'all' || a.bundleId === activeBundle);
   const showFilterBar = ['applications', 'work-items', 'wiki', 'reviews', 'documents'].includes(activeTab);
+  const isGuestUser = String(userAccountType || '').toUpperCase() === 'GUEST';
   const showDeliveryNav = isDeliveryActive;
   const deliveryRows = showDeliveryNav ? (isActivitiesPath ? 2 : 1) : 0;
   const deliveryHeight = deliveryRows * 48;
@@ -125,7 +127,7 @@ const Layout: React.FC<LayoutProps> = ({
         </a>
 
         <div className="flex space-x-1 h-full overflow-x-auto no-scrollbar">
-          {NAV_TOP.map((item) => {
+          {NAV_TOP.filter((item) => !(isGuestUser && item.id === 'admin')).map((item) => {
             const isActive = item.id === 'delivery'
               ? isDeliveryActive
               : activeTab === item.id;
@@ -315,7 +317,7 @@ const Layout: React.FC<LayoutProps> = ({
                 className="bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-1.5 text-[11px] font-bold focus:border-blue-500 outline-none w-44 transition-all"
               />
             </div>
-            {activeTab === 'wiki' ? (
+            {!isGuestUser && activeTab === 'wiki' ? (
               <>
                 <button 
                   onClick={onCreateSpace}
@@ -332,7 +334,7 @@ const Layout: React.FC<LayoutProps> = ({
                   New Artifact
                 </button>
               </>
-            ) : activeTab === 'work-items' ? (
+            ) : !isGuestUser && activeTab === 'work-items' ? (
               <button 
                 onClick={onCreateWorkItem}
                 className="px-4 py-1.5 bg-blue-600 text-white text-[9px] font-black rounded-lg hover:bg-blue-700 transition-all uppercase tracking-widest flex items-center gap-2 shadow-lg shadow-blue-500/10"

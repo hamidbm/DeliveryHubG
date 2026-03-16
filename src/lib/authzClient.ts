@@ -23,13 +23,16 @@ const VENDOR_ROLES = new Set<Role>([
 export const isEngineeringRoleClient = (role?: string) => ENGINEERING_ROLES.has(role as Role);
 export const isVendorRoleClient = (role?: string) => VENDOR_ROLES.has(role as Role);
 
-export const canSubmitForReviewClient = (role?: string) =>
-  Boolean(role);
+export const canSubmitForReviewClient = (role?: string, accountType?: string) =>
+  String(accountType || '').toUpperCase() !== 'GUEST' && Boolean(role);
+
+export const isGuestAccountClient = (user?: { accountType?: string } | null) =>
+  String(user?.accountType || '').toUpperCase() === 'GUEST';
 
 export const canMarkFeedbackSentClient = (role?: string) => role === Role.CMO_MEMBER;
 
-export const canResubmitClient = (role?: string) =>
-  Boolean(role && (isEngineeringRoleClient(role) || isVendorRoleClient(role)));
+export const canResubmitClient = (role?: string, accountType?: string) =>
+  String(accountType || '').toUpperCase() !== 'GUEST' && Boolean(role && (isEngineeringRoleClient(role) || isVendorRoleClient(role)));
 
 export const canEditBundleProfileClient = (user?: { team?: string }, isAdmin?: boolean) =>
-  Boolean(isAdmin || user?.team === 'Management');
+  Boolean(!isGuestAccountClient(user as any) && (isAdmin || user?.team === 'Management'));

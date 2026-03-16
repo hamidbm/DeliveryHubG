@@ -1,249 +1,105 @@
 # Dashboards and AI Insights
 
-Dashboards provide program-level rollups for milestones, risks, and delivery status. AI Insights provide summaries and highlights.
+Dashboards and AI Insights are the two major cross-cutting intelligence layers in DeliveryHub.
 
-## Features
-- Portfolio-level dashboards
-- Delivery and milestone analytics
-- AI Insights module for synthesized reporting
-- Executive rollups across applications, bundles, and milestones
-- Visual summaries for risks and progress
-- Program Capacity planning (bundle capacity vs. committed milestone demand)
-- Executive Decision Dashboard (Phase 14 dashboard redesign)
+They turn module-level activity into portfolio-level visibility, decision support, and proactive investigation.
 
-## Data
-- Stored in module-specific collections
-- AI Insights uses AI settings and audit logs
-- AI Insights portfolio report persistence uses `ai_analysis_cache` (`portfolio-summary`)
-- Bundle capacity configuration stored in `bundle_capacity`
-- Capacity planning uses milestone rollups (`remainingPoints`) and committed milestone dates
-- Executive dashboard aggregation service:
-  - `src/services/dashboardService.ts`
-  - one aggregated payload per dashboard view
-  - short in-memory cache (~45s) keyed by filter context
+## What These Areas Are For
 
-## AI Insights (Phase 12A)
-- Page load is cache-first (`GET /api/ai/portfolio-summary`), with no automatic live generation.
-- Manual refresh only (`POST /api/ai/portfolio-summary`) via `Generate/Regenerate Analysis`.
-- Freshness policy:
-  - `fresh` within 24 hours
-  - `stale` older than 24 hours (still shown with stale banner)
-- First-run experience:
-  - empty state when no cached report exists
-  - explicit generate action required
-- Failure behavior:
-  - normalized provider quota/rate-limit errors
-  - fallback to last successful cached report when live generation fails
-- Exports:
-  - Markdown download
-  - styled PDF download (direct file save)
+Operational modules tell users what exists and what is being worked on.
 
-## AI Insights (Phase 12B)
-- Structured report sections now drive the primary UI:
-  - Overall Health
-  - Executive Summary
-  - Top Risks
-  - Recommended Actions
-  - Concentration Signals
-  - Questions To Ask
-  - Full Narrative Report (collapsible)
-- Structured report items now include evidence and provenance metadata:
-  - `provenance: ai | deterministic | legacy`
-- Deterministic enrichment/fallback layer now improves weak or malformed AI output:
-  - risk/action/signal/question synthesis using snapshot-derived ratios and counts
-  - severity/urgency normalization rules
-- Legacy cache normalization remains supported and visible, with narrative fallback available.
-- 12B.5 introduced interactive Q&A in AI Insights:
-  - **Ask DeliveryHub AI** panel for free-text portfolio questions
-  - quick suggestions generated from the current structured report/signals
-  - evidence-backed responses with concise explanation and follow-up prompts
-  - follow-up prompts are actionable chips that can be re-run as new queries
-  - API endpoint: `POST /api/ai/portfolio-query`
-- 12C.1 added evidence exploration and drill-down:
-  - structured and query evidence now use typed `EvidenceItem[]` with `entities[]`
-  - entity references include `workitem`, `application`, `bundle`, `milestone`, `review`
-  - AI Insights evidence blocks now render clickable entity chips and grouped **Related Entities**
-  - drill-down links navigate to existing DeliveryHub pages/views without regenerating AI content
-  - when no entity refs exist, evidence still renders as plain text
-- 12C.2 refined related-entity usability:
-  - related entities now render in bounded contextual panels per type (work items, milestones, reviews, applications, bundles)
-  - per-group ordering is relevance-first (e.g., blocked/overdue/unassigned before less urgent work items)
-  - panel limits and toggle behavior:
-    - default 5 items shown per group
-    - if group has more than 50 items, initial display is 15
-    - `View all` / `Show less` supported for oversized groups
-  - backend-driven secondary metadata is provided through `relatedEntitiesMeta` and rendered as actionable subtitles
-- 12C.3 expanded Ask DeliveryHub AI query coverage:
-  - deterministic query intents now include operational/ranking categories (work items, bundles, applications, milestones, reviews, owners, risk ranking)
-  - list-style deterministic answers are evidence-backed with entity references
-  - contextual deterministic follow-up suggestions are generated per query result
-  - extractor-backed deterministic metrics are reused across intents (`src/services/ai/knowledgeExtractors.ts`)
-  - query-time behavior remains snapshot/signals/report-based (no additional DB fetches required for deterministic answer generation)
-- 12C.4 added persistent investigation workflow:
-  - users can save query results as investigations (`ai_saved_queries`)
-  - saved items support run/refresh/pin/unpin/delete actions
-  - pinned investigations are surfaced at the top of AI Insights (`max 6`)
-  - query history is kept per browser session and supports run-again + save
-  - refresh re-runs deterministic query logic and updates the saved answer snapshot
-- 12D added portfolio trend intelligence:
-  - historical summary snapshots are persisted in `portfolio_snapshots` on manual regenerate
-  - retention policy keeps the last 90 days of snapshot history
-  - trend signals are computed from recent snapshots (max 14 loaded, default 7-snapshot window)
-  - structured report now includes `trendSignals[]` and UI renders a **Portfolio Trends** section
-  - trend-aware deterministic query support added for delivery/risk/backlog/milestone trend questions
-  - quick suggestions now include trend investigations when rising signals are present
-- 12E added proactive operations intelligence in AI Insights:
-  - deterministic **Portfolio Health** scoring (`0-100`) with weighted component breakdown
-  - deterministic **Alerts** panel combining:
-    - trend deterioration alerts
-    - threshold breach alerts
-    - predictive risk alerts
-  - predictive risk rules cover execution pressure, milestone slip risk, review congestion, and capacity pressure
-  - query support expanded for active alerts, emerging risks, predictive near-term risk, and health score questions
-  - alert-aware quick suggestions now surface health/alert investigations
-  - each alert card supports direct **Save as Investigation** using the existing saved investigation workflow
-- 12F.1 added watcher subscriptions + in-app notifications:
-  - notification center added to AI Insights header with unread badge and read/unread grouping
-  - watcher management added in AI Insights (`Watchers` list + `Watcher Config` form)
-  - new watcher APIs:
-    - `GET/POST /api/ai/watchers`
-    - `PATCH/DELETE /api/ai/watchers/:id`
-  - new notification APIs:
-    - `GET /api/ai/notifications`
-    - `PATCH /api/ai/notifications/:id`
-  - trigger points currently evaluate watchers:
-    - after report regeneration
-    - after investigation refresh
-  - contextual watch actions available from alerts, trends, health threshold, and saved investigations
-- 12F.2 added external delivery + delivery preferences:
-  - watcher config now supports channel preferences (`in_app`, `email`) and email minimum severity
-  - notification dispatch pipeline evaluates preferences and dispatches email via centralized channel adapter
-  - notification center now displays per-channel delivery status (in-app/email)
-  - delivery outcomes tracked as `pending|sent|failed|suppressed` with attempt/error metadata
-  - cooldown suppression prevents noisy repeated email sends for the same watcher context
-- 12F.3 expanded notifications to Slack/Teams and digest mode:
-  - watcher config now supports `slack` and `teams` webhooks with per-channel severity thresholds
-  - watcher config now supports digest delivery (`enabled`, `hourly|daily`)
-  - notification dispatch now routes across `email`, `slack`, and `teams` with shared suppression/severity policy
-  - digest mode queues notifications for scheduled summary delivery instead of immediate external sends
-  - notification center now displays channel badges for Slack/Teams and a `Digest` delivery mode indicator
-- 13A added Executive Portfolio Summary:
-  - new executive page at `/ai/executive-insights`
-  - API endpoints:
-    - `GET /api/ai/executive-summary`
-    - `POST /api/ai/executive-summary`
-  - summary sections include:
-    - portfolio health (score + label)
-    - key observations
-    - strategic concerns
-    - top alerts
-    - trend highlights
-    - actionable recommendations
-  - summary is cache-backed via `ai_analysis_cache` using `executive-summary`
-- 13B added deterministic portfolio forecasting:
-  - forecast API endpoints:
-    - `GET /api/ai/portfolio-forecast`
-    - `POST /api/ai/portfolio-forecast`
-  - forecast signals now surface in Executive Insights via a dedicated **Forecast Signals** panel
-  - forecast cards include severity, confidence, evidence, and related entity links
-  - forecast cache is persisted in `ai_analysis_cache` using `portfolio-forecast`
-  - Ask DeliveryHub AI now supports forecast-aware deterministic prompts (delivery-soon risk, likely milestone slips, execution slowdown, backlog growth)
-- 13C added Cross-Project Risk Propagation:
-  - propagation API endpoints:
-    - `GET /api/ai/risk-propagation`
-    - `POST /api/ai/risk-propagation`
-  - Executive Insights now includes a **Cross-Project Risk Propagation** panel
-  - propagation cards show:
-    - severity
-    - summary
-    - propagation paths (`From -> To via linkType`)
-    - evidence
-    - related entity drill-down chips
-  - propagation cache is persisted in `ai_analysis_cache` using `risk-propagation`
-  - Ask DeliveryHub AI now supports deterministic propagation questions (cascade risk, dependency-contributing risk, propagation paths)
-- 13D added Strategic AI Advisor in AI Insights:
-  - new strategic panel in AI Insights for leadership-style natural language Q&A
-  - new endpoints:
-    - `POST /api/ai/strategic-query`
-    - `GET /api/ai/strategic-suggestions`
-  - strategic responses include:
-    - concise answer
-    - reasoning/explanation
-    - evidence items
-    - related entities
-    - follow-up prompts
-  - strategic queries are cache-backed in `ai_analysis_cache` under `strategic-query:{queryHash}` (24h window)
-  - existing Ask DeliveryHub AI flow now routes strategic-intent questions through the strategic advisor path
-- 13E added Scenario Planner and What-If Simulation in AI Insights:
-  - new scenario planner UI integrated under Strategic AI Advisor:
-    - create scenario definitions with change types:
-      - `reassignWorkItems`
-      - `adjustMilestoneDate`
-      - `adjustPriority`
-      - `bundleResourceShift`
-    - save/list/delete scenarios
-    - run deterministic simulations
-  - new APIs:
-    - `POST /api/ai/scenario`
-    - `GET /api/ai/scenarios`
-    - `POST /api/ai/scenarios`
-    - `DELETE /api/ai/scenarios/:id`
-  - scenario results include:
-    - simulated health score
-    - delta metrics vs baseline
-    - recomputed forecast and propagation signals
-    - optimization recommendations
-  - scenario runs are cache-backed in `ai_analysis_cache` under `scenario-result:{scenarioHash}` (`reportType: scenarioResult`)
-  - strategic advisor now includes recent scenario outcomes in context for what-if and scenario comparison questions
-- 14 added Collaborative Workflow Automation in AI Insights:
-  - new **Action Plan** panel shows prioritized execution steps with linked evidence
-  - new **Task Suggestions** cards allow:
-    - single task creation
-    - batch creation of selected suggestions
-  - new **Workflow Rules** panel provides:
-    - deterministic rule suggestions
-    - enable/disable toggles persisted in `ai_workflow_rules`
-    - on-demand rule enforcement from UI
-  - new APIs:
-    - `GET/POST /api/ai/action-plan`
-    - `POST /api/ai/tasks/batch` (`/api/tasks/batch` alias)
-    - `GET/POST /api/ai/workflow-rules`
-  - strategic advisor answers now include action-plan context so strategic and operational guidance stay aligned
-- 14 Dashboard redesign added Executive Decision Dashboard under Delivery -> Dashboards:
-  - new aggregated API endpoints:
-    - `GET /api/dashboard/executive`
-    - `GET /api/dashboard/bundle/:bundleId`
-    - `GET /api/dashboard/milestone/:milestoneId`
-  - global dashboard controls:
-    - bundle/application/team filters
-    - time window (`7d|30d|90d|quarter`)
-    - comparison selector (`prev_week|prev_month|prev_quarter`)
-    - view mode (`executive|delivery|risk`)
-  - row-based executive layout now includes:
-    - program health KPI strip (Bundles, Milestones, Work Items, Blocked, High/Critical Risks, Overdue)
-    - delivery progress trend (planned vs actual)
-    - delivery forecast by bundle (planned/forecast go-live, variance, confidence, risk level)
-    - at-risk bundles ranking
-    - blocker heatmap
-    - risk trend
-    - velocity trend
-    - capacity utilization
-    - work item aging
-    - application distribution
-    - health pulse
-    - AI summary panel with actionable recommendations
-  - drill-down behavior:
-    - KPI cards and risk/forecast rows deep-link to Program scope views
-    - bundle and milestone dashboard APIs are available for deeper phase expansion
-  - frontend components:
-    - `src/components/dashboard/ExecutiveDashboard.tsx`
-    - `src/components/dashboard/MetricCard.tsx`
-    - `src/components/Dashboard.tsx` now wraps the executive dashboard
-- Visual sequence diagrams for cache/regenerate/query/drill-down are documented in `docs/wiki/AI.md` under **Visual Flows**.
+Dashboards and AI Insights answer the higher-level questions:
 
-## Program Capacity (v1)
-- Capacity is defined per bundle as points per week or points per sprint.
-- Allocation rule: remaining milestone points are distributed evenly from now until the milestone end date (forecast end date if available).
-- Overcommit is flagged when bucket demand exceeds bucket capacity.
-- Recommended actions are heuristics: reduce scope, slip a milestone, or add capacity.
-- Configure bundle capacity in Admin → Operations → Bundle Capacity.
+- are we on track
+- where is risk concentrated
+- what is trending in the wrong direction
+- which bundles or milestones need intervention
+- what is likely to happen next if nothing changes
+
+## Dashboards
+
+### Executive visibility
+
+Dashboards provide portfolio, bundle, and milestone visibility so leaders can move from broad health signals to focused operational views.
+
+### Decision-oriented presentation
+
+The dashboard experience is meant to support action, not just observation.
+
+It can surface:
+
+- health rollups
+- delivery progress
+- forecast direction
+- blocked and overdue work
+- risk concentration
+- capacity pressure
+
+### Structural and execution views
+
+Dashboards can also expose the mechanics behind delivery performance, including:
+
+- blocker patterns
+- risk movement
+- velocity trends
+- dependency-driven drag
+- application and bundle distribution
+
+### Drill-down pathways
+
+The dashboard layer is most useful because it does not stop at summary. It allows leaders to move from an executive signal into the specific bundle, milestone, work item, or application behind that signal.
+
+## AI Insights
+
+### Portfolio summary and executive synthesis
+
+AI Insights can generate structured portfolio and executive summaries so leaders can understand the state of the program more quickly.
+
+### Evidence-backed Q&A
+
+Users can ask natural-language questions and receive evidence-backed answers that point to the records behind the answer.
+
+### Investigation workflow
+
+The AI experience supports saved investigations, pinned findings, follow-up questions, and refreshable analysis so users can build repeatable inquiry patterns.
+
+### Trend, forecast, and alerting intelligence
+
+AI Insights can highlight trend deterioration, predictive delivery risk, health scoring, and forecast pressure rather than only describing current state.
+
+### Cross-project risk propagation
+
+One of the most important capabilities is showing how issues may ripple across bundles, milestones, applications, and reviews instead of remaining isolated.
+
+### Strategic advisor and what-if planning
+
+The AI layer also supports higher-level strategic questioning, scenario analysis, and action-oriented recommendations.
+
+## Typical Ways Teams Use These Areas
+
+### For CIO and VP leadership
+
+Use dashboards and executive summaries to identify where intervention is most justified, then drill into the evidence behind that conclusion.
+
+### For PMO and program leadership
+
+Use these areas to anchor operating reviews around real signals, not manual slide synthesis.
+
+### For architects and delivery leaders
+
+Use propagation analysis, trend signals, and dependency visibility to understand how localized issues are affecting the wider program.
+
+## How These Areas Connect to the Rest of DeliveryHub
+
+- **Applications** supplies business and system context
+- **Work Items** supplies execution truth
+- **Architecture** and **Wiki** supply governed artifacts and review activity
+- **Reviews** contributes cycle and governance signals
+
+These layers are powerful because they synthesize evidence from the rest of the platform instead of inventing a separate reporting reality.
+
+## Why These Areas Matter
+
+Without Dashboards and AI Insights, DeliveryHub would still be useful as an operational system.
+
+With them, it becomes a leadership system as well: one that supports prioritization, escalation, and decision-making at portfolio scale.
