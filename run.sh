@@ -9,7 +9,8 @@ MONGO_CONTAINER_NAME="mongo"
 MONGO_NETWORK="delivery-network"
 MONGO_URL="mongodb://admin:secretpassword@host.docker.internal:27017/delivery?authSource=admin"
 
-DOCS_SITE_NAME="delivery"
+DOCS_SITE_ID="1e68e427-2460-407d-849e-0bc29a35a230"   # hubworks.netlify.app
+DOCS_SITE_URL="https://hubworks.netlify.app"
 DOCS_FOLDER="docs"
 
 # ─────────────────────────────────────────────
@@ -143,20 +144,21 @@ function docs_setup() {
   echo "🔐 Logging in to Netlify..."
   netlify login || { echo "❌ Login failed"; exit 1; }
 
-  echo "🌐 Creating Netlify site: ${DOCS_SITE_NAME}..."
-  netlify sites:create --name "${DOCS_SITE_NAME}" || { echo "❌ Site creation failed"; exit 1; }
+  echo "🌐 Creating Netlify site..."
+  SITE_JSON=$(netlify api createSite --data '{}') \
+    || { echo "❌ Site creation failed"; exit 1; }
 
-  echo "🔗 Linking project to site: ${DOCS_SITE_NAME}..."
-  netlify link --name "${DOCS_SITE_NAME}" || { echo "❌ Linking failed"; exit 1; }
+  NEW_SITE_ID=$(echo "$SITE_JSON" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+  NEW_SITE_NAME=$(echo "$SITE_JSON" | python3 -c "import sys,json; print(json.load(sys.stdin)['name'])")
 
+  echo "✅ Site created: $NEW_SITE_NAME (ID: $NEW_SITE_ID)"
   echo ""
-  echo "✅ Setup complete!"
-  echo "   Site URL : https://${DOCS_SITE_NAME}.netlify.app"
-  echo "   Run './run.sh docs' whenever you want to publish your docs."
+  echo "⚠️  Update DOCS_SITE_ID in this script with: $NEW_SITE_ID"
+  echo "   Then run './run.sh docs' to deploy."
 }
 
 function docs_deploy() {
-  local docs_dir="${1:-docs}"
+  local docs_dir="${DOCS_FOLDER}"
 
   # Check dependencies
   if ! command -v netlify &>/dev/null; then
@@ -171,21 +173,31 @@ function docs_deploy() {
     echo "❌ mkdocs.yml not found in '${docs_dir}/'. Are you in the repo root?"
     exit 1
   fi
-  if [[ ! -f ".netlify/state.json" ]]; then
-    echo "❌ No linked Netlify site found. Run './run.sh docinit <site-name>' first."
+  if [[ -z "$DOCS_SITE_ID" ]]; then
+    echo "❌ DOCS_SITE_ID is not set. Run './run.sh docinit' first."
     exit 1
   fi
 
+  # Clean any previous build and Netlify artifacts to avoid deploying Next.js leftovers
+  echo "🧹 Cleaning previous build and Netlify artifacts..."
+  rm -rf "${docs_dir}/site"
+  rm -rf .netlify
+
   echo "🔨 Building docs from '${docs_dir}'..."
   mkdocs build --config-file "${docs_dir}/mkdocs.yml" --site-dir "${docs_dir}/site" \
-    || { echo "❌ Build failed"; exit 1; }
+    || { echo "❌ MkDocs build failed"; exit 1; }
 
   echo "🚀 Deploying to Netlify (production)..."
-  netlify deploy --dir="${docs_dir}/site" --prod \
+  netlify deploy \
+    --dir="${docs_dir}/site" \
+    --prod \
+    --no-build \
+    --site="${DOCS_SITE_ID}" \
     || { echo "❌ Deployment failed"; exit 1; }
 
   echo ""
   echo "✅ Docs deployed successfully!"
+  echo "   🌐 $DOCS_SITE_URL"
 }
 
 # ─────────────────────────────────────────────
