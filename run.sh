@@ -180,21 +180,14 @@ function docs_deploy() {
 
   # Clean any previous build and Netlify artifacts to avoid deploying Next.js leftovers
   echo "🧹 Cleaning previous build and Netlify artifacts..."
-  rm -rf "${docs_dir}/site"
+  #rm -rf "${docs_dir}/site"
   rm -rf .netlify
 
   echo "🔨 Building docs from '${docs_dir}'..."
-  mkdocs build --config-file "${docs_dir}/mkdocs.yml" --site-dir "${docs_dir}/site" \
-    || { echo "❌ MkDocs build failed"; exit 1; }
+  mkdocs build --config-file "${docs_dir}/mkdocs.yml" || { echo "❌ MkDocs build failed"; exit 1; }
 
   echo "🚀 Deploying to Netlify (production)..."
-  netlify deploy \
-    --dir="${docs_dir}/site" \
-    --prod \
-    --no-build \
-    --site="${DOCS_SITE_ID}" \
-    || { echo "❌ Deployment failed"; exit 1; }
-
+  netlify deploy --dir="${docs_dir}/site" --prod --no-build --site="${DOCS_SITE_ID}" || { echo "❌ Deployment failed"; exit 1; }
   echo ""
   echo "✅ Docs deployed successfully!"
   echo "   🌐 $DOCS_SITE_URL"

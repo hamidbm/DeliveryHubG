@@ -3,7 +3,7 @@ site_description: Authoritative product documentation for DeliveryHub
 site_dir: site
 docs_dir: wiki
 nav:
-  - Home: Home.md
+  - Home: index.md
   - Quick Setup:
       - Overview: quick-setup/index.md
       - Laptop Requirements and First Run: quick-setup/local-development.md

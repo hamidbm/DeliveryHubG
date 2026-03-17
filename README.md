@@ -1,148 +1,216 @@
 # DeliveryHub
 
-DeliveryHub is an internal Software Delivery + Application Portfolio Management portal that consolidates program governance, execution, architecture, and documentation in one place. It is designed for large migration programs with hundreds of applications moving to cloud platforms.
+DeliveryHub is a software delivery, application portfolio management, architecture governance, and knowledge-management platform for large migration and modernization programs.
 
-Documentation
-- Entry point: `docs/wiki/Home.md`
-- Full docs index: `docs/wiki/Modules-Overview.md`
+It brings together the core capabilities that teams usually spread across Jira, Confluence, LeanIX, Planview, dashboards, and AI decision-support tools into one operational system.
 
-## Documentation Table of Contents
-1. [docs/wiki/Home.md](docs/wiki/Home.md)
-2. [docs/wiki/Architecture.md](docs/wiki/Architecture.md)
-3. [docs/wiki/Modules-Overview.md](docs/wiki/Modules-Overview.md)
-4. [docs/wiki/Modules-Wiki.md](docs/wiki/Modules-Wiki.md)
-5. [docs/wiki/Modules-WorkItems.md](docs/wiki/Modules-WorkItems.md)
-6. [docs/wiki/Modules-Applications.md](docs/wiki/Modules-Applications.md)
-7. [docs/wiki/Modules-Architecture.md](docs/wiki/Modules-Architecture.md)
-8. [docs/wiki/Modules-Dashboards.md](docs/wiki/Modules-Dashboards.md)
-9. [docs/wiki/Admin.md](docs/wiki/Admin.md)
-10. [docs/wiki/AI.md](docs/wiki/AI.md)
-11. [docs/wiki/Data-Model.md](docs/wiki/Data-Model.md)
-12. [docs/wiki/Operations.md](docs/wiki/Operations.md)
-13. [docs/wiki/Development.md](docs/wiki/Development.md)
-14. [docs/wiki/Roadmap.md](docs/wiki/Roadmap.md)
+## Documentation
 
-## What It Does
-- Work Items management with hierarchy, kanban, and analytics
-- Wiki for pages and uploaded assets with AI assistance
-- Architecture diagrams and integration views
-- Applications portfolio inventory
-- Dashboards and AI Insights for executive rollups
-- Admin tooling for taxonomy, themes, and AI governance
+Hosted documentation: [https://hubworks.netlify.app/](https://hubworks.netlify.app/)
 
-## AI Insights (Phase 12A)
-- Cache-first portfolio report experience:
-  - `GET /api/ai/portfolio-summary` reads latest persisted report from `ai_analysis_cache`
-  - `POST /api/ai/portfolio-summary` manually regenerates report and persists it
-- No automatic provider generation on page visit
-- First-run explicit generate flow when no cached report exists
-- Freshness policy:
-  - `fresh` if generated within 24 hours
-  - `stale` if older than 24 hours (still displayed, with stale banner)
-- Provider failure handling:
-  - normalized quota/rate-limit/credentials errors
-  - attempted provider metadata retained for diagnostics
-  - cached success returned when live generation fails
-- Report rendering/export:
-  - markdown rendered in app with wiki-style presentation
-  - markdown export
-  - styled PDF direct download
+The documentation site is the main entry point for:
 
-## Architecture
-- Next.js App Router with server-side MongoDB access
-- BFF design with API routes as the integration surface
-- Assistive AI with explicit user actions
-- Auditability for AI usage and content insights
+- quick laptop setup and local run instructions
+- product guide material for executives, PMO teams, architects, and delivery leaders
+- technical documentation for engineers working on the product
 
-## Project Structure
-- `src/app`: routes, layouts, API handlers
-- `src/components`: UI components
-- `src/lib`: shared helpers
-- `src/services`: DB and AI services
-- `src/types.ts`: shared types
+## Quick Setup
 
-## Run Locally
-Prerequisites
-- Node.js
+Minimum local path:
 
-Steps
-1. Install dependencies: `npm install`
-2. Set environment variables in `.env.local`
-3. Run the app: `npm run dev`
-4. Run lint (CI-safe): `npm run lint:ci`
+1. Install `git`, Node.js, and a container runtime such as Docker Desktop or Colima.
+2. Install project dependencies:
+   ```bash
+   npm install
+   ```
+3. Start MongoDB:
+   ```bash
+   ./run.sh mongo
+   ```
+4. Run the app locally:
+   ```bash
+   npm run dev
+   ```
+5. Open:
+   ```text
+   http://localhost:3000
+   ```
 
-## Docker Helper Script (`run.sh`)
-`run.sh` provides local Docker run commands for either MongoDB or the DeliveryHub web app.
+Alternative containerized run:
 
-Prerequisites
-- Docker
+```bash
+./run.sh
+```
 
-Usage
-- Show help: `./run.sh --help`
-- Start MongoDB container: `./run.sh mongo`
-- Run DeliveryHub web app container: `./run.sh`
-- Force rebuild DeliveryHub image, then run app: `./run.sh --rebuild`
+If you use Colima instead of Docker Desktop, one supported example is:
 
-Behavior
-- `./run.sh mongo`
-  - Ensures Docker network `delivery-network` exists.
-  - Starts/restarts container `mongo` on port `27017`.
-  - Uses volume `mongo-data` for persistence.
-- `./run.sh` (app)
-  - Builds image `deliveryhub` if missing.
-  - Removes/replaces container `deliveryhub`.
-  - Runs app on `http://localhost:3000`.
-  - Injects `MONGO_URL` into the app container (configured in `run.sh`).
+```bash
+colima start --cpu 8 --memory 20 --mount-type virtiofs --disk 50
+```
 
-## Environment Variables
-Auth and Access
-- `AUTH_MODE`
-- `AUTH_DISABLE_LOCAL_SIGNUP`
-- `ENTRA_TENANT_ID`
-- `ENTRA_CLIENT_ID`
-- `ENTRA_CLIENT_SECRET`
-- `ENTRA_REDIRECT_URI`
-- `ENTRA_SCOPES`
-- `JWT_SECRET`
-- `ADMIN_BOOTSTRAP_EMAILS`
+For the full setup tutorial, troubleshooting guidance, and laptop-specific installation steps for macOS and Windows, use the docs site.
 
-Database
-- `MONGO_URL`
+## What DeliveryHub Provides
 
-AI Providers and Routing
-- `AI_DEFAULT_PROVIDER`
-- `OPENAI_API_KEY`
-- `OPENROUTER_API_KEY`
-- `GEMINI_API_KEY`
-- `ANTHROPIC_API_KEY`
-- `HUGGINGFACE_API_KEY`
-- `COHERE_API_KEY`
+DeliveryHub is built around four major apps and two major cross-cutting modules.
 
-Integrations
-- `GITHUB_TOKEN`
-- `GITHUB_REPOS`
-- `JIRA_HOST`
-- `JIRA_EMAIL`
-- `JIRA_API_TOKEN`
-- `JIRA_PROJECT_KEYS`
-- `JIRA_STORY_POINTS_FIELD_ID`
-- `JIRA_STATUS_MAPPING`
+### 1. Applications
 
-Bootstrap and Seeding
-- `AUTO_BOOTSTRAP_BASELINE`
-- `INSTALL_SAMPLE_DATA`
-- `BOOTSTRAP_FORCE`
-- `SEED_SAMPLE_DIR`
-- `DEBUG_BOOTSTRAP`
+Application Portfolio Management for large delivery programs.
 
-Schedulers and Jobs
-- `DIGEST_CRON_SECRET`
-- `COMMIT_DRIFT_CRON_SECRET`
-- `WEEKLY_BRIEF_CRON_SECRET`
+Key capabilities:
 
-Admin and Runtime
-- `ADMIN_EXPORT_SECRET`
-- `FEEDBACK_DOCUMENT_TYPE`
-- `DEBUG_ROADMAP`
-- `NODE_ENV`
-- `NEXT_PHASE`
+- application and bundle inventory
+- portfolio segmentation and health visibility
+- planning metadata and planning context
+- release train and lifecycle alignment
+- environment strategy and go-live planning
+- cross-application dependency modeling
+- delivery-impact rollups by application and bundle
+
+Why it matters:
+
+- gives leaders a usable portfolio system of record
+- links planning context directly to delivery execution
+- makes migration scope, readiness, and ownership visible
+
+### 2. Work Items
+
+Jira-like task management, execution control, and roadmap planning.
+
+Key capabilities:
+
+- epic, feature, story, and task hierarchy
+- kanban and execution-board views
+- roadmap timeline, swimlane, and dependency views
+- milestone and sprint planning
+- advanced roadmap visualization
+- bulk work management and quality views
+- work-item linking, dependency tracking, and blocker management
+- estimate requests, ownership nudges, and activity history
+- delivery plan creation and preview workflows
+- capacity-aware planning and bundle-level planning
+- forecasting and probabilistic forecasting
+- AI-driven optimization and what-if scenario planning
+- staleness detection and intervention workflows
+- cross-project risk propagation and dependency intelligence
+
+Why it matters:
+
+- turns portfolio plans into managed execution
+- gives PMO and delivery managers a real operating model
+- connects roadmap commitments to actual flow, risk, and capacity
+
+### 3. Architecture
+
+LeanIX-like architecture visibility and review workflows.
+
+Key capabilities:
+
+- architecture diagrams and integration views
+- capability and interface management
+- architecture review submission and cycle tracking
+- reviewer assignment and feedback workflows
+- architecture activity visibility across delivery work
+
+Why it matters:
+
+- keeps architecture decisions tied to execution
+- improves traceability between design intent and delivery reality
+- supports review governance without separate disconnected tools
+
+### 4. Knowledge
+
+Confluence-like knowledge management powered by the Wiki module.
+
+Key capabilities:
+
+- structured wiki spaces and pages
+- markdown-based knowledge authoring
+- Word, PDF, image, and spreadsheet asset support
+- Word-to-markdown conversion with stable image serving
+- comments, discussion threads, and review launch from documents
+- history, revert, themes, templates, and taxonomy support
+- AI-assisted knowledge exploration and insights
+
+Why it matters:
+
+- keeps documentation close to delivery work
+- reduces loss of context across teams and migration waves
+- supports governed document review and institutional memory
+
+### 5. Dashboards
+
+Executive and program visibility across the whole portfolio.
+
+Key capabilities:
+
+- executive dashboards
+- bundle and milestone dashboards
+- portfolio health and delivery-intelligence views
+- milestone readiness and commitment tracking
+- burnup, drift, and progress signals
+- program-level risk concentration and intervention views
+
+Why it matters:
+
+- gives CIO, VP, PMO, and delivery leadership a live control tower
+- shortens the path from signal to intervention
+- makes portfolio health understandable without manual slide creation
+
+### 6. AI Insights
+
+Assistive decision support across portfolio, delivery, and governance workflows.
+
+Key capabilities:
+
+- portfolio summaries and executive briefings
+- saved investigations and evidence-backed analysis
+- trend detection and change monitoring
+- AI alerts, watchers, and notification workflows
+- strategic advisor flows
+- forecast interpretation and explainability
+- scenario modeling and action planning
+- AI-assisted optimization support
+
+Why it matters:
+
+- helps leadership move faster on complex portfolio questions
+- surfaces risks and opportunities earlier
+- supports better decisions without giving AI uncontrolled write access
+
+## Product Positioning
+
+DeliveryHub is not just a task tracker and not just a portfolio registry.
+
+It is designed as an integrated operating platform for transformation programs where leaders need to understand:
+
+- what exists in the portfolio
+- what is being delivered
+- what is blocked or drifting
+- what architecture decisions matter
+- what documentation supports execution
+- what leadership should do next
+
+## Core Principles
+
+- server-side MongoDB access only
+- AI is assistive only and never silently changes product data
+- governance, traceability, and auditability are first-class concerns
+- Work Items remain the execution system of record
+
+## Local Development Commands
+
+```bash
+npm run dev
+npm run build
+npm run start
+npm run lint
+npm run test:api
+```
+
+## Notes
+
+- `run.sh` provides a quick local path for starting MongoDB or running the app in containers without using Docker Compose directly.
+- MongoDB Compass is optional, but useful if you want to inspect local collections during development.
+- The docs site contains the full quick setup, product guide, and technical documentation.
