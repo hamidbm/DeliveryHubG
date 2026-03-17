@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Application, Bundle } from '../types';
 import {
   EntityReference,
@@ -32,8 +32,12 @@ import NotificationCenter from './ai/NotificationCenter';
 import WatcherList from './ai/WatcherList';
 import WatcherConfigForm from './ai/WatcherConfigForm';
 import StrategicAdvisorPanel from './ai/StrategicAdvisorPanel';
+import ActionPlanPanel from './ai/ActionPlanPanel';
+import WorkflowRulePanel from './ai/WorkflowRulePanel';
+import ScenarioPlannerPanel from './ai/ScenarioPlannerPanel';
 
 type AnalysisState = 'loading' | 'success' | 'error' | 'cached' | 'empty';
+type InsightsWorkspaceTab = 'risks' | 'actions' | 'strategy' | 'simulation';
 let lastAutoLoadAt = 0;
 
 interface AIInsightsProps {
@@ -178,8 +182,9 @@ type PdfBlock =
       color?: [number, number, number];
     };
 
-const escapePdfText = (value: string) => value
-  .replace(/[^\x00-\x7F]/g, '?')
+const escapePdfText = (value: string) => Array.from(value)
+  .map((char) => (char.charCodeAt(0) > 0x7f ? '?' : char))
+  .join('')
   .replace(/\\/g, '\\\\')
   .replace(/\(/g, '\\(')
   .replace(/\)/g, '\\)')
@@ -554,6 +559,30 @@ const SnapshotMetric = ({ label, value }: { label: string; value: number | strin
   </div>
 );
 
+const WorkspaceTabButton = ({
+  id,
+  label,
+  active,
+  onClick
+}: {
+  id: InsightsWorkspaceTab;
+  label: string;
+  active: boolean;
+  onClick: (id: InsightsWorkspaceTab) => void;
+}) => (
+  <button
+    type="button"
+    onClick={() => onClick(id)}
+    className={`inline-flex items-center gap-2 border-b-2 px-1 py-3 text-[11px] font-black uppercase tracking-widest transition ${
+      active
+        ? 'border-blue-600 text-slate-900'
+        : 'border-transparent text-slate-400 hover:text-slate-700'
+    }`}
+  >
+    <span>{label}</span>
+  </button>
+);
+
 const buildEntityGroupsFromEvidence = (
   evidence: EvidenceItem[] = [],
   meta: RelatedEntitiesMeta = {}
@@ -604,6 +633,11 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
   const [isAdminUser, setIsAdminUser] = useState(false);
   const [watcherFormOpen, setWatcherFormOpen] = useState(false);
   const [watcherPreset, setWatcherPreset] = useState<WatcherPreset | undefined>(undefined);
+  const [activeWorkspaceTab, setActiveWorkspaceTab] = useState<InsightsWorkspaceTab>('risks');
+  const [riskVisibleCount, setRiskVisibleCount] = useState(3);
+  const [alertVisibleCount, setAlertVisibleCount] = useState(3);
+  const [actionVisibleCount, setActionVisibleCount] = useState(3);
+  const [trendVisibleCount, setTrendVisibleCount] = useState(3);
   const hasAutoLoadedRef = useRef(false);
   const inFlightRef = useRef(false);
 
@@ -777,6 +811,26 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
   const reportMarkdown = structuredReport?.markdownReport || structuredReport?.executiveSummary || '';
   const hasExportableReport = Boolean(reportMarkdown && (state === 'success' || state === 'cached'));
   const pinnedItems = savedInvestigations.filter((item) => item.pinned).slice(0, 6);
+  const topRisks = structuredReport?.topRisks || [];
+  const recommendedActions = structuredReport?.recommendedActions || [];
+  const alerts = structuredReport?.alerts || [];
+  const trendSignals = structuredReport?.trendSignals || [];
+  const concentrationSignals = structuredReport?.concentrationSignals || [];
+  const questionsToAsk = structuredReport?.questionsToAsk || [];
+  const sortedRisks = useMemo(
+    () => topRisks.slice().sort((a, b) => (severityWeight[b.severity] || 0) - (severityWeight[a.severity] || 0)),
+    [topRisks]
+  );
+  const sortedAlerts = useMemo(
+    () => alerts.slice().sort((a, b) => (alertSeverityWeight[b.severity] || 0) - (alertSeverityWeight[a.severity] || 0)),
+    [alerts]
+  );
+  const workspaceTabs: Array<{ id: InsightsWorkspaceTab; label: string }> = [
+    { id: 'risks', label: 'Risks' },
+    { id: 'actions', label: 'Actions' },
+    { id: 'strategy', label: 'Strategy' },
+    { id: 'simulation', label: 'Simulation' }
+  ];
 
   const refreshWatchers = async () => {
     const res = await fetch('/api/ai/watchers');
@@ -1097,18 +1151,253 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
     URL.revokeObjectURL(url);
   };
 
+  const renderWorkspace = () => {
+    if (!structuredReport) return null;
+
+    if (activeWorkspaceTab === 'risks') {
+      return (
+        <div className="space-y-5">
+          <SectionCard icon="fa-triangle-exclamation" title={`Top Risks (${sortedRisks.length})`}>
+            <div className="space-y-3">
+              {sortedRisks.slice(0, riskVisibleCount).map((risk) => {
+                const summary = (risk.summary || '').trim() || risk.evidence?.[0]?.text || 'No summary provided.';
+                const detailGroups = buildEntityGroupsFromEvidence(risk.evidence || [], relatedEntitiesMeta);
+                return (
+                  <div key={risk.id} className="border border-slate-200 rounded-lg p-3 bg-slate-50">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="font-semibold text-slate-800 break-words">{risk.title}</p>
+                      <SeverityBadge value={risk.severity} />
+                    </div>
+                    <p className="text-sm text-slate-600 mt-1 break-words">{summary}</p>
+                    <RelatedEntitiesSection groups={detailGroups} compact />
+                    {(risk.evidence?.length || detailGroups.length) ? (
+                      <details className="mt-3 group">
+                        <summary className="cursor-pointer list-none text-xs font-semibold text-blue-700 hover:text-blue-800">
+                          <span className="group-open:hidden">View details</span>
+                          <span className="hidden group-open:inline">Hide details</span>
+                        </summary>
+                        <div className="mt-3 space-y-3">
+                          <EntityEvidenceList evidence={risk.evidence} />
+                          <RelatedEntitiesSection groups={detailGroups} />
+                        </div>
+                      </details>
+                    ) : null}
+                  </div>
+                );
+              })}
+              {sortedRisks.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
+                  No major risks identified at this time.
+                </div>
+              ) : null}
+              {sortedRisks.length > riskVisibleCount ? (
+                <button type="button" onClick={() => setRiskVisibleCount((value) => value + 3)} className="text-xs font-semibold text-blue-700 hover:text-blue-800">
+                  Show more risks
+                </button>
+              ) : null}
+            </div>
+          </SectionCard>
+
+          <SectionCard icon="fa-bell" title={`Portfolio Alerts (${sortedAlerts.length})`}>
+            <div className="space-y-3">
+              {sortedAlerts.slice(0, alertVisibleCount).map((alert) => (
+                <AlertCard
+                  key={alert.id}
+                  alert={alert}
+                  relatedEntitiesMeta={relatedEntitiesMeta}
+                  onSaveInvestigation={saveAlertAsInvestigation}
+                  onWatchAlert={handleWatchAlert}
+                />
+              ))}
+              {sortedAlerts.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
+                  No active alerts in this report.
+                </div>
+              ) : null}
+              {sortedAlerts.length > alertVisibleCount ? (
+                <button type="button" onClick={() => setAlertVisibleCount((value) => value + 3)} className="text-xs font-semibold text-blue-700 hover:text-blue-800">
+                  Show more alerts
+                </button>
+              ) : null}
+            </div>
+          </SectionCard>
+
+          <SectionCard icon="fa-bullseye" title={`Concentration Signals (${concentrationSignals.length})`}>
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+              {concentrationSignals.map((signal) => {
+                const summary = (signal.summary || '').trim() || signal.evidence?.[0]?.text || 'No summary provided.';
+                return (
+                  <div key={signal.id} className="border border-slate-200 rounded-lg p-3 bg-slate-50">
+                    <p className="font-semibold text-slate-800 break-words">{signal.title}</p>
+                    <p className="text-sm text-slate-600 mt-1 break-words">{summary}</p>
+                    {signal.impact ? <p className="text-xs text-slate-500 mt-2">Impact: {signal.impact}</p> : null}
+                    <RelatedEntitiesSection groups={buildEntityGroupsFromEvidence(signal.evidence || [], relatedEntitiesMeta)} compact />
+                  </div>
+                );
+              })}
+              {concentrationSignals.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500 xl:col-span-2">
+                  No concentration signals identified.
+                </div>
+              ) : null}
+            </div>
+          </SectionCard>
+
+          <SectionCard icon="fa-chart-line" title={`Trend Signals (${trendSignals.length})`}>
+            <div className="space-y-3">
+              {trendSignals.slice(0, trendVisibleCount).map((signal, index) => (
+                <TrendSignalCard key={`${signal.metric}-${signal.timeframeDays}-${index}`} signal={signal} onWatch={handleWatchTrend} />
+              ))}
+              {trendSignals.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
+                  Trend analysis needs at least two historical snapshots. Generate more reports over time to unlock this section.
+                </div>
+              ) : null}
+              {trendSignals.length > trendVisibleCount ? (
+                <button type="button" onClick={() => setTrendVisibleCount((value) => value + 3)} className="text-xs font-semibold text-blue-700 hover:text-blue-800">
+                  Show more trend signals
+                </button>
+              ) : null}
+            </div>
+          </SectionCard>
+        </div>
+      );
+    }
+
+    if (activeWorkspaceTab === 'actions') {
+      return (
+        <div className="space-y-5">
+          <SectionCard icon="fa-list-check" title={`Recommended Actions (${recommendedActions.length})`}>
+            <div className="space-y-3">
+              {recommendedActions.slice(0, actionVisibleCount).map((action) => {
+                const summary = (action.summary || '').trim() || action.evidence?.[0]?.text || 'No summary provided.';
+                const detailGroups = buildEntityGroupsFromEvidence(action.evidence || [], relatedEntitiesMeta);
+                return (
+                  <div key={action.id} className="border border-slate-200 rounded-lg p-3 bg-slate-50">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="font-semibold text-slate-800 break-words">{action.title}</p>
+                      <UrgencyBadge value={action.urgency} />
+                    </div>
+                    <p className="text-sm text-slate-600 mt-1 break-words">{summary}</p>
+                    {action.ownerHint ? <p className="text-xs text-slate-500 mt-2">Owner Hint: {action.ownerHint}</p> : null}
+                    <RelatedEntitiesSection groups={detailGroups} compact />
+                    {(action.evidence?.length || detailGroups.length) ? (
+                      <details className="mt-3 group">
+                        <summary className="cursor-pointer list-none text-xs font-semibold text-blue-700 hover:text-blue-800">
+                          <span className="group-open:hidden">View details</span>
+                          <span className="hidden group-open:inline">Hide details</span>
+                        </summary>
+                        <div className="mt-3 space-y-3">
+                          <EntityEvidenceList evidence={action.evidence} />
+                          <RelatedEntitiesSection groups={detailGroups} />
+                        </div>
+                      </details>
+                    ) : null}
+                  </div>
+                );
+              })}
+              {recommendedActions.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
+                  No recommended actions available.
+                </div>
+              ) : null}
+              {recommendedActions.length > actionVisibleCount ? (
+                <button type="button" onClick={() => setActionVisibleCount((value) => value + 3)} className="text-xs font-semibold text-blue-700 hover:text-blue-800">
+                  Show more actions
+                </button>
+              ) : null}
+            </div>
+          </SectionCard>
+
+          <ActionPlanPanel />
+          <WorkflowRulePanel />
+
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+            <WatcherList
+              watchers={watchers}
+              usage={watcherUsage}
+              onCreate={() => setWatcherFormOpen((value) => !value)}
+              onToggle={toggleWatcher}
+              onDelete={deleteWatcher}
+            />
+            {watcherFormOpen ? (
+              <WatcherConfigForm
+                initial={watcherPreset}
+                usage={watcherUsage}
+                onCancel={() => {
+                  setWatcherFormOpen(false);
+                  setWatcherPreset(undefined);
+                }}
+                onSubmit={createWatcher}
+              />
+            ) : (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
+                Configure watcher subscriptions to receive in-app notifications when alerts, trends, investigations, or health thresholds trigger.
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    if (activeWorkspaceTab === 'strategy') {
+      return (
+        <div className="space-y-5">
+          <StrategicAdvisorPanel relatedEntitiesMeta={relatedEntitiesMeta} showActionPlan={false} showWorkflowRules={false} showScenarioPlanner={false} />
+
+          <SectionCard icon="fa-circle-question" title={`Questions To Ask (${questionsToAsk.length})`}>
+            <div className="space-y-2">
+              {questionsToAsk.map((item) => (
+                <div key={item.id} className="border border-slate-200 rounded-lg p-3 bg-slate-50">
+                  <p className="text-sm font-semibold text-slate-800 break-words">{item.question}</p>
+                  {item.rationale ? <p className="text-xs text-slate-500 mt-1 break-words">{item.rationale}</p> : null}
+                </div>
+              ))}
+              {questionsToAsk.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
+                  No follow-up questions suggested.
+                </div>
+              ) : null}
+            </div>
+          </SectionCard>
+
+          {structuredReport.markdownReport ? (
+            <section className="bg-white border border-slate-200 rounded-xl p-4">
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="text-sm font-black uppercase tracking-widest text-slate-500">Full Narrative Report</h3>
+                <button onClick={() => setShowNarrative((open) => !open)} className="text-xs font-semibold text-blue-700 hover:text-blue-800">
+                  {showNarrative ? 'Hide' : 'Show'}
+                </button>
+              </div>
+              {showNarrative ? (
+                <div className="wiki-content theme-aurora mt-3">
+                  <MarkdownRenderer content={structuredReport.markdownReport} />
+                </div>
+              ) : (
+                <p className="mt-3 text-sm text-slate-500">
+                  Expand the full narrative when you need the complete AI-written portfolio interpretation.
+                </p>
+              )}
+            </section>
+          ) : null}
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-5">
+        <SectionCard icon="fa-flask" title="Scenario Planning">
+          <p className="text-sm text-slate-600">
+            Model delivery changes, rerun assumptions, and compare likely outcomes before applying operational changes.
+          </p>
+        </SectionCard>
+        <ScenarioPlannerPanel />
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6">
-      <PinnedInsightsPanel
-        items={pinnedItems}
-        busyId={investigationBusyId}
-        onView={(item) => {
-          setQueryInput(item.question);
-          setQueryResponse(toQueryResponseFromSaved(item));
-        }}
-        onRefresh={handleRefreshSaved}
-        onUnpin={(item) => handleTogglePinSaved(item, false)}
-      />
       <div className="flex justify-between items-center gap-3">
         <div>
           <h1 className="text-2xl font-bold text-slate-800 flex items-center space-x-2">
@@ -1162,31 +1451,6 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
           <SnapshotMetric label="Open Reviews" value={snapshot.reviews.open} />
         </div>
       )}
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-        <WatcherList
-          watchers={watchers}
-          usage={watcherUsage}
-          onCreate={() => setWatcherFormOpen((value) => !value)}
-          onToggle={toggleWatcher}
-          onDelete={deleteWatcher}
-        />
-        {watcherFormOpen ? (
-          <WatcherConfigForm
-            initial={watcherPreset}
-            usage={watcherUsage}
-            onCancel={() => {
-              setWatcherFormOpen(false);
-              setWatcherPreset(undefined);
-            }}
-            onSubmit={createWatcher}
-          />
-        ) : (
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
-            Configure watcher subscriptions to receive in-app notifications when alerts, trends, investigations, or health thresholds trigger.
-          </div>
-        )}
-      </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden min-h-[420px]">
         <div className="p-4 border-b border-slate-100 bg-slate-50 flex items-center space-x-2">
@@ -1244,16 +1508,45 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
               )}
               {structuredReport ? (
                 <div className="space-y-5">
-                  <SectionCard icon="fa-heart-pulse" title="Overall Health">
-                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                      <HealthBadge value={structuredReport.overallHealth} />
-                      <p className="text-sm text-slate-600">
-                        {structuredReport.executiveSummary
-                          ? structuredReport.executiveSummary.split('. ').slice(0, 1).join('. ').trim()
-                          : 'Insufficient data available to determine portfolio health context.'}
-                      </p>
-                    </div>
-                  </SectionCard>
+                  <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,0.75fr)] gap-5">
+                    <SectionCard icon="fa-gauge-high" title="Portfolio Health">
+                      <div className="space-y-3">
+                        <HealthScoreCard score={structuredReport.healthScore} onWatchThreshold={handleWatchHealth} />
+                        <div className="flex items-start justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                          <div>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Overall Health</p>
+                            <div className="mt-2">
+                              <HealthBadge value={structuredReport.overallHealth} />
+                            </div>
+                          </div>
+                          <p className="text-sm text-slate-600">
+                            {structuredReport.executiveSummary
+                              ? structuredReport.executiveSummary.split('. ').slice(0, 1).join('. ').trim()
+                              : 'Insufficient data available to determine portfolio health context.'}
+                          </p>
+                        </div>
+                      </div>
+                    </SectionCard>
+
+                    <SectionCard icon="fa-bell" title="Alert Snapshot">
+                      <div className="space-y-3">
+                        {sortedAlerts.slice(0, 3).map((alert) => (
+                          <div key={alert.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="text-sm font-semibold text-slate-800 break-words">{alert.title}</p>
+                              <SeverityBadge value={alert.severity} />
+                            </div>
+                            <p className="mt-1 text-xs text-slate-500 break-words">{alert.rationale}</p>
+                          </div>
+                        ))}
+                        {sortedAlerts.length === 0 ? (
+                          <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
+                            No active alerts in this report.
+                          </div>
+                        ) : null}
+                      </div>
+                    </SectionCard>
+                  </div>
 
                   <SectionCard icon="fa-align-left" title="Executive Summary">
                     <p className="text-slate-700 leading-7 whitespace-pre-wrap break-words">
@@ -1261,250 +1554,114 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
                     </p>
                   </SectionCard>
 
-                  <SectionCard icon="fa-triangle-exclamation" title="Top Risks">
-                    <div className="space-y-3 max-h-[460px] overflow-y-auto pr-1">
-                      {(structuredReport.topRisks || [])
-                        .slice()
-                        .sort((a, b) => (severityWeight[b.severity] || 0) - (severityWeight[a.severity] || 0))
-                        .map((risk) => {
-                          const summary = (risk.summary || '').trim() || risk.evidence?.[0]?.text || 'No summary provided.';
-                          return (
-                            <div key={risk.id} className="border border-slate-200 rounded-lg p-3 bg-slate-50">
-                              <div className="flex items-center justify-between gap-3">
-                                <p className="font-semibold text-slate-800 break-words">{risk.title}</p>
-                                <SeverityBadge value={risk.severity} />
-                              </div>
-                              <p className="text-sm text-slate-600 mt-1 break-words">{summary}</p>
-                              <EntityEvidenceList evidence={risk.evidence} />
-                              <RelatedEntitiesSection groups={buildEntityGroupsFromEvidence(risk.evidence || [], relatedEntitiesMeta)} />
-                            </div>
-                          );
-                        })}
-                      {(structuredReport.topRisks || []).length === 0 && (
-                        <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
-                          No major risks identified at this time.
-                        </div>
-                      )}
+                  <div className="flex flex-wrap gap-2">
+                    {workspaceTabs.map((tab) => (
+                      <WorkspaceTabButton
+                        key={tab.id}
+                        id={tab.id}
+                        label={tab.label}
+                        active={activeWorkspaceTab === tab.id}
+                        onClick={setActiveWorkspaceTab}
+                      />
+                    ))}
+                  </div>
+
+                  <div className="grid grid-cols-1 2xl:grid-cols-[minmax(0,1fr)_360px] gap-6 items-start">
+                    <div className="min-w-0">
+                      {renderWorkspace()}
                     </div>
-                  </SectionCard>
 
-                  <SectionCard icon="fa-list-check" title="Recommended Actions">
-                    <div className="space-y-3 max-h-[460px] overflow-y-auto pr-1">
-                      {(structuredReport.recommendedActions || []).map((action) => {
-                        const summary = (action.summary || '').trim() || action.evidence?.[0]?.text || 'No summary provided.';
-                        return (
-                          <div key={action.id} className="border border-slate-200 rounded-lg p-3 bg-slate-50">
-                            <div className="flex items-center justify-between gap-3">
-                              <p className="font-semibold text-slate-800 break-words">{action.title}</p>
-                              <UrgencyBadge value={action.urgency} />
-                            </div>
-                            <p className="text-sm text-slate-600 mt-1 break-words">{summary}</p>
-                            {action.ownerHint && <p className="text-xs text-slate-500 mt-2">Owner Hint: {action.ownerHint}</p>}
-                            <EntityEvidenceList evidence={action.evidence} />
-                            <RelatedEntitiesSection groups={buildEntityGroupsFromEvidence(action.evidence || [], relatedEntitiesMeta)} />
-                          </div>
-                        );
-                      })}
-                      {(structuredReport.recommendedActions || []).length === 0 && (
-                        <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
-                          No recommended actions available.
-                        </div>
-                      )}
-                    </div>
-                  </SectionCard>
-
-                  <SectionCard icon="fa-bullseye" title="Concentration Signals">
-                    <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
-                      {(structuredReport.concentrationSignals || []).map((signal) => {
-                        const summary = (signal.summary || '').trim() || signal.evidence?.[0]?.text || 'No summary provided.';
-                        return (
-                          <div key={signal.id} className="border border-slate-200 rounded-lg p-3 bg-slate-50">
-                            <p className="font-semibold text-slate-800 break-words">{signal.title}</p>
-                            <p className="text-sm text-slate-600 mt-1 break-words">{summary}</p>
-                            {signal.impact && <p className="text-xs text-slate-500 mt-2">Impact: {signal.impact}</p>}
-                            <EntityEvidenceList evidence={signal.evidence} />
-                            <RelatedEntitiesSection groups={buildEntityGroupsFromEvidence(signal.evidence || [], relatedEntitiesMeta)} />
-                          </div>
-                        );
-                      })}
-                      {(structuredReport.concentrationSignals || []).length === 0 && (
-                        <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
-                          No concentration signals identified.
-                        </div>
-                      )}
-                    </div>
-                  </SectionCard>
-
-                  <SectionCard icon="fa-gauge-high" title="Portfolio Health">
-                    <HealthScoreCard
-                      score={structuredReport.healthScore}
-                      onWatchThreshold={handleWatchHealth}
-                    />
-                  </SectionCard>
-
-                  <SectionCard icon="fa-chart-line" title="Portfolio Trends">
-                    <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
-                      {(structuredReport.trendSignals || []).map((signal, index) => (
-                        <TrendSignalCard
-                          key={`${signal.metric}-${signal.timeframeDays}-${index}`}
-                          signal={signal}
-                          onWatch={handleWatchTrend}
-                        />
-                      ))}
-                      {(structuredReport.trendSignals || []).length === 0 && (
-                        <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
-                          Trend analysis needs at least two historical snapshots. Generate more reports over time to unlock this section.
-                        </div>
-                      )}
-                    </div>
-                  </SectionCard>
-
-                  <SectionCard icon="fa-bell" title="Alerts">
-                    <div className="space-y-3 max-h-[460px] overflow-y-auto pr-1">
-                      {(structuredReport.alerts || [])
-                        .slice()
-                        .sort((a, b) => (alertSeverityWeight[b.severity] || 0) - (alertSeverityWeight[a.severity] || 0))
-                        .map((alert) => (
-                          <AlertCard
-                            key={alert.id}
-                            alert={alert}
-                            relatedEntitiesMeta={relatedEntitiesMeta}
-                            onSaveInvestigation={saveAlertAsInvestigation}
-                            onWatchAlert={handleWatchAlert}
-                          />
-                        ))}
-                      {(structuredReport.alerts || []).length === 0 && (
-                        <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
-                          No active alerts in this report.
-                        </div>
-                      )}
-                    </div>
-                  </SectionCard>
-
-                  <SectionCard icon="fa-circle-question" title="Questions To Ask">
-                    <div className="space-y-2 max-h-[360px] overflow-y-auto pr-1">
-                      {(structuredReport.questionsToAsk || []).map((item) => (
-                        <div key={item.id} className="border border-slate-200 rounded-lg p-3 bg-slate-50">
-                          <p className="text-sm font-semibold text-slate-800 break-words">{item.question}</p>
-                          {item.rationale && <p className="text-xs text-slate-500 mt-1 break-words">{item.rationale}</p>}
-                        </div>
-                      ))}
-                      {(structuredReport.questionsToAsk || []).length === 0 && (
-                        <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
-                          No follow-up questions suggested.
-                        </div>
-                      )}
-                    </div>
-                  </SectionCard>
-
-                  {structuredReport.markdownReport && (
-                  <section className="bg-white border border-slate-200 rounded-xl p-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <h3 className="text-sm font-black uppercase tracking-widest text-slate-500">Full Narrative Report</h3>
-                        <button
-                          onClick={() => setShowNarrative((open) => !open)}
-                          className="text-xs font-semibold text-blue-700 hover:text-blue-800"
-                        >
-                          {showNarrative ? 'Hide' : 'Show'}
-                        </button>
-                      </div>
-                      {showNarrative && (
-                        <div className="wiki-content theme-aurora mt-3">
-                          <MarkdownRenderer content={structuredReport.markdownReport} />
-                        </div>
-                      )}
-                    </section>
-                  )}
-
-                  <StrategicAdvisorPanel relatedEntitiesMeta={relatedEntitiesMeta} />
-
-                  <SectionCard icon="fa-comments" title="Ask DeliveryHub AI">
-                    <div className="space-y-3">
-                      <div className="flex flex-col md:flex-row gap-2">
-                        <input
-                          value={queryInput}
-                          onChange={(e) => setQueryInput(e.target.value)}
-                          placeholder="Ask about risks, milestones, reviews, or delivery blockers..."
-                          className="flex-1 px-3 py-2 rounded-lg border border-slate-300 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-200"
-                        />
-                        <button
-                          onClick={() => submitQuery()}
-                          disabled={queryLoading || !queryInput.trim()}
-                          className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:opacity-50"
-                        >
-                          {queryLoading ? 'Analyzing...' : 'Ask'}
-                        </button>
-                      </div>
-
-                      {suggestions.length > 0 && (
-                        <div className="flex flex-wrap gap-2">
-                          {suggestions.map((item) => (
+                    <aside className="space-y-5 2xl:sticky 2xl:top-6">
+                      <SectionCard icon="fa-comments" title="Ask DeliveryHub AI">
+                        <div className="space-y-3">
+                          <div className="flex flex-col gap-2">
+                            <input
+                              value={queryInput}
+                              onChange={(e) => setQueryInput(e.target.value)}
+                              placeholder="Ask about risks, milestones, reviews, or delivery blockers..."
+                              className="flex-1 px-3 py-2 rounded-lg border border-slate-300 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                            />
                             <button
-                              key={item.id}
-                              onClick={() => submitQuery(item.prompt)}
-                              disabled={queryLoading}
-                              className="px-3 py-1.5 rounded-full border border-slate-300 bg-slate-50 text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+                              onClick={() => submitQuery()}
+                              disabled={queryLoading || !queryInput.trim()}
+                              className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:opacity-50"
                             >
-                              {item.prompt}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-
-                      {queryError && (
-                        <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{queryError}</div>
-                      )}
-
-                      {queryResponse && (
-                        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2">
-                          <p className="text-sm font-semibold text-slate-800">{queryResponse.answer}</p>
-                          <p className="text-sm text-slate-600">{queryResponse.explanation}</p>
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => saveInvestigation(lastQueryQuestion || queryInput, queryResponse)}
-                              className="px-2 py-1 rounded border border-blue-200 bg-blue-50 text-xs font-semibold text-blue-700 hover:bg-blue-100"
-                            >
-                              Save Investigation
+                              {queryLoading ? 'Analyzing...' : 'Ask'}
                             </button>
                           </div>
-                          {queryResponse.evidence?.length > 0 && (
-                            <div>
-                              <p className="text-xs font-black uppercase tracking-widest text-slate-400 mb-1">Evidence</p>
-                              <EntityEvidenceList evidence={queryResponse.evidence} />
-                              <RelatedEntitiesSection
-                                groups={buildEntityGroupsFromEvidence(
-                                  queryResponse.evidence || [],
-                                  queryResponse.relatedEntitiesMeta || relatedEntitiesMeta
-                                )}
-                              />
-                            </div>
-                          )}
-                          {queryResponse.followUps?.length > 0 && (
-                            <div>
-                              <p className="text-xs font-black uppercase tracking-widest text-slate-400 mb-1">Follow-ups</p>
-                              <div className="flex flex-wrap gap-2">
-                                {queryResponse.followUps.map((item, idx) => (
-                                  <button
-                                    key={`qfu-${idx}`}
-                                    onClick={() => submitQuery(item)}
-                                    disabled={queryLoading}
-                                    className="px-3 py-1 rounded-full border border-blue-200 bg-blue-50 text-xs font-semibold text-blue-700 hover:bg-blue-100 disabled:opacity-50"
-                                  >
-                                    {item}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      )}
 
-                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                          {suggestions.length > 0 ? (
+                            <div className="flex flex-wrap gap-2">
+                              {suggestions.slice(0, 3).map((item) => (
+                                <button
+                                  key={item.id}
+                                  onClick={() => submitQuery(item.prompt)}
+                                  disabled={queryLoading}
+                                  className="px-2.5 py-1 rounded-full border border-slate-200 bg-slate-50 text-[11px] font-semibold text-slate-600 hover:bg-slate-100 disabled:opacity-50"
+                                >
+                                  {item.prompt}
+                                </button>
+                              ))}
+                            </div>
+                          ) : null}
+
+                          {queryError ? (
+                            <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{queryError}</div>
+                          ) : null}
+
+                          {queryResponse ? (
+                            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2">
+                              <p className="text-sm font-semibold text-slate-800">{queryResponse.answer}</p>
+                              <p className="text-sm text-slate-600">{queryResponse.explanation}</p>
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => saveInvestigation(lastQueryQuestion || queryInput, queryResponse)}
+                                  className="px-2 py-1 rounded border border-blue-200 bg-blue-50 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+                                >
+                                  Save Investigation
+                                </button>
+                              </div>
+                              {queryResponse.followUps?.length ? (
+                                <div className="flex flex-wrap gap-2">
+                                  {queryResponse.followUps.slice(0, 4).map((item, idx) => (
+                                    <button
+                                      key={`qfu-${idx}`}
+                                      onClick={() => submitQuery(item)}
+                                      disabled={queryLoading}
+                                      className="px-3 py-1 rounded-full border border-blue-200 bg-blue-50 text-xs font-semibold text-blue-700 hover:bg-blue-100 disabled:opacity-50"
+                                    >
+                                      {item}
+                                    </button>
+                                  ))}
+                                </div>
+                              ) : null}
+                            </div>
+                          ) : null}
+                        </div>
+                      </SectionCard>
+
+                      {pinnedItems.length ? (
+                        <PinnedInsightsPanel
+                          items={pinnedItems}
+                          busyId={investigationBusyId}
+                          onView={(item) => {
+                            setQueryInput(item.question);
+                            setQueryResponse(toQueryResponseFromSaved(item));
+                          }}
+                          onRefresh={handleRefreshSaved}
+                          onUnpin={(item) => handleTogglePinSaved(item, false)}
+                        />
+                      ) : null}
+
+                      {queryHistory.length ? (
                         <QueryHistoryPanel
                           items={queryHistory}
                           onRunAgain={(question) => submitQuery(question)}
                           onSave={(item) => saveInvestigation(item.question, item.result)}
                         />
+                      ) : null}
+
+                      {savedInvestigations.length ? (
                         <InvestigationPanel
                           items={savedInvestigations}
                           busyId={investigationBusyId}
@@ -1519,9 +1676,9 @@ const AIInsights: React.FC<AIInsightsProps> = ({ applications = [], bundles = []
                             enabled: true
                           })}
                         />
-                      </div>
-                    </div>
-                  </SectionCard>
+                      ) : null}
+                    </aside>
+                  </div>
                 </div>
               ) : (
                 <div className="wiki-content theme-aurora">

@@ -19,9 +19,17 @@ type StrategicResult = {
 
 type Props = {
   relatedEntitiesMeta?: RelatedEntitiesMeta;
+  showActionPlan?: boolean;
+  showWorkflowRules?: boolean;
+  showScenarioPlanner?: boolean;
 };
 
-const StrategicAdvisorPanel: React.FC<Props> = ({ relatedEntitiesMeta }) => {
+const StrategicAdvisorPanel: React.FC<Props> = ({
+  relatedEntitiesMeta,
+  showActionPlan = true,
+  showWorkflowRules = true,
+  showScenarioPlanner = true
+}) => {
   const [question, setQuestion] = React.useState('');
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState('');
@@ -140,13 +148,13 @@ const StrategicAdvisorPanel: React.FC<Props> = ({ relatedEntitiesMeta }) => {
               void askStrategicQuestion(nextQuestion);
             }}
           />
-          <ActionPlanPanel embeddedPlan={result.actionPlan} />
+          {showActionPlan ? <ActionPlanPanel embeddedPlan={result.actionPlan} /> : null}
         </div>
       )}
 
-      {!result && <ActionPlanPanel />}
-      <WorkflowRulePanel />
-      <ScenarioPlannerPanel />
+      {!result && showActionPlan ? <ActionPlanPanel /> : null}
+      {showWorkflowRules ? <WorkflowRulePanel /> : null}
+      {showScenarioPlanner ? <ScenarioPlannerPanel /> : null}
     </section>
   );
 };

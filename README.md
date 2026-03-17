@@ -23,15 +23,45 @@ Minimum local path:
    ```bash
    npm install
    ```
-3. Start MongoDB:
+3. Create a local env file and set the most important variables before first run.
+
+   Minimum recommended `.env.local`:
+
+   ```bash
+   MONGO_URL=mongodb://localhost:27017/delivery
+   JWT_SECRET=replace-with-a-long-random-secret
+   AUTH_MODE=local
+   AUTH_DISABLE_LOCAL_SIGNUP=false
+   AI_DEFAULT_PROVIDER=OPENAI
+   OPENAI_API_KEY=your_openai_key
+   ```
+
+   Important notes:
+
+   - `MONGO_URL` is required. The local default database name is `delivery`.
+   - `JWT_SECRET` is important even in local development because login/session cookies depend on it.
+   - `AI_DEFAULT_PROVIDER` should match a provider for which you actually set credentials.
+   - If you do not want to use OpenAI, you can switch to another supported provider and set its key instead:
+     - `OPENROUTER_API_KEY`
+     - `GEMINI_API_KEY`
+     - `ANTHROPIC_API_KEY`
+     - `HUGGINGFACE_API_KEY`
+     - `COHERE_API_KEY`
+   - If you want admin bootstrap on first run, also set:
+     - `ADMIN_BOOTSTRAP_EMAILS=you@company.com`
+   - If you plan to test integrations locally, also set the relevant credentials:
+     - GitHub: `GITHUB_TOKEN`, `GITHUB_REPOS`
+     - Jira: `JIRA_HOST`, `JIRA_EMAIL`, `JIRA_API_TOKEN`, `JIRA_PROJECT_KEYS`
+
+4. Start MongoDB:
    ```bash
    ./run.sh mongo
    ```
-4. Run the app locally:
+5. Run the app locally:
    ```bash
    npm run dev
    ```
-5. Open:
+6. Open:
    ```text
    http://localhost:3000
    ```
