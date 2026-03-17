@@ -1,15 +1,18 @@
 import { ObjectId } from 'mongodb';
 import { Notification, NotificationDigestItem } from '../../types/ai';
-import { getDb } from '../db';
 import { sendNotificationEmail } from './emailChannel';
 import { sendSlackNotification } from './slackChannel';
 import { sendTeamsNotification } from './teamsChannel';
 import { getNotificationPolicy } from './notificationPolicy';
-
-const QUEUE_COLLECTION = 'ai_notification_digest_queue';
-const NOTIFICATIONS_COLLECTION = 'ai_notifications';
-const WATCHERS_COLLECTION = 'ai_watchers';
-const USERS_COLLECTION = 'users';
+import {
+  deleteAiNotificationDigestRecordsByIds,
+  enqueueAiNotificationDigestRecord,
+  listAiNotificationsByIds,
+  listDigestEnabledAiWatchersForUserRecords,
+  listPendingAiNotificationDigestRecords,
+  markAiNotificationDigestRecordsProcessed
+} from '../../server/db/repositories/aiNotificationsRepo';
+import { findUserById } from '../../server/db/repositories/usersRepo';
 
 let schedulerStarted = false;
 let schedulerHandle: NodeJS.Timeout | null = null;
@@ -28,22 +31,14 @@ const toDigestItem = (row: any): NotificationDigestItem => ({
   createdAt: String(row.createdAt || nowIso())
 });
 
-const ensureIndexes = async (db: any) => {
-  await db.collection(QUEUE_COLLECTION).createIndex({ userId: 1, digestFrequency: 1, processedAt: 1, createdAt: 1 });
-  await db.collection(QUEUE_COLLECTION).createIndex({ notificationId: 1 }, { unique: true });
-};
-
 export const enqueueNotificationForDigest = async (input: {
   userId: string;
   notificationId: string;
   watcherId?: string;
   digestFrequency?: 'hourly' | 'daily';
 }) => {
-  const db = await getDb();
-  await ensureIndexes(db);
-
   try {
-    await db.collection(QUEUE_COLLECTION).insertOne({
+    await enqueueAiNotificationDigestRecord({
       userId: String(input.userId),
       notificationId: String(input.notificationId),
       watcherId: input.watcherId ? String(input.watcherId) : undefined,
@@ -97,10 +92,8 @@ const shouldSendNowByFrequency = (
   return elapsed >= threshold;
 };
 
-const resolveUserContact = async (db: any, userId: string) => {
-  const row = await db.collection(USERS_COLLECTION).findOne({
-    $or: [{ _id: toObjectId(userId) }, { id: userId }, { userId }]
-  } as any, { projection: { _id: 1, email: 1, name: 1 } });
+const resolveUserContact = async (userId: string) => {
+  const row = await findUserById(userId) || null;
 
   return {
     email: row?.email ? String(row.email) : '',
@@ -108,21 +101,13 @@ const resolveUserContact = async (db: any, userId: string) => {
   };
 };
 
-const getWatcherPreferencesForUser = async (db: any, userId: string) => {
-  const rows = await db.collection(WATCHERS_COLLECTION)
-    .find({ userId: String(userId), enabled: true, 'deliveryPreferences.digest.enabled': true })
-    .toArray();
-  return rows;
-};
+const getWatcherPreferencesForUser = async (userId: string) => await listDigestEnabledAiWatchersForUserRecords(String(userId));
 
 export const processDigestQueue = async () => {
   if (String(process.env.NOTIFICATION_DIGEST_ENABLED || 'false').toLowerCase() !== 'true') return;
   const policy = getNotificationPolicy();
 
-  const db = await getDb();
-  await ensureIndexes(db);
-
-  const queueRows = await db.collection(QUEUE_COLLECTION).find({ processedAt: null }).sort({ createdAt: 1 }).limit(1000).toArray();
+  const queueRows = await listPendingAiNotificationDigestRecords(1000);
   if (!queueRows.length) return;
 
   const grouped = new Map<string, NotificationDigestItem[]>();
@@ -133,12 +118,10 @@ export const processDigestQueue = async () => {
   });
 
   for (const [userId, items] of grouped.entries()) {
-    const notificationRows = await db.collection(NOTIFICATIONS_COLLECTION)
-      .find({ _id: { $in: items.map((item) => toObjectId(item.notificationId)) } } as any)
-      .toArray();
+    const notificationRows = await listAiNotificationsByIds(items.map((item) => item.notificationId));
 
     if (!notificationRows.length) {
-      await db.collection(QUEUE_COLLECTION).deleteMany({ _id: { $in: items.map((item) => toObjectId(item.id)) } } as any);
+      await deleteAiNotificationDigestRecordsByIds(items.map((item) => item.id));
       continue;
     }
 
@@ -156,9 +139,9 @@ export const processDigestQueue = async () => {
       delivery: row.delivery || undefined
     })) as Notification[];
 
-    const digestWatchers = await getWatcherPreferencesForUser(db, userId);
+    const digestWatchers = await getWatcherPreferencesForUser(userId);
     if (!digestWatchers.length) {
-      await db.collection(QUEUE_COLLECTION).deleteMany({ _id: { $in: items.map((item) => toObjectId(item.id)) } } as any);
+      await deleteAiNotificationDigestRecordsByIds(items.map((item) => item.id));
       continue;
     }
 
@@ -187,7 +170,7 @@ export const processDigestQueue = async () => {
     };
 
     const appUrl = process.env.APP_BASE_URL || process.env.NEXT_PUBLIC_APP_BASE_URL;
-    const contact = await resolveUserContact(db, userId);
+    const contact = await resolveUserContact(userId);
 
     if (firstPref?.email?.enabled && contact.email) {
       try {
@@ -219,10 +202,7 @@ export const processDigestQueue = async () => {
     }
     console.info('digest_sent', JSON.stringify({ userId, count: notifications.length, frequency, timestamp: nowIso() }));
 
-    await db.collection(QUEUE_COLLECTION).updateMany(
-      { _id: { $in: items.map((item) => toObjectId(item.id)) } } as any,
-      { $set: { processedAt: nowIso() } }
-    );
+    await markAiNotificationDigestRecordsProcessed(items.map((item) => item.id), nowIso());
   }
 };
 

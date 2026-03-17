@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { computeSprintRollups } from '../../../../services/db';
+import { computeSprintRollups } from '../../../../services/rollupAnalytics';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);

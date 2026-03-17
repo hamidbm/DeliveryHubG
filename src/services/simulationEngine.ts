@@ -1,6 +1,6 @@
 import { ObjectId } from 'mongodb';
-import { getDb } from './db';
 import { buildDeliveryPlanPreview } from './planningEngine';
+import { getBundleCapacityForPlanning, resolvePlanScope } from './planScope';
 import type {
   DeliveryPlanInput,
   DeliveryPlanPreview,
@@ -10,61 +10,7 @@ import type {
   SimulationComparison,
   MilestoneComparison,
   SimulationSummary,
-  PlanScope
 } from '../types';
-
-const resolveScope = async (input: DeliveryPlanInput): Promise<PlanScope> => {
-  const db = await getDb();
-  const scopeType = input.scopeType;
-  const scopeId = String(input.scopeId || '');
-  if (scopeType === 'PROGRAM') {
-    return {
-      scopeType,
-      scopeId: scopeId || 'program',
-      scopeName: 'Program',
-      scopeRef: { type: 'initiative', id: 'program', name: 'Program' }
-    };
-  }
-
-  if (scopeType === 'BUNDLE') {
-    const bundle = ObjectId.isValid(scopeId)
-      ? await db.collection('bundles').findOne({ _id: new ObjectId(scopeId) })
-      : await db.collection('bundles').findOne({ $or: [{ id: scopeId }, { key: scopeId }] });
-    const name = bundle?.name || bundle?.key || scopeId;
-    return {
-      scopeType,
-      scopeId,
-      scopeName: name,
-      bundleId: bundle?._id ? String(bundle._id) : scopeId,
-      scopeRef: { type: 'bundle', id: bundle?._id ? String(bundle._id) : scopeId, name }
-    };
-  }
-
-  const app = ObjectId.isValid(scopeId)
-    ? await db.collection('applications').findOne({ _id: new ObjectId(scopeId) })
-    : await db.collection('applications').findOne({ $or: [{ id: scopeId }, { key: scopeId }, { aid: scopeId }] });
-  const name = app?.name || app?.key || scopeId;
-  const bundleId = app?.bundleId ? String(app.bundleId) : undefined;
-  return {
-    scopeType,
-    scopeId,
-    scopeName: name,
-    bundleId,
-    applicationId: app?._id ? String(app._id) : scopeId,
-    scopeRef: { type: 'application', id: app?._id ? String(app._id) : scopeId, name }
-  };
-};
-
-const getBundleCapacity = async (bundleId?: string | null) => {
-  if (!bundleId) return null;
-  const db = await getDb();
-  const record = await db.collection('bundle_capacity').findOne({ bundleId: String(bundleId) });
-  if (!record) return null;
-  return {
-    unit: record.unit as 'POINTS_PER_SPRINT' | 'POINTS_PER_WEEK',
-    value: Number(record.value || 0)
-  };
-};
 
 const shiftDate = (value?: string, shiftDays?: number) => {
   if (!value || typeof shiftDays !== 'number') return value;
@@ -224,20 +170,20 @@ export const comparePreviews = (
 };
 
 export const runSimulation = async (simulationRequest: SimulationRequest): Promise<SimulationResult> => {
-  const scope = await resolveScope(simulationRequest.baselineInput);
+  const scope = await resolvePlanScope(simulationRequest.baselineInput);
   const baselinePreviewId = String(new ObjectId());
   const scenarioPreviewId = String(new ObjectId());
   const baselinePreview = (await buildDeliveryPlanPreview(simulationRequest.baselineInput, {
     previewId: baselinePreviewId,
     scope,
-    getBundleCapacity
+    getBundleCapacity: getBundleCapacityForPlanning
   })).preview;
 
   const scenarioInput = applyScenarioOverrides(simulationRequest.baselineInput, simulationRequest.scenario.overrides || []);
   const scenarioPreview = (await buildDeliveryPlanPreview(scenarioInput, {
     previewId: scenarioPreviewId,
     scope,
-    getBundleCapacity
+    getBundleCapacity: getBundleCapacityForPlanning
   })).preview;
 
   const shiftedScenarioPreview = applyMilestoneDateShifts(scenarioPreview, simulationRequest.scenario.overrides || []);

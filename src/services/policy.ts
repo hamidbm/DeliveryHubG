@@ -1,6 +1,15 @@
 import { ObjectId } from 'mongodb';
-import { getMongoClientPromise, getMongoDbName } from '../lib/mongodb';
 import { recordCacheHit, recordCacheMiss } from './perfStats';
+import {
+  deleteDeliveryPolicyOverrideRecord,
+  getDeliveryPolicyOverrideRecord,
+  getGlobalDeliveryPolicyRecord,
+  insertGlobalDeliveryPolicyRecord,
+  saveDeliveryPolicyOverrideRecord,
+  upsertGlobalDeliveryPolicyRecord
+} from '../server/db/repositories/deliveryPolicyRepo';
+import { getMilestoneByRef } from '../server/db/repositories/milestonesRepo';
+import { listWorkItemsByMilestoneRefs } from '../server/db/repositories/workItemsRepo';
 
 export type DeliveryPolicy = {
   _id: 'global';
@@ -214,15 +223,6 @@ let cachedOverrides: Map<string, { value: DeliveryPolicyOverride | null; ts: num
 let cachedEffective: Map<string, { value: EffectivePolicyRef; ts: number }> = new Map();
 let cachedMilestoneEffective: Map<string, { value: EffectivePolicyRef; ts: number }> = new Map();
 const CACHE_TTL_MS = 30_000;
-
-const getDb = async () => {
-  const client = await getMongoClientPromise();
-  return client.db(getMongoDbName());
-};
-
-const ensureOverrideIndexes = async (db: any) => {
-  await db.collection('delivery_policy_overrides').createIndex({ bundleId: 1 }, { unique: true });
-};
 
 const coerceNumber = (value: any, fallback: number) => {
   const num = typeof value === 'number' ? value : Number(value);
@@ -446,10 +446,9 @@ export const getDeliveryPolicy = async (): Promise<DeliveryPolicy> => {
     return cachedPolicy.value;
   }
   recordCacheMiss('policy');
-  const db = await getDb();
-  const existing = await db.collection('delivery_policies').findOne({ _id: 'global' as any });
+  const existing = await getGlobalDeliveryPolicyRecord();
   if (!existing) {
-    await db.collection('delivery_policies').insertOne(DEFAULT_POLICY as any);
+    await insertGlobalDeliveryPolicyRecord(DEFAULT_POLICY);
     cachedPolicy = { value: DEFAULT_POLICY, ts: Date.now() };
     return DEFAULT_POLICY;
   }
@@ -467,17 +466,13 @@ export const getDeliveryPolicyOverride = async (bundleId: string): Promise<Deliv
     return cached.value;
   }
   recordCacheMiss('policy');
-  const db = await getDb();
-  await ensureOverrideIndexes(db);
-  const doc = await db.collection<DeliveryPolicyOverride>('delivery_policy_overrides').findOne({ bundleId: id });
+  const doc = await getDeliveryPolicyOverrideRecord(id);
   cachedOverrides.set(id, { value: doc || null, ts: Date.now() });
   return doc || null;
 };
 
 export const saveDeliveryPolicyOverride = async (bundleId: string, overrides: DeepPartial<DeliveryPolicy>, updatedBy: string) => {
-  const db = await getDb();
-  await ensureOverrideIndexes(db);
-  const existing = await db.collection('delivery_policy_overrides').findOne({ bundleId: String(bundleId) });
+  const existing = await getDeliveryPolicyOverrideRecord(String(bundleId));
   const nextVersion = existing?.version ? Number(existing.version) + 1 : 1;
   const payload: DeliveryPolicyOverride = {
     bundleId: String(bundleId),
@@ -486,11 +481,7 @@ export const saveDeliveryPolicyOverride = async (bundleId: string, overrides: De
     updatedBy,
     overrides
   };
-  await db.collection('delivery_policy_overrides').updateOne(
-    { bundleId: String(bundleId) },
-    { $set: payload },
-    { upsert: true }
-  );
+  await saveDeliveryPolicyOverrideRecord(payload);
   cachedOverrides.delete(String(bundleId));
   cachedEffective.delete(String(bundleId));
   cachedMilestoneEffective.clear();
@@ -498,9 +489,7 @@ export const saveDeliveryPolicyOverride = async (bundleId: string, overrides: De
 };
 
 export const deleteDeliveryPolicyOverride = async (bundleId: string) => {
-  const db = await getDb();
-  await ensureOverrideIndexes(db);
-  await db.collection('delivery_policy_overrides').deleteOne({ bundleId: String(bundleId) });
+  await deleteDeliveryPolicyOverrideRecord(String(bundleId));
   cachedOverrides.delete(String(bundleId));
   cachedEffective.delete(String(bundleId));
   cachedMilestoneEffective.clear();
@@ -689,15 +678,7 @@ export const getEffectivePolicyForMilestone = async (milestoneId: string): Promi
   }
   recordCacheMiss('policy');
 
-  const db = await getDb();
-  const objectIds = ObjectId.isValid(id) ? [new ObjectId(id)] : [];
-  const milestone = await db.collection('milestones').findOne({
-    $or: [
-      { _id: { $in: objectIds } },
-      { id },
-      { name: id }
-    ]
-  });
+  const milestone = await getMilestoneByRef(id);
 
   if (!milestone) {
     const global = await getDeliveryPolicy();
@@ -711,18 +692,7 @@ export const getEffectivePolicyForMilestone = async (milestoneId: string): Promi
   }
 
   const candidates = resolveMilestoneCandidates(milestone);
-  const candidateObjectIds = candidates.filter(ObjectId.isValid).map((c) => new ObjectId(c));
-  const items = await db.collection('workitems').find({
-    $and: [
-      { $or: [{ isArchived: { $exists: false } }, { isArchived: false }] },
-      { $or: [
-        { milestoneIds: { $in: candidates } },
-        { milestoneIds: { $in: candidateObjectIds } },
-        { milestoneId: { $in: candidates } },
-        { milestoneId: { $in: candidateObjectIds } }
-      ] }
-    ]
-  }, { projection: { bundleId: 1 } }).toArray();
+  const items = await listWorkItemsByMilestoneRefs(candidates);
 
   const bundleIds = new Set<string>();
   if (milestone?.bundleId) bundleIds.add(String(milestone.bundleId));
@@ -766,8 +736,7 @@ export const getEffectivePolicyForMilestone = async (milestoneId: string): Promi
 };
 
 export const saveDeliveryPolicy = async (policy: DeliveryPolicy) => {
-  const db = await getDb();
-  await db.collection('delivery_policies').updateOne({ _id: 'global' as any }, { $set: policy as any }, { upsert: true });
+  await upsertGlobalDeliveryPolicyRecord(policy);
   cachedPolicy = { value: policy, ts: Date.now() };
   cachedEffective.clear();
   cachedMilestoneEffective.clear();

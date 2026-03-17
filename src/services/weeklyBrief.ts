@@ -1,8 +1,14 @@
-import { ObjectId } from 'mongodb';
-import { computeMilestoneRollup, computeMilestoneRollups, getDb } from './db';
+import { computeMilestoneRollup, computeMilestoneRollups } from './rollupAnalytics';
 import { computeBundleCapacityPlans } from './capacityPlanning';
 import { computeMilestoneBaselineDelta } from './baselineDelta';
 import { createVisibilityContext } from './visibility';
+import { listDecisionSummariesForRange } from '../server/db/repositories/decisionsRepo';
+import { findBundleByAnyId, listBundles } from '../server/db/repositories/bundlesRepo';
+import { getMilestoneByRef, listMilestones } from '../server/db/repositories/milestonesRepo';
+import { getCommitmentDriftSnapshotByMilestoneId, listCommitmentDriftSnapshotsByMilestoneIds } from '../server/db/repositories/commitmentRepo';
+import { listBlockedWorkItemsByMilestoneRefs } from '../server/db/repositories/workItemsRepo';
+import { enqueueNotificationDigestItems, listDigestOptInUserPrefsDocs, listNotificationDigestQueueItems } from '../server/db/repositories/notificationPlatformRepo';
+import { getWeeklyBriefRecord, insertWeeklyBriefRecordIfMissing, upsertWeeklyBriefRecord } from '../server/db/repositories/weeklyBriefsRepo';
 
 type WeeklyBrief = {
   scopeType: 'PROGRAM' | 'BUNDLE' | 'MILESTONE';
@@ -24,18 +30,6 @@ type WeeklyBrief = {
     decisions?: { top?: Array<{ title: string; outcome: string; severity: string }> };
   };
   links: Array<{ label: string; href: string }>;
-};
-
-const ensureWeeklyBriefIndexes = async (db: any) => {
-  await db.collection('weekly_briefs').createIndex({ scopeType: 1, scopeId: 1, weekKey: 1 }, { unique: true });
-  await db.collection('weekly_briefs').createIndex({ generatedAt: -1 });
-};
-
-const buildMilestoneQuery = (id: string) => {
-  if (ObjectId.isValid(id)) {
-    return { $or: [{ _id: new ObjectId(id) }, { id }, { name: id }] };
-  }
-  return { $or: [{ id }, { name: id }] };
 };
 
 const formatDate = (value?: string) => {
@@ -77,16 +71,14 @@ const weekKeyToRange = (weekKey: string) => {
 };
 
 const fetchDecisionsForScope = async (scopeType: WeeklyBrief['scopeType'], scopeId: string | undefined, weekKey: string) => {
-  const db = await getDb();
   const { start, end } = weekKeyToRange(weekKey);
-  const query: any = {
+  const items = await listDecisionSummariesForRange({
     scopeType,
-    createdAt: { $gte: start.toISOString(), $lt: end.toISOString() }
-  };
-  if (scopeType !== 'PROGRAM') {
-    query.scopeId = scopeId || null;
-  }
-  const items = await db.collection('decision_log').find(query).sort({ createdAt: -1 }).limit(5).toArray();
+    scopeId,
+    startIso: start.toISOString(),
+    endIso: end.toISOString(),
+    limit: 5
+  });
   return items.map((d: any) => ({
     title: d.title,
     outcome: d.outcome,
@@ -121,22 +113,11 @@ const buildForecastSummary = (rollup: any, deltaLabel?: string) => {
 };
 
 const loadMilestoneSignals = async (milestoneId: string) => {
-  const db = await getDb();
-  const snapshot = await db.collection('commitment_drift_snapshots').findOne({ milestoneId });
-  return snapshot;
+  return await getCommitmentDriftSnapshotByMilestoneId(milestoneId);
 };
 
 const fetchTopBlockers = async (milestoneId: string) => {
-  const db = await getDb();
-  const candidates = [milestoneId];
-  if (ObjectId.isValid(milestoneId)) candidates.push(new ObjectId(milestoneId) as any);
-  const items = await db.collection('workitems')
-    .find({
-      $or: [{ milestoneIds: { $in: candidates } }, { milestoneId: { $in: candidates } }],
-      status: 'BLOCKED'
-    })
-    .limit(3)
-    .toArray();
+  const items = await listBlockedWorkItemsByMilestoneRefs([milestoneId], 3);
   return items.map((item: any) => ({
     key: item.key || String(item._id || item.id || ''),
     title: item.title || 'Blocked item',
@@ -149,8 +130,7 @@ export const generateMilestoneBrief = async (
   weekKey: string,
   userContext?: { userId?: string; visibility?: ReturnType<typeof createVisibilityContext> }
 ): Promise<WeeklyBrief | null> => {
-  const db = await getDb();
-  const milestone = await db.collection('milestones').findOne(buildMilestoneQuery(milestoneId));
+  const milestone = await getMilestoneByRef(milestoneId);
   if (!milestone) return null;
 
   const rollup = await computeMilestoneRollup(String(milestone._id || milestone.id || milestone.name || milestoneId));
@@ -244,17 +224,13 @@ export const generateBundleBrief = async (
   weekKey: string,
   userContext?: { userId?: string; visibility?: ReturnType<typeof createVisibilityContext> }
 ): Promise<WeeklyBrief | null> => {
-  const db = await getDb();
-  const bundleQuery = ObjectId.isValid(bundleId)
-    ? { $or: [{ _id: new ObjectId(bundleId) }, { id: bundleId }, { name: bundleId }] }
-    : { $or: [{ id: bundleId }, { name: bundleId }] };
-  const bundle = await db.collection('bundles').findOne(bundleQuery);
-  const milestones = await db.collection('milestones').find({ bundleId: String(bundleId) }).toArray();
+  const bundle = await findBundleByAnyId(bundleId);
+  const milestones = await listMilestones({ bundleId: String(bundleId), applicationId: null, status: null });
   const milestoneIds = milestones.map((m: any) => String(m._id || m.id || m.name)).filter(Boolean);
   if (!milestoneIds.length) return null;
 
   const rollups = await computeMilestoneRollups(milestoneIds);
-  const driftSnapshots = await db.collection('commitment_drift_snapshots').find({ milestoneId: { $in: milestoneIds } }).toArray();
+  const driftSnapshots = await listCommitmentDriftSnapshotsByMilestoneIds(milestoneIds);
   const major = driftSnapshots.filter((s: any) => s.driftBand === 'MAJOR');
   const minor = driftSnapshots.filter((s: any) => s.driftBand === 'MINOR');
 
@@ -314,9 +290,8 @@ export const generateProgramBrief = async (
   weekKey: string,
   userContext?: { userId?: string; visibility?: ReturnType<typeof createVisibilityContext> }
 ): Promise<WeeklyBrief> => {
-  const db = await getDb();
-  let bundles = await db.collection('bundles').find({}).toArray();
-  let milestones = await db.collection('milestones').find({}).toArray();
+  let bundles = await listBundles(false);
+  let milestones = await listMilestones({ bundleId: null, applicationId: null, status: null });
   if (userContext?.visibility) {
     const filtered = [];
     for (const bundle of bundles) {
@@ -332,7 +307,7 @@ export const generateProgramBrief = async (
   const bundleIds = bundles.map((b: any) => String(b._id || b.id || b.name)).filter(Boolean);
   const milestoneIds = milestones.map((m: any) => String(m._id || m.id || m.name)).filter(Boolean);
   const rollups = await computeMilestoneRollups(milestoneIds);
-  const driftSnapshots = await db.collection('commitment_drift_snapshots').find({ milestoneId: { $in: milestoneIds } }).toArray();
+  const driftSnapshots = await listCommitmentDriftSnapshotsByMilestoneIds(milestoneIds);
   const major = driftSnapshots.filter((s: any) => s.driftBand === 'MAJOR');
   const minor = driftSnapshots.filter((s: any) => s.driftBand === 'MINOR');
 
@@ -371,47 +346,38 @@ export const generateProgramBrief = async (
 };
 
 export const upsertWeeklyBrief = async (brief: WeeklyBrief, force = false) => {
-  const db = await getDb();
-  await ensureWeeklyBriefIndexes(db);
   if (force) {
-    await db.collection('weekly_briefs').replaceOne(
-      { scopeType: brief.scopeType, scopeId: brief.scopeId || null, weekKey: brief.weekKey },
-      brief,
-      { upsert: true }
-    );
-    return brief;
+    return await upsertWeeklyBriefRecord(brief as unknown as Record<string, unknown>) as unknown as WeeklyBrief;
   }
-  const existing = await db.collection('weekly_briefs').findOne({ scopeType: brief.scopeType, scopeId: brief.scopeId || null, weekKey: brief.weekKey });
-  if (existing) return existing as unknown as WeeklyBrief;
-  await db.collection('weekly_briefs').insertOne(brief);
-  return brief;
+  return await insertWeeklyBriefRecordIfMissing(brief as unknown as Record<string, unknown>) as unknown as WeeklyBrief;
 };
 
 export const fetchWeeklyBrief = async (scopeType: WeeklyBrief['scopeType'], scopeId: string | undefined, weekKey: string) => {
-  const db = await getDb();
-  await ensureWeeklyBriefIndexes(db);
-  const found = await db.collection('weekly_briefs').findOne({ scopeType, scopeId: scopeId || null, weekKey });
+  const found = await getWeeklyBriefRecord(scopeType, scopeId, weekKey);
   return (found as unknown as WeeklyBrief) || null;
 };
 
 export const resolveWeekKey = (input?: string) => input || getWeekKey();
 
 export const queueWeeklyBriefDigest = async (brief: WeeklyBrief) => {
-  const db = await getDb();
-  const prefs = await db.collection('notification_user_prefs').find({ digestOptIn: true }, { projection: { userId: 1 } }).toArray();
+  const prefs = await listDigestOptInUserPrefsDocs();
   const createdAt = new Date().toISOString();
+  const userIds = prefs.map((pref: any) => String(pref.userId || '')).filter(Boolean);
+  const existing = userIds.length
+    ? await listNotificationDigestQueueItems({
+        userId: { $in: userIds },
+        type: 'weekly.brief.available',
+        weekKey: brief.weekKey,
+        scopeType: brief.scopeType,
+        scopeId: brief.scopeId || null
+      })
+    : [];
+  const existingUserIds = new Set(existing.map((item: any) => String(item.userId || '')).filter(Boolean));
+  const items: Array<Record<string, unknown>> = [];
   for (const pref of prefs) {
     const userId = String(pref.userId || '');
-    if (!userId) continue;
-    const existing = await db.collection('notification_digest_queue').findOne({
-      userId,
-      type: 'weekly.brief.available',
-      weekKey: brief.weekKey,
-      scopeType: brief.scopeType,
-      scopeId: brief.scopeId || null
-    });
-    if (existing) continue;
-    await db.collection('notification_digest_queue').insertOne({
+    if (!userId || existingUserIds.has(userId)) continue;
+    items.push({
       userId,
       type: 'weekly.brief.available',
       weekKey: brief.weekKey,
@@ -423,4 +389,5 @@ export const queueWeeklyBriefDigest = async (brief: WeeklyBrief) => {
       createdAt
     });
   }
+  await enqueueNotificationDigestItems(items);
 };

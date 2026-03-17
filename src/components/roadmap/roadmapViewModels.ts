@@ -8,7 +8,9 @@ export type RoadmapMilestoneVM = {
   sprintCount?: number;
   targetCapacity?: number | null;
   applicationId?: string;
+  applicationLabel?: string;
   bundleId?: string;
+  bundleLabel?: string;
   ownerEmail?: string;
   goal?: string;
   themeLabel?: string;

@@ -1,8 +1,9 @@
 import { ObjectId } from 'mongodb';
-import { getDb } from './db';
 import { evaluateMilestoneCommitReview } from './commitmentReview';
 import { getEffectivePolicyForMilestone } from './policy';
 import { computeMilestoneBaselineDelta } from './baselineDelta';
+import { getLatestPassingCommitmentReviewRecord } from '../server/db/repositories/commitmentRepo';
+import { getMilestoneByRef } from '../server/db/repositories/milestonesRepo';
 
 type DriftDelta = {
   key: string;
@@ -23,13 +24,6 @@ export type DriftResult = {
 };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-
-const buildMilestoneQuery = (id: string) => {
-  if (ObjectId.isValid(id)) {
-    return { $or: [{ _id: new ObjectId(id) }, { id }, { name: id }] };
-  }
-  return { $or: [{ id }, { name: id }] };
-};
 
 const compareNumber = (before: number | null, after: number | null) => {
   if (before === null && after !== null) return { status: 'NEW' as const, delta: null };
@@ -57,16 +51,10 @@ const compareDate = (before?: string, after?: string) => {
 export const evaluateMilestoneCommitmentDrift = async (milestoneId: string): Promise<DriftResult | null> => {
   const id = String(milestoneId || '');
   if (!id) return null;
-  const db = await getDb();
-  const milestone = await db.collection('milestones').findOne(buildMilestoneQuery(id));
+  const milestone = await getMilestoneByRef(id);
   if (!milestone) return null;
 
-  const baseline = await db.collection('commitment_reviews')
-    .find({ milestoneId: String(milestone._id || milestone.id || milestone.name || id), result: { $in: ['PASS', 'OVERRIDDEN'] } })
-    .sort({ evaluatedAt: -1 })
-    .limit(1)
-    .toArray();
-  const baselineDoc = baseline[0];
+  const baselineDoc = await getLatestPassingCommitmentReviewRecord(String(milestone._id || milestone.id || milestone.name || id));
   if (!baselineDoc?.review) {
     return {
       milestoneId: String(milestone._id || milestone.id || milestone.name || id),

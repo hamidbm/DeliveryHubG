@@ -1,6 +1,8 @@
 # Roadmap
 
-This section captures known gaps and likely next steps. The backbone is milestone readiness + rollups, with roadmap intelligence as the derived surface, and program coordination + notifications/audit as the operational layer.
+This section captures implemented roadmap phases plus remaining next steps. Historical items that are no longer active future work are explicitly marked as `Completed` or `Superseded`.
+
+The backbone is milestone readiness + rollups, with roadmap intelligence as the derived surface, and program coordination + notifications/audit as the operational layer.
 
 ## Work Items Roadmap
 
@@ -313,33 +315,33 @@ Problem: historical migrations left mixed shapes. Value: safer analytics and few
 Problem: roadmap and rollup queries can be heavy at scale. Value: early detection of regressions. Dependencies: existing perf logging pattern. Deliverables: optional query explain sampling and timing logs. Verify: enable sampling and capture explain summaries without breaking API.
 
 ### Mid-term (next 1–3 months)
-1. Sprint execution integration.
+1. Sprint execution integration. `Completed`
 Problem: sprint execution is not tied to milestone scope. Value: alignment between team execution and milestone readiness. Dependencies: sprint data model and milestone rollups. Deliverables: sprint capacity tied to milestone scope and burn-up. Verify: sprint updates change milestone readiness signals.
 
-2. Forecasting v1 (Monte Carlo).
+2. Forecasting v1 (Monte Carlo). `Completed`
 Problem: single-point ETA misses distribution and hit probability. Value: P50/P80/P90 finish dates and probability of hitting endDate. Dependencies: historical throughput distribution. Deliverables: Monte Carlo ETA in rollups, roadmap, and capacity planning; Admin policy toggle. Verify: P80 chips render and policy can enable/disable.
 
-3. Baseline + Scope Delta accounting.
+3. Baseline + Scope Delta accounting. `Completed`
 Problem: drift lacks attribution. Value: explain drift via added/removed scope and estimate changes since commit. Dependencies: commitment review snapshots + scope tracking. Deliverables: baseline snapshots, delta computation, UI panels and drift attribution. Verify: delta panel shows added/removed/estimate changes and drift includes scope summary.
 
 4. Watcher templates for broader domains.
 Problem: watchers are currently created manually per context. Value: faster setup and broader operational coverage. Dependencies: 12F.3 dispatch + digest foundation. Deliverables: reusable watcher templates for bundle/milestone/application contexts. Verify: users can apply templates and receive routed notifications with expected suppression behavior.
 
 ### Long-term
-1. External integrations.
-Problem: manual sync with external tools. Value: reduce dual entry and stale data. Dependencies: stable API contracts and mapping rules. Deliverables: Jira sync and calendar release milestones. Verify: changes propagate between systems without drift.
+1. External integrations. `Partially Completed / Superseded`
+Problem: manual sync with external tools. Value: reduce dual entry and stale data. Core GitHub and Jira sync paths now exist. The original wording is superseded by the current implementation state; future work in this area is incremental integration expansion rather than first-time external sync support.
 
 2. Advanced governance.
 Problem: COMMITTED scope changes are not formally approved. Value: enforce governance and auditability. Dependencies: existing readiness + override workflow. Deliverables: approval workflow for committed scope changes and policy-as-config thresholds. Verify: scope change requires approval and is fully auditable.
 
-3. Advanced analytics.
-Problem: limited critical path visibility. Value: improved program prioritization. Dependencies: accurate dependency graph and milestone rollups. Deliverables: critical path visualization and Monte Carlo forecasting (optional). Verify: critical path highlights matches actual blockers over time.
+3. Advanced analytics. `Completed`
+Problem: limited critical path visibility. Value: improved program prioritization. Critical path and probabilistic forecasting are now implemented, so this item is no longer a future roadmap gap.
 
 ## Platform Roadmap
 
 ### Near-term
-1. Expand repository pattern into per-domain repositories.
-Problem: DB access is still centralized. Value: clearer ownership and safer changes. Dependencies: current services/db.ts. Deliverables: repo modules for work items, milestones, notifications. Verify: routes use repositories consistently.
+1. Expand repository pattern into per-domain repositories. `Completed`
+Problem: DB access is still centralized. Value: clearer ownership and safer changes. This was the main architecture remediation stream and is now largely complete. The codebase now uses per-domain repositories, shared DB infrastructure, a shared event module, and shared bootstrap entry points. `src/services/db.ts` remains only as a legacy compatibility facade.
 
 2. Improve automated API tests coverage.
 Problem: regression detection is limited. Value: safer releases. Dependencies: test harness. Deliverables: coverage for notifications policy + digest and audit console. Verify: `npm run test:api` passes with meaningful scenarios.

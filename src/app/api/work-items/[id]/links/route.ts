@@ -1,9 +1,12 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import { jwtVerify } from 'jose';
-import { addWorkItemLink, removeWorkItemLink, fetchWorkItemById, fetchWorkItemByKeyOrId, detectBlocksCycle } from '../../../../../services/db';
-
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
+import {
+  addWorkItemLink,
+  detectBlocksCycle,
+  fetchWorkItemById,
+  fetchWorkItemByKeyOrId,
+  removeWorkItemLink
+} from '../../../../../services/workItemsService';
+import { requireStandardUser } from '../../../../../shared/auth/guards';
 
 const resolveLinkDirection = (sourceId: string, targetId: string, type: string) => {
   const upper = String(type || '').toUpperCase();
@@ -19,11 +22,9 @@ const resolveLinkDirection = (sourceId: string, targetId: string, type: string) 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
-    const cookieStore = await cookies();
-    const token = cookieStore.get('nexus_auth_token')?.value;
-    if (!token) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
-
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const auth = await requireStandardUser(request);
+    if (!auth.ok) return auth.response;
+    const payload = auth.principal.rawPayload;
     const body = await request.json();
     const type = String(body?.type || '').toUpperCase();
     const targetKey = body?.targetKey ? String(body.targetKey) : '';
@@ -61,11 +62,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
-    const cookieStore = await cookies();
-    const token = cookieStore.get('nexus_auth_token')?.value;
-    if (!token) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
-
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const auth = await requireStandardUser(request);
+    if (!auth.ok) return auth.response;
+    const payload = auth.principal.rawPayload;
     const body = await request.json();
     const type = String(body?.type || '').toUpperCase();
     const targetKey = body?.targetKey ? String(body.targetKey) : '';

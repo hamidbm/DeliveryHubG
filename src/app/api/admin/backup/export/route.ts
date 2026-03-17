@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
 import { createHash } from 'node:crypto';
-import { ObjectId } from 'mongodb';
-import { getDb, emitEvent } from '../../../../../services/db';
-import { getAuthUserFromCookies } from '../../../../../services/visibility';
+import { emitEvent } from '../../../../../shared/events/emitEvent';
 import { isAdminOrCmo } from '../../../../../services/authz';
+import { requireStandardUser } from '../../../../../shared/auth/guards';
+import { listBackupCollectionRecords } from '../../../../../server/db/repositories/adminBackupRepo';
 
 const DEFAULT_INCLUDE = ['policies', 'overrides', 'bundles', 'assignments', 'milestones', 'scope-requests'];
 
@@ -30,8 +30,9 @@ const serializeDoc = (doc: any) => {
 
 export async function GET(request: Request) {
   try {
-    const authUser = await getAuthUserFromCookies();
-    if (!authUser?.userId) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
+    const auth = await requireStandardUser(request);
+    if (!auth.ok) return auth.response;
+    const authUser = { userId: auth.principal.userId, role: auth.principal.role || undefined, email: auth.principal.email, id: auth.principal.userId };
     if (!(await isAdminOrCmo(authUser))) return NextResponse.json({ error: 'Forbidden', code: 'ADMIN_ONLY' }, { status: 403 });
 
     const exportSecret = process.env.ADMIN_EXPORT_SECRET || '';
@@ -48,7 +49,6 @@ export async function GET(request: Request) {
       ? include.split(',').map((v) => v.trim()).filter(Boolean)
       : DEFAULT_INCLUDE;
 
-    const db = await getDb();
     const collections: Record<string, any[]> = {};
     const counts: Record<string, number> = {};
 
@@ -56,7 +56,7 @@ export async function GET(request: Request) {
       const normalized = key.replace('-', '_');
       const collectionName = COLLECTION_MAP[normalized] || COLLECTION_MAP[key];
       if (!collectionName) continue;
-      const docs = await db.collection(collectionName).find({}).toArray();
+      const docs = await listBackupCollectionRecords(collectionName);
       const serialized = docs.map(serializeDoc);
       collections[collectionName] = serialized;
       counts[collectionName] = serialized.length;
@@ -90,4 +90,3 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: error.message || 'Failed to export backup' }, { status: 500 });
   }
 }
-

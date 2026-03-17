@@ -1,99 +1,38 @@
 import { ObjectId } from 'mongodb';
 import {
-  getDb,
-  saveMilestone,
-  saveSprint,
   saveWorkItem,
-  addWorkItemLink,
-  emitEvent
-} from './db';
+  addWorkItemLink
+} from './workItemsService';
+import { emitEvent } from '../shared/events/emitEvent';
+import { getServerDb } from '../server/db/client';
+import { saveMilestoneRecord as saveMilestone, saveSprintRecord as saveSprint } from '../server/db/repositories/milestonesRepo';
+import {
+  createRoadmapPhaseRecord,
+  createWorkDeliveryPlanRunRecord,
+  createWorkPlanPreviewRecord,
+  getWorkPlanPreviewRecord
+} from '../server/db/repositories/workPlansRepo';
+import { findWorkItemRecord } from '../server/db/repositories/workItemsRepo';
 import { invalidateWorkItemScope, primeWorkItemScope } from './workItemCache';
 import { suggestOwnersForMilestoneScope, suggestOwnersForGeneratedArtifact } from './ownership';
 import { buildDeliveryPlanPreview } from './planningEngine';
 import { getDependencySkeletonPairs } from './dependencyPlanner';
+import { getBundleCapacityForPlanning, resolvePlanScope } from './planScope';
 import {
   DeliveryPlanInput,
   DeliveryPlanPreview,
-  PlanScope,
   WorkItemStatus,
   WorkItemType,
   MilestoneStatus
 } from '../types';
 
-const ensureWorkPlanIndexes = async (db: any) => {
-  await db.collection('work_plan_previews').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
-  await db.collection('work_plan_previews').createIndex({ createdBy: 1, createdAt: -1 });
-  await db.collection('work_plan_previews').createIndex({ scopeType: 1, scopeId: 1, createdAt: -1 });
-  await db.collection('work_roadmap_phases').createIndex({ scopeType: 1, scopeId: 1, startDate: 1 });
-  await db.collection('work_roadmap_phases').createIndex({ milestoneIds: 1 });
-  await db.collection('work_delivery_plan_runs').createIndex({ createdBy: 1, createdAt: -1 });
-};
-
- 
-
-const resolveScope = async (input: DeliveryPlanInput): Promise<PlanScope> => {
-  const db = await getDb();
-  const scopeType = input.scopeType;
-  const scopeId = String(input.scopeId || '');
-  if (scopeType === 'PROGRAM') {
-    return {
-      scopeType,
-      scopeId: scopeId || 'program',
-      scopeName: 'Program',
-      scopeRef: { type: 'initiative', id: 'program', name: 'Program' }
-    };
-  }
-
-  if (scopeType === 'BUNDLE') {
-    const bundle = ObjectId.isValid(scopeId)
-      ? await db.collection('bundles').findOne({ _id: new ObjectId(scopeId) })
-      : await db.collection('bundles').findOne({ $or: [{ id: scopeId }, { key: scopeId }] });
-    const name = bundle?.name || bundle?.key || scopeId;
-    return {
-      scopeType,
-      scopeId,
-      scopeName: name,
-      bundleId: bundle?._id ? String(bundle._id) : scopeId,
-      scopeRef: { type: 'bundle', id: bundle?._id ? String(bundle._id) : scopeId, name }
-    };
-  }
-
-  const app = ObjectId.isValid(scopeId)
-    ? await db.collection('applications').findOne({ _id: new ObjectId(scopeId) })
-    : await db.collection('applications').findOne({ $or: [{ id: scopeId }, { key: scopeId }, { aid: scopeId }] });
-  const name = app?.name || app?.key || scopeId;
-  const bundleId = app?.bundleId ? String(app.bundleId) : undefined;
-  return {
-    scopeType,
-    scopeId,
-    scopeName: name,
-    bundleId,
-    applicationId: app?._id ? String(app._id) : scopeId,
-    scopeRef: { type: 'application', id: app?._id ? String(app._id) : scopeId, name }
-  };
-};
-
-const getBundleCapacity = async (bundleId?: string | null) => {
-  if (!bundleId) return null;
-  const db = await getDb();
-  const record = await db.collection('bundle_capacity').findOne({ bundleId: String(bundleId) });
-  if (!record) return null;
-  return {
-    unit: record.unit as 'POINTS_PER_SPRINT' | 'POINTS_PER_WEEK',
-    value: Number(record.value || 0)
-  };
-};
-
 export const previewDeliveryPlan = async (input: DeliveryPlanInput, user: { userId: string; email?: string }) => {
-  const db = await getDb();
-  await ensureWorkPlanIndexes(db);
-
   const previewId = new ObjectId();
-  const scope = await resolveScope(input);
+  const scope = await resolvePlanScope(input);
   const { preview } = await buildDeliveryPlanPreview(input, {
     previewId: String(previewId),
     scope,
-    getBundleCapacity,
+    getBundleCapacity: getBundleCapacityForPlanning,
     suggestMilestoneOwner: input.suggestMilestoneOwners
       ? async ({ scopeType, scopeId, bundleId }) => {
         const suggestion = await suggestOwnersForMilestoneScope({ scopeType, scopeId, bundleId });
@@ -104,7 +43,7 @@ export const previewDeliveryPlan = async (input: DeliveryPlanInput, user: { user
 
   const now = new Date();
   const expiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-  await db.collection('work_plan_previews').insertOne({
+  await createWorkPlanPreviewRecord({
     _id: previewId,
     createdAt: now.toISOString(),
     createdBy: String(user.userId),
@@ -128,23 +67,17 @@ export const previewDeliveryPlan = async (input: DeliveryPlanInput, user: { user
 };
 
 export const getPlanPreview = async (previewId: string) => {
-  const db = await getDb();
-  await ensureWorkPlanIndexes(db);
-  const lookupId = ObjectId.isValid(previewId) ? new ObjectId(previewId) : previewId;
-  return await db.collection('work_plan_previews').findOne({ _id: lookupId } as any);
+  return await getWorkPlanPreviewRecord(previewId);
 };
 
 export const createDeliveryPlan = async (previewId: string, user: { userId: string; email?: string }) => {
-  const db = await getDb();
-  await ensureWorkPlanIndexes(db);
-
-  const lookupId = ObjectId.isValid(previewId) ? new ObjectId(previewId) : previewId;
-  const previewDoc = await db.collection('work_plan_previews').findOne({ _id: lookupId } as any);
+  const db = await getServerDb();
+  const previewDoc = await getWorkPlanPreviewRecord(previewId);
   if (!previewDoc) throw new Error('Preview not found or expired.');
 
   const input = previewDoc.input as DeliveryPlanInput;
   const preview: DeliveryPlanPreview = previewDoc.preview as DeliveryPlanPreview;
-  const scope = await resolveScope(input);
+  const scope = await resolvePlanScope(input);
   const runId = new ObjectId();
   const generator = { source: 'DELIVERY_PLAN_GENERATOR' as const, runId: String(runId) };
 
@@ -170,7 +103,7 @@ export const createDeliveryPlan = async (previewId: string, user: { userId: stri
   const roadmapIds: string[] = [];
   for (const phase of preview.roadmap) {
     const milestoneIds = phase.milestoneIndexes.map((idx) => milestoneIdMap.get(idx)).filter(Boolean);
-    const res = await db.collection('work_roadmap_phases').insertOne({
+    const res = await createRoadmapPhaseRecord({
       scopeType: scope.scopeType,
       scopeId: scope.scopeId,
       name: phase.name,
@@ -328,11 +261,11 @@ export const createDeliveryPlan = async (previewId: string, user: { userId: stri
   if (input.createDependencySkeleton) {
     const pairs = getDependencySkeletonPairs(preview.artifacts);
     for (const pair of pairs) {
-      const source = await db.collection('workitems').findOne({
+      const source = await findWorkItemRecord({
         title: pair.fromEpicName,
         milestoneIds: { $in: [milestoneIdMap.get(pair.fromMilestoneIndex)] }
       });
-      const target = await db.collection('workitems').findOne({
+      const target = await findWorkItemRecord({
         title: pair.toEpicName,
         milestoneIds: { $in: [milestoneIdMap.get(pair.toMilestoneIndex)] }
       });
@@ -344,7 +277,7 @@ export const createDeliveryPlan = async (previewId: string, user: { userId: stri
     }
   }
 
-  await db.collection('work_delivery_plan_runs').insertOne({
+  await createWorkDeliveryPlanRunRecord({
     _id: runId,
     previewId: previewDoc._id,
     createdAt: new Date().toISOString(),

@@ -1,13 +1,11 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import { jwtVerify } from 'jose';
 import { ObjectId } from 'mongodb';
-import { getDb } from '../../../services/db';
 import type { FeedItem } from '../../../types';
 import { createVisibilityContext } from '../../../services/visibility';
 import { normalizeEventType } from '../../../services/eventsTaxonomy';
-
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
+import { requireUser } from '../../../shared/auth/guards';
+import { listMilestoneRefsByBundleId } from '../../../server/db/repositories/milestonesRepo';
+import { listEventsByQuery } from '../../../server/db/repositories/eventsRepo';
 
 const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -184,23 +182,16 @@ const mapEventToFeedItem = (
   };
 };
 
-const getUser = async () => {
-  const testToken = process.env.NODE_ENV === 'test' ? (globalThis as any).__testToken : null;
-  const cookieStore = testToken ? null : await cookies();
-  const token = testToken || cookieStore?.get('nexus_auth_token')?.value;
-  if (!token) return null;
-  const { payload } = await jwtVerify(token, JWT_SECRET);
-  return {
-    userId: String(payload.id || payload.userId || ''),
-    role: payload.role ? String(payload.role) : undefined,
-    email: payload.email ? String(payload.email) : undefined
-  };
-};
-
 export async function GET(request: Request) {
   try {
-    const user = await getUser();
-    if (!user?.userId) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
+    const auth = await requireUser(request);
+    if (!auth.ok) return auth.response;
+    const user = {
+      userId: auth.principal.userId,
+      role: auth.principal.role || undefined,
+      email: auth.principal.email,
+      accountType: auth.principal.accountType
+    };
 
     const { searchParams } = new URL(request.url);
     const scopeType = (searchParams.get('scopeType') || 'PROGRAM').toUpperCase();
@@ -231,8 +222,6 @@ export async function GET(request: Request) {
       return NextResponse.json({ items: [], nextCursor: null });
     }
 
-    const db = await getDb();
-
     const typeFilters = prefixes.map((prefix) => ({ type: new RegExp(`^${escapeRegex(prefix)}`) }));
     const filters: any[] = [{ $or: typeFilters }];
 
@@ -241,7 +230,7 @@ export async function GET(request: Request) {
       const bundleQuery = ObjectId.isValid(scopeId)
         ? { $or: [{ bundleId: scopeId }, { bundleId: new ObjectId(scopeId) }] }
         : { bundleId: scopeId };
-      const milestoneDocs = await db.collection('milestones').find(bundleQuery, { projection: { _id: 1, id: 1, name: 1 } }).toArray();
+      const milestoneDocs = await listMilestoneRefsByBundleId(scopeId);
       const milestoneIds = milestoneDocs
         .flatMap((doc: any) => [doc._id, doc.id, doc.name])
         .filter(Boolean)
@@ -285,11 +274,7 @@ export async function GET(request: Request) {
     }
 
     const query = filters.length ? { $and: filters } : {};
-    let items = await db.collection('events')
-      .find(query)
-      .sort({ ts: -1, _id: -1 })
-      .limit(limit)
-      .toArray();
+    let items = await listEventsByQuery(query, limit);
 
     const visibility = createVisibilityContext(user);
     items = await visibility.filterVisibleEventsForFeed(items);

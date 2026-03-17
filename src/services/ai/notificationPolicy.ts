@@ -1,7 +1,4 @@
-import { getDb } from '../db';
-
-const WATCHERS_COLLECTION = 'ai_watchers';
-const NOTIFICATIONS_COLLECTION = 'ai_notifications';
+import { countAiNotificationsForUserSince, countAiWatchersForUser } from '../../server/db/repositories/aiNotificationsRepo';
 
 export type NotificationPolicy = {
   maxWatchersPerUser: number;
@@ -61,9 +58,8 @@ export const isWithinQuietHours = (at = new Date(), policy = getNotificationPoli
 };
 
 export const getWatcherUsageForUser = async (userId: string) => {
-  const db = await getDb();
   const policy = getNotificationPolicy();
-  const used = await db.collection(WATCHERS_COLLECTION).countDocuments({ userId: String(userId) });
+  const used = await countAiWatchersForUser(String(userId));
   return { used, max: policy.maxWatchersPerUser };
 };
 
@@ -78,12 +74,8 @@ export const enforceWatcherQuota = async (userId: string) => {
 };
 
 export const isRateLimitedForUser = async (userId: string, policy = getNotificationPolicy()) => {
-  const db = await getDb();
   const sinceIso = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-  const count = await db.collection(NOTIFICATIONS_COLLECTION).countDocuments({
-    userId: String(userId),
-    createdAt: { $gte: sinceIso }
-  });
+  const count = await countAiNotificationsForUserSince(String(userId), sinceIso);
   return {
     limited: count >= policy.maxNotificationsPerUserPerHour,
     count,

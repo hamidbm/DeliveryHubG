@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createHash } from 'crypto';
-import { fetchAiAnalysisCache, saveAiAnalysisCache } from '../../../../services/db';
+import { fetchAiAnalysisCache, saveAiAnalysisCache } from '../../../../services/aiPersistence';
 import { getAuthUserFromCookies } from '../../../../services/visibility';
 import { derivePortfolioSignals } from '../../../../services/ai/portfolioSignals';
 import { normalizePortfolioReport } from '../../../../services/ai/normalizePortfolioReport';

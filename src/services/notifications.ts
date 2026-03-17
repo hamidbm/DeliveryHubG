@@ -1,4 +1,15 @@
-import { getDb, fetchUsersByIds, resolveMentionUsers } from './db';
+import { listAdmins } from '../server/db/repositories/adminsRepo';
+import { listBundleAssignments } from '../server/db/repositories/bundleAssignmentsRepo';
+import {
+  enqueueNotificationDigestItems,
+  getNotificationSettingsDoc,
+  getUserNotificationPrefsDoc,
+  insertClassicNotifications,
+  listUserNotificationPrefsDocs,
+  saveNotificationSettingsDoc,
+  saveUserNotificationPrefsDoc
+} from '../server/db/repositories/notificationPlatformRepo';
+import { listUsersByAnyIds, resolveUsersForMentions, searchUsersWithFilters } from '../server/db/repositories/usersRepo';
 import { listWatcherUserIdsForScopes } from './watchers';
 import { createVisibilityContext } from './visibility';
 
@@ -74,27 +85,13 @@ let cachedSettings: { value: any; ts: number } | null = null;
 let cachedSettingsKey: string | null = null;
 const SETTINGS_TTL_MS = 30_000;
 
-const ensureSettingsIndexes = async (db: any) => {
-  await db.collection('notification_settings').createIndex({ updatedAt: -1 });
-};
-
-const ensureUserPrefsIndexes = async (db: any) => {
-  await db.collection('notification_user_prefs').createIndex({ userId: 1 }, { unique: true });
-};
-
-const ensureDigestQueueIndexes = async (db: any) => {
-  await db.collection('notification_digest_queue').createIndex({ userId: 1, createdAt: -1 });
-};
-
 export const getNotificationSettings = async () => {
   const now = Date.now();
   const cacheKey = process.env.MONGO_URL || 'default';
   if (cachedSettings && cachedSettingsKey === cacheKey && now - cachedSettings.ts < SETTINGS_TTL_MS) {
     return cachedSettings.value;
   }
-  const db = await getDb();
-  await ensureSettingsIndexes(db);
-  const existing = await db.collection<any>('notification_settings').findOne({ _id: 'global' });
+  const existing = await getNotificationSettingsDoc();
   const merged = {
     ...DEFAULT_SETTINGS,
     ...(existing || {}),
@@ -117,8 +114,6 @@ export const getNotificationSettings = async () => {
 };
 
 export const saveNotificationSettings = async (input: any, userId: string) => {
-  const db = await getDb();
-  await ensureSettingsIndexes(db);
   const next = {
     ...DEFAULT_SETTINGS,
     ...input,
@@ -128,63 +123,52 @@ export const saveNotificationSettings = async (input: any, userId: string) => {
     updatedAt: new Date().toISOString(),
     updatedBy: userId || 'system'
   };
-  await db.collection<any>('notification_settings').updateOne(
-    { _id: 'global' },
-    { $set: next },
-    { upsert: true }
-  );
+  await saveNotificationSettingsDoc(next);
   cachedSettings = { value: next, ts: Date.now() };
   cachedSettingsKey = process.env.MONGO_URL || 'default';
   return next;
 };
 
 export const getUserNotificationPrefs = async (userId: string) => {
-  const db = await getDb();
-  await ensureUserPrefsIndexes(db);
-  const prefs = await db.collection('notification_user_prefs').findOne({ userId });
+  const prefs = await getUserNotificationPrefsDoc(userId);
   return prefs || { userId, mutedTypes: [], digestOptIn: false };
 };
 
 export const saveUserNotificationPrefs = async (userId: string, input: any) => {
-  const db = await getDb();
-  await ensureUserPrefsIndexes(db);
   const mutedTypes = Array.isArray(input?.mutedTypes) ? Array.from(new Set(input.mutedTypes.filter(Boolean))) : [];
   const digestOptIn = Boolean(input?.digestOptIn);
   const payload = { userId, mutedTypes, digestOptIn };
-  await db.collection('notification_user_prefs').updateOne(
-    { userId },
-    { $set: payload },
-    { upsert: true }
-  );
+  await saveUserNotificationPrefsDoc(userId, payload);
   return payload;
 };
 
-const resolveAdminCmoRecipients = async (db: any) => {
-  const users = await db.collection('users').find({
-    role: { $regex: /(cmo|admin)/i }
-  }).project({ name: 1, email: 1, role: 1 }).toArray();
-
-  const filtered = users.filter((u: any) => isAdminOrCmoRole(u.role));
-  return filtered.map((u: any) => ({
-    userId: String(u._id),
+const resolveAdminCmoRecipients = async () => {
+  const adminRows = await listAdmins();
+  const adminUsers = await listUsersByAnyIds(adminRows.map((row: any) => String(row.userId || '')).filter(Boolean));
+  const cmoUsers = await searchUsersWithFilters({
+    roleClauses: [{ role: { $regex: /cmo/i } }, { role: { $regex: /admin/i } }]
+  });
+  const combined = [...adminUsers, ...cmoUsers].filter((user: any) => isAdminOrCmoRole(user.role) || adminRows.some((row: any) => String(row.userId) === String(user._id || user.id || user.userId || '')));
+  return combined.map((u: any) => ({
+    userId: String(u._id || u.id || u.userId || ''),
     name: String(u.name || ''),
     email: String(u.email || ''),
     role: u.role
   }));
 };
 
-const resolveBundleOwners = async (db: any, bundleId?: string) => {
+const resolveBundleOwners = async (bundleId?: string) => {
   if (!bundleId) return [];
-  const assignments = await db.collection('bundle_assignments').find({
+  const assignments = await listBundleAssignments({
     bundleId: String(bundleId),
     assignmentType: 'bundle_owner',
     active: true
-  }).toArray();
+  });
   const userIds = assignments.map((a: any) => String(a.userId || '')).filter(Boolean);
   if (!userIds.length) return [];
-  const users = await fetchUsersByIds(userIds);
+  const users = await listUsersByAnyIds(userIds);
   return users.map((u: any) => ({
-    userId: String(u._id || u.id || ''),
+    userId: String(u._id || u.id || u.userId || ''),
     name: String(u.name || ''),
     email: String(u.email || ''),
     role: u.role
@@ -238,25 +222,20 @@ const filterRecipientsByVisibility = async (
 const resolveRecipientNamesByIds = async (ids: string[]) => {
   const clean = ids.filter(Boolean);
   if (!clean.length) return [];
-  const users = await fetchUsersByIds(clean);
+  const users = await listUsersByAnyIds(clean);
   return users.map((u: any) => String(u.name || u.email || '')).filter(Boolean);
 };
 
 const resolveWatchersByScopes = async (scopes: Array<{ scopeType: 'BUNDLE' | 'MILESTONE'; scopeId: string }>) => {
   const userIds = await listWatcherUserIdsForScopes(scopes);
   if (!userIds.length) return [] as Recipient[];
-  const users = await fetchUsersByIds(userIds);
+  const users = await listUsersByAnyIds(userIds);
   return users.map((u: any) => ({
-    userId: String(u._id || u.id || ''),
+    userId: String(u._id || u.id || u.userId || ''),
     name: String(u.name || ''),
     email: String(u.email || ''),
     role: u.role
   }));
-};
-
-const insertNotifications = async (db: any, notifications: Array<any>) => {
-  if (!notifications.length) return;
-  await db.collection('notifications').insertMany(notifications);
 };
 
 const buildNotification = (input: {
@@ -287,12 +266,9 @@ const DIGEST_ELIGIBLE = new Set([
   'milestone.commitment.drift'
 ]);
 
-const filterRecipientsByPrefs = async (db: any, recipients: Recipient[], type: string, settings: any) => {
+const filterRecipientsByPrefs = async (recipients: Recipient[], type: string, settings: any) => {
   const withIds = recipients.filter((r) => r.userId);
-  await ensureUserPrefsIndexes(db);
-  const prefsDocs = withIds.length
-    ? await db.collection('notification_user_prefs').find({ userId: { $in: withIds.map((r) => r.userId) } }).toArray()
-    : [];
+  const prefsDocs = withIds.length ? await listUserNotificationPrefsDocs(withIds.map((recipient) => String(recipient.userId || ''))) : [];
   const prefMap = new Map<string, { mutedTypes?: string[]; digestOptIn?: boolean }>(prefsDocs.map((p: any) => [p.userId, p]));
 
   const immediates: Recipient[] = [];
@@ -315,18 +291,11 @@ const filterRecipientsByPrefs = async (db: any, recipients: Recipient[], type: s
   return { immediates, digestQueue };
 };
 
-const enqueueDigestItems = async (db: any, items: Array<any>) => {
-  if (!items.length) return;
-  await ensureDigestQueueIndexes(db);
-  await db.collection('notification_digest_queue').insertMany(items);
-};
-
 export const createNotificationsForEvent = async (input: {
   type: string;
   actor?: Actor;
   payload: any;
 }) => {
-  const db = await getDb();
   const settings = await getNotificationSettings();
   if (settings.enabledTypes && settings.enabledTypes[input.type] === false) return;
 
@@ -334,7 +303,7 @@ export const createNotificationsForEvent = async (input: {
   const sender = String(input.actor?.displayName || input.actor?.name || input.actor?.email || 'System');
 
   const buildForRecipients = async (recipients: Recipient[], title: string, body: string, link?: string, severity: 'info' | 'warn' | 'critical' = 'info') => {
-    const { immediates } = await filterRecipientsByPrefs(db, recipients, input.type, settings);
+    const { immediates } = await filterRecipientsByPrefs(recipients, input.type, settings);
     const notifications = immediates.map((r) => buildNotification({
       recipient: r.name || r.email || r.userId || 'Unknown',
       sender,
@@ -344,11 +313,11 @@ export const createNotificationsForEvent = async (input: {
       link,
       severity
     }));
-    await insertNotifications(db, notifications);
+    await insertClassicNotifications(notifications);
   };
 
   const queueDigestForRecipients = async (recipients: Recipient[], title: string, body: string, link?: string) => {
-    const { digestQueue } = await filterRecipientsByPrefs(db, recipients, input.type, settings);
+    const { digestQueue } = await filterRecipientsByPrefs(recipients, input.type, settings);
     const items = digestQueue.map((entry) => ({
       userId: entry.userId,
       type: input.type,
@@ -357,7 +326,7 @@ export const createNotificationsForEvent = async (input: {
       link,
       createdAt: now
     }));
-    await enqueueDigestItems(db, items);
+    await enqueueNotificationDigestItems(items);
   };
 
   const routeRecipients = async (list: Recipient[], title: string, body: string, link?: string, severity: 'info' | 'warn' | 'critical' = 'info') => {
@@ -369,8 +338,8 @@ export const createNotificationsForEvent = async (input: {
     const milestone = input.payload?.milestone || {};
     const watcherRecipients = await resolveWatchersByScopes([{ scopeType: 'MILESTONE', scopeId: String(milestone._id || milestone.id || milestone.name || '') }]);
     let recipients = uniqueRecipients([
-      ...(settings.routing.includeAdmins ? await resolveAdminCmoRecipients(db) : []),
-      ...(settings.routing.includeBundleOwners ? await resolveBundleOwners(db, milestone.bundleId) : []),
+      ...(settings.routing.includeAdmins ? await resolveAdminCmoRecipients() : []),
+      ...(settings.routing.includeBundleOwners ? await resolveBundleOwners(milestone.bundleId) : []),
       ...watcherRecipients
     ]);
     recipients = await filterRecipientsByVisibility(recipients, { bundleIds: [String(milestone.bundleId || '')], milestoneId: String(milestone._id || milestone.id || milestone.name || '') });
@@ -384,8 +353,8 @@ export const createNotificationsForEvent = async (input: {
     const milestone = input.payload?.milestone || {};
     const watcherRecipients = await resolveWatchersByScopes([{ scopeType: 'MILESTONE', scopeId: String(milestone._id || milestone.id || milestone.name || '') }]);
     let recipients = uniqueRecipients([
-      ...(settings.routing.includeAdmins ? await resolveAdminCmoRecipients(db) : []),
-      ...(settings.routing.includeBundleOwners ? await resolveBundleOwners(db, milestone.bundleId) : []),
+      ...(settings.routing.includeAdmins ? await resolveAdminCmoRecipients() : []),
+      ...(settings.routing.includeBundleOwners ? await resolveBundleOwners(milestone.bundleId) : []),
       ...watcherRecipients
     ]);
     recipients = await filterRecipientsByVisibility(recipients, { bundleIds: [String(milestone.bundleId || '')], milestoneId: String(milestone._id || milestone.id || milestone.name || '') });
@@ -408,7 +377,7 @@ export const createNotificationsForEvent = async (input: {
       email: input.actor.email
     } : null;
     let recipients = uniqueRecipients([
-      ...(settings.routing.includeAdmins ? await resolveAdminCmoRecipients(db) : []),
+      ...(settings.routing.includeAdmins ? await resolveAdminCmoRecipients() : []),
       ...(settings.routing.includeActorOnBlocked && actorRecipient ? [actorRecipient] : []),
       ...watcherRecipients
     ]);
@@ -447,8 +416,8 @@ export const createNotificationsForEvent = async (input: {
       { scopeType: 'BUNDLE', scopeId: String(item.bundleId || milestone.bundleId || '') }
     ]);
     let recipients = uniqueRecipients([
-      ...(settings.routing.includeAdmins ? await resolveAdminCmoRecipients(db) : []),
-      ...(settings.routing.includeBundleOwners ? await resolveBundleOwners(db, item.bundleId) : []),
+      ...(settings.routing.includeAdmins ? await resolveAdminCmoRecipients() : []),
+      ...(settings.routing.includeBundleOwners ? await resolveBundleOwners(item.bundleId) : []),
       ...watcherRecipients
     ]);
     recipients = await filterRecipientsByVisibility(recipients, { bundleIds: [String(item.bundleId || milestone.bundleId || '')], milestoneId: String(milestone._id || milestone.id || milestone.name || '') });
@@ -468,8 +437,8 @@ export const createNotificationsForEvent = async (input: {
       name: milestone.ownerEmail || milestone.ownerUserId
     } : (milestone.ownerEmail ? { email: String(milestone.ownerEmail), name: String(milestone.ownerEmail) } : null);
     let recipients = uniqueRecipients([
-      ...(settings.routing.includeAdmins ? await resolveAdminCmoRecipients(db) : []),
-      ...(settings.routing.includeBundleOwners ? await resolveBundleOwners(db, milestone.bundleId) : []),
+      ...(settings.routing.includeAdmins ? await resolveAdminCmoRecipients() : []),
+      ...(settings.routing.includeBundleOwners ? await resolveBundleOwners(milestone.bundleId) : []),
       ...(ownerRecipient ? [ownerRecipient] : []),
       ...watcherRecipients
     ]);
@@ -488,8 +457,8 @@ export const createNotificationsForEvent = async (input: {
       { scopeType: 'BUNDLE', scopeId: String(milestone.bundleId || '') }
     ]);
     let recipients = uniqueRecipients([
-      ...(settings.routing.includeAdmins ? await resolveAdminCmoRecipients(db) : []),
-      ...(settings.routing.includeBundleOwners ? await resolveBundleOwners(db, milestone.bundleId) : []),
+      ...(settings.routing.includeAdmins ? await resolveAdminCmoRecipients() : []),
+      ...(settings.routing.includeBundleOwners ? await resolveBundleOwners(milestone.bundleId) : []),
       ...watcherRecipients
     ]);
     recipients = await filterRecipientsByVisibility(recipients, { bundleIds: [String(milestone.bundleId || '')], milestoneId: String(milestone._id || milestone.id || milestone.name || '') });
@@ -531,9 +500,9 @@ export const createNotificationsForEvent = async (input: {
       { scopeType: 'BUNDLE', scopeId: String(blocked.bundleId || '') }
     ]);
     let recipients = uniqueRecipients([
-      ...(settings.routing.includeAdmins ? await resolveAdminCmoRecipients(db) : []),
-      ...(settings.routing.includeBundleOwners ? await resolveBundleOwners(db, blocker.bundleId) : []),
-      ...(settings.routing.includeBundleOwners ? await resolveBundleOwners(db, blocked.bundleId) : []),
+      ...(settings.routing.includeAdmins ? await resolveAdminCmoRecipients() : []),
+      ...(settings.routing.includeBundleOwners ? await resolveBundleOwners(blocker.bundleId) : []),
+      ...(settings.routing.includeBundleOwners ? await resolveBundleOwners(blocked.bundleId) : []),
       ...watcherRecipients
     ]);
     recipients = await filterRecipientsByVisibility(recipients, { bundleIds: [String(blocker.bundleId || ''), String(blocked.bundleId || '')] });
@@ -548,7 +517,7 @@ export const createNotificationsForEvent = async (input: {
     const milestoneId = input.payload?.milestoneId;
     const reason = input.payload?.reason || 'Estimate requested for critical path.';
     const assigneeToken = item.assignedTo ? [String(item.assignedTo)] : [];
-    const assigneeRecipients = assigneeToken.length ? await resolveMentionUsers(assigneeToken) : [];
+    const assigneeRecipients = assigneeToken.length ? await resolveUsersForMentions(assigneeToken) : [];
     const scopes: Array<{ scopeType: 'BUNDLE' | 'MILESTONE'; scopeId: string }> = [
       { scopeType: 'BUNDLE', scopeId: String(item.bundleId || '') }
     ];
@@ -558,7 +527,7 @@ export const createNotificationsForEvent = async (input: {
     const watcherRecipients = await resolveWatchersByScopes(scopes);
     let recipients = uniqueRecipients([
       ...assigneeRecipients.map((u: any) => ({ userId: u.userId, name: u.displayName, email: u.email })),
-      ...(settings.routing.includeBundleOwners ? await resolveBundleOwners(db, item.bundleId) : []),
+      ...(settings.routing.includeBundleOwners ? await resolveBundleOwners(item.bundleId) : []),
       ...watcherRecipients
     ]);
     recipients = await filterRecipientsByVisibility(recipients, { bundleIds: [String(item.bundleId || '')], milestoneId: milestoneId ? String(milestoneId) : undefined, workItem: item });
@@ -580,8 +549,8 @@ export const createNotificationsForEvent = async (input: {
     }
     const watcherRecipients = await resolveWatchersByScopes(scopes);
     let recipients = uniqueRecipients([
-      ...(settings.routing.includeAdmins ? await resolveAdminCmoRecipients(db) : []),
-      ...(settings.routing.includeBundleOwners ? await resolveBundleOwners(db, item.bundleId) : []),
+      ...(settings.routing.includeAdmins ? await resolveAdminCmoRecipients() : []),
+      ...(settings.routing.includeBundleOwners ? await resolveBundleOwners(item.bundleId) : []),
       ...watcherRecipients
     ]);
     recipients = await filterRecipientsByVisibility(recipients, { bundleIds: [String(item.bundleId || '')], milestoneId: milestoneId ? String(milestoneId) : undefined, workItem: item });
@@ -596,9 +565,9 @@ export const createNotificationsForEvent = async (input: {
     const milestone = input.payload?.milestone || {};
     const reason = input.payload?.reason || 'Stale work item';
     const assigneeTokens = item.assignedTo ? [String(item.assignedTo)] : [];
-    const assigneeRecipients = assigneeTokens.length ? await resolveMentionUsers(assigneeTokens) : [];
+    const assigneeRecipients = assigneeTokens.length ? await resolveUsersForMentions(assigneeTokens) : [];
     const assigneeUsers = Array.isArray(item.assigneeUserIds) && item.assigneeUserIds.length
-      ? await fetchUsersByIds(item.assigneeUserIds.map(String))
+      ? await listUsersByAnyIds(item.assigneeUserIds.map(String))
       : [];
     const milestoneOwnerRecipient: Recipient | null = milestone?.ownerUserId
       ? {
@@ -617,7 +586,7 @@ export const createNotificationsForEvent = async (input: {
       ...assigneeRecipients.map((u: any) => ({ userId: u.userId, name: u.displayName, email: u.email })),
       ...assigneeUsers.map((u: any) => ({ userId: String(u._id || u.id || ''), name: String(u.name || ''), email: u.email ? String(u.email) : undefined, role: u.role })),
       ...(milestoneOwnerRecipient ? [milestoneOwnerRecipient] : []),
-      ...(settings.routing.includeBundleOwners ? await resolveBundleOwners(db, item.bundleId) : []),
+      ...(settings.routing.includeBundleOwners ? await resolveBundleOwners(item.bundleId) : []),
       ...watcherRecipients
     ]);
     recipients = await filterRecipientsByVisibility(recipients, {
@@ -652,8 +621,8 @@ export const createNotificationsForEvent = async (input: {
       { scopeType: 'BUNDLE', scopeId: String(sprint.bundleId || '') }
     ]);
     let recipients = uniqueRecipients([
-      ...(settings.routing.includeAdmins ? await resolveAdminCmoRecipients(db) : []),
-      ...(settings.routing.includeBundleOwners ? await resolveBundleOwners(db, sprint.bundleId) : []),
+      ...(settings.routing.includeAdmins ? await resolveAdminCmoRecipients() : []),
+      ...(settings.routing.includeBundleOwners ? await resolveBundleOwners(sprint.bundleId) : []),
       ...watcherRecipients
     ]);
     recipients = await filterRecipientsByVisibility(recipients, { bundleIds: [String(sprint.bundleId || '')] });
@@ -675,8 +644,8 @@ export const createNotificationsForEvent = async (input: {
       email: input.actor.email
     } : null;
     let recipients = uniqueRecipients([
-      ...(settings.routing.includeAdmins ? await resolveAdminCmoRecipients(db) : []),
-      ...(settings.routing.includeBundleOwners ? await resolveBundleOwners(db, sprint.bundleId) : []),
+      ...(settings.routing.includeAdmins ? await resolveAdminCmoRecipients() : []),
+      ...(settings.routing.includeBundleOwners ? await resolveBundleOwners(sprint.bundleId) : []),
       ...(settings.routing.includeActorOnBlocked && actorRecipient ? [actorRecipient] : []),
       ...watcherRecipients
     ]);
@@ -695,8 +664,8 @@ export const createNotificationsForEvent = async (input: {
       { scopeType: 'BUNDLE', scopeId: String(sprint.bundleId || item.bundleId || '') }
     ]);
     let recipients = uniqueRecipients([
-      ...(settings.routing.includeAdmins ? await resolveAdminCmoRecipients(db) : []),
-      ...(settings.routing.includeBundleOwners ? await resolveBundleOwners(db, sprint.bundleId || item.bundleId) : []),
+      ...(settings.routing.includeAdmins ? await resolveAdminCmoRecipients() : []),
+      ...(settings.routing.includeBundleOwners ? await resolveBundleOwners(sprint.bundleId || item.bundleId) : []),
       ...watcherRecipients
     ]);
     recipients = await filterRecipientsByVisibility(recipients, { bundleIds: [String(sprint.bundleId || item.bundleId || '')] });

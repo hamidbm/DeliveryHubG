@@ -1,41 +1,25 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import { jwtVerify } from 'jose';
-import { ObjectId } from 'mongodb';
-import { getDb, computeSprintRollups, emitEvent } from '../../../../services/db';
+import { emitEvent } from '../../../../shared/events/emitEvent';
+import { computeSprintRollups } from '../../../../services/rollupAnalytics';
 import { canManageSprints } from '../../../../services/authz';
 import { evaluateSprintReadiness } from '../../../../services/sprintGovernance';
 import { getDeliveryPolicy, getEffectivePolicyForBundle } from '../../../../services/policy';
 import { createNotificationsForEvent } from '../../../../services/notifications';
-
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
-
-const getUser = async () => {
-  const testToken = process.env.NODE_ENV === 'test' ? (globalThis as any).__testToken : null;
-  const cookieStore = testToken ? null : await cookies();
-  const token = testToken || cookieStore?.get('nexus_auth_token')?.value;
-  if (!token) return null;
-  const { payload } = await jwtVerify(token, JWT_SECRET);
-  return {
-    userId: String(payload.id || payload.userId || ''),
-    role: payload.role ? String(payload.role) : undefined,
-    email: payload.email ? String(payload.email) : undefined,
-    name: payload.name ? String(payload.name) : undefined
-  };
-};
-
-const findSprint = async (db: any, id: string) => {
-  if (ObjectId.isValid(id)) {
-    return await db.collection('workitems_sprints').findOne({ _id: new ObjectId(id) });
-  }
-  return await db.collection('workitems_sprints').findOne({ $or: [{ id }, { name: id }] });
-};
+import { requireStandardUser } from '../../../../shared/auth/guards';
+import { getSprintByRef, updateSprintRecordByRef } from '../../../../server/db/repositories/milestonesRepo';
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
-    const user = await getUser();
-    if (!user?.userId) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
+    const auth = await requireStandardUser(request);
+    if (!auth.ok) return auth.response;
+    const user = {
+      userId: auth.principal.userId,
+      role: auth.principal.role || undefined,
+      email: auth.principal.email,
+      name: auth.principal.fullName || undefined,
+      accountType: auth.principal.accountType
+    };
     if (!(await canManageSprints(user))) return NextResponse.json({ error: 'FORBIDDEN_SPRINT_STATUS' }, { status: 403 });
 
     const body = await request.json();
@@ -43,8 +27,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const allowOverride = Boolean(body?.allowOverride);
     const overrideReason = body?.overrideReason ? String(body.overrideReason) : '';
 
-    const db = await getDb();
-    const sprint = await findSprint(db, id);
+    const sprint = await getSprintByRef(id);
     if (!sprint) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
     const currentStatus = String(sprint.status || 'DRAFT').toUpperCase();
@@ -90,8 +73,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (nextStatus === 'CLOSED') update.closedAt = now;
     if (allowOverride && overrideReason) update.overrideReason = overrideReason;
 
-    await db.collection('workitems_sprints').updateOne({ _id: sprint._id }, { $set: update });
-    const updated = await findSprint(db, id);
+    await updateSprintRecordByRef(id, update);
+    const updated = await getSprintByRef(id);
 
     const actor = { userId: user.userId, displayName: user.name, email: user.email, role: user.role };
     try {

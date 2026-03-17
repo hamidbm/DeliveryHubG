@@ -1,15 +1,15 @@
 import { ObjectId } from 'mongodb';
-import { getDb, computeMilestoneRollups, deriveWorkItemLinkSummary } from './db';
+import { computeMilestoneRollups } from './rollupAnalytics';
 import { evaluateMilestoneReadiness } from './milestoneGovernance';
 import { getEffectivePolicyForMilestone } from './policy';
-import { createVisibilityContext } from './visibility';
+import { getLatestWorkDeliveryPlanRunRecord } from '../server/db/repositories/workPlansRepo';
 import type {
   WorkItem,
-  DeliveryPlanPreview,
   MilestoneProbabilisticForecast,
   PlanProbabilisticForecastSummary,
   PortfolioProbabilisticForecastSummary
 } from '../types';
+import { getCreatedPlanExecutionData, getPreviewPlanExecutionData, parsePlanExecutionId } from './planExecutionData';
 
 const DEFAULT_SAMPLE_COUNT = 500;
 const DEFAULT_SEED = 42;
@@ -18,17 +18,6 @@ const LOW_ON_TIME_PROBABILITY_THRESHOLD = 0.5;
 const MEDIUM_ON_TIME_PROBABILITY_THRESHOLD = 0.8;
 const LOW_UNCERTAINTY_SPREAD_DAYS = 5;
 const MEDIUM_UNCERTAINTY_SPREAD_DAYS = 10;
-
-type PlanIdParsed = { source: 'CREATED_PLAN' | 'PREVIEW'; id: string };
-
-const parsePlanId = (value: string): PlanIdParsed | null => {
-  if (!value) return null;
-  const [prefix, raw] = value.split(':');
-  if (!raw) return null;
-  if (prefix === 'created') return { source: 'CREATED_PLAN', id: raw };
-  if (prefix === 'preview') return { source: 'PREVIEW', id: raw };
-  return null;
-};
 
 const toDate = (value?: string) => {
   if (!value) return null;
@@ -356,57 +345,26 @@ export const computePortfolioProbabilisticForecast = (
 };
 
 const getPlanData = async (planId: string, user: { userId?: string; role?: string } | null) => {
-  const parsed = parsePlanId(planId);
-  if (!parsed) return null;
-  const db = await getDb();
-  const visibility = createVisibilityContext(user);
+  const parsedPlan = parsePlanExecutionId(planId);
+  if (!parsedPlan) return null;
 
-  if (parsed.source === 'PREVIEW') {
-    const preview = await db.collection('work_plan_previews').findOne({ _id: new ObjectId(parsed.id) });
-    if (!preview) return null;
-    const data = preview.preview as DeliveryPlanPreview;
-    const milestones = data.milestones.map((m) => ({
-      id: String(m.index),
-      startDate: m.startDate,
-      endDate: m.endDate,
-      targetCapacity: m.targetCapacity ?? null
-    }));
-    const rollups: Record<string, any> = {};
-    data.artifacts.forEach((artifact) => {
-      const cap = data.milestones.find((m) => m.index === artifact.milestoneIndex);
-      const targetCapacity = cap?.targetCapacity ?? null;
-      const committedPoints = artifact.storyCount || 0;
-      rollups[String(artifact.milestoneIndex)] = {
-        capacity: {
-          targetCapacity,
-          committedPoints,
-          capacityUtilization: targetCapacity && targetCapacity > 0 ? committedPoints / targetCapacity : null
-        },
-        totals: { blockedDerived: 0 },
-        confidence: { band: 'medium' }
-      };
-    });
+  if (parsedPlan.source === 'PREVIEW') {
+    const previewData = await getPreviewPlanExecutionData(parsedPlan.id);
+    if (!previewData) return null;
     const readinessByMilestone: Record<string, any> = {};
-    milestones.forEach((m) => { readinessByMilestone[m.id] = { band: 'medium' }; });
+    previewData.milestones.forEach((m) => { readinessByMilestone[m.id] = { band: 'medium' }; });
     const dependencyInbound: Record<string, number> = {};
-    return { milestones, rollups, readinessByMilestone, dependencyInbound };
+    return {
+      milestones: previewData.milestones,
+      rollups: previewData.rollups,
+      readinessByMilestone,
+      dependencyInbound
+    };
   }
 
-  const run = await db.collection('work_delivery_plan_runs').findOne({ _id: new ObjectId(parsed.id) });
-  if (!run) return null;
-  const milestoneIds = (run.milestoneIds || []).filter((id: any) => ObjectId.isValid(String(id))).map((id: any) => new ObjectId(String(id)));
-  const milestonesRaw = await db.collection('milestones').find({ _id: { $in: milestoneIds } }).toArray();
-  const visibleMilestones = [];
-  for (const ms of milestonesRaw) {
-    const canView = await visibility.canViewBundle(String(ms.bundleId || ''));
-    if (canView) visibleMilestones.push(ms);
-  }
-  const milestones = visibleMilestones.map((m) => ({
-    id: String(m._id || m.id || m.name),
-    startDate: m.startDate,
-    endDate: m.endDate,
-    targetCapacity: typeof m.targetCapacity === 'number' ? m.targetCapacity : null
-  }));
+  const runData = await getCreatedPlanExecutionData(parsedPlan.id, user);
+  if (!runData?.run) return null;
+  const milestones = runData.milestones;
   const rollupList = await computeMilestoneRollups(milestones.map((m) => m.id));
   const rollups: Record<string, any> = {};
   rollupList.forEach((r: any) => { rollups[String(r.milestoneId)] = r; });
@@ -416,11 +374,7 @@ const getPlanData = async (planId: string, user: { userId?: string; role?: strin
     const readiness = rollups[milestone.id] ? await evaluateMilestoneReadiness(rollups[milestone.id], policyRef.effective) : null;
     readinessByMilestone[milestone.id] = readiness || { band: 'medium' };
   }
-  const itemIds = (run.workItemIds || []).filter((id: any) => ObjectId.isValid(String(id))).map((id: any) => new ObjectId(String(id)));
-  const items = await db.collection('workitems').find({ _id: { $in: itemIds } }).toArray();
-  const visibleItems = await visibility.filterVisibleWorkItems(items as unknown as WorkItem[]);
-  const enriched = await deriveWorkItemLinkSummary(visibleItems as WorkItem[]);
-  const dependencyInbound = buildDependencyInbound(enriched as WorkItem[]);
+  const dependencyInbound = buildDependencyInbound(runData.enrichedItems as WorkItem[]);
 
   return { milestones, rollups, readinessByMilestone, dependencyInbound };
 };
@@ -461,13 +415,8 @@ export const getPortfolioProbabilisticForecast = async (
 };
 
 export const resolveLatestPlanId = async (scopeType: string, scopeId: string) => {
-  const db = await getDb();
   if (!scopeType || !scopeId) return null;
-  const run = await db.collection('work_delivery_plan_runs')
-    .find({ scopeType, scopeId })
-    .sort({ createdAt: -1 })
-    .limit(1)
-    .next();
+  const run = await getLatestWorkDeliveryPlanRunRecord(scopeType, scopeId);
   if (run?._id) return `created:${String(run._id)}`;
   return null;
 };

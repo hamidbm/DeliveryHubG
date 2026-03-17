@@ -21,6 +21,7 @@ nav:
   - Technical Documentation:
       - Overview: technical/index.md
       - Architecture and Structure: technical/architecture-and-structure.md
+      - Persistence Boundaries: technical/persistence-boundaries.md
       - Operations and Deployment: technical/operations-and-deployment.md
       - Development Workflow: technical/development-workflow.md
       - Data Model and Collections: technical/data-model-and-collections.md

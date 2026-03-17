@@ -1,13 +1,14 @@
 
 import { NextResponse } from 'next/server';
 import { createHash } from 'crypto';
-import { fetchArchitectureDiagramById, fetchArchitectureDiagrams, fetchArchitectureDiagramsWithReviewSummary, emitEvent, saveArchitectureDiagram } from '../../../../services/db';
-import { jwtVerify } from 'jose';
-import { cookies } from 'next/headers';
-
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
+import { emitEvent } from '../../../../shared/events/emitEvent';
+import { fetchArchitectureDiagramsWithReviewSummary } from '../../../../services/architectureDiagramSummaries';
+import { getArchitectureDiagramById, listArchitectureDiagrams, saveArchitectureDiagramRecord } from '../../../../server/db/repositories/architectureRepo';
+import { requireStandardUser, requireUser } from '../../../../shared/auth/guards';
 
 export async function GET(request: Request) {
+  const auth = await requireUser(request);
+  if (!auth.ok) return auth.response;
   const { searchParams } = new URL(request.url);
   const filters = {
     bundleId: searchParams.get('bundleId'),
@@ -16,20 +17,17 @@ export async function GET(request: Request) {
   const includeReviewSummary = searchParams.get('includeReviewSummary') === 'true';
   const diagrams = includeReviewSummary
     ? await fetchArchitectureDiagramsWithReviewSummary(filters)
-    : await fetchArchitectureDiagrams(filters);
+    : await listArchitectureDiagrams(filters);
   return NextResponse.json(diagrams);
 }
 
 export async function POST(request: Request) {
   try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get('nexus_auth_token')?.value;
-    if (!token) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
-    
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const auth = await requireStandardUser(request);
+    if (!auth.ok) return auth.response;
     const diagramData = await request.json();
     const isCreate = !diagramData?._id || !String(diagramData._id).trim();
-    const existing = !isCreate ? await fetchArchitectureDiagramById(String(diagramData._id)) : null;
+    const existing = !isCreate ? await getArchitectureDiagramById(String(diagramData._id)) : null;
     if (isCreate && !diagramData?.documentTypeId) {
       return NextResponse.json({ error: 'documentTypeId is required.' }, { status: 400 });
     }
@@ -43,12 +41,12 @@ export async function POST(request: Request) {
       diagramData.contentHash = newContentHash;
     }
 
-    const result = await saveArchitectureDiagram(diagramData, payload);
+    const result = await saveArchitectureDiagramRecord(diagramData, auth.principal.rawPayload);
 
     const actor = {
-      userId: String(payload.id || payload.userId || ''),
-      displayName: String(payload.name || 'Unknown'),
-      email: payload.email ? String(payload.email) : undefined
+      userId: auth.principal.userId,
+      displayName: auth.principal.fullName || 'Unknown',
+      email: auth.principal.email
     };
     const insertedId = (result && typeof (result as any).insertedId !== 'undefined')
       ? (result as any).insertedId

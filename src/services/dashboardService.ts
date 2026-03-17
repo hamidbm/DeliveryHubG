@@ -1,4 +1,3 @@
-import { ObjectId } from 'mongodb';
 import {
   AtRiskBundleModel,
   BlockerHeatmapCell,
@@ -17,9 +16,14 @@ import {
   VelocityPoint,
   WorkItemAgingBucket
 } from '../types/dashboard';
-import { getDb } from './db';
 import { loadStrategicAdvisorContext } from './ai/strategicAdvisor';
 import { generateActionPlan } from './ai/actionRecommender';
+import {
+  getDashboardBundleRecord,
+  getDashboardMilestoneRecord,
+  listDashboardMilestoneItems,
+  loadDashboardContextRecord
+} from './dashboardData';
 
 type CacheEntry<T> = {
   expiresAt: number;
@@ -598,27 +602,7 @@ const buildSummaryCards = (ctx: ReturnType<typeof filterByScope>, trend: Progres
   };
 };
 
-const loadDashboardContext = async (): Promise<DashboardContext> => {
-  const db = await getDb();
-  const [bundles, applications, milestones, workItems, users, snapshots] = await Promise.all([
-    db.collection('bundles').find({}).project({ _id: 1, id: 1, name: 1, title: 1 }).toArray(),
-    db.collection('applications').find({}).project({ _id: 1, id: 1, bundleId: 1, name: 1, status: 1 }).toArray(),
-    db.collection('milestones').find({}).project({ _id: 1, id: 1, bundleId: 1, name: 1, targetDate: 1, endDate: 1, startDate: 1, status: 1 }).toArray(),
-    db.collection('workitems').find({ $or: [{ isArchived: { $exists: false } }, { isArchived: false }] })
-      .project({
-        _id: 1, id: 1, key: 1, title: 1, type: 1, status: 1, bundleId: 1, applicationId: 1, milestoneIds: 1,
-        createdAt: 1, updatedAt: 1, completedAt: 1, dueDate: 1, assignedTo: 1, assignee: 1, risk: 1, severity: 1, links: 1
-      }).toArray(),
-    db.collection('users').find({}).project({ _id: 1, id: 1, email: 1, name: 1, team: 1, role: 1 }).toArray(),
-    db.collection('portfolio_snapshots').find({}).project({
-      createdAt: 1,
-      blockedWorkItems: 1,
-      overdueWorkItems: 1,
-      criticalApplications: 1
-    }).toArray()
-  ]);
-  return { bundles, applications, milestones, workItems, users, snapshots };
-};
+const loadDashboardContext = async (): Promise<DashboardContext> => await loadDashboardContextRecord();
 
 export const getExecutiveDashboard = async (rawFilters: DashboardFilters = {}): Promise<ExecutiveDashboardResponse> => {
   const filters = normalizeFilters(rawFilters);
@@ -710,10 +694,7 @@ export const getAiDashboardSummary = async (filters: DashboardFilters = {}) => {
 };
 
 export const getBundleDashboard = async (bundleId: string, rawFilters: DashboardFilters = {}): Promise<BundleDashboardResponse> => {
-  const db = await getDb();
-  const bundle = ObjectId.isValid(bundleId)
-    ? await db.collection('bundles').findOne({ _id: new ObjectId(bundleId) })
-    : await db.collection('bundles').findOne({ id: bundleId });
+  const bundle = await getDashboardBundleRecord(bundleId);
   const executive = await getExecutiveDashboard({ ...rawFilters, bundleId });
   return {
     bundleId,
@@ -723,10 +704,7 @@ export const getBundleDashboard = async (bundleId: string, rawFilters: Dashboard
 };
 
 export const getMilestoneDashboard = async (milestoneId: string, rawFilters: DashboardFilters = {}): Promise<MilestoneDashboardResponse> => {
-  const db = await getDb();
-  const milestone = ObjectId.isValid(milestoneId)
-    ? await db.collection('milestones').findOne({ _id: new ObjectId(milestoneId) })
-    : await db.collection('milestones').findOne({ $or: [{ id: milestoneId }, { name: milestoneId }] });
+  const milestone = await getDashboardMilestoneRecord(milestoneId);
   if (!milestone) {
     return {
       milestoneId,
@@ -744,18 +722,7 @@ export const getMilestoneDashboard = async (milestoneId: string, rawFilters: Das
 
   const bundleId = String(milestone.bundleId || '');
   const executive = await getExecutiveDashboard({ ...rawFilters, bundleId });
-  const milestoneItems = await (await getDb()).collection('workitems').find({
-    $and: [
-      {
-        $or: [
-          { milestoneIds: milestoneId },
-          ...(ObjectId.isValid(milestoneId) ? [{ milestoneIds: new ObjectId(milestoneId) }] : []),
-          { milestoneId }
-        ]
-      },
-      { $or: [{ isArchived: { $exists: false } }, { isArchived: false }] }
-    ]
-  }).project({ status: 1, dueDate: 1, assignedTo: 1, links: 1 }).toArray();
+  const milestoneItems = await listDashboardMilestoneItems(milestoneId);
 
   const blockedItems = milestoneItems.filter((item: any) => String(item.status || '').toUpperCase() === 'BLOCKED').length;
   const overdueItems = milestoneItems.filter((item: any) => {

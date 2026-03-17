@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import { jwtVerify } from 'jose';
 import { ObjectId } from 'mongodb';
-import { getDb } from '../../../../services/db';
 import { isAdminOrCmo } from '../../../../services/authz';
-
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
+import { requireStandardUser } from '../../../../shared/auth/guards';
+import {
+  getClassicNotificationById,
+  listClassicNotificationRecords
+} from '../../../../server/db/repositories/notificationPlatformRepo';
+import { listAiNotificationRecords } from '../../../../server/db/repositories/aiNotificationsRepo';
 
 const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -34,27 +35,6 @@ const resolveRangeStart = (range?: string | null) => {
   return null;
 };
 
-const getUser = async () => {
-  const testToken = process.env.NODE_ENV === 'test' ? (globalThis as any).__testToken : null;
-  const cookieStore = testToken ? null : await cookies();
-  const token = testToken || cookieStore?.get('nexus_auth_token')?.value;
-  if (!token) return null;
-  const { payload } = await jwtVerify(token, JWT_SECRET);
-  return {
-    userId: String(payload.id || payload.userId || ''),
-    role: payload.role ? String(payload.role) : undefined,
-    email: payload.email ? String(payload.email) : undefined
-  };
-};
-
-const requireAdmin = async () => {
-  const user = await getUser();
-  if (!user?.userId) return { ok: false, status: 401, user: null };
-  const allowed = await isAdminOrCmo(user);
-  if (!allowed) return { ok: false, status: 403, user };
-  return { ok: true, status: 200, user };
-};
-
 const parsePaging = (searchParams: URLSearchParams) => {
   const cursor = searchParams.get('cursor') || undefined;
   const limitRaw = Number(searchParams.get('limit') || '50');
@@ -76,7 +56,7 @@ const applyCursorFilter = (filters: any[], cursor?: string) => {
   });
 };
 
-const listClassicNotifications = async (db: any, searchParams: URLSearchParams) => {
+const listClassicNotifications = async (searchParams: URLSearchParams) => {
   const id = searchParams.get('id');
   const includePayload = searchParams.get('includePayload') === 'true';
 
@@ -85,7 +65,7 @@ const listClassicNotifications = async (db: any, searchParams: URLSearchParams) 
       return NextResponse.json({ error: 'Invalid id', code: 'INVALID_ID' }, { status: 400 });
     }
     const projection = includePayload ? undefined : { payload: 0 };
-    const item = await db.collection('notifications').findOne({ _id: new ObjectId(id) }, { projection });
+    const item = await getClassicNotificationById(id, projection);
     return NextResponse.json({ item });
   }
 
@@ -129,11 +109,7 @@ const listClassicNotifications = async (db: any, searchParams: URLSearchParams) 
   const query = filters.length ? { $and: filters } : {};
   const projection = includePayload ? undefined : { payload: 0 };
 
-  const items = await db.collection('notifications')
-    .find(query, { projection })
-    .sort({ createdAt: -1, _id: -1 })
-    .limit(limit)
-    .toArray();
+  const items = await listClassicNotificationRecords({ query, projection, limit });
 
   const last = items[items.length - 1];
   const nextCursor = last ? encodeCursor(String(last.createdAt || ''), String(last._id)) : null;
@@ -141,7 +117,7 @@ const listClassicNotifications = async (db: any, searchParams: URLSearchParams) 
   return NextResponse.json({ items, nextCursor });
 };
 
-const listAiNotifications = async (db: any, searchParams: URLSearchParams) => {
+const listAiNotifications = async (searchParams: URLSearchParams) => {
   const { cursor, limit } = parsePaging(searchParams);
   const channel = String(searchParams.get('channel') || '').trim();
   const status = String(searchParams.get('status') || '').trim();
@@ -205,11 +181,7 @@ const listAiNotifications = async (db: any, searchParams: URLSearchParams) => {
   applyCursorFilter(filters, cursor);
 
   const query = filters.length ? { $and: filters } : {};
-  const items = await db.collection('ai_notifications')
-    .find(query)
-    .sort({ createdAt: -1, _id: -1 })
-    .limit(limit)
-    .toArray();
+  const items = await listAiNotificationRecords({ query, limit });
 
   const last = items[items.length - 1];
   const nextCursor = last ? encodeCursor(String(last.createdAt || ''), String(last._id)) : null;
@@ -219,19 +191,20 @@ const listAiNotifications = async (db: any, searchParams: URLSearchParams) => {
 
 export async function GET(request: Request) {
   try {
-    const auth = await requireAdmin();
+    const auth = await requireStandardUser(request);
     if (!auth.ok) {
-      return NextResponse.json({ error: 'Forbidden', code: 'ADMIN_ONLY' }, { status: auth.status });
+      return auth.response;
+    }
+    if (!(await isAdminOrCmo({ userId: auth.principal.userId, role: auth.principal.role || undefined, email: auth.principal.email }))) {
+      return NextResponse.json({ error: 'Forbidden', code: 'ADMIN_ONLY' }, { status: 403 });
     }
 
     const { searchParams } = new URL(request.url);
-    const db = await getDb();
-
     if (searchParams.get('source') === 'ai') {
-      return listAiNotifications(db, searchParams);
+      return listAiNotifications(searchParams);
     }
 
-    return listClassicNotifications(db, searchParams);
+    return listClassicNotifications(searchParams);
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'Failed to fetch notifications' }, { status: 500 });
   }

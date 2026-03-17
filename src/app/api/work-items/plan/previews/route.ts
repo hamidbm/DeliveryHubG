@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getAuthUserFromCookies } from '../../../../../services/visibility';
-import { getDb } from '../../../../../services/db';
-import { ObjectId } from 'mongodb';
+import { listWorkPlanPreviewRecords } from '../../../../../server/db/repositories/workPlansRepo';
 
 export async function GET(request: Request) {
   try {
@@ -11,15 +10,12 @@ export async function GET(request: Request) {
     const limit = Math.min(Math.max(Number(searchParams.get('limit') || '10'), 1), 50);
     const scopeType = searchParams.get('scopeType') || undefined;
     const scopeId = searchParams.get('scopeId') || undefined;
-    const db = await getDb();
-    const query: any = { createdBy: String(user.userId) };
-    if (scopeType) query.scopeType = scopeType;
-    if (scopeId) query.scopeId = scopeId;
-    const previews = await db.collection('work_plan_previews')
-      .find(query)
-      .sort({ createdAt: -1 })
-      .limit(limit)
-      .toArray();
+    const previews = await listWorkPlanPreviewRecords({
+      createdBy: String(user.userId),
+      scopeType,
+      scopeId,
+      limit
+    });
     return NextResponse.json(previews.map((doc: any) => ({
       id: String(doc._id || doc.id || ''),
       createdAt: doc.createdAt,

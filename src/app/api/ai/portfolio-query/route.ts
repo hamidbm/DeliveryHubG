@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { fetchAiAnalysisCache, fetchSystemSettings } from '../../../../services/db';
+import { fetchSystemSettings } from '../../../../services/aiSettings';
+import { fetchAiAnalysisCache } from '../../../../services/aiPersistence';
 import { getAuthUserFromCookies } from '../../../../services/visibility';
 import { ForecastSignal, PortfolioQueryResponse, PortfolioSummaryResponse } from '../../../../types/ai';
 import { derivePortfolioSignals } from '../../../../services/ai/portfolioSignals';

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { computeBundleHealth } from '../../../../services/db';
+import { computeBundleHealth } from '../../../../services/bundleAnalytics';
 import { createVisibilityContext, getAuthUserFromCookies } from '../../../../services/visibility';
 
 export async function GET(request: Request) {

@@ -1,49 +1,42 @@
 import { NextResponse } from 'next/server';
-import { jwtVerify } from 'jose';
-import { cookies } from 'next/headers';
-import { getAdminBootstrapEmails, upsertAdmin } from '../../../../services/db';
+import { saveAdminRecord } from '../../../../server/db/repositories/adminsRepo';
+import { getAdminBootstrapEmailsFromEnv } from '../../../../server/db/repositories/usersRepo';
 import { getBundleOwnership, isAdminOrCmo } from '../../../../services/authz';
-import { normalizeAccountType } from '../../../../services/authPrincipal';
-
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
+import { requireUser } from '../../../../shared/auth/guards';
 
 export async function GET() {
-  // Await cookies() as it is now asynchronous in recent Next.js versions.
-  const cookieStore = await cookies();
-  const token = cookieStore.get('nexus_auth_token')?.value;
-
-  if (!token) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
-  }
+  const auth = await requireUser();
+  if (!auth.ok) return auth.response;
 
   try {
-    const { payload } = await jwtVerify(token, JWT_SECRET);
-    const normalizedEmail = String(payload.email || '').trim().toLowerCase();
-    const bootstrapEmails = getAdminBootstrapEmails();
+    const { principal } = auth;
+    const normalizedEmail = String(principal.email || '').trim().toLowerCase();
+    const bootstrapEmails = getAdminBootstrapEmailsFromEnv();
     if (normalizedEmail && bootstrapEmails.has(normalizedEmail)) {
-      const userId = String(payload.id || payload.userId || '');
-      if (userId) {
-        await upsertAdmin(userId, 'system');
-      }
+      await saveAdminRecord(principal.userId, 'system');
     }
-    const userId = String(payload.id || payload.userId || '');
-    const accountType = normalizeAccountType(String(payload.accountType || ''));
-    const bundleOwnership = await getBundleOwnership(userId);
+    const bundleOwnership = await getBundleOwnership(principal.userId);
     const isAdminOrCMO = await isAdminOrCmo({
-      userId,
-      role: payload.role as string | undefined,
-      accountType
+      userId: principal.userId,
+      role: principal.role || undefined,
+      accountType: principal.accountType
     });
     return NextResponse.json({
       user: {
-        ...payload,
-        accountType
+        id: principal.userId,
+        userId: principal.userId,
+        email: principal.email,
+        name: principal.fullName,
+        team: principal.team,
+        role: principal.role,
+        username: principal.username,
+        accountType: principal.accountType
       },
       permissions: {
-        role: payload.role,
+        role: principal.role,
         isAdminOrCMO,
         bundleOwnership,
-        isGuest: accountType === 'GUEST'
+        isGuest: principal.accountType === 'GUEST'
       }
     });
   } catch (error) {

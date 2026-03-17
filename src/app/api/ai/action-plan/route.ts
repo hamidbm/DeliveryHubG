@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { fetchAiAnalysisCache, saveAiAnalysisCache } from '../../../../services/db';
+import { fetchAiAnalysisCache, saveAiAnalysisCache } from '../../../../services/aiPersistence';
 import { getAuthUserFromCookies } from '../../../../services/visibility';
 import { generateActionPlan } from '../../../../services/ai/actionRecommender';
 import { loadStrategicAdvisorContext } from '../../../../services/ai/strategicAdvisor';

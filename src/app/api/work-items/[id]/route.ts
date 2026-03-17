@@ -1,17 +1,44 @@
 
 import { NextResponse } from 'next/server';
-import { fetchWorkItemById, saveWorkItem, emitEvent, getDb, computeMilestoneRollup, computeSprintRollups } from '../../../../services/db';
-import { jwtVerify } from 'jose';
-import { cookies } from 'next/headers';
-import { ObjectId } from 'mongodb';
+import { emitEvent } from '../../../../shared/events/emitEvent';
+import { fetchWorkItemById, saveWorkItem } from '../../../../services/workItemsService';
+import { computeMilestoneRollup, computeSprintRollups } from '../../../../services/rollupAnalytics';
 import { evaluateCapacity } from '../../../../services/milestoneGovernance';
 import { canCreateBlocksDependency, canEditRiskSeverity, canOverrideCapacity, canRemoveBlocksDependency, isAdminOrCmo } from '../../../../services/authz';
 import { createNotificationsForEvent } from '../../../../services/notifications';
 import { createDecision } from '../../../../services/decisionLog';
 import { createVisibilityContext, getAuthUserFromCookies } from '../../../../services/visibility';
 import { invalidateWorkItemScopesFromCandidates } from '../../../../services/workItemCache';
+import { requireStandardUser } from '../../../../shared/auth/guards';
+import type { Principal } from '../../../../shared/auth/roles';
+import { archiveWorkItemRecord, listWorkItemsByAnyRefs } from '../../../../server/db/repositories/workItemsRepo';
+import { getMilestoneByRef, getSprintByRef } from '../../../../server/db/repositories/milestonesRepo';
 
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
+const getPayloadField = (principal: Principal, key: string) => principal.rawPayload[key];
+
+const buildActor = (principal: Principal) => ({
+  userId: principal.userId || String(getPayloadField(principal, 'id') || getPayloadField(principal, 'userId') || getPayloadField(principal, 'email') || ''),
+  displayName: principal.fullName || String(getPayloadField(principal, 'name') || getPayloadField(principal, 'displayName') || principal.email || 'Unknown'),
+  email: principal.email || (getPayloadField(principal, 'email') ? String(getPayloadField(principal, 'email')) : undefined),
+  role: principal.role || (getPayloadField(principal, 'role') ? String(getPayloadField(principal, 'role')) : undefined)
+});
+
+const isPrivilegedRole = (role?: string | null) =>
+  new Set([
+    'CMO Architect',
+    'SVP Architect',
+    'SVP PM',
+    'SVP Engineer',
+    'Director',
+    'VP',
+    'CIO'
+  ]).has(String(role || ''));
+
+const canManageRestrictedTransition = (principal: Principal, item: any) => {
+  const userName = principal.fullName || String(getPayloadField(principal, 'name') || '');
+  const isOwner = Boolean(userName && (item.assignedTo === userName || item.createdBy === userName));
+  return isOwner || isPrivilegedRole(principal.role);
+};
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -30,16 +57,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
-    let token: string | undefined;
-    if (process.env.NODE_ENV === 'test') {
-      token = (globalThis as any).__testToken as string | undefined;
-    } else {
-      const cookieStore = await cookies();
-      token = cookieStore.get('nexus_auth_token')?.value;
-    }
-    if (!token) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
-    
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const auth = await requireStandardUser(request);
+    if (!auth.ok) return auth.response;
+    const payload = auth.principal.rawPayload;
     const itemData = await request.json();
     const criticalPathAction = itemData?.criticalPathAction;
     if (Object.prototype.hasOwnProperty.call(itemData, 'criticalPathAction')) {
@@ -54,9 +74,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       delete itemData.overrideReason;
     }
     const authUser = {
-      userId: String((payload as any).id || (payload as any).userId || ''),
-      role: String((payload as any).role || ''),
-      team: String((payload as any).team || '')
+      userId: auth.principal.userId,
+      role: String(auth.principal.role || ''),
+      team: String(auth.principal.team || ''),
+      accountType: auth.principal.accountType
     };
 
     if (allowOverCapacity && !(await canOverrideCapacity(authUser))) {
@@ -67,9 +88,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const originalItem = await fetchWorkItemById(id);
     if (!originalItem) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     const visibility = createVisibilityContext({
-      userId: String((payload as any).id || (payload as any).userId || ''),
-      role: (payload as any).role ? String((payload as any).role) : undefined,
-      email: (payload as any).email ? String((payload as any).email) : undefined
+      userId: auth.principal.userId,
+      role: auth.principal.role || undefined,
+      email: auth.principal.email
     });
     if (!(await visibility.canViewWorkItem(originalItem))) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
@@ -85,12 +106,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         ? originalItem.milestoneIds.map((m: any) => String(m)).filter(Boolean)
         : [];
       const unionIds = Array.from(new Set([...milestoneIds, ...previousMilestones]));
-      const db = await getDb();
       const adminDirect = await isAdminOrCmo(authUser);
       for (const milestoneId of unionIds) {
-        const milestone = ObjectId.isValid(milestoneId)
-          ? await db.collection('milestones').findOne({ _id: new ObjectId(milestoneId) })
-          : await db.collection('milestones').findOne({ $or: [{ id: milestoneId }, { name: milestoneId }] });
+        const milestone = await getMilestoneByRef(milestoneId);
         if (!milestone) continue;
 
         const status = String(milestone.status || '').toUpperCase();
@@ -162,10 +180,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
     if (itemData.sprintId !== undefined && itemData.sprintId !== null) {
       const sprintId = String(itemData.sprintId);
-      const db = await getDb();
-      const sprint = ObjectId.isValid(sprintId)
-        ? await db.collection('workitems_sprints').findOne({ _id: new ObjectId(sprintId) })
-        : await db.collection('workitems_sprints').findOne({ $or: [{ id: sprintId }, { name: sprintId }] });
+      const sprint = await getSprintByRef(sprintId);
       if (!sprint) return NextResponse.json({ error: 'SPRINT_NOT_FOUND' }, { status: 404 });
 
       const sprintStatus = String(sprint.status || '').toUpperCase();
@@ -224,19 +239,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (itemData.status && itemData.status !== originalItem.status) {
       const criticalStatuses = new Set(['DONE', 'BLOCKED', 'REVIEW']);
       if (criticalStatuses.has(itemData.status)) {
-        const userName = String(payload.name || '');
-        const userRole = String((payload as any).role || '');
-        const privilegedRoles = new Set([
-          'CMO Architect',
-          'SVP Architect',
-          'SVP PM',
-          'SVP Engineer',
-          'Director',
-          'VP',
-          'CIO'
-        ]);
-        const isOwner = userName && (originalItem.assignedTo === userName || originalItem.createdBy === userName);
-        if (!isOwner && !privilegedRoles.has(userRole)) {
+        if (!canManageRestrictedTransition(auth.principal, originalItem)) {
           return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
       }
@@ -246,19 +249,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       (itemData.priority && itemData.priority !== originalItem.priority) ||
       (itemData.assignedTo !== undefined && itemData.assignedTo !== originalItem.assignedTo)
     ) {
-      const userName = String(payload.name || '');
-      const userRole = String((payload as any).role || '');
-      const privilegedRoles = new Set([
-        'CMO Architect',
-        'SVP Architect',
-        'SVP PM',
-        'SVP Engineer',
-        'Director',
-        'VP',
-        'CIO'
-      ]);
-      const isOwner = userName && (originalItem.assignedTo === userName || originalItem.createdBy === userName);
-      if (!isOwner && !privilegedRoles.has(userRole)) {
+      if (!canManageRestrictedTransition(auth.principal, originalItem)) {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
       }
     }
@@ -298,18 +289,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       ? originalItem.links.filter((l: any) => String(l?.type) === 'BLOCKS' && l.targetId && (!Array.isArray(normalizedLinks) || !normalizedLinks.find((n: any) => String(n?.type) === 'BLOCKS' && String(n?.targetId) === String(l.targetId))))
       : [];
 
+    let targetMap = new Map<string, any>();
     if (newBlocks.length || removedBlocks.length) {
-      const db = await getDb();
       const targets = [...newBlocks, ...removedBlocks].map((l: any) => String(l.targetId));
       const uniqueTargets = Array.from(new Set(targets));
-      const targetDocs = await db.collection('workitems').find({
-        $or: [
-          { _id: { $in: uniqueTargets.filter(ObjectId.isValid).map((id) => new ObjectId(id)) } },
-          { id: { $in: uniqueTargets } },
-          { key: { $in: uniqueTargets } }
-        ]
-      }).toArray();
-      const targetMap = new Map<string, any>();
+      const targetDocs = await listWorkItemsByAnyRefs(uniqueTargets);
       targetDocs.forEach((t: any) => {
         if (t._id) targetMap.set(String(t._id), t);
         if (t.id) targetMap.set(String(t.id), t);
@@ -352,12 +336,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     );
 
     if (criticalPathAction?.type) {
-      const actor = {
-        userId: String((payload as any).id || (payload as any).userId || (payload as any).email || ''),
-        displayName: String((payload as any).name || (payload as any).displayName || ''),
-        email: (payload as any).email ? String((payload as any).email) : undefined,
-        role: (payload as any).role ? String((payload as any).role) : undefined
-      };
+      const actor = buildActor(auth.principal);
       await emitEvent({
         ts: new Date().toISOString(),
         type: 'criticalpath.action.executed',
@@ -369,12 +348,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
 
     if (directScopeChanges.length) {
-      const actor = {
-        userId: String((payload as any).id || (payload as any).userId || (payload as any).email || ''),
-        displayName: String((payload as any).name || (payload as any).displayName || ''),
-        email: (payload as any).email ? String((payload as any).email) : undefined,
-        role: (payload as any).role ? String((payload as any).role) : undefined
-      };
+      const actor = buildActor(auth.principal);
       const now = new Date().toISOString();
       await Promise.all(directScopeChanges.map(async (entry) => {
         try {
@@ -396,12 +370,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
 
     if (capacityOverrides.length) {
-      const actor = {
-        userId: String((payload as any).id || (payload as any).userId || (payload as any).email || ''),
-        displayName: String((payload as any).name || (payload as any).displayName || ''),
-        email: (payload as any).email ? String((payload as any).email) : undefined,
-        role: (payload as any).role ? String((payload as any).role) : undefined
-      };
+      const actor = buildActor(auth.principal);
       await Promise.all(capacityOverrides.map(async (entry) => {
         try {
           await createNotificationsForEvent({
@@ -435,12 +404,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
 
     if (sprintCapacityOverrides.length) {
-      const actor = {
-        userId: String((payload as any).id || (payload as any).userId || (payload as any).email || ''),
-        displayName: String((payload as any).name || (payload as any).displayName || ''),
-        email: (payload as any).email ? String((payload as any).email) : undefined,
-        role: (payload as any).role ? String((payload as any).role) : undefined
-      };
+      const actor = buildActor(auth.principal);
       const seen = new Set<string>();
       await Promise.all(sprintCapacityOverrides.map(async (entry) => {
         try {
@@ -461,19 +425,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
 
     if (newBlocks.length) {
-      const actor = {
-        userId: String((payload as any).id || (payload as any).userId || (payload as any).email || ''),
-        displayName: String((payload as any).name || (payload as any).displayName || ''),
-        email: (payload as any).email ? String((payload as any).email) : undefined,
-        role: (payload as any).role ? String((payload as any).role) : undefined
-      };
-      const db = await getDb();
+      const actor = buildActor(auth.principal);
       await Promise.all(newBlocks.map(async (link: any) => {
         try {
           const targetId = String(link.targetId);
-          const target = ObjectId.isValid(targetId)
-            ? await db.collection('workitems').findOne({ _id: new ObjectId(targetId) })
-            : await db.collection('workitems').findOne({ $or: [{ id: targetId }, { key: targetId }] });
+          const target = targetMap.get(targetId) || (await fetchWorkItemById(targetId));
           if (!target) return;
           const blockerBundle = originalItem.bundleId || itemData.bundleId;
           const blockedBundle = target.bundleId;
@@ -504,36 +460,18 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
-    const cookieStore = await cookies();
-    const token = cookieStore.get('nexus_auth_token')?.value;
-    if (!token) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
-
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const auth = await requireStandardUser(request);
+    if (!auth.ok) return auth.response;
+    const payload = auth.principal.rawPayload;
     const item = await fetchWorkItemById(id);
     if (!item) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-    const userName = String(payload.name || '');
-    const userRole = String((payload as any).role || '');
-    const privilegedRoles = new Set([
-      'CMO Architect',
-      'SVP Architect',
-      'SVP PM',
-      'SVP Engineer',
-      'Director',
-      'VP',
-      'CIO'
-    ]);
-    const isOwner = userName && (item.assignedTo === userName || item.createdBy === userName);
-    if (!isOwner && !privilegedRoles.has(userRole)) {
+    const userName = auth.principal.fullName || String(payload.name || '');
+    if (!canManageRestrictedTransition(auth.principal, item)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const now = new Date().toISOString();
-    const db = await getDb();
-    await db.collection('workitems').updateOne(
-      { _id: new ObjectId(id) },
-      { $set: { isArchived: true, archivedAt: now, archivedBy: userName, updatedAt: now } }
-    );
+    const { now } = await archiveWorkItemRecord(id, userName);
     await invalidateWorkItemScopesFromCandidates(
       [{ bundleId: item?.bundleId, applicationId: item?.applicationId }],
       'workitems.archive'
@@ -543,11 +481,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
       await emitEvent({
         ts: now,
         type: 'workitems.item.archived',
-        actor: {
-          userId: String((payload as any).id || (payload as any).userId || (payload as any).email || userName),
-          displayName: String((payload as any).name || (payload as any).displayName || userName),
-          email: (payload as any).email ? String((payload as any).email) : undefined
-        },
+        actor: buildActor(auth.principal),
         resource: { type: 'workitems.item', id: String(item._id || item.id || id), title: item.title },
         context: { bundleId: item.bundleId, appId: item.applicationId }
       });

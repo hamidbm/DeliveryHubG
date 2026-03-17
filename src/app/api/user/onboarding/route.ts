@@ -1,12 +1,8 @@
 import { NextResponse } from 'next/server';
-import { getDb } from '../../../../services/db';
-import { getAuthUserFromCookies } from '../../../../services/visibility';
 import { getOnboardingContent, inferOnboardingRole, isOnboardingRole } from '../../../../services/onboardingContent';
+import { findUserOnboarding, insertUserOnboarding, updateUserOnboarding } from '../../../../server/db/repositories/onboardingRepo';
+import { requireUser } from '../../../../shared/auth/guards';
 import type { UserOnboarding, OnboardingRole } from '../../../../types';
-
-const ensureIndexes = async (db: any) => {
-  await db.collection('user_onboarding').createIndex({ userId: 1 }, { unique: true });
-};
 
 const normalizeRole = (value?: string): OnboardingRole | null => {
   if (!value) return null;
@@ -29,16 +25,14 @@ const buildDefaultOnboarding = async (userId: string, roleHint?: string): Promis
 
 export async function GET() {
   try {
-    const user = await getAuthUserFromCookies();
-    if (!user?.userId) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
+    const auth = await requireUser();
+    if (!auth.ok) return auth.response;
+    const user = auth.principal;
 
-    const db = await getDb();
-    await ensureIndexes(db);
-    const collection = db.collection<UserOnboarding>('user_onboarding');
-    let onboarding: UserOnboarding | null = await collection.findOne({ userId: String(user.userId) }) as UserOnboarding | null;
+    let onboarding: UserOnboarding | null = await findUserOnboarding(String(user.userId));
     if (!onboarding) {
       onboarding = await buildDefaultOnboarding(String(user.userId), user.role);
-      await collection.insertOne(onboarding);
+      await insertUserOnboarding(onboarding);
     }
     return NextResponse.json({ onboarding, content: getOnboardingContent() });
   } catch (error: any) {
@@ -48,40 +42,26 @@ export async function GET() {
 
 export async function PATCH(request: Request) {
   try {
-    const user = await getAuthUserFromCookies();
-    if (!user?.userId) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
+    const auth = await requireUser(request);
+    if (!auth.ok) return auth.response;
+    const user = auth.principal;
 
     const body = await request.json();
-    const db = await getDb();
-    await ensureIndexes(db);
-    const collection = db.collection<UserOnboarding>('user_onboarding');
-
-    let onboarding: UserOnboarding | null = await collection.findOne({ userId: String(user.userId) }) as UserOnboarding | null;
+    let onboarding: UserOnboarding | null = await findUserOnboarding(String(user.userId));
     if (!onboarding) {
       onboarding = await buildDefaultOnboarding(String(user.userId), user.role);
-      await collection.insertOne(onboarding);
+      await insertUserOnboarding(onboarding);
     }
-
-    const updates: any = { $set: { updatedAt: new Date().toISOString() } };
     const role = normalizeRole(body?.role);
     if (body?.role && !role) {
       return NextResponse.json({ error: 'Invalid role' }, { status: 400 });
     }
-    if (role) updates.$set.role = role;
-
-    if (body?.reset) {
-      updates.$set.completedSteps = [];
-      updates.$set.dismissedTips = [];
-    }
-    if (body?.completeStepId) {
-      updates.$addToSet = { ...(updates.$addToSet || {}), completedSteps: String(body.completeStepId) };
-    }
-    if (body?.dismissTipId) {
-      updates.$addToSet = { ...(updates.$addToSet || {}), dismissedTips: String(body.dismissTipId) };
-    }
-
-    await collection.updateOne({ userId: String(user.userId) }, updates);
-    const refreshed = await collection.findOne({ userId: String(user.userId) });
+    const refreshed = await updateUserOnboarding(String(user.userId), {
+      role: role || undefined,
+      reset: Boolean(body?.reset),
+      completeStepId: body?.completeStepId ? String(body.completeStepId) : undefined,
+      dismissTipId: body?.dismissTipId ? String(body.dismissTipId) : undefined
+    });
     return NextResponse.json({ onboarding: refreshed, content: getOnboardingContent() });
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'Failed to update onboarding' }, { status: 500 });

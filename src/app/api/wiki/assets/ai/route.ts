@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { checkAndIncrementAiRateLimit, fetchSystemSettings, fetchWikiAssetAiHistory, saveAiAuditLog, saveWikiAssetAiHistory } from '../../../../../services/db';
+import { fetchSystemSettings } from '../../../../../services/aiSettings';
+import { checkAndIncrementAiRateLimit, fetchWikiAssetAiHistory, saveAiAuditLog, saveWikiAssetAiHistory } from '../../../../../services/aiPersistence';
 import { getRateLimitPerHour, getRequestIdentity, getRetentionDays } from '../../../../../services/aiPolicy';
 import { executeAiTextTask } from '../../../../../services/aiRouting';
 

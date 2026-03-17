@@ -1,5 +1,6 @@
 import { createHash } from 'crypto';
-import { fetchAiAnalysisCache, fetchSystemSettings, getDb, saveAiAnalysisCache } from '../db';
+import { fetchSystemSettings } from '../aiSettings';
+import { fetchAiAnalysisCache, saveAiAnalysisCache } from '../aiPersistence';
 import {
   ForecastSignal,
   PortfolioAlert,
@@ -19,6 +20,7 @@ import { generateDeterministicStrategicAnswer } from './strategicDeterministicEn
 import { normalizeStrategicModelResponse } from './strategicResponseNormalizer';
 import { generateStrategicQuickSuggestions } from './suggestionGenerator';
 import { generateActionPlan } from './actionRecommender';
+import { listAiAnalysisCacheRecordsByReportType } from '../../server/db/repositories/aiSupportRepo';
 
 type AiSettings = {
   geminiProModel?: string;
@@ -131,12 +133,7 @@ const loadRiskPropagationSignals = async () => {
 };
 
 const loadRecentScenarioResults = async () => {
-  const db = await getDb();
-  const rows = await db.collection('ai_analysis_cache')
-    .find({ reportType: 'scenarioResult' } as any)
-    .sort({ updatedAt: -1 })
-    .limit(30)
-    .toArray();
+  const rows = await listAiAnalysisCacheRecordsByReportType('scenarioResult', 30);
 
   return rows
     .filter((row: any) => String(row?._id || '').startsWith(SCENARIO_CACHE_PREFIX))

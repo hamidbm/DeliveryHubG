@@ -1,39 +1,27 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import { jwtVerify } from 'jose';
-import { ObjectId } from 'mongodb';
-import { getDb, computeMilestoneRollup, ensureScopeChangeRequestIndexes, emitEvent } from '../../../../../services/db';
+import { emitEvent } from '../../../../../shared/events/emitEvent';
+import { computeMilestoneRollup } from '../../../../../services/rollupAnalytics';
 import { canEditCommittedMilestoneScope, canOverrideCapacity } from '../../../../../services/authz';
 import { createNotificationsForEvent } from '../../../../../services/notifications';
-
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
-
-const getUser = async () => {
-  const testToken = process.env.NODE_ENV === 'test' ? (globalThis as any).__testToken : null;
-  const cookieStore = testToken ? null : await cookies();
-  const token = testToken || cookieStore?.get('nexus_auth_token')?.value;
-  if (!token) return null;
-  const { payload } = await jwtVerify(token, JWT_SECRET);
-  return {
-    userId: String((payload as any).id || (payload as any).userId || ''),
-    role: String((payload as any).role || ''),
-    email: (payload as any).email ? String((payload as any).email) : undefined,
-    name: (payload as any).name ? String((payload as any).name) : undefined
-  };
-};
-
-const resolveMilestone = async (db: any, id: string) => {
-  if (ObjectId.isValid(id)) {
-    return await db.collection('milestones').findOne({ _id: new ObjectId(id) });
-  }
-  return await db.collection('milestones').findOne({ $or: [{ id }, { name: id }] });
-};
+import { requireStandardUser, requireUser } from '../../../../../shared/auth/guards';
+import { getMilestoneByRef } from '../../../../../server/db/repositories/milestonesRepo';
+import {
+  insertScopeChangeRequestRecord,
+  listScopeChangeRequestRecords
+} from '../../../../../server/db/repositories/scopeRequestsRepo';
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
-    const user = await getUser();
-    if (!user?.userId) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
+    const auth = await requireStandardUser(request);
+    if (!auth.ok) return auth.response;
+    const user = {
+      userId: auth.principal.userId,
+      role: String(auth.principal.role || ''),
+      email: auth.principal.email,
+      name: auth.principal.fullName,
+      accountType: auth.principal.accountType
+    };
 
     const body = await request.json();
     const action = body?.action;
@@ -47,9 +35,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: 'Missing workItemIds' }, { status: 400 });
     }
 
-    const db = await getDb();
-    await ensureScopeChangeRequestIndexes(db);
-    const milestone = await resolveMilestone(db, id);
+    const milestone = await getMilestoneByRef(id);
     if (!milestone) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
     const status = String(milestone.status || '').toUpperCase();
@@ -79,7 +65,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       before
     };
 
-    const result = await db.collection('scope_change_requests').insertOne(doc);
+    const result = await insertScopeChangeRequestRecord(doc);
 
     const actor = { userId: user.userId, displayName: user.name, email: user.email, role: user.role };
     try {
@@ -110,12 +96,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
-    const user = await getUser();
-    if (!user?.userId) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
+    const auth = await requireUser(request);
+    if (!auth.ok) return auth.response;
+    const user = {
+      userId: auth.principal.userId,
+      role: String(auth.principal.role || ''),
+      email: auth.principal.email,
+      name: auth.principal.fullName,
+      accountType: auth.principal.accountType
+    };
 
-    const db = await getDb();
-    await ensureScopeChangeRequestIndexes(db);
-    const milestone = await resolveMilestone(db, id);
+    const milestone = await getMilestoneByRef(id);
     if (!milestone) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
     const statusParam = new URL(request.url).searchParams.get('status');
@@ -127,7 +118,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       query.requestedBy = user.userId;
     }
 
-    const items = await db.collection('scope_change_requests').find(query).sort({ requestedAt: -1 }).toArray();
+    const items = await listScopeChangeRequestRecords(query);
     return NextResponse.json({ items });
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'Failed to fetch scope requests' }, { status: 500 });

@@ -1,9 +1,8 @@
 
 import { NextRequest, NextResponse } from 'next/server';
-import { deleteMilestone, getDb, computeMilestoneRollup, emitEvent } from '../../../../services/db';
-import { jwtVerify } from 'jose';
-import { cookies } from 'next/headers';
-import { ObjectId } from 'mongodb';
+import { emitEvent } from '../../../../shared/events/emitEvent';
+import { deleteMilestone } from '../../../../services/workItemsService';
+import { computeMilestoneRollup } from '../../../../services/rollupAnalytics';
 import { canCommitMilestone, canStartMilestone, canCompleteMilestone, canOverrideMilestoneReadiness, canEditMilestoneOwner } from '../../../../services/authz';
 import { evaluateMilestoneReadiness } from '../../../../services/milestoneGovernance';
 import { getEffectivePolicyForMilestone } from '../../../../services/policy';
@@ -12,23 +11,23 @@ import { resolveMilestoneBundleScope } from '../../../../services/ownership';
 import { evaluateMilestoneCommitReview } from '../../../../services/commitmentReview';
 import { ensureMilestoneBaseline } from '../../../../services/baselineDelta';
 import { createDecision } from '../../../../services/decisionLog';
+import { requireStandardUser } from '../../../../shared/auth/guards';
+import type { Principal } from '../../../../shared/auth/roles';
+import { getMilestoneByRef, updateMilestoneRecordByRef } from '../../../../server/db/repositories/milestonesRepo';
 
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
+const buildActor = (principal: Principal) => ({
+  userId: principal.userId,
+  displayName: principal.fullName || principal.email || '',
+  email: principal.email,
+  role: principal.role || undefined
+});
 
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
-    let token: string | undefined;
-    if (process.env.NODE_ENV === 'test') {
-      token = (globalThis as any).__testToken as string | undefined;
-    } else {
-      const cookieStore = await cookies();
-      token = cookieStore.get('nexus_auth_token')?.value;
-    }
-    if (!token) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
-
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const auth = await requireStandardUser(request);
+    if (!auth.ok) return auth.response;
     const body = await request.json();
     const nextStatus = body?.status ? String(body.status) : undefined;
     const ownerUserId = body?.ownerUserId ? String(body.ownerUserId) : undefined;
@@ -41,9 +40,10 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     if (Object.prototype.hasOwnProperty.call(body, 'ownerEmail')) delete body.ownerEmail;
 
     const authUser = {
-      userId: String((payload as any).id || (payload as any).userId || ''),
-      role: String((payload as any).role || ''),
-      team: String((payload as any).team || '')
+      userId: auth.principal.userId,
+      role: String(auth.principal.role || ''),
+      team: String(auth.principal.team || ''),
+      accountType: auth.principal.accountType
     };
 
     if (nextStatus && String(nextStatus).toUpperCase() === 'COMMITTED') {
@@ -52,10 +52,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       }
     }
 
-    const db = await getDb();
-    const existing = ObjectId.isValid(id)
-      ? await db.collection('milestones').findOne({ _id: new ObjectId(id) })
-      : await db.collection('milestones').findOne({ $or: [{ id }, { name: id }] });
+    const existing = await getMilestoneByRef(id);
     if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
     if (nextStatus && String(nextStatus).toUpperCase() === 'COMMITTED') {
@@ -83,12 +80,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         try {
           await createNotificationsForEvent({
             type: 'milestone.readiness.blocked',
-            actor: {
-              userId: String((payload as any).id || (payload as any).userId || (payload as any).email || ''),
-              displayName: String((payload as any).name || (payload as any).displayName || ''),
-              email: (payload as any).email ? String((payload as any).email) : undefined,
-              role: (payload as any).role ? String((payload as any).role) : undefined
-            },
+            actor: buildActor(auth.principal),
             payload: {
               milestone: existing,
               readiness
@@ -111,21 +103,13 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
       const now = new Date().toISOString();
       const update = { ...body, status: nextStatus, updatedAt: now };
-      if (ObjectId.isValid(id)) {
-        await db.collection('milestones').updateOne({ _id: new ObjectId(id) }, { $set: update });
-      } else {
-        await db.collection('milestones').updateOne({ $or: [{ id }, { name: id }] }, { $set: update });
-      }
+      await updateMilestoneRecordByRef(id, update);
 
       try {
         await emitEvent({
           ts: now,
           type: 'milestones.milestone.statuschanged',
-          actor: {
-            userId: String((payload as any).id || (payload as any).userId || (payload as any).email || ''),
-            displayName: String((payload as any).name || (payload as any).displayName || ''),
-            email: (payload as any).email ? String((payload as any).email) : undefined
-          },
+          actor: buildActor(auth.principal),
           resource: { type: 'milestones.milestone', id: String(existing._id || existing.id || id), title: existing.name },
           payload: {
             from: existing.status,
@@ -140,12 +124,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       try {
         await createNotificationsForEvent({
           type: 'milestone.status.changed',
-          actor: {
-            userId: String((payload as any).id || (payload as any).userId || (payload as any).email || ''),
-            displayName: String((payload as any).name || (payload as any).displayName || ''),
-            email: (payload as any).email ? String((payload as any).email) : undefined,
-            role: (payload as any).role ? String((payload as any).role) : undefined
-          },
+          actor: buildActor(auth.principal),
           payload: {
             milestone: existing,
             from: existing.status,
@@ -155,12 +134,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         if (allowOverride) {
           await createNotificationsForEvent({
             type: 'milestone.status.override',
-            actor: {
-              userId: String((payload as any).id || (payload as any).userId || (payload as any).email || ''),
-              displayName: String((payload as any).name || (payload as any).displayName || ''),
-              email: (payload as any).email ? String((payload as any).email) : undefined,
-              role: (payload as any).role ? String((payload as any).role) : undefined
-            },
+            actor: buildActor(auth.principal),
             payload: {
               milestone: existing,
               overrideReason,
@@ -171,9 +145,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
             await createDecision({
               createdAt: now,
               createdBy: {
-                userId: String((payload as any).id || (payload as any).userId || ''),
-                email: (payload as any).email ? String((payload as any).email) : '',
-                name: (payload as any).name ? String((payload as any).name) : undefined
+                userId: auth.principal.userId,
+                email: auth.principal.email || '',
+                name: auth.principal.fullName || undefined
               },
               source: 'AUTO',
               scopeType: 'MILESTONE',
@@ -205,21 +179,13 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         ownerEmail: ownerEmail || null,
         updatedAt: new Date().toISOString()
       };
-      if (ObjectId.isValid(id)) {
-        await db.collection('milestones').updateOne({ _id: new ObjectId(id) }, { $set: updateOwner });
-      } else {
-        await db.collection('milestones').updateOne({ $or: [{ id }, { name: id }] }, { $set: updateOwner });
-      }
+      await updateMilestoneRecordByRef(id, updateOwner);
 
       try {
         await emitEvent({
           ts: updateOwner.updatedAt,
           type: 'milestones.milestone.ownerchanged',
-          actor: {
-            userId: String((payload as any).id || (payload as any).userId || (payload as any).email || ''),
-            displayName: String((payload as any).name || (payload as any).displayName || ''),
-            email: (payload as any).email ? String((payload as any).email) : undefined
-          },
+          actor: buildActor(auth.principal),
           resource: { type: 'milestones.milestone', id: String(existing._id || existing.id || id), title: existing.name },
           payload: {
             from: { ownerUserId: existing.ownerUserId, ownerEmail: existing.ownerEmail },
@@ -232,12 +198,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       try {
         await createNotificationsForEvent({
           type: 'milestone.owner.changed',
-          actor: {
-            userId: String((payload as any).id || (payload as any).userId || (payload as any).email || ''),
-            displayName: String((payload as any).name || (payload as any).displayName || ''),
-            email: (payload as any).email ? String((payload as any).email) : undefined,
-            role: (payload as any).role ? String((payload as any).role) : undefined
-          },
+          actor: buildActor(auth.principal),
           payload: {
             milestone: { ...existing, ownerUserId: ownerUserId || null, ownerEmail: ownerEmail || null }
           }
@@ -251,11 +212,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       update.ownerUserId = ownerUserId || null;
       update.ownerEmail = ownerEmail || null;
     }
-    if (ObjectId.isValid(id)) {
-      await db.collection('milestones').updateOne({ _id: new ObjectId(id) }, { $set: update });
-    } else {
-      await db.collection('milestones').updateOne({ $or: [{ id }, { name: id }] }, { $set: update });
-    }
+    await updateMilestoneRecordByRef(id, update);
 
     if (nextStatus && String(nextStatus).toUpperCase() === 'COMMITTED' && String(existing.status) !== String(nextStatus)) {
       try {
@@ -265,11 +222,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         await emitEvent({
           ts: now,
           type: 'milestones.milestone.statuschanged',
-          actor: {
-            userId: String((payload as any).id || (payload as any).userId || (payload as any).email || ''),
-            displayName: String((payload as any).name || (payload as any).displayName || ''),
-            email: (payload as any).email ? String((payload as any).email) : undefined
-          },
+          actor: buildActor(auth.principal),
           resource: { type: 'milestones.milestone', id: String(existing._id || existing.id || id), title: existing.name },
           payload: {
             from: existing.status,
@@ -280,12 +233,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       try {
         await createNotificationsForEvent({
           type: 'milestone.status.changed',
-          actor: {
-            userId: String((payload as any).id || (payload as any).userId || (payload as any).email || ''),
-            displayName: String((payload as any).name || (payload as any).displayName || ''),
-            email: (payload as any).email ? String((payload as any).email) : undefined,
-            role: (payload as any).role ? String((payload as any).role) : undefined
-          },
+          actor: buildActor(auth.principal),
           payload: {
             milestone: existing,
             from: existing.status,
@@ -305,6 +253,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
+    const auth = await requireStandardUser(request);
+    if (!auth.ok) return auth.response;
     await deleteMilestone(id);
     return NextResponse.json({ success: true });
   } catch (error) {

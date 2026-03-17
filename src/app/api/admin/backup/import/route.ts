@@ -1,8 +1,13 @@
 import { NextResponse } from 'next/server';
 import { ObjectId } from 'mongodb';
-import { getDb, emitEvent } from '../../../../../services/db';
-import { getAuthUserFromCookies } from '../../../../../services/visibility';
+import { emitEvent } from '../../../../../shared/events/emitEvent';
 import { isAdminOrCmo } from '../../../../../services/authz';
+import { requireStandardUser } from '../../../../../shared/auth/guards';
+import {
+  findBackupCollectionRecord,
+  insertBackupCollectionRecord,
+  updateBackupCollectionRecord
+} from '../../../../../server/db/repositories/adminBackupRepo';
 
 type BackupBundleV1 = {
   version: 1;
@@ -76,8 +81,9 @@ const summarizeDiff = (existing: any, incoming: any) => {
 };
 
 export async function POST(request: Request) {
-  const authUser = await getAuthUserFromCookies();
-  if (!authUser?.userId) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
+  const auth = await requireStandardUser(request);
+  if (!auth.ok) return auth.response;
+  const authUser = { userId: auth.principal.userId, role: auth.principal.role || undefined, email: auth.principal.email, id: auth.principal.userId };
   if (!(await isAdminOrCmo(authUser))) return NextResponse.json({ error: 'Forbidden', code: 'ADMIN_ONLY' }, { status: 403 });
 
   const body = await request.json().catch(() => ({}));
@@ -97,7 +103,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Confirmation required', code: 'CONFIRMATION_REQUIRED' }, { status: 409 });
   }
 
-  const db = await getDb();
   const collections = bundle.collections || {};
   const result: any = {
     mode,
@@ -128,7 +133,7 @@ export async function POST(request: Request) {
           continue;
         }
 
-        const existing = await db.collection(collection).findOne(filter as any);
+        const existing = await findBackupCollectionRecord(collection, filter as any);
         if (collection === 'delivery_policies' && existing && !overwritePolicies) {
           summary.skipped += 1;
           continue;
@@ -155,10 +160,10 @@ export async function POST(request: Request) {
         }
 
         if (existing) {
-          await db.collection(collection).updateOne(filter as any, { $set: normalized }, { upsert: allowUpsert });
+          await updateBackupCollectionRecord(collection, filter as any, normalized, allowUpsert);
           summary.upserts += 1;
         } else {
-          await db.collection(collection).insertOne(normalized as any);
+          await insertBackupCollectionRecord(collection, normalized as any);
           summary.creates += 1;
         }
       }

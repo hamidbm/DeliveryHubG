@@ -1,16 +1,11 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import { jwtVerify } from 'jose';
-import { createWorkPlanFromIntake, getDb } from '../../../../services/db';
-
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
+import { createWorkPlanFromIntake } from '../../../../services/workItemsService';
+import { requireStandardUser } from '../../../../shared/auth/guards';
 
 export async function POST(request: Request) {
   try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get('nexus_auth_token')?.value;
-    if (!token) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const auth = await requireStandardUser(request);
+    if (!auth.ok) return auth.response;
 
     const body = await request.json();
     const scopeType = String(body.scopeType || '');
@@ -28,7 +23,6 @@ export async function POST(request: Request) {
     const sprintDurationWeeks = Number(body.sprintDurationWeeks || 2);
     const milestoneThemes = Array.isArray(body.milestoneThemes) ? body.milestoneThemes : [];
 
-    await getDb(); // ensure connection
     await createWorkPlanFromIntake({
       scopeType: scopeType as any,
       scopeId,
@@ -40,7 +34,7 @@ export async function POST(request: Request) {
       milestoneDurationWeeks,
       sprintDurationWeeks,
       milestoneThemes,
-      actor: payload as any
+      actor: auth.principal.rawPayload as any
     });
 
     return NextResponse.json({ success: true });

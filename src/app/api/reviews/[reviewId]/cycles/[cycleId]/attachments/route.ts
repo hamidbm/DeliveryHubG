@@ -1,92 +1,37 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import { jwtVerify } from 'jose';
-import fs from 'fs';
-import path from 'path';
-import os from 'os';
 import { Readable } from 'stream';
-import { execSync } from 'child_process';
 import ExcelJS from 'exceljs';
-import { addReviewCycleAttachments, emitEvent, ensureInReview, fetchReviewById, saveWikiAsset } from '../../../../../../../services/db';
+import { emitEvent } from '../../../../../../../shared/events/emitEvent';
+import { addReviewCycleAttachments, ensureInReview } from '../../../../../../../services/reviewLifecycle';
 import { buildSheetData } from '../../../../../../../lib/wikiSpreadsheet';
+import { requireStandardUser } from '../../../../../../../shared/auth/guards';
+import { getReviewById } from '../../../../../../../server/db/repositories/reviewsRepo';
+import { saveWikiAssetRecord } from '../../../../../../../server/db/repositories/wikiRepo';
+import { ObjectId } from 'mongodb';
+import { convertDocxToAssetPreview } from '../../../../../../../server/wiki/docxAssetPreview';
 
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
 const FEEDBACK_DOCUMENT_TYPE = process.env.FEEDBACK_DOCUMENT_TYPE || 'Feedback Document';
-
-const getUser = async () => {
-  const cookieStore = await cookies();
-  const token = cookieStore.get('nexus_auth_token')?.value;
-  if (!token) return null;
-  const { payload } = await jwtVerify(token, JWT_SECRET);
-  return {
-    userId: String(payload.id || payload.userId || ''),
-    displayName: String(payload.name || 'Unknown'),
-    email: payload.email ? String(payload.email) : undefined
-  };
-};
-
-function embedImagesAsBase64(markdown: string, mediaDir: string): string {
-  let processedMarkdown = markdown;
-  if (!fs.existsSync(mediaDir)) return markdown;
-  const mediaFiles = fs.readdirSync(mediaDir);
-  for (const fileName of mediaFiles) {
-    const filePath = path.join(mediaDir, fileName);
-    const stats = fs.statSync(filePath);
-    if (stats.isFile()) {
-      const ext = path.extname(fileName).toLowerCase().replace('.', '');
-      const mimeType = (ext === 'jpg' || ext === 'jpeg') ? 'image/jpeg' : `image/${ext}`;
-      const base64 = fs.readFileSync(filePath).toString('base64');
-      const dataUri = `data:${mimeType};base64,${base64}`;
-      const safeFileName = fileName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const mdPattern = new RegExp(`\\([^"\\)]*?\\/?media\\/${safeFileName}\\)`, 'g');
-      processedMarkdown = processedMarkdown.replace(mdPattern, `(${dataUri})`);
-      const htmlPattern = new RegExp(`src="[^"]*?\\/?media\\/${safeFileName}"`, 'g');
-      processedMarkdown = processedMarkdown.replace(htmlPattern, `src="${dataUri}"`);
-    }
-  }
-  return processedMarkdown;
-}
-
-async function convertDocxToMarkdown(buffer: Buffer): Promise<string> {
-  const tempId = Date.now();
-  const workDir = path.join(os.tmpdir(), `nexus_conv_${tempId}`);
-  const tempDocxPath = path.join(workDir, `input.docx`);
-  const tempMdPath = path.join(workDir, `output.md`);
-
-  try {
-    if (!fs.existsSync(workDir)) fs.mkdirSync(workDir, { recursive: true });
-    fs.writeFileSync(tempDocxPath, buffer);
-    execSync(
-      `pandoc -f docx -t gfm --wrap=none --extract-media="${workDir}" "${tempDocxPath}" -o "${tempMdPath}"`
-    );
-    let content = fs.readFileSync(tempMdPath, 'utf8');
-    const mediaDir = path.join(workDir, 'media');
-    content = embedImagesAsBase64(content, mediaDir);
-    content = content
-      .replace(/\{#.*?\}/g, '')
-      .replace(/<a id="[^"]+"><\/a>/g, '')
-      .replace(/([^\n])\n#(?!#)/g, '$1\n\n#')
-      .trim();
-    return content;
-  } finally {
-    try {
-      if (fs.existsSync(workDir)) {
-        fs.rmSync(workDir, { recursive: true, force: true });
-      }
-    } catch {}
-  }
-}
 
 export async function POST(request: Request, { params }: { params: Promise<{ reviewId: string; cycleId: string }> }) {
   try {
-    const user = await getUser();
-    if (!user?.userId) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
+    const auth = await requireStandardUser(request);
+    if (!auth.ok) return auth.response;
+    const user = {
+      userId: auth.principal.userId,
+      displayName: auth.principal.fullName || 'Unknown',
+      email: auth.principal.email
+    };
     const { reviewId, cycleId } = await params;
-    const review = (await fetchReviewById(reviewId)) as any;
+    const review = (await getReviewById(reviewId)) as any;
     if (!review) return NextResponse.json({ error: 'Review not found' }, { status: 404 });
     const cycle = (review.cycles || []).find((c) => c.cycleId === cycleId);
     if (!cycle) return NextResponse.json({ error: 'Cycle not found' }, { status: 404 });
-    const isReviewer = (cycle.reviewerUserIds || []).includes(user.userId);
+    const reviewerIds = Array.isArray(cycle.reviewerUserIds)
+      ? cycle.reviewerUserIds.map((id: unknown) => String(id))
+      : Array.isArray(cycle.reviewers)
+        ? cycle.reviewers.map((reviewer: any) => String(reviewer.userId || ''))
+        : [];
+    const isReviewer = reviewerIds.includes(user.userId);
     if (!isReviewer) return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     if (cycle.status === 'closed') return NextResponse.json({ error: 'Cycle is closed.' }, { status: 409 });
 
@@ -108,17 +53,21 @@ export async function POST(request: Request, { params }: { params: Promise<{ rev
     const buffer = Buffer.from(arrayBuffer) as unknown as Buffer;
     const base64Data = buffer.toString('base64');
     const ext = file.name.split('.').pop()?.toLowerCase() || '';
+    const assetId = new ObjectId().toHexString();
 
     let previewKind: 'pdf' | 'html' | 'images' | 'markdown' | 'none' | 'sheet' = 'none';
     let previewData = '';
     let previewStatus: 'ready' | 'pending' | 'failed' = 'ready';
-    let previewMeta: { sheetNames?: string[] } = {};
+    let previewMeta: { sheetNames?: string[]; imageCount?: number } = {};
+    let extractedImages: Array<{ id: string; filename: string; contentType: string; data: string }> = [];
 
     if (ext === 'docx') {
       try {
-        const markdown = await convertDocxToMarkdown(buffer);
+        const preview = await convertDocxToAssetPreview(buffer, assetId);
         previewKind = 'markdown';
-        previewData = markdown;
+        previewData = preview.markdown;
+        extractedImages = preview.images;
+        previewMeta = { ...previewMeta, imageCount: preview.images.length };
       } catch {
         previewStatus = 'failed';
       }
@@ -153,6 +102,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ rev
     }
 
     const assetData: any = {
+      _id: assetId,
       title: file.name,
       spaceId: formData.get('spaceId') || '',
       content: previewKind === 'markdown' ? previewData : '',
@@ -166,6 +116,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ rev
       documentTypeId: undefined,
       documentType: FEEDBACK_DOCUMENT_TYPE,
       artifactKind: 'feedback',
+      images: extractedImages,
       reviewContext: {
         reviewId,
         cycleId,
@@ -191,7 +142,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ rev
       }
     };
 
-    const result = await saveWikiAsset(assetData);
+    const result = await saveWikiAssetRecord(assetData);
     const insertedId = (result as any)?.insertedId;
     if (!insertedId) {
       return NextResponse.json({ error: 'Failed to save attachment' }, { status: 500 });

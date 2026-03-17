@@ -1,5 +1,13 @@
-import { ObjectId } from 'mongodb';
-import { getDb, fetchBundleAssignments } from './db';
+import { listAdmins } from '../server/db/repositories/adminsRepo';
+import { listBundleAssignments } from '../server/db/repositories/bundleAssignmentsRepo';
+import { getMilestoneByRef } from '../server/db/repositories/milestonesRepo';
+import { listUsersByAnyIds } from '../server/db/repositories/usersRepo';
+import {
+  findWorkItemByIdOrKey,
+  listRecentAssignedWorkItemsForBundle,
+  listWorkItemsByMilestoneRefs
+} from '../server/db/repositories/workItemsRepo';
+import { listWatcherUserIdsForScopeRecord } from '../server/db/repositories/watchersRepo';
 
 type Candidate = {
   userId: string;
@@ -8,10 +16,23 @@ type Candidate = {
   score: number;
 };
 
+const resolveUsers = async (userIds: string[]) => {
+  const ids = Array.from(new Set(userIds.filter(Boolean)));
+  if (!ids.length) return new Map<string, any>();
+  const users = await listUsersByAnyIds(ids);
+  const map = new Map<string, any>();
+  users.forEach((user: any) => {
+    [user?._id, user?.id, user?.userId]
+      .map((value) => (value ? String(value) : ''))
+      .filter(Boolean)
+      .forEach((key) => map.set(key, user));
+  });
+  return map;
+};
+
 const resolveAdminCandidates = async () => {
-  const db = await getDb();
-  const adminDocs = await db.collection('admins').find({}).toArray();
-  const adminIds = adminDocs.map((a: any) => String(a.userId || '')).filter(Boolean);
+  const admins = await listAdmins();
+  const adminIds = admins.map((admin: any) => String(admin.userId || '')).filter(Boolean);
   const adminUsers = await resolveUsers(adminIds);
   return adminIds.map((id) => {
     const user = adminUsers.get(id);
@@ -25,8 +46,8 @@ const resolveAdminCandidates = async () => {
 };
 
 const resolveBundleOwnerCandidates = async (bundleId: string) => {
-  const assignments = await fetchBundleAssignments({ bundleId, assignmentType: 'bundle_owner', active: true });
-  const ownerIds = assignments.map((a) => String(a.userId)).filter(Boolean);
+  const assignments = await listBundleAssignments({ bundleId, assignmentType: 'bundle_owner', active: true });
+  const ownerIds = assignments.map((assignment) => String(assignment.userId)).filter(Boolean);
   const ownerUsers = await resolveUsers(ownerIds);
   return ownerIds.map((id) => {
     const user = ownerUsers.get(id);
@@ -39,71 +60,46 @@ const resolveBundleOwnerCandidates = async (bundleId: string) => {
   });
 };
 
-const resolveUsers = async (userIds: string[]) => {
-  const db = await getDb();
-  const ids = Array.from(new Set(userIds.filter(Boolean)));
-  if (!ids.length) return new Map<string, any>();
-  const objectIds = ids.filter(ObjectId.isValid).map((id) => new ObjectId(id));
-  const users = await db.collection('users').find({
-    $or: [
-      { _id: { $in: objectIds } },
-      { id: { $in: ids } },
-      { userId: { $in: ids } }
-    ]
-  }).toArray();
-  const map = new Map<string, any>();
-  users.forEach((u: any) => {
-    const id = String(u._id || u.id || u.userId || '');
-    if (id) map.set(id, u);
-  });
-  return map;
-};
-
 const dedupeCandidates = (candidates: Candidate[]) => {
   const map = new Map<string, Candidate>();
-  candidates.forEach((c) => {
-    const key = c.userId;
+  candidates.forEach((candidate) => {
+    const key = candidate.userId;
     if (!map.has(key)) {
-      map.set(key, c);
-    } else {
-      const existing = map.get(key)!;
-      if (c.score > existing.score) {
-        map.set(key, { ...existing, ...c, score: c.score, reason: `${existing.reason}; ${c.reason}` });
-      }
+      map.set(key, candidate);
+      return;
+    }
+    const existing = map.get(key)!;
+    if (candidate.score > existing.score) {
+      map.set(key, { ...existing, ...candidate, score: candidate.score, reason: `${existing.reason}; ${candidate.reason}` });
     }
   });
   return Array.from(map.values()).sort((a, b) => b.score - a.score);
 };
 
+const buildMilestoneRefs = (milestone: any) => {
+  return [milestone?._id, milestone?.id, milestone?.name]
+    .map((value) => (value ? String(value) : ''))
+    .filter(Boolean);
+};
+
 export const suggestOwnersForWorkItem = async (workItemId: string) => {
-  const db = await getDb();
-  const item = ObjectId.isValid(workItemId)
-    ? await db.collection('workitems').findOne({ _id: new ObjectId(workItemId) })
-    : await db.collection('workitems').findOne({ $or: [{ id: workItemId }, { key: workItemId }] });
+  const item = await findWorkItemByIdOrKey(workItemId);
   if (!item) return { candidates: [] as Candidate[] };
 
   const bundleId = String(item.bundleId || '');
   if (!bundleId) return { candidates: [] as Candidate[] };
 
-  const bundleOwners = await fetchBundleAssignments({ bundleId, assignmentType: 'bundle_owner', active: true });
-  const ownerIds = bundleOwners.map((a) => String(a.userId)).filter(Boolean);
+  const bundleOwners = await listBundleAssignments({ bundleId, assignmentType: 'bundle_owner', active: true });
+  const ownerIds = bundleOwners.map((assignment) => String(assignment.userId)).filter(Boolean);
   const ownerUsers = await resolveUsers(ownerIds);
 
-  const watcherDocs = await db.collection('notification_watchers').find({
-    scopeType: 'BUNDLE',
-    scopeId: bundleId
-  }).toArray();
-  const watcherIds = watcherDocs.map((w: any) => String(w.userId || '')).filter(Boolean);
+  const watcherIds = await listWatcherUserIdsForScopeRecord('BUNDLE', bundleId);
   const watcherUsers = await resolveUsers(watcherIds);
 
-  const recentItems = await db.collection('workitems')
-    .find({ bundleId, type: item.type, assigneeUserIds: { $exists: true, $ne: [] } }, { projection: { assigneeUserIds: 1, updatedAt: 1 } })
-    .sort({ updatedAt: -1 })
-    .limit(30)
-    .toArray();
+  const recentItems = await listRecentAssignedWorkItemsForBundle(bundleId, String(item.type || ''));
   const recentCounts = new Map<string, number>();
-  recentItems.forEach((wi: any) => {
-    const ids = Array.isArray(wi.assigneeUserIds) ? wi.assigneeUserIds.map(String) : [];
+  recentItems.forEach((workItem: any) => {
+    const ids = Array.isArray(workItem.assigneeUserIds) ? workItem.assigneeUserIds.map(String) : [];
     ids.forEach((id: string) => {
       if (!id) return;
       recentCounts.set(id, (recentCounts.get(id) || 0) + 1);
@@ -146,49 +142,27 @@ export const suggestOwnersForWorkItem = async (workItemId: string) => {
 };
 
 export const suggestOwnersForMilestone = async (milestoneId: string) => {
-  const db = await getDb();
-  const milestone = ObjectId.isValid(milestoneId)
-    ? await db.collection('milestones').findOne({ _id: new ObjectId(milestoneId) })
-    : await db.collection('milestones').findOne({ $or: [{ id: milestoneId }, { name: milestoneId }] });
+  const milestone = await getMilestoneByRef(milestoneId);
   if (!milestone) return { candidates: [] as Candidate[] };
 
   const candidates: Candidate[] = [];
   const bundleIds = new Set<string>();
   if (milestone.bundleId) bundleIds.add(String(milestone.bundleId));
 
-  const milestoneKeyCandidates = new Set<string>();
-  if (milestone._id) milestoneKeyCandidates.add(String(milestone._id));
-  if (milestone.id) milestoneKeyCandidates.add(String(milestone.id));
-  if (milestone.name) milestoneKeyCandidates.add(String(milestone.name));
-  const candidateIds = Array.from(milestoneKeyCandidates);
-  const candidateObjectIds = candidateIds.filter(ObjectId.isValid).map((id) => new ObjectId(id));
-
-  const items = await db.collection('workitems').find({
-    $and: [
-      { $or: [{ isArchived: { $exists: false } }, { isArchived: false }] },
-      { $or: [
-        { milestoneIds: { $in: candidateIds } },
-        { milestoneIds: { $in: candidateObjectIds } },
-        { milestoneId: { $in: candidateIds } },
-        { milestoneId: { $in: candidateObjectIds } }
-      ] }
-    ]
-  }, { projection: { bundleId: 1, storyPoints: 1 } }).toArray();
-
+  const items = await listWorkItemsByMilestoneRefs(buildMilestoneRefs(milestone));
   const bundlePoints = new Map<string, number>();
   items.forEach((item: any) => {
-    const bId = item.bundleId ? String(item.bundleId) : '';
-    if (!bId) return;
-    bundleIds.add(bId);
+    const bundleId = item.bundleId ? String(item.bundleId) : '';
+    if (!bundleId) return;
+    bundleIds.add(bundleId);
     const points = typeof item.storyPoints === 'number' ? item.storyPoints : 0;
-    bundlePoints.set(bId, (bundlePoints.get(bId) || 0) + points);
+    bundlePoints.set(bundleId, (bundlePoints.get(bundleId) || 0) + points);
   });
 
   const bundlesByPoints = Array.from(bundleIds).sort((a, b) => (bundlePoints.get(b) || 0) - (bundlePoints.get(a) || 0));
-
   for (const bundleId of bundlesByPoints) {
-    const assignments = await fetchBundleAssignments({ bundleId, assignmentType: 'bundle_owner', active: true });
-    const ownerIds = assignments.map((a) => String(a.userId)).filter(Boolean);
+    const assignments = await listBundleAssignments({ bundleId, assignmentType: 'bundle_owner', active: true });
+    const ownerIds = assignments.map((assignment) => String(assignment.userId)).filter(Boolean);
     const ownerUsers = await resolveUsers(ownerIds);
     ownerIds.forEach((id) => {
       const user = ownerUsers.get(id);
@@ -202,9 +176,7 @@ export const suggestOwnersForMilestone = async (milestoneId: string) => {
     });
   }
 
-  const adminCandidates = await resolveAdminCandidates();
-  candidates.push(...adminCandidates);
-
+  candidates.push(...(await resolveAdminCandidates()));
   return { candidates: dedupeCandidates(candidates) };
 };
 
@@ -218,18 +190,12 @@ export const suggestOwnersForMilestoneScope = async ({
   bundleId?: string;
 }) => {
   const candidates: Candidate[] = [];
-  if (bundleId) {
-    candidates.push(...(await resolveBundleOwnerCandidates(bundleId)));
-  }
+  if (bundleId) candidates.push(...(await resolveBundleOwnerCandidates(bundleId)));
   candidates.push(...(await resolveAdminCandidates()));
   return { candidates: dedupeCandidates(candidates) };
 };
 
-export const suggestOwnersForGeneratedArtifact = async ({
-  bundleId
-}: {
-  bundleId: string;
-}) => {
+export const suggestOwnersForGeneratedArtifact = async ({ bundleId }: { bundleId: string }) => {
   const candidates: Candidate[] = [];
   candidates.push(...(await resolveBundleOwnerCandidates(bundleId)));
   candidates.push(...(await resolveAdminCandidates()));
@@ -237,23 +203,11 @@ export const suggestOwnersForGeneratedArtifact = async ({
 };
 
 export const resolveMilestoneBundleScope = async (milestoneId: string) => {
-  const db = await getDb();
-  const milestone = ObjectId.isValid(milestoneId)
-    ? await db.collection('milestones').findOne({ _id: new ObjectId(milestoneId) })
-    : await db.collection('milestones').findOne({ $or: [{ id: milestoneId }, { name: milestoneId }] });
+  const milestone = await getMilestoneByRef(milestoneId);
   if (!milestone) return [];
   const bundleIds = new Set<string>();
   if (milestone.bundleId) bundleIds.add(String(milestone.bundleId));
-  const ids = [String(milestone._id || ''), String(milestone.id || ''), String(milestone.name || '')].filter(Boolean);
-  const objectIds = ids.filter(ObjectId.isValid).map((id) => new ObjectId(id));
-  const items = await db.collection('workitems').find({
-    $or: [
-      { milestoneIds: { $in: ids } },
-      { milestoneIds: { $in: objectIds } },
-      { milestoneId: { $in: ids } },
-      { milestoneId: { $in: objectIds } }
-    ]
-  }, { projection: { bundleId: 1 } }).toArray();
+  const items = await listWorkItemsByMilestoneRefs(buildMilestoneRefs(milestone));
   items.forEach((item: any) => {
     if (item?.bundleId) bundleIds.add(String(item.bundleId));
   });

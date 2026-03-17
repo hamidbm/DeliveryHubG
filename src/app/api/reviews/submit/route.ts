@@ -1,28 +1,23 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import { jwtVerify } from 'jose';
-import { appendReviewCycle, fetchReview, fetchWikiAssetById, fetchWikiPageById, saveReview, emitReviewCycleEvent, fetchUsersByIds, createReviewWorkItem, fetchArchitectureDiagramById } from '../../../../services/db';
+import { getArchitectureDiagramById } from '../../../../server/db/repositories/architectureRepo';
+import { appendReviewCycle, emitReviewCycleEvent, createReviewWorkItem } from '../../../../services/reviewLifecycle';
+import { fetchUsersByIds } from '../../../../services/userDirectory';
 import { canSubmitForReview, canViewArchitectureDiagram } from '../../../../services/authz';
-
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
-
-const getUser = async () => {
-  const cookieStore = await cookies();
-  const token = cookieStore.get('nexus_auth_token')?.value;
-  if (!token) return null;
-  const { payload } = await jwtVerify(token, JWT_SECRET);
-  return {
-    userId: String(payload.id || payload.userId || ''),
-    displayName: String(payload.name || 'Unknown'),
-    email: payload.email ? String(payload.email) : undefined,
-    role: payload.role ? String(payload.role) : undefined
-  };
-};
+import { requireUser } from '../../../../shared/auth/guards';
+import { getReviewByResource, saveReviewRecord } from '../../../../server/db/repositories/reviewsRepo';
+import { getWikiAssetById, getWikiPageById } from '../../../../server/db/repositories/wikiRepo';
 
 export async function POST(request: Request) {
   try {
-    const authUser = await getUser();
-    if (!authUser?.userId) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
+    const auth = await requireUser(request);
+    if (!auth.ok) return auth.response;
+    const authUser = {
+      userId: auth.principal.userId,
+      displayName: auth.principal.fullName || 'Unknown',
+      email: auth.principal.email,
+      role: auth.principal.role || undefined,
+      accountType: auth.principal.accountType
+    };
     if (!canSubmitForReview(authUser)) return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     const actor = {
       userId: authUser.userId,
@@ -48,9 +43,9 @@ export async function POST(request: Request) {
 
     let artifact: any = null;
     if (resourceType === 'wiki.page') {
-      artifact = await fetchWikiPageById(resourceId);
+      artifact = await getWikiPageById(resourceId);
     } else if (resourceType === 'wiki.asset') {
-      artifact = await fetchWikiAssetById(resourceId);
+      artifact = await getWikiAssetById(resourceId);
       if (artifact && (artifact as any).artifactKind === 'feedback') {
         return NextResponse.json({ error: 'Feedback documents cannot be submitted for review.' }, { status: 400 });
       }
@@ -62,7 +57,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Artifact must be published before review.' }, { status: 400 });
       }
     } else if (resourceType === 'architecture_diagram') {
-      artifact = await fetchArchitectureDiagramById(resourceId);
+      artifact = await getArchitectureDiagramById(resourceId);
       if (!artifact) {
         return NextResponse.json({ error: 'Diagram not found.' }, { status: 404 });
       }
@@ -75,7 +70,7 @@ export async function POST(request: Request) {
     const resolvedBundleId = bundleId || artifact?.bundleId;
     const resolvedApplicationId = applicationId || artifact?.applicationId;
 
-    let review = await fetchReview(resourceType, resourceId);
+    let review = await getReviewByResource(resourceType, resourceId);
     if (!review) {
       review = {
         resource: { type: resourceType, id: resourceId, title: resolvedTitle, bundleId: resolvedBundleId, applicationId: resolvedApplicationId },
@@ -86,7 +81,7 @@ export async function POST(request: Request) {
         cycles: [],
         resourceVersion: artifact?.updatedAt ? { resourceUpdatedAtAtSubmission: String(artifact.updatedAt) } : undefined
       };
-      await saveReview(review);
+      await saveReviewRecord(review);
     } else {
       review.resource = { ...review.resource, title: resolvedTitle, bundleId: resolvedBundleId, applicationId: resolvedApplicationId };
       const currentCycle = review.currentCycleId

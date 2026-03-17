@@ -1,10 +1,20 @@
 import { NextResponse } from 'next/server';
-import { ObjectId } from 'mongodb';
-import { computeMilestoneRollups, getDb, emitEvent } from '../../../../services/db';
+import { emitEvent } from '../../../../shared/events/emitEvent';
+import { computeMilestoneRollups } from '../../../../services/rollupAnalytics';
 import { evaluateMilestoneReadiness } from '../../../../services/milestoneGovernance';
 import { createVisibilityContext, getAuthUserFromCookies } from '../../../../services/visibility';
 import { getEffectivePolicyForMilestone } from '../../../../services/policy';
 import { snapshotCacheStats, diffCacheStats, summarizeCacheStats } from '../../../../services/perfStats';
+import { listBundlesByRefs } from '../../../../server/db/repositories/bundlesRepo';
+import {
+  listMilestoneRecordsByRefs,
+  listMilestones,
+  listMilestonesByBundleIds
+} from '../../../../server/db/repositories/milestonesRepo';
+import {
+  listActiveWorkItemsForScope,
+  listBlockingWorkItemsForTargetRefsAndExcludedBundles
+} from '../../../../server/db/repositories/workItemsRepo';
 
 const parseList = (value: string | null) =>
   value ? value.split(',').map((v) => v.trim()).filter(Boolean) : [];
@@ -39,22 +49,13 @@ export async function GET(request: Request) {
     : [];
   const limit = Math.max(1, Number(searchParams.get('limit') || 10));
 
-  const db = await getDb();
-
   let milestones: any[] = [];
   if (milestoneIds.length) {
-    const objectIds = milestoneIds.filter(ObjectId.isValid).map((id) => new ObjectId(id));
-    milestones = await db.collection('milestones').find({
-      $or: [
-        { _id: { $in: objectIds } },
-        { id: { $in: milestoneIds } },
-        { name: { $in: milestoneIds } }
-      ]
-    }).toArray();
+    milestones = await listMilestoneRecordsByRefs(milestoneIds);
   } else if (bundleIds.length) {
-    milestones = await db.collection('milestones').find({ bundleId: { $in: bundleIds } }).toArray();
+    milestones = await listMilestonesByBundleIds(bundleIds);
   } else {
-    milestones = await db.collection('milestones').find({}).toArray();
+    milestones = await listMilestones({});
   }
 
   if (milestones.length) {
@@ -89,27 +90,15 @@ export async function GET(request: Request) {
   rollups.forEach((r: any) => rollupMap.set(String(r.milestoneId), r));
 
   const bundles = Array.from(new Set(milestones.map((m) => String(m.bundleId || '')).filter(Boolean)));
-  const bundleDocs = bundles.length
-    ? await db.collection('bundles').find({ _id: { $in: bundles.filter(ObjectId.isValid).map((id) => new ObjectId(id)) } }).toArray()
-    : [];
+  const bundleDocs = bundles.length ? await listBundlesByRefs(bundles) : [];
   const bundleNameMap = new Map<string, string>();
   bundleDocs.forEach((b: any) => bundleNameMap.set(String(b._id || b.id || ''), String(b.name || b.title || '')));
 
-  const itemQuery: any = { $or: [{ isArchived: { $exists: false } }, { isArchived: false }] };
-  if (milestoneIds.length) {
-    const objectIds = milestoneIds.filter(ObjectId.isValid).map((id) => new ObjectId(id));
-    itemQuery.$and = [
-      { $or: [{ milestoneIds: { $in: milestoneIds } }, { milestoneIds: { $in: objectIds } }, { milestoneId: { $in: milestoneIds } }, { milestoneId: { $in: objectIds } }] }
-    ];
-  } else if (bundleIds.length) {
-    itemQuery.bundleId = { $in: bundleIds };
-  } else if (bundles.length) {
-    itemQuery.bundleId = { $in: bundles };
-  }
-
-  let workItems = await db.collection('workitems')
-    .find(itemQuery, { projection: { _id: 1, id: 1, key: 1, title: 1, status: 1, bundleId: 1, milestoneIds: 1, milestoneId: 1, links: 1, type: 1, risk: 1 } })
-    .toArray();
+  let workItems = await listActiveWorkItemsForScope({
+    bundleIds: milestoneIds.length ? undefined : (bundleIds.length ? bundleIds : bundles),
+    milestoneRefs: milestoneIds.length ? milestoneIds : undefined,
+    projection: { _id: 1, id: 1, key: 1, title: 1, status: 1, bundleId: 1, milestoneIds: 1, milestoneId: 1, links: 1, type: 1, risk: 1 }
+  });
   workItems = await visibility.filterVisibleWorkItems(workItems as any[]);
 
   const scopedItemIds = new Set<string>();
@@ -121,18 +110,11 @@ export async function GET(request: Request) {
 
   let externalBlockers: any[] = [];
   if (scopedItemIds.size && (bundleIds.length || milestoneIds.length)) {
-    const candidates = Array.from(scopedItemIds);
-    const objectIds = candidates.filter(ObjectId.isValid).map((id) => new ObjectId(id));
-    const blockerQuery: any = {
-      'links.type': 'BLOCKS',
-      'links.targetId': { $in: [...candidates, ...objectIds] }
-    };
-    if (bundleIds.length) {
-      blockerQuery.bundleId = { $nin: bundleIds };
-    }
-    externalBlockers = await db.collection('workitems')
-      .find(blockerQuery, { projection: { _id: 1, id: 1, key: 1, title: 1, status: 1, bundleId: 1, milestoneIds: 1, milestoneId: 1, links: 1 } })
-      .toArray();
+    externalBlockers = await listBlockingWorkItemsForTargetRefsAndExcludedBundles({
+      targetRefs: Array.from(scopedItemIds),
+      excludedBundleIds: bundleIds.length ? bundleIds : undefined,
+      projection: { _id: 1, id: 1, key: 1, title: 1, status: 1, bundleId: 1, milestoneIds: 1, milestoneId: 1, links: 1 }
+    });
     externalBlockers = await Promise.all(externalBlockers.map(async (item) => await visibility.redactWorkItem(item)));
   }
 

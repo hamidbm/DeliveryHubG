@@ -1,11 +1,14 @@
 import { NextResponse } from 'next/server';
-import { getDb } from '../../../../../services/db';
-import { ObjectId } from 'mongodb';
 import { evaluateMilestoneReadiness } from '../../../../../services/milestoneGovernance';
-import { computeMilestoneRollup } from '../../../../../services/db';
-import { deriveWorkItemLinkSummary } from '../../../../../services/db';
+import { computeMilestoneRollup } from '../../../../../services/rollupAnalytics';
+import { deriveWorkItemLinkSummary } from '../../../../../services/workItemsService';
 import { createVisibilityContext, getAuthUserFromCookies } from '../../../../../services/visibility';
 import { getEffectivePolicyForMilestone } from '../../../../../services/policy';
+import { getMilestoneByRef } from '../../../../../server/db/repositories/milestonesRepo';
+import {
+  listBlockingWorkItemRecordsForTargetRefs,
+  listWorkItemRecordsByMilestoneRefs
+} from '../../../../../server/db/repositories/workItemsRepo';
 
 const buildMilestoneKey = (m: any) => String(m._id || m.id || m.name);
 
@@ -18,23 +21,8 @@ const getMilestoneCandidates = (m: any) => {
 };
 
 const computeLists = async (milestone: any, visibility: ReturnType<typeof createVisibilityContext>) => {
-  const db = await getDb();
   const candidates = getMilestoneCandidates(milestone);
-  const objectIds = candidates.filter((id) => ObjectId.isValid(id)).map((id) => new ObjectId(id));
-
-  const query = {
-    $and: [
-      { $or: [{ isArchived: { $exists: false } }, { isArchived: false }] },
-      { $or: [
-        { milestoneIds: { $in: candidates } },
-        { milestoneIds: { $in: objectIds } },
-        { milestoneId: { $in: candidates } },
-        { milestoneId: { $in: objectIds } }
-      ] }
-    ]
-  };
-
-  const items = await db.collection('workitems').find(query).toArray();
+  const items = await listWorkItemRecordsByMilestoneRefs(candidates);
   const visibleItems = await visibility.filterVisibleWorkItems(items as any[]);
   const enriched = await deriveWorkItemLinkSummary(visibleItems as any[]);
   await visibility.redactWorkItemLinks(enriched as any[]);
@@ -107,11 +95,7 @@ const computeLists = async (milestone: any, visibility: ReturnType<typeof create
     .slice(0, 10);
 
   const crossMilestoneBlocks: any[] = [];
-  const blockerCursor = db.collection('workitems').find({
-    'links.type': 'BLOCKS',
-    'links.targetId': { $in: candidates }
-  }, { projection: { _id: 1, id: 1, key: 1, milestoneIds: 1, milestoneId: 1, links: 1, bundleId: 1, title: 1, status: 1 } });
-  const blockers = await blockerCursor.toArray();
+  const blockers = await listBlockingWorkItemRecordsForTargetRefs(candidates);
   for (const blocker of blockers) {
     const canViewBlocker = await visibility.canViewBundle(String(blocker.bundleId || ''));
     if (!canViewBlocker) continue;
@@ -144,10 +128,7 @@ export async function GET(request: Request) {
   const bundleId = searchParams.get('bundleId');
   const applicationId = searchParams.get('applicationId');
 
-  const db = await getDb();
-  const milestone = ObjectId.isValid(milestoneId)
-    ? await db.collection('milestones').findOne({ _id: new ObjectId(milestoneId) })
-    : await db.collection('milestones').findOne({ $or: [{ id: milestoneId }, { name: milestoneId }] });
+  const milestone = await getMilestoneByRef(milestoneId);
 
   if (!milestone) return NextResponse.json({ error: 'Not found' }, { status: 404 });
   if (!(await visibility.canViewBundle(String(milestone.bundleId || '')))) {

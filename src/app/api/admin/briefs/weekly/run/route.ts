@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
-import { ObjectId } from 'mongodb';
-import { getDb, emitEvent } from '../../../../../../services/db';
+import { emitEvent } from '../../../../../../shared/events/emitEvent';
 import { generateBundleBrief, generateMilestoneBrief, generateProgramBrief, resolveWeekKey, upsertWeeklyBrief, queueWeeklyBriefDigest } from '../../../../../../services/weeklyBrief';
+import { listBundleRefs } from '../../../../../../server/db/repositories/bundlesRepo';
+import { listMilestonesByStatuses } from '../../../../../../server/db/repositories/milestonesRepo';
 
 const resolveFlag = (value: string | null, defaultValue = false) => {
   if (value === null) return defaultValue;
@@ -22,10 +23,9 @@ export async function POST(request: Request) {
   const force = resolveFlag(searchParams.get('force'), false);
   const includeMilestones = resolveFlag(searchParams.get('includeMilestones'), false);
 
-  const db = await getDb();
-  const bundles = await db.collection('bundles').find({}).toArray();
+  const bundles = await listBundleRefs();
   const milestones = includeMilestones
-    ? await db.collection('milestones').find({ status: { $in: ['COMMITTED', 'IN_PROGRESS'] } }).toArray()
+    ? await listMilestonesByStatuses(['COMMITTED', 'IN_PROGRESS'])
     : [];
 
   const counts = { program: 0, bundles: 0, milestones: 0 };

@@ -1,32 +1,51 @@
 
 import { NextResponse } from 'next/server';
-import { getDb, computeMilestoneRollup, computeSprintRollups, emitEvent } from '../../../../services/db';
-import { ObjectId } from 'mongodb';
-import { jwtVerify } from 'jose';
-import { cookies } from 'next/headers';
+import { emitEvent } from '../../../../shared/events/emitEvent';
+import { computeMilestoneRollup, computeSprintRollups } from '../../../../services/rollupAnalytics';
 import { evaluateCapacity } from '../../../../services/milestoneGovernance';
 import { createNotificationsForEvent } from '../../../../services/notifications';
 import { createDecision } from '../../../../services/decisionLog';
 import { canOverrideCapacity, canCreateBlocksDependency, isAdminOrCmo, canEditRiskSeverity } from '../../../../services/authz';
 import { invalidateWorkItemScopesFromCandidates } from '../../../../services/workItemCache';
+import { requireStandardUser } from '../../../../shared/auth/guards';
+import type { Principal } from '../../../../shared/auth/roles';
+import { getMilestoneByRef, getSprintByRef } from '../../../../server/db/repositories/milestonesRepo';
+import {
+  bulkPatchWorkItemsByIds,
+  listWorkItemsByAnyRefs,
+  listWorkItemsByIds
+} from '../../../../server/db/repositories/workItemsRepo';
 
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
+const buildActor = (principal: Principal) => ({
+  userId: principal.userId,
+  displayName: principal.fullName || principal.email || 'Unknown',
+  email: principal.email,
+  role: principal.role || undefined
+});
+
+const isPrivilegedRole = (role?: string | null) =>
+  new Set([
+    'CMO Architect',
+    'SVP Architect',
+    'SVP PM',
+    'SVP Engineer',
+    'Director',
+    'VP',
+    'CIO'
+  ]).has(String(role || ''));
 
 export async function PATCH(request: Request) {
   try {
-    const testToken = process.env.NODE_ENV === 'test' ? (globalThis as any).__testToken : null;
-    const cookieStore = testToken ? null : await cookies();
-    const token = testToken || cookieStore?.get('nexus_auth_token')?.value;
-    if (!token) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
-    
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const auth = await requireStandardUser(request);
+    if (!auth.ok) return auth.response;
     const { ids, updates, allowOverCapacity, overrideReason } = await request.json();
     const allowOver = !!allowOverCapacity;
     const overrideNote = overrideReason ? String(overrideReason) : '';
     const authUser = {
-      userId: String((payload as any).id || (payload as any).userId || ''),
-      role: String((payload as any).role || ''),
-      team: String((payload as any).team || '')
+      userId: auth.principal.userId,
+      role: String(auth.principal.role || ''),
+      team: String(auth.principal.team || ''),
+      accountType: auth.principal.accountType
     };
 
     if (allowOver && !(await canOverrideCapacity(authUser))) {
@@ -37,31 +56,20 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: 'No IDs provided' }, { status: 400 });
     }
 
-    const db = await getDb();
     const now = new Date().toISOString();
-    const userName = payload.name as string || 'System';
+    const userName = auth.principal.fullName || auth.principal.email || 'System';
     const warnings: Array<{ code: string; message: string; details?: any }> = [];
     const capacityOverrides: Array<{ milestone: any; item: any; details: any }> = [];
     const sprintCapacityOverrides: Array<{ sprint: any; item: any; details: any }> = [];
     const directScopeChanges: Array<{ milestone: any; action: string; count: number }> = [];
 
     if (updates && (updates.assignedTo !== undefined || updates.priority !== undefined)) {
-      const userRole = String((payload as any).role || '');
-      const privilegedRoles = new Set([
-        'CMO Architect',
-        'SVP Architect',
-        'SVP PM',
-        'SVP Engineer',
-        'Director',
-        'VP',
-        'CIO'
-      ]);
-      if (!privilegedRoles.has(userRole)) {
+      if (!isPrivilegedRole(auth.principal.role)) {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
       }
     }
 
-    const itemsForChecks = await db.collection('workitems').find({ _id: { $in: ids.map((id: string) => new ObjectId(id)) } }).toArray();
+    const itemsForChecks = await listWorkItemsByIds(ids.map(String));
 
     if (updates?.risk?.severity) {
       for (const item of itemsForChecks) {
@@ -76,9 +84,7 @@ export async function PATCH(request: Request) {
       if (milestoneIds.length > 0) {
         const items = itemsForChecks;
         for (const milestoneId of milestoneIds) {
-          const milestone = ObjectId.isValid(milestoneId)
-            ? await db.collection('milestones').findOne({ _id: new ObjectId(milestoneId) })
-            : await db.collection('milestones').findOne({ $or: [{ id: milestoneId }, { name: milestoneId }] });
+          const milestone = await getMilestoneByRef(milestoneId);
           if (!milestone) continue;
 
           const status = String(milestone.status || '').toUpperCase();
@@ -180,16 +186,14 @@ export async function PATCH(request: Request) {
 
     if (updates?.sprintId !== undefined && updates?.sprintId !== null) {
       const sprintId = String(updates.sprintId);
-      const sprint = ObjectId.isValid(sprintId)
-        ? await db.collection('workitems_sprints').findOne({ _id: new ObjectId(sprintId) })
-        : await db.collection('workitems_sprints').findOne({ $or: [{ id: sprintId }, { name: sprintId }] });
+      const sprint = await getSprintByRef(sprintId);
       if (!sprint) {
         return NextResponse.json({ error: 'SPRINT_NOT_FOUND' }, { status: 404 });
       }
 
       const sprintStatus = String(sprint.status || '').toUpperCase();
       if (sprintStatus === 'ACTIVE') {
-        const items = await db.collection('workitems').find({ _id: { $in: ids.map((id: string) => new ObjectId(id)) } }).toArray();
+        const items = itemsForChecks;
         let incomingPointsTotal = 0;
         let existingPointsAssigned = 0;
         let missingEstimate = false;
@@ -282,13 +286,11 @@ export async function PATCH(request: Request) {
       updates.assignedAt = now;
     }
 
-    const result = await db.collection('workitems').updateMany(
-      { _id: { $in: ids.map(id => new ObjectId(id)) } },
-      { 
-        $set: { ...updates, updatedAt: now, updatedBy: userName },
-        $push: { activity: auditEntry }
-      } as any
-    );
+    const result = await bulkPatchWorkItemsByIds({
+      ids: ids.map(String),
+      set: { ...updates, updatedAt: now, updatedBy: userName },
+      activity: auditEntry
+    });
     await invalidateWorkItemScopesFromCandidates(
       itemsForChecks.map((item: any) => ({
         bundleId: item?.bundleId || updates?.bundleId,
@@ -298,12 +300,7 @@ export async function PATCH(request: Request) {
     );
 
     if (directScopeChanges.length) {
-      const actor = {
-        userId: String((payload as any).id || (payload as any).userId || (payload as any).email || ''),
-        displayName: String((payload as any).name || (payload as any).displayName || ''),
-        email: (payload as any).email ? String((payload as any).email) : undefined,
-        role: (payload as any).role ? String((payload as any).role) : undefined
-      };
+      const actor = buildActor(auth.principal);
       const seen = new Set<string>();
       await Promise.all(directScopeChanges.map(async (entry) => {
         const milestoneKey = String(entry.milestone._id || entry.milestone.id || entry.milestone.name);
@@ -327,12 +324,7 @@ export async function PATCH(request: Request) {
     }
 
     if (capacityOverrides.length) {
-      const actor = {
-        userId: String((payload as any).id || (payload as any).userId || (payload as any).email || ''),
-        displayName: String((payload as any).name || (payload as any).displayName || ''),
-        email: (payload as any).email ? String((payload as any).email) : undefined,
-        role: (payload as any).role ? String((payload as any).role) : undefined
-      };
+      const actor = buildActor(auth.principal);
       const seen = new Set<string>();
       await Promise.all(capacityOverrides.map(async (entry) => {
         try {
@@ -370,12 +362,7 @@ export async function PATCH(request: Request) {
     }
 
     if (sprintCapacityOverrides.length) {
-      const actor = {
-        userId: String((payload as any).id || (payload as any).userId || (payload as any).email || ''),
-        displayName: String((payload as any).name || (payload as any).displayName || ''),
-        email: (payload as any).email ? String((payload as any).email) : undefined,
-        role: (payload as any).role ? String((payload as any).role) : undefined
-      };
+      const actor = buildActor(auth.principal);
       const seen = new Set<string>();
       await Promise.all(sprintCapacityOverrides.map(async (entry) => {
         try {

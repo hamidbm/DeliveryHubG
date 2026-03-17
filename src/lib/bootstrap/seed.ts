@@ -4,7 +4,7 @@ import path from 'path';
 import { EJSON } from 'bson';
 import { ObjectId } from 'mongodb';
 import bcrypt from 'bcryptjs';
-import { getDb } from '../../services/db';
+import { getDb } from '../../shared/db/client';
 import { createDeliveryPlan, previewDeliveryPlan } from '../../services/deliveryPlanGenerator';
 import { DeliveryPlanInput } from '../../types';
 import { DemoScenario } from '../../types/demoScenario';

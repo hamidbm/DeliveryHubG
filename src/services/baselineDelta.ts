@@ -1,7 +1,10 @@
 import { ObjectId } from 'mongodb';
-import { getDb, emitEvent } from './db';
+import { emitEvent } from '../shared/events/emitEvent';
 import { getEffectivePolicyForMilestone } from './policy';
 import { createVisibilityContext } from './visibility';
+import { getMilestoneByRef } from '../server/db/repositories/milestonesRepo';
+import { getMilestoneBaselineRecord, insertMilestoneBaselineRecord } from '../server/db/repositories/commitmentRepo';
+import { listWorkItemScopeRecordsByMilestoneRefs, listWorkItemsByAnyRefs } from '../server/db/repositories/workItemsRepo';
 
 type BaselineItem = {
   workItemId: string;
@@ -41,13 +44,6 @@ export type BaselineDelta = {
   topChanges: Array<{ type: 'ADDED' | 'REMOVED' | 'ESTIMATE_CHANGED'; key?: string; title?: string; before?: number; after?: number }>;
 };
 
-const buildMilestoneQuery = (id: string) => {
-  if (ObjectId.isValid(id)) {
-    return { $or: [{ _id: new ObjectId(id) }, { id }, { name: id }] };
-  }
-  return { $or: [{ id }, { name: id }] };
-};
-
 const getMilestoneIdCandidates = (milestone: any) => {
   const candidates = new Set<string>();
   if (milestone?._id) candidates.add(String(milestone._id));
@@ -59,29 +55,17 @@ const getMilestoneIdCandidates = (milestone: any) => {
 const isOpenStatus = (status?: string) => String(status || '').toUpperCase() !== 'DONE';
 
 const fetchScopeItems = async (milestoneId: string) => {
-  const db = await getDb();
-  const milestone = await db.collection('milestones').findOne(buildMilestoneQuery(milestoneId));
+  const milestone = await getMilestoneByRef(milestoneId);
   if (!milestone) return { milestone: null, items: [] };
   const candidates = getMilestoneIdCandidates(milestone);
-  const objectIds = candidates.filter(ObjectId.isValid).map((id) => new ObjectId(id));
-  const query: any = {
-    $and: [
-      { $or: [{ isArchived: { $exists: false } }, { isArchived: false }] },
-      { $or: [{ milestoneIds: { $in: [...candidates, ...objectIds] } }, { milestoneId: { $in: [...candidates, ...objectIds] } }] }
-    ]
-  };
-  const items = await db.collection('workitems')
-    .find(query, { projection: { _id: 1, id: 1, key: 1, title: 1, storyPoints: 1, status: 1, bundleId: 1 } })
-    .toArray();
+  const items = await listWorkItemScopeRecordsByMilestoneRefs(candidates);
   return { milestone, items };
 };
 
 export const ensureMilestoneBaseline = async (milestoneId: string, actorId: string) => {
   const id = String(milestoneId || '');
   if (!id) return null;
-  const db = await getDb();
-  await db.collection('milestone_baselines').createIndex({ milestoneId: 1 }, { unique: true });
-  const existing = await db.collection('milestone_baselines').findOne({ milestoneId: id });
+  const existing = await getMilestoneBaselineRecord(id);
   if (existing) return existing as unknown as MilestoneBaseline;
 
   const { milestone, items } = await fetchScopeItems(id);
@@ -121,7 +105,7 @@ export const ensureMilestoneBaseline = async (milestoneId: string, actorId: stri
     }
   };
 
-  await db.collection('milestone_baselines').insertOne(baseline);
+  await insertMilestoneBaselineRecord(baseline);
 
   try {
     await emitEvent({
@@ -137,8 +121,7 @@ export const ensureMilestoneBaseline = async (milestoneId: string, actorId: stri
 };
 
 export const getMilestoneBaseline = async (milestoneId: string) => {
-  const db = await getDb();
-  const found = await db.collection('milestone_baselines').findOne({ milestoneId: String(milestoneId || '') });
+  const found = await getMilestoneBaselineRecord(String(milestoneId || ''));
   return (found as unknown as MilestoneBaseline) || null;
 };
 
@@ -150,8 +133,7 @@ type DeltaOptions = {
 export const computeMilestoneBaselineDelta = async (milestoneId: string, options: DeltaOptions = {}): Promise<BaselineDelta | null> => {
   const id = String(milestoneId || '');
   if (!id) return null;
-  const db = await getDb();
-  const baseline = (await db.collection('milestone_baselines').findOne({ milestoneId: id })) as unknown as MilestoneBaseline | null;
+  const baseline = (await getMilestoneBaselineRecord(id)) as unknown as MilestoneBaseline | null;
   if (!baseline) return null;
 
   const { items: currentItems } = await fetchScopeItems(id);
@@ -162,10 +144,7 @@ export const computeMilestoneBaselineDelta = async (milestoneId: string, options
     visibleCurrent = await options.visibilityContext.filterVisibleWorkItems(currentItems as any[]);
     const baselineIds = baseline.items.map((i) => i.workItemId).filter(Boolean);
     if (baselineIds.length) {
-      const objectIds = baselineIds.filter(ObjectId.isValid).map((v) => new ObjectId(v));
-      const baselineDocs = await db.collection('workitems')
-        .find({ $or: [{ _id: { $in: objectIds } }, { id: { $in: baselineIds } }, { key: { $in: baselineIds } }] })
-        .toArray();
+      const baselineDocs = await listWorkItemsByAnyRefs(baselineIds);
       const visibleBaselineDocs = await options.visibilityContext.filterVisibleWorkItems(baselineDocs as any[]);
       const allowedIds = new Set<string>();
       visibleBaselineDocs.forEach((doc: any) => {

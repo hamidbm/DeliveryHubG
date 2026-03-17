@@ -1,6 +1,8 @@
 
 import { NextResponse } from 'next/server';
-import { checkAndIncrementAiRateLimit, fetchSystemSettings, fetchWorkItemById, saveAiAuditLog } from '../../../../services/db';
+import { fetchSystemSettings } from '../../../../services/aiSettings';
+import { checkAndIncrementAiRateLimit, saveAiAuditLog } from '../../../../services/aiPersistence';
+import { fetchWorkItemById } from '../../../../services/workItemsService';
 import { getRateLimitPerHour, getRequestIdentity, getRetentionDays } from '../../../../services/aiPolicy';
 import { executeAiTextTask } from '../../../../services/aiRouting';
 

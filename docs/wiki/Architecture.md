@@ -17,7 +17,10 @@ DeliveryHub follows a simple BFF architecture with Next.js App Router and a Mong
 
 ## Data Access
 - MongoDB connection is centralized in `src/lib/mongodb.ts`
-- Repository-style functions live in `src/services/db.ts`
+- Domain repositories live under `src/server/db/repositories`
+- Shared DB access lives under `src/shared/db`
+- Centralized event emission lives under `src/shared/events`
+- `src/services/db.ts` is legacy compatibility infrastructure, not the preferred repository layer
 
 ## Runtime
 - Development uses `npm run dev`

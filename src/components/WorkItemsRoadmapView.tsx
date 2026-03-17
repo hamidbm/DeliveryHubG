@@ -566,12 +566,37 @@ const WorkItemsRoadmapView: React.FC<WorkItemsRoadmapViewProps> = ({
     return map;
   }, [roadmapIntel]);
 
-  const roadmapViewModel = useMemo(() => transformRawRoadmapData({
-    milestones,
-    items,
-    roadmapIntel,
-    sprintCache
-  }), [milestones, items, roadmapIntel, sprintCache]);
+  const roadmapViewModel = useMemo(() => {
+    const base = transformRawRoadmapData({
+      milestones,
+      items,
+      roadmapIntel,
+      sprintCache
+    });
+    const bundleLabelById = new Map<string, string>();
+    bundles.forEach((bundle) => {
+      const label = String(bundle.name || bundle.key || bundle.id || bundle._id || '');
+      if (!label) return;
+      const ids = [bundle._id, bundle.id, bundle.key].filter(Boolean).map((value) => String(value));
+      ids.forEach((id) => bundleLabelById.set(id, label));
+    });
+    const appLabelById = new Map<string, string>();
+    applications.forEach((app) => {
+      const label = String(app.name || app.aid || app.id || app._id || '');
+      if (!label) return;
+      const ids = [app._id, app.id, app.aid].filter(Boolean).map((value) => String(value));
+      ids.forEach((id) => appLabelById.set(id, label));
+    });
+
+    return {
+      ...base,
+      milestones: base.milestones.map((milestone) => ({
+        ...milestone,
+        bundleLabel: milestone.bundleId ? (bundleLabelById.get(String(milestone.bundleId)) || milestone.bundleId) : undefined,
+        applicationLabel: milestone.applicationId ? (appLabelById.get(String(milestone.applicationId)) || milestone.applicationId) : undefined
+      }))
+    };
+  }, [milestones, items, roadmapIntel, sprintCache, bundles, applications]);
 
   const getBurnupTrend = (milestoneId: string) => {
     const burn = burnupCache[milestoneId];

@@ -1403,6 +1403,12 @@ export interface WikiAsset {
     reviewedResourceId: string;
     reviewedDocumentType?: string;
   };
+  images?: Array<{
+    id: string;
+    filename: string;
+    contentType: string;
+    data: string;
+  }>;
   file: {
     originalName: string;
     ext: string;
@@ -1422,6 +1428,7 @@ export interface WikiAsset {
       pageCount?: number;
       slideCount?: number;
       sheetNames?: string[];
+      imageCount?: number;
     };
     error?: string | null;
   };

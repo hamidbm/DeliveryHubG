@@ -1,5 +1,9 @@
 import { WorkItemStatus } from '../types';
-import { deriveWorkItemLinkSummary, getDb } from './db';
+import {
+  deriveWorkItemLinkSummary,
+  listWorkItemsForScope
+} from '../server/db/repositories/workItemsRepo';
+import { listMilestonesForScope } from '../server/db/repositories/milestonesRepo';
 
 export type WorkItemScope = {
   scopeType: 'BUNDLE' | 'APPLICATION' | 'GLOBAL';
@@ -95,47 +99,13 @@ const pruneCacheIfNeeded = () => {
 };
 
 const loadWorkItemsForTreeFromDb = async (scope: WorkItemScope) => {
-  const db = await getDb();
-  const query: any = {};
-  if (scope.scopeType === 'BUNDLE' && scope.scopeId !== 'all') {
-    query.bundleId = scope.scopeId;
-  }
-  if (scope.scopeType === 'APPLICATION' && scope.scopeId !== 'all') {
-    query.applicationId = scope.scopeId;
-  }
-
-  const projection = {
-    _id: 1,
-    id: 1,
-    key: 1,
-    title: 1,
-    type: 1,
-    status: 1,
-    priority: 1,
-    assignedTo: 1,
-    assigneeUserIds: 1,
-    isFlagged: 1,
-    isBlocked: 1,
-    isArchived: 1,
-    links: 1,
-    parentId: 1,
-    bundleId: 1,
-    applicationId: 1,
-    milestoneId: 1,
-    milestoneIds: 1,
-    sprintId: 1,
-    rank: 1,
-    createdAt: 1,
-    updatedAt: 1
+  const scopeFilters = {
+    bundleId: scope.scopeType === 'BUNDLE' ? scope.scopeId : null,
+    applicationId: scope.scopeType === 'APPLICATION' ? scope.scopeId : null
   };
-
-  const rawItems = await db.collection('workitems').find(query, { projection }).sort({ rank: 1, createdAt: -1 }).toArray();
+  const rawItems = await listWorkItemsForScope(scopeFilters);
   const items = await deriveWorkItemLinkSummary(rawItems as any[]);
-
-  const milestoneQuery: any = {};
-  if (scope.scopeType === 'BUNDLE' && scope.scopeId !== 'all') milestoneQuery.bundleId = scope.scopeId;
-  if (scope.scopeType === 'APPLICATION' && scope.scopeId !== 'all') milestoneQuery.applicationId = scope.scopeId;
-  const milestones = await db.collection('milestones').find(milestoneQuery, { projection: { _id: 1, id: 1, name: 1, status: 1, bundleId: 1, applicationId: 1 } }).toArray();
+  const milestones = await listMilestonesForScope(scopeFilters);
 
   return { items, milestones };
 };

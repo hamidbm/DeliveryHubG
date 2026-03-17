@@ -9,11 +9,16 @@ const MilestoneTooltip: React.FC<{
   intelligence?: MilestoneIntelligence | null;
   probabilistic?: MilestoneProbabilisticForecast | null;
 }> = ({ milestone, intelligence, probabilistic }) => {
+  const bundleText = milestone.bundleLabel || milestone.bundleId || '';
+  const applicationText = milestone.applicationLabel || milestone.applicationId || '';
+
   return (
     <div className="w-64 rounded-2xl border border-slate-200 bg-white shadow-xl p-3 text-xs text-slate-600">
       <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Milestone</div>
       <div className="text-sm font-semibold text-slate-800">{milestone.name}</div>
       <div className="mt-2 space-y-1">
+        {bundleText ? <div>Bundle: {bundleText}</div> : null}
+        {applicationText ? <div>Application: {applicationText}</div> : null}
         <div>Planned: {formatDate(milestone.startDate)} → {formatDate(milestone.endDate)}</div>
         {probabilistic && (
           <>

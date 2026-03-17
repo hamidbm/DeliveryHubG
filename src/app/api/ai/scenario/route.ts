@@ -1,6 +1,6 @@
 import { createHash } from 'crypto';
 import { NextResponse } from 'next/server';
-import { fetchAiAnalysisCache, saveAiAnalysisCache } from '../../../../services/db';
+import { fetchAiAnalysisCache, saveAiAnalysisCache } from '../../../../services/aiPersistence';
 import { getAuthUserFromCookies } from '../../../../services/visibility';
 import { ScenarioDefinition, ScenarioResult } from '../../../../types/ai';
 import { simulateScenario } from '../../../../services/ai/scenarioEngine';

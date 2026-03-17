@@ -1,35 +1,20 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import { jwtVerify } from 'jose';
-import { createFeedbackPackage, emitEvent, fetchFeedbackPackages } from '../../../services/db';
+import { emitEvent } from '../../../shared/events/emitEvent';
+import { listFeedbackPackages, saveFeedbackPackageRecord } from '../../../server/db/repositories/feedbackPackagesRepo';
 import { canCloseCycle, canSubmitForReview } from '../../../services/authz';
-
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
-
-const getUser = async () => {
-  const cookieStore = await cookies();
-  const token = cookieStore.get('nexus_auth_token')?.value;
-  if (!token) return null;
-  const { payload } = await jwtVerify(token, JWT_SECRET);
-  return {
-    userId: String(payload.id || payload.userId || ''),
-    displayName: String(payload.name || 'Unknown'),
-    email: payload.email ? String(payload.email) : undefined,
-    role: payload.role ? String(payload.role) : undefined
-  };
-};
+import { requireStandardUser, requireUser } from '../../../shared/auth/guards';
 
 export async function GET(request: Request) {
   try {
-    const user = await getUser();
-    if (!user?.userId) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
+    const auth = await requireUser(request);
+    if (!auth.ok) return auth.response;
     const { searchParams } = new URL(request.url);
     const resourceType = searchParams.get('resourceType');
     const resourceId = searchParams.get('resourceId');
     if (!resourceType || !resourceId) {
       return NextResponse.json({ error: 'resourceType and resourceId are required' }, { status: 400 });
     }
-    const data = await fetchFeedbackPackages(resourceType, resourceId);
+    const data = await listFeedbackPackages(resourceType, resourceId);
     return NextResponse.json(data);
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'Failed to fetch feedback packages' }, { status: 500 });
@@ -38,8 +23,15 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const user = await getUser();
-    if (!user?.userId) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
+    const auth = await requireStandardUser(request);
+    if (!auth.ok) return auth.response;
+    const user = {
+      userId: auth.principal.userId,
+      displayName: auth.principal.fullName || 'Unknown',
+      email: auth.principal.email,
+      role: auth.principal.role || undefined,
+      accountType: auth.principal.accountType
+    };
     const body = await request.json();
     const resourceType = String(body.resourceType || '');
     const resourceId = String(body.resourceId || '');
@@ -66,7 +58,7 @@ export async function POST(request: Request) {
       status: 'feedback_sent' as const
     };
 
-    const result = await createFeedbackPackage(pkg);
+    const result = await saveFeedbackPackageRecord(pkg);
     await emitEvent({
       ts: new Date().toISOString(),
       type: 'feedback.package.imported',

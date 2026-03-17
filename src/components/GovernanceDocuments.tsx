@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { WikiPage, TaxonomyDocumentType, Application } from '../types';
-import { useRouter } from '../App';
+import { useRouter } from '../lib/navigation';
 
 type GovTab = 'standards' | 'scorecard' | 'review' | 'intake' | 'adr';
 

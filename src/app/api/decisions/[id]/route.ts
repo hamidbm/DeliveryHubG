@@ -1,14 +1,15 @@
 import { NextResponse } from 'next/server';
-import { ObjectId } from 'mongodb';
-import { getDb } from '../../../../services/db';
-import { createVisibilityContext, getAuthUserFromCookies } from '../../../../services/visibility';
+import { createVisibilityContext } from '../../../../services/visibility';
 import { getDecision } from '../../../../services/decisionLog';
+import { requireUser } from '../../../../shared/auth/guards';
+import { ObjectId } from 'mongodb';
+import { getMilestoneByRef } from '../../../../server/db/repositories/milestonesRepo';
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const authUser = await getAuthUserFromCookies();
-  if (!authUser?.userId) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
-  const visibility = createVisibilityContext(authUser);
+  const auth = await requireUser();
+  if (!auth.ok) return auth.response;
+  const visibility = createVisibilityContext(auth.principal);
 
   if (!ObjectId.isValid(id)) return NextResponse.json({ error: 'Not found' }, { status: 404 });
   const decision = await getDecision(id);
@@ -18,13 +19,12 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ decision });
   }
 
-  const db = await getDb();
   const bundleId = decision.related?.bundleId;
   if (bundleId && !(await visibility.canViewBundle(String(bundleId)))) {
     return NextResponse.json({ error: 'Forbidden', code: 'BUNDLE_RESTRICTED' }, { status: 403 });
   }
   if (!bundleId && decision.related?.milestoneId) {
-    const milestone = await db.collection('milestones').findOne({ _id: new ObjectId(decision.related.milestoneId) });
+    const milestone = await getMilestoneByRef(String(decision.related.milestoneId));
     if (milestone && !(await visibility.canViewBundle(String(milestone.bundleId || '')))) {
       return NextResponse.json({ error: 'Forbidden', code: 'BUNDLE_RESTRICTED' }, { status: 403 });
     }

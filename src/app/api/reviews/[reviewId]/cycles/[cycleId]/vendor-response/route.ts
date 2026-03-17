@@ -1,28 +1,20 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import { jwtVerify } from 'jose';
-import { fetchReviewById, updateReviewCycleNote, emitEvent, syncReviewCycleWorkItem } from '../../../../../../../services/db';
-
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
-
-const getUser = async () => {
-  const cookieStore = await cookies();
-  const token = cookieStore.get('nexus_auth_token')?.value;
-  if (!token) return null;
-  const { payload } = await jwtVerify(token, JWT_SECRET);
-  return {
-    userId: String(payload.id || payload.userId || ''),
-    displayName: String(payload.name || 'Unknown'),
-    email: payload.email ? String(payload.email) : undefined
-  };
-};
+import { emitEvent } from '../../../../../../../shared/events/emitEvent';
+import { updateReviewCycleNote, syncReviewCycleWorkItem } from '../../../../../../../services/reviewLifecycle';
+import { requireStandardUser } from '../../../../../../../shared/auth/guards';
+import { getReviewById } from '../../../../../../../server/db/repositories/reviewsRepo';
 
 export async function POST(request: Request, { params }: { params: Promise<{ reviewId: string; cycleId: string }> }) {
   try {
-    const user = await getUser();
-    if (!user?.userId) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
+    const auth = await requireStandardUser(request);
+    if (!auth.ok) return auth.response;
+    const user = {
+      userId: auth.principal.userId,
+      displayName: auth.principal.fullName || 'Unknown',
+      email: auth.principal.email
+    };
     const { reviewId, cycleId } = await params;
-    const review = await fetchReviewById(reviewId);
+    const review = await getReviewById(reviewId);
     if (!review) return NextResponse.json({ error: 'Review not found' }, { status: 404 });
     const cycle = (review.cycles || []).find((c) => c.cycleId === cycleId);
     if (!cycle) return NextResponse.json({ error: 'Cycle not found' }, { status: 404 });

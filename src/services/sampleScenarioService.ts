@@ -1,7 +1,6 @@
 import bcrypt from 'bcryptjs';
 import { ObjectId } from 'mongodb';
 import { createDeliveryPlan, previewDeliveryPlan } from './deliveryPlanGenerator';
-import { getDb } from './db';
 import { invalidateAllWorkItemCaches, primeWorkItemScope } from './workItemCache';
 import { DeliveryPlanInput, WorkItemStatus, WorkItemType } from '../types';
 import {
@@ -13,6 +12,17 @@ import {
   DemoScenarioUser,
   DemoScenarioValidationResult
 } from '../types/demoScenario';
+import {
+  deleteDemoScenarioRecords,
+  getUserEmailById,
+  listWorkItemsByIds,
+  tagGeneratedDemoArtifactsRecord,
+  updateDemoWorkItemAssignmentRecord,
+  upsertDemoApplicationRecord,
+  upsertDemoBundleAssignmentRecord,
+  upsertDemoBundleRecord,
+  upsertDemoUserRecord
+} from '../server/db/repositories/demoScenarioRepo';
 
 class DemoScenarioValidationError extends Error {
   code = 'DEMO_SCENARIO_VALIDATION' as const;
@@ -346,7 +356,7 @@ const dedupeUsersByEmail = (scenario: DemoScenario) => {
   return map;
 };
 
-const provisionScenarioUsers = async (db: any, scenario: DemoScenario, demoTag: string, actorUserId: string) => {
+const provisionScenarioUsers = async (scenario: DemoScenario, demoTag: string, actorUserId: string) => {
   const users = dedupeUsersByEmail(scenario);
   const hashed = await bcrypt.hash(String(scenario.defaults?.defaultPassword || DEFAULT_DEMO_PASSWORD), 10);
   const now = new Date().toISOString();
@@ -355,30 +365,19 @@ const provisionScenarioUsers = async (db: any, scenario: DemoScenario, demoTag: 
 
   for (const [email, user] of users.entries()) {
     const username = (user.username || email.split('@')[0] || '').trim() || email.split('@')[0];
-    await db.collection('users').updateOne(
-      { email },
-      {
-        $set: {
-          name: user.name,
-          username,
-          email,
-          team: user.team,
-          role: user.role,
-          isActive: user.isActive !== false,
-          demoTag,
-          demoScenarioKey: scenario.scenarioKey,
-          updatedAt: now,
-          updatedBy: actorUserId
-        },
-        $setOnInsert: {
-          password: hashed,
-          createdAt: now,
-          createdBy: actorUserId
-        }
-      },
-      { upsert: true }
-    );
-    const persisted = await db.collection('users').findOne({ email });
+    const persisted = await upsertDemoUserRecord({
+      email,
+      name: user.name,
+      username,
+      team: user.team,
+      role: user.role,
+      isActive: user.isActive !== false,
+      demoTag,
+      demoScenarioKey: scenario.scenarioKey,
+      passwordHash: hashed,
+      actorUserId,
+      now
+    });
     if (persisted) byEmail.set(email, persisted);
     processed += 1;
   }
@@ -386,7 +385,7 @@ const provisionScenarioUsers = async (db: any, scenario: DemoScenario, demoTag: 
   return { processed, byEmail };
 };
 
-const provisionScenarioBundles = async (db: any, scenario: DemoScenario, demoTag: string, actorUserId: string) => {
+const provisionScenarioBundles = async (scenario: DemoScenario, demoTag: string, actorUserId: string) => {
   const now = new Date().toISOString();
   const byTempId = new Map<string, { _id: string; name: string; key: string }>();
   let processed = 0;
@@ -394,26 +393,16 @@ const provisionScenarioBundles = async (db: any, scenario: DemoScenario, demoTag
   for (const bundle of scenario.bundles || []) {
     const key = (bundle.key || `DEMO-${slugify(bundle.name)}`).toUpperCase();
     const filter = bundle.key ? { key: bundle.key } : { name: bundle.name };
-    await db.collection('bundles').updateOne(
+    const persisted = await upsertDemoBundleRecord({
       filter,
-      {
-        $set: {
-          key,
-          name: bundle.name,
-          description: bundle.description || '',
-          demoTag,
-          demoScenarioKey: scenario.scenarioKey,
-          updatedAt: now,
-          updatedBy: actorUserId
-        },
-        $setOnInsert: {
-          createdAt: now,
-          createdBy: actorUserId
-        }
-      },
-      { upsert: true }
-    );
-    const persisted = await db.collection('bundles').findOne({ key });
+      key,
+      name: bundle.name,
+      description: bundle.description || '',
+      demoTag,
+      demoScenarioKey: scenario.scenarioKey,
+      actorUserId,
+      now
+    });
     if (persisted?._id) {
       byTempId.set(bundle.tempId, { _id: String(persisted._id), name: persisted.name || bundle.name, key: persisted.key || key });
       processed += 1;
@@ -426,7 +415,6 @@ const provisionScenarioBundles = async (db: any, scenario: DemoScenario, demoTag
 const buildGeneratedAid = (bundleKey: string, appName: string) => `APP-${slugify(bundleKey)}-${slugify(appName)}`;
 
 const provisionScenarioApplications = async (
-  db: any,
   scenario: DemoScenario,
   bundleByTempId: Map<string, { _id: string; name: string; key: string }>,
   demoTag: string,
@@ -446,28 +434,19 @@ const provisionScenarioApplications = async (
         ? { aid: app.aid }
         : { bundleId: persistedBundle._id, name: app.name };
 
-      await db.collection('applications').updateOne(
+      await upsertDemoApplicationRecord({
         filter,
-        {
-          $set: {
-            aid,
-            key,
-            name: app.name,
-            bundleId: persistedBundle._id,
-            isActive: app.isActive !== false,
-            status: app.status || { health: 'Healthy' },
-            demoTag,
-            demoScenarioKey: scenario.scenarioKey,
-            updatedAt: now,
-            updatedBy: actorUserId
-          },
-          $setOnInsert: {
-            createdAt: now,
-            createdBy: actorUserId
-          }
-        },
-        { upsert: true }
-      );
+        aid,
+        key,
+        name: app.name,
+        bundleId: persistedBundle._id,
+        isActive: app.isActive !== false,
+        status: app.status || { health: 'Healthy' },
+        demoTag,
+        demoScenarioKey: scenario.scenarioKey,
+        actorUserId,
+        now
+      });
       processed += 1;
     }
   }
@@ -476,7 +455,6 @@ const provisionScenarioApplications = async (
 };
 
 const provisionBundleAssignments = async (
-  db: any,
   scenario: DemoScenario,
   bundleByTempId: Map<string, { _id: string; name: string; key: string }>,
   usersByEmail: Map<string, any>,
@@ -503,30 +481,15 @@ const provisionBundleAssignments = async (
         const assignmentTypes = inferAssignmentTypes(scenarioUser.team || team.name);
 
         for (const assignmentType of assignmentTypes) {
-          await db.collection('bundle_assignments').updateOne(
-            {
-              bundleId: persistedBundle._id,
-              userId: String(persistedUser._id),
-              assignmentType
-            },
-            {
-              $set: {
-                bundleId: persistedBundle._id,
-                userId: String(persistedUser._id),
-                assignmentType,
-                active: true,
-                demoTag,
-                demoScenarioKey: scenario.scenarioKey,
-                updatedAt: now,
-                updatedBy: actorUserId
-              },
-              $setOnInsert: {
-                createdAt: now,
-                createdBy: actorUserId
-              }
-            },
-            { upsert: true }
-          );
+          await upsertDemoBundleAssignmentRecord({
+            bundleId: persistedBundle._id,
+            userId: String(persistedUser._id),
+            assignmentType,
+            demoTag,
+            demoScenarioKey: scenario.scenarioKey,
+            actorUserId,
+            now
+          });
         }
       }
     }
@@ -557,10 +520,7 @@ export const buildDeliveryPlanInputsFromScenario = (
 
 const countScenarioApplications = (scenario: DemoScenario) => (scenario.bundles || []).reduce((sum, bundle) => sum + (bundle.applications || []).length, 0);
 
-const asObjectIds = (ids: string[]) => ids.filter((v) => ObjectId.isValid(v)).map((v) => new ObjectId(v));
-
 const tagGeneratedArtifacts = async (
-  db: any,
   payload: {
     demoTag: string;
     demoScenarioKey: string;
@@ -574,32 +534,7 @@ const tagGeneratedArtifacts = async (
   actorUserId: string
 ) => {
   const now = new Date().toISOString();
-  const tagSet = {
-    demoTag: payload.demoTag,
-    demoScenarioKey: payload.demoScenarioKey,
-    updatedAt: now,
-    updatedBy: actorUserId
-  };
-
-  if (payload.milestoneIds.length) {
-    await db.collection('milestones').updateMany({ _id: { $in: asObjectIds(payload.milestoneIds) } }, { $set: tagSet });
-  }
-  if (payload.sprintIds.length) {
-    await db.collection('workitems_sprints').updateMany({ _id: { $in: asObjectIds(payload.sprintIds) } }, { $set: tagSet });
-  }
-  if (payload.workItemIds.length) {
-    await db.collection('workitems').updateMany({ _id: { $in: asObjectIds(payload.workItemIds) } }, { $set: tagSet });
-  }
-  if (payload.roadmapPhaseIds.length) {
-    await db.collection('work_roadmap_phases').updateMany({ _id: { $in: asObjectIds(payload.roadmapPhaseIds) } }, { $set: tagSet });
-  }
-
-  if (ObjectId.isValid(payload.previewId)) {
-    await db.collection('work_plan_previews').updateOne({ _id: new ObjectId(payload.previewId) }, { $set: tagSet });
-  }
-  if (ObjectId.isValid(payload.runId)) {
-    await db.collection('work_delivery_plan_runs').updateOne({ _id: new ObjectId(payload.runId) }, { $set: tagSet });
-  }
+  await tagGeneratedDemoArtifactsRecord(payload, actorUserId, now);
 };
 
 const shuffle = <T,>(items: T[]): T[] => {
@@ -617,7 +552,6 @@ const pickRoundRobin = <T,>(items: T[], index: number): T | null => {
 };
 
 export const enrichGeneratedDemoArtifacts = async (
-  db: any,
   params: {
     scenario: DemoScenario;
     demoTag: string;
@@ -662,8 +596,7 @@ export const enrichGeneratedDemoArtifacts = async (
       return (match?.assignmentIntent || 'PRIMARY') === 'SECONDARY';
     });
 
-    const itemIds = run.workItemIds.filter((idValue) => ObjectId.isValid(idValue)).map((idValue) => new ObjectId(idValue));
-    const workItems: any[] = await db.collection('workitems').find({ _id: { $in: itemIds } }).toArray();
+    const workItems: any[] = await listWorkItemsByIds(run.workItemIds);
 
     const storiesById = new Map<string, any>();
     workItems.forEach((item: any) => {
@@ -706,55 +639,42 @@ export const enrichGeneratedDemoArtifacts = async (
       const status = statusRoll < 0.07 ? WorkItemStatus.DONE : statusRoll < 0.33 ? WorkItemStatus.IN_PROGRESS : WorkItemStatus.TODO;
 
       if (assignTo?.email) {
-        await db.collection('workitems').updateOne(
-          { _id: item._id },
-          {
-            $set: {
-              assignedTo: String(assignTo.email),
-              assigneeUserIds: assignTo._id ? [String(assignTo._id)] : [],
-              status,
-              labels: Array.from(new Set([...(item.labels || []), 'demo'])),
-              demoTag: params.demoTag,
-              demoScenarioKey: params.scenario.scenarioKey,
-              updatedAt: now,
-              updatedBy: params.actorUserId
-            }
-          }
-        );
+        await updateDemoWorkItemAssignmentRecord({
+          workItemId: item._id,
+          assignedTo: String(assignTo.email),
+          assigneeUserIds: assignTo._id ? [String(assignTo._id)] : [],
+          status,
+          demoTag: params.demoTag,
+          demoScenarioKey: params.scenario.scenarioKey,
+          actorUserId: params.actorUserId,
+          labels: Array.from(new Set([...(item.labels || []), 'demo'])),
+          now
+        });
       } else {
-        await db.collection('workitems').updateOne(
-          { _id: item._id },
-          {
-            $set: {
-              status,
-              labels: Array.from(new Set([...(item.labels || []), 'demo'])),
-              demoTag: params.demoTag,
-              demoScenarioKey: params.scenario.scenarioKey,
-              updatedAt: now,
-              updatedBy: params.actorUserId
-            },
-            $unset: {
-              assignedTo: '',
-              assigneeUserIds: ''
-            }
-          }
-        );
+        await updateDemoWorkItemAssignmentRecord({
+          workItemId: item._id,
+          status,
+          demoTag: params.demoTag,
+          demoScenarioKey: params.scenario.scenarioKey,
+          actorUserId: params.actorUserId,
+          labels: Array.from(new Set([...(item.labels || []), 'demo'])),
+          now
+        });
       }
     }
   }
 };
 
-const getActorEmail = async (db: any, userId: string, fallback?: string) => {
-  if (!ObjectId.isValid(userId)) return fallback || 'admin@deliveryhub.local';
-  const user = await db.collection('users').findOne({ _id: new ObjectId(userId) }).catch(() => null);
-  return String(user?.email || fallback || 'admin@deliveryhub.local');
+const getActorEmail = async (userId: string, fallback?: string) => {
+  const email = await getUserEmailById(userId);
+  return String(email || fallback || 'admin@deliveryhub.local');
 };
 
-const provisionScenarioContext = async (db: any, scenario: DemoScenario, demoTag: string, actorUserId: string) => {
-  const users = await provisionScenarioUsers(db, scenario, demoTag, actorUserId);
-  const bundles = await provisionScenarioBundles(db, scenario, demoTag, actorUserId);
-  const apps = await provisionScenarioApplications(db, scenario, bundles.byTempId, demoTag, actorUserId);
-  await provisionBundleAssignments(db, scenario, bundles.byTempId, users.byEmail, demoTag, actorUserId);
+const provisionScenarioContext = async (scenario: DemoScenario, demoTag: string, actorUserId: string) => {
+  const users = await provisionScenarioUsers(scenario, demoTag, actorUserId);
+  const bundles = await provisionScenarioBundles(scenario, demoTag, actorUserId);
+  const apps = await provisionScenarioApplications(scenario, bundles.byTempId, demoTag, actorUserId);
+  await provisionBundleAssignments(scenario, bundles.byTempId, users.byEmail, demoTag, actorUserId);
   return {
     users,
     bundles,
@@ -770,11 +690,10 @@ export const previewDemoScenario = async (
   assertValidScenario(input);
   const normalized = normalizeScenario(input);
   const scenario = normalized.scenario;
-  const db = await getDb();
   const demoTag = getDemoTag(scenario);
-  const actorEmail = actor.email || await getActorEmail(db, actor.userId, actor.email);
+  const actorEmail = actor.email || await getActorEmail(actor.userId, actor.email);
 
-  const context = await provisionScenarioContext(db, scenario, demoTag, actor.userId);
+  const context = await provisionScenarioContext(scenario, demoTag, actor.userId);
   const bundlePreviews: DemoScenarioPreviewResponse['bundlePreviews'] = [];
 
   for (const bundleInput of context.builtInputs) {
@@ -832,22 +751,21 @@ export const installDemoScenario = async (
   assertValidScenario(input);
   const normalized = normalizeScenario(input);
   const scenario = normalized.scenario;
-  const db = await getDb();
   const demoTag = getDemoTag(scenario);
-  const actorEmail = actor.email || await getActorEmail(db, actor.userId, actor.email);
+  const actorEmail = actor.email || await getActorEmail(actor.userId, actor.email);
 
   if (scenario.resetBeforeInstall) {
     await resetDemoScenarioData();
   }
 
-  const context = await provisionScenarioContext(db, scenario, demoTag, actor.userId);
+  const context = await provisionScenarioContext(scenario, demoTag, actor.userId);
   const runs: DemoScenarioInstallResponse['planRuns'] = [];
   const runsByBundleTempId = new Map<string, { workItemIds: string[] }>();
 
   for (const bundleInput of context.builtInputs) {
     const preview = await previewDeliveryPlan(bundleInput.input, { userId: actor.userId, email: actorEmail });
     const created = await createDeliveryPlan(String(preview.previewId), { userId: actor.userId, email: actorEmail });
-    await tagGeneratedArtifacts(db, {
+    await tagGeneratedArtifacts({
       demoTag,
       demoScenarioKey: scenario.scenarioKey,
       previewId: String(preview.previewId),
@@ -872,10 +790,10 @@ export const installDemoScenario = async (
     });
   }
 
-  await enrichGeneratedDemoArtifacts(db, {
-    scenario,
-    demoTag,
-    usersByEmail: context.users.byEmail,
+    await enrichGeneratedDemoArtifacts({
+      scenario,
+      demoTag,
+      usersByEmail: context.users.byEmail,
     runsByBundleTempId,
     actorUserId: actor.userId
   });
@@ -906,7 +824,6 @@ export const installDemoScenario = async (
 };
 
 export const resetDemoScenarioData = async (demoTag?: string) => {
-  const db = await getDb();
   const filter = getDemoDeleteFilter(demoTag);
   const collections = [
     'users',
@@ -927,13 +844,7 @@ export const resetDemoScenarioData = async (demoTag?: string) => {
     'comment_messages'
   ];
 
-  for (const collection of collections) {
-    try {
-      await db.collection(collection).deleteMany(filter as any);
-    } catch {
-      // ignore missing/non-existing collections
-    }
-  }
+  await deleteDemoScenarioRecords(collections, filter as Record<string, unknown>);
 
   await invalidateAllWorkItemCaches('sample.reset');
 

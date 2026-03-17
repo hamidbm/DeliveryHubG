@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { fetchWorkItemById } from '../../../../../services/db';
+import { fetchWorkItemById } from '../../../../../services/workItemsService';
 import { createVisibilityContext, getAuthUserFromCookies } from '../../../../../services/visibility';
 import { suggestOwnersForWorkItem } from '../../../../../services/ownership';
 

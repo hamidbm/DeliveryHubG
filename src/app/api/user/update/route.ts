@@ -1,28 +1,23 @@
 
 import { NextResponse } from 'next/server';
-import { jwtVerify, SignJWT } from 'jose';
+import { SignJWT } from 'jose';
 import { cookies } from 'next/headers';
 import bcrypt from 'bcryptjs';
-import { ObjectId } from 'mongodb';
-import { getDb } from '../../../../services/db';
 import { normalizeAccountType } from '../../../../services/authPrincipal';
+import { updateUserById } from '../../../../server/db/repositories/usersRepo';
+import { requireStandardUser } from '../../../../shared/auth/guards';
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
 
 export async function POST(request: Request) {
-  const cookieStore = await cookies();
-  const token = cookieStore.get('nexus_auth_token')?.value;
-
-  if (!token) {
-    return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
-  }
+  const auth = await requireStandardUser();
+  if (!auth.ok) return auth.response;
 
   try {
-    const { payload } = await jwtVerify(token, JWT_SECRET);
-    const userId = payload.id as string;
+    const { principal } = auth;
+    const userId = principal.userId;
     const { role, password } = await request.json();
 
-    const db = await getDb();
     const updateData: any = {};
     const now = new Date().toISOString();
 
@@ -38,8 +33,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'No update data provided' }, { status: 400 });
     }
 
-    const result = await db.collection('users').findOneAndUpdate(
-      { _id: new ObjectId(userId) },
+    const result = await updateUserById(
+      userId,
       { 
         $set: { ...updateData, updatedAt: now },
         $push: { 
@@ -49,8 +44,7 @@ export async function POST(request: Request) {
             timestamp: now 
           }
         }
-      } as any,
-      { returnDocument: 'after' }
+      } as any
     );
 
     if (!result) {
@@ -71,7 +65,7 @@ export async function POST(request: Request) {
     })
       .setProtectedHeader({ alg: 'HS256' })
       .setIssuedAt()
-      .setExpirationTime(payload.exp ? (payload.exp - Math.floor(Date.now() / 1000)) + 's' : '24h')
+      .setExpirationTime('24h')
       .sign(JWT_SECRET);
 
     const response = NextResponse.json({ 

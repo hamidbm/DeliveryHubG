@@ -1,5 +1,7 @@
 import { ObjectId } from 'mongodb';
-import { getDb, emitEvent, fetchBundleAssignments } from './db';
+import { emitEvent } from '../shared/events/emitEvent';
+import { listBundleAssignments } from '../server/db/repositories/bundleAssignmentsRepo';
+import { findDecisionById, insertDecisionRecord, listDecisionRecords } from '../server/db/repositories/decisionsRepo';
 import { createVisibilityContext } from './visibility';
 import { isAdminOrCmo } from './authz';
 
@@ -35,18 +37,10 @@ export type DecisionLogEntry = {
   tags?: string[];
 };
 
-const ensureDecisionIndexes = async (db: any) => {
-  await db.collection('decision_log').createIndex({ scopeType: 1, scopeId: 1, createdAt: -1 });
-  await db.collection('decision_log').createIndex({ 'related.milestoneId': 1, createdAt: -1 });
-  await db.collection('decision_log').createIndex({ decisionType: 1, createdAt: -1 });
-};
-
 export const createDecision = async (entry: DecisionLogEntry) => {
-  const db = await getDb();
-  await ensureDecisionIndexes(db);
   const payload = { ...entry, source: entry.source || 'MANUAL', createdAt: entry.createdAt || new Date().toISOString() };
   const { _id, ...doc } = payload as any;
-  const result = await db.collection('decision_log').insertOne(doc);
+  const result = await insertDecisionRecord(doc);
   try {
     await emitEvent({
       ts: payload.createdAt,
@@ -67,31 +61,12 @@ export const createDecision = async (entry: DecisionLogEntry) => {
 };
 
 export const getDecision = async (id: string) => {
-  const db = await getDb();
-  const doc = await db.collection('decision_log').findOne({ _id: new ObjectId(id) });
+  const doc = await findDecisionById(id);
   return (doc as unknown as DecisionLogEntry | null);
 };
 
 export const listDecisions = async (params: { scopeType?: string; scopeId?: string; milestoneId?: string; limit?: number; cursor?: string }) => {
-  const db = await getDb();
-  await ensureDecisionIndexes(db);
-  const query: any = {};
-  if (params.scopeType) query.scopeType = params.scopeType;
-  if (params.scopeId) query.scopeId = params.scopeId;
-  if (params.milestoneId) query['related.milestoneId'] = params.milestoneId;
-  if (params.cursor) {
-    const [cursorTime, cursorId] = String(params.cursor).split('|');
-    if (cursorTime && cursorId && ObjectId.isValid(cursorId)) {
-      query.$or = [
-        { createdAt: { $lt: cursorTime } },
-        { createdAt: cursorTime, _id: { $lt: new ObjectId(cursorId) } }
-      ];
-    } else if (cursorTime) {
-      query.createdAt = { $lt: cursorTime };
-    }
-  }
-  const limit = Math.min(Math.max(params.limit || 50, 1), 200);
-  const items = await db.collection('decision_log').find(query).sort({ createdAt: -1, _id: -1 }).limit(limit).toArray();
+  const items = await listDecisionRecords(params);
   return items as unknown as DecisionLogEntry[];
 };
 
@@ -101,7 +76,7 @@ export const canCreateDecisionForScope = async (user: { userId?: string; id?: st
   if (scopeType === 'PROGRAM') return false;
   const userId = String(user.userId || user.id || '');
   if (!userId || !bundleId) return false;
-  const assignments = await fetchBundleAssignments({ userId, assignmentType: 'bundle_owner', active: true });
+  const assignments = await listBundleAssignments({ userId, assignmentType: 'bundle_owner', active: true });
   return assignments.some((a) => String(a.bundleId) === String(bundleId));
 };
 

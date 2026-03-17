@@ -1,5 +1,8 @@
 import { ObjectId } from 'mongodb';
-import { getDb, computeMilestoneRollups, fetchBundleCapacity } from './db';
+import { computeMilestoneRollups } from './rollupAnalytics';
+import { listBundleCapacity } from '../server/db/repositories/bundleCapacityRepo';
+import { listBundlesByRefs } from '../server/db/repositories/bundlesRepo';
+import { listMilestonesByBundleIds } from '../server/db/repositories/milestonesRepo';
 import { MilestoneStatus } from '../types';
 
 export type CapacityBucketType = 'WEEK' | 'SPRINT';
@@ -66,24 +69,20 @@ const resolveMilestoneEnd = (milestone: any, rollup: any) => {
 };
 
 export const computeBundleCapacityPlans = async (bundleIds: string[], horizonWeeks = 12) => {
-  const db = await getDb();
   const bundleIdList = bundleIds.map(String).filter(Boolean);
   if (!bundleIdList.length) {
     return { bundlePlans: [] as BundleCapacityPlan[], atRiskBundles: [], recommendedActions: [] as CapacityAction[] };
   }
 
-  const bundles = await db.collection('bundles').find({ _id: { $in: bundleIdList.filter(ObjectId.isValid).map((id) => new ObjectId(id)) } }).toArray();
+  const bundles = await listBundlesByRefs(bundleIdList);
   const bundleNameMap = new Map<string, string>();
   bundles.forEach((b: any) => bundleNameMap.set(String(b._id || b.id || b.key || ''), String(b.name || b.title || '')));
 
-  const capacities = await fetchBundleCapacity(bundleIdList);
+  const capacities = await listBundleCapacity(bundleIdList);
   const capacityMap = new Map<string, any>();
   capacities.forEach((c: any) => capacityMap.set(String(c.bundleId), c));
 
-  const milestones = await db.collection('milestones').find({
-    bundleId: { $in: bundleIdList },
-    status: { $in: [MilestoneStatus.COMMITTED, MilestoneStatus.IN_PROGRESS] }
-  }).toArray();
+  const milestones = await listMilestonesByBundleIds(bundleIdList, [MilestoneStatus.COMMITTED, MilestoneStatus.IN_PROGRESS]);
 
   const rollups = milestones.length ? await computeMilestoneRollups(milestones.map(buildMilestoneKey)) : [];
   const rollupMap = new Map<string, any>();

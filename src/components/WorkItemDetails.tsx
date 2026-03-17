@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef, useMemo, Suspense } from 'react';
 import { WorkItem, WorkItemType, WorkItemStatus, Bundle, Application, WorkItemLinkDerivedType, WorkItemAttachment, WorkItemActivity, WorkItemComment, Milestone, ChecklistItem } from '../types';
 import AssigneeSearch from './AssigneeSearch';
 import CommentsDrawer from './CommentsDrawer';
-import { useRouter } from '../App';
+import { useRouter } from '../lib/navigation';
 const WorkItemAiPanel = React.lazy(() => import('./WorkItemAiPanel'));
 const WorkItemAttachmentsPanel = React.lazy(() => import('./WorkItemAttachmentsPanel'));
 const WorkItemActivityPanel = React.lazy(() => import('./WorkItemActivityPanel'));

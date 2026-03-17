@@ -1,11 +1,13 @@
 import { Role } from '../types';
-import { fetchBundleAssignments, isAdmin } from './db';
+import { hasAdminRecord } from '../server/db/repositories/adminsRepo';
+import { listBundleAssignments } from '../server/db/repositories/bundleAssignmentsRepo';
 
 type AuthUser = {
   userId?: string;
   id?: string;
   role?: string;
   team?: string;
+  email?: string;
   accountType?: 'STANDARD' | 'GUEST';
 };
 
@@ -50,7 +52,7 @@ const isAdminOrCmoRole = (role?: string) => {
 export const getBundleOwnership = async (userId?: string) => {
   const uid = String(userId || '');
   if (!uid) return [];
-  const assignments = await fetchBundleAssignments({ userId: uid, assignmentType: 'bundle_owner', active: true });
+  const assignments = await listBundleAssignments({ userId: uid, assignmentType: 'bundle_owner', active: true });
   return assignments.map((a) => String(a.bundleId)).filter(Boolean);
 };
 
@@ -67,7 +69,7 @@ export const isAdminOrCmo = async (user?: AuthUser) => {
   if (isAdminOrCmoRole(user.role)) return true;
   const userId = String(user.userId || user.id || '');
   if (!userId) return false;
-  return await isAdmin(userId);
+  return await hasAdminRecord(userId);
 };
 
 export const canSubmitForReview = (user?: AuthUser) => {
@@ -90,7 +92,7 @@ export const canCloseCycle = async (user?: AuthUser) => {
   if (user.team === 'Management') return true;
   const userId = String(user.userId || user.id || '');
   if (!userId) return false;
-  return await isAdmin(userId);
+  return await hasAdminRecord(userId);
 };
 
 export const canViewArchitectureDiagram = (user?: AuthUser, _diagram?: any) => {
@@ -109,7 +111,7 @@ export const canEditBundleProfile = async (user?: AuthUser) => {
   if (user.team === 'Management') return true;
   const userId = String(user.userId || user.id || '');
   if (!userId) return false;
-  return await isAdmin(userId);
+  return await hasAdminRecord(userId);
 };
 
 export const isPrivilegedMilestoneRole = (role?: string) => {

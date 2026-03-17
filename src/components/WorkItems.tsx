@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, Suspense, useMemo } from 'react';
-import { useSearchParams, useRouter } from '../App';
+import { useSearchParams, useRouter } from '../lib/navigation';
 import { WorkItem, WorkItemType, WorkItemStatus, Bundle, Application } from '../types';
 import WorkItemsTreeView from './WorkItemsTreeView';
 import WorkItemsBoardView from './WorkItemsBoardView';

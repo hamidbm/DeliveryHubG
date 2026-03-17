@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { ObjectId } from 'mongodb';
-import { getDb, emitEvent } from '../../../../services/db';
+import { emitEvent } from '../../../../shared/events/emitEvent';
 import { createVisibilityContext, getAuthUserFromCookies } from '../../../../services/visibility';
 import { evaluateWorkItemStaleness } from '../../../../lib/staleness';
 import { computeMilestoneCriticalPath } from '../../../../services/criticalPath';
@@ -8,24 +7,22 @@ import { isAdminOrCmo } from '../../../../services/authz';
 import { listWatcherUserIdsForScopes } from '../../../../services/watchers';
 import { createNotificationsForEvent } from '../../../../services/notifications';
 import { getDeliveryPolicy, getEffectivePolicyForBundle, getEffectivePolicyForMilestone } from '../../../../services/policy';
+import { findActiveBundleOwnerAssignment } from '../../../../server/db/repositories/bundleAssignmentsRepo';
+import { getMilestoneByRef, getSprintByRef } from '../../../../server/db/repositories/milestonesRepo';
+import {
+  getWorkItemByAnyRef,
+  listActiveWorkItemsForScope
+} from '../../../../server/db/repositories/workItemsRepo';
+import {
+  countRecentStalenessNudgesByUser,
+  getRecentStalenessNudgeForWorkItem,
+  insertStalenessNudgeRecord
+} from '../../../../server/db/repositories/stalenessRepo';
 
-const buildIdCandidates = (value: string) => {
-  const candidates: Array<string | ObjectId> = [value];
-  if (ObjectId.isValid(value)) candidates.push(new ObjectId(value));
-  return candidates;
-};
-
-const resolveMilestone = async (db: any, milestoneId?: string | null) => {
+const resolveMilestone = async (milestoneId?: string | null) => {
   const id = String(milestoneId || '');
   if (!id) return null;
-  const candidates = buildIdCandidates(id);
-  return await db.collection('milestones').findOne({
-    $or: [
-      { _id: { $in: candidates.filter((c) => c instanceof ObjectId) } },
-      { id: { $in: candidates.filter((c) => typeof c === 'string') as string[] } },
-      { name: { $in: candidates.filter((c) => typeof c === 'string') as string[] } }
-    ]
-  });
+  return await getMilestoneByRef(id);
 };
 
 const buildCriticalIdSet = async (milestoneIds: string[]) => {
@@ -43,23 +40,12 @@ const buildCriticalIdSet = async (milestoneIds: string[]) => {
   return criticalIds;
 };
 
-const ensureNudgeIndexes = async (db: any) => {
-  await db.collection('staleness_nudges').createIndex({ workItemId: 1, nudgedAt: -1 });
-  await db.collection('staleness_nudges').createIndex({ nudgedBy: 1, nudgedAt: -1 });
-};
-
-const resolvePolicyRef = async (db: any, input: { milestoneId?: string | null; sprintId?: string | null; bundleId?: string | null }) => {
+const resolvePolicyRef = async (input: { milestoneId?: string | null; sprintId?: string | null; bundleId?: string | null }) => {
   if (input.milestoneId && input.milestoneId !== 'all') {
     return await getEffectivePolicyForMilestone(String(input.milestoneId));
   }
   if (input.sprintId && input.sprintId !== 'all') {
-    const sprint = await db.collection('workitems_sprints').findOne({
-      $or: [
-        { _id: { $in: buildIdCandidates(String(input.sprintId)).filter((c) => c instanceof ObjectId) } },
-        { id: { $in: buildIdCandidates(String(input.sprintId)).filter((c) => typeof c === 'string') as string[] } },
-        { name: { $in: buildIdCandidates(String(input.sprintId)).filter((c) => typeof c === 'string') as string[] } }
-      ]
-    });
+    const sprint = await getSprintByRef(String(input.sprintId));
     if (sprint?.bundleId) return await getEffectivePolicyForBundle(String(sprint.bundleId));
   }
   if (input.bundleId && input.bundleId !== 'all') {
@@ -98,7 +84,7 @@ const buildStaleReason = (input: {
   };
 };
 
-const canNudge = async (db: any, authUser: any, item: any, milestone: any, policy: any) => {
+const canNudge = async (authUser: any, item: any, milestone: any, policy: any) => {
   if (!authUser?.userId) return false;
 
   const userId = String(authUser.userId || authUser.id || '');
@@ -115,12 +101,7 @@ const canNudge = async (db: any, authUser: any, item: any, milestone: any, polic
   if (allowedRoles.includes('BUNDLE_OWNER')) {
     if (milestone?.ownerUserId && String(milestone.ownerUserId) === userId) return true;
     if (item?.bundleId) {
-      const assignment = await db.collection('bundle_assignments').findOne({
-        bundleId: String(item.bundleId),
-        userId,
-        assignmentType: 'bundle_owner',
-        active: true
-      });
+      const assignment = await findActiveBundleOwnerAssignment(String(item.bundleId), userId);
       if (assignment) return true;
     }
   }
@@ -149,43 +130,11 @@ export async function GET(request: Request) {
   const sprintId = searchParams.get('sprintId');
   const bundleId = searchParams.get('bundleId');
 
-  const query: any = {
-    $and: [{ $or: [{ isArchived: { $exists: false } }, { isArchived: false }] }]
-  };
-
-  if (bundleId && bundleId !== 'all') {
-    const candidates = buildIdCandidates(String(bundleId));
-    query.$and.push({
-      $or: [
-        { bundleId: { $in: candidates.filter((c) => typeof c === 'string') as string[] } },
-        { bundleId: { $in: candidates.filter((c) => c instanceof ObjectId) } }
-      ]
-    });
-  }
-
-  if (sprintId && sprintId !== 'all') {
-    const candidates = buildIdCandidates(String(sprintId));
-    query.$and.push({
-      $or: [
-        { sprintId: { $in: candidates.filter((c) => typeof c === 'string') as string[] } },
-        { sprintId: { $in: candidates.filter((c) => c instanceof ObjectId) } }
-      ]
-    });
-  }
-
-  if (milestoneId && milestoneId !== 'all') {
-    const candidates = buildIdCandidates(String(milestoneId));
-    query.$and.push({
-      $or: [
-        { milestoneIds: { $in: candidates } },
-        { milestoneId: { $in: candidates } }
-      ]
-    });
-  }
-
-  const db = await getDb();
-  const policyRef = await resolvePolicyRef(db, { milestoneId, sprintId, bundleId });
-  let items = await db.collection('workitems').find(query, {
+  const policyRef = await resolvePolicyRef({ milestoneId, sprintId, bundleId });
+  let items = await listActiveWorkItemsForScope({
+    bundleIds: bundleId && bundleId !== 'all' ? [String(bundleId)] : undefined,
+    sprintRefs: sprintId && sprintId !== 'all' ? [String(sprintId)] : undefined,
+    milestoneRefs: milestoneId && milestoneId !== 'all' ? [String(milestoneId)] : undefined,
     projection: {
       _id: 1,
       id: 1,
@@ -203,7 +152,7 @@ export async function GET(request: Request) {
       github: 1,
       isBlocked: 1
     }
-  }).toArray();
+  });
 
   items = await visibility.filterVisibleWorkItems(items as any[]);
 
@@ -278,16 +227,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Missing work item id' }, { status: 400 });
   }
 
-  const db = await getDb();
-  const lookup = workItemId ? buildIdCandidates(workItemId) : buildIdCandidates(workItemKey);
-  const rawItem = await db.collection('workitems').findOne({
-    $or: [
-      { _id: { $in: lookup.filter((c) => c instanceof ObjectId) } },
-      { id: { $in: lookup.filter((c) => typeof c === 'string') as string[] } },
-      { key: { $in: lookup.filter((c) => typeof c === 'string') as string[] } }
-    ]
-  });
-
+  const rawItem = await getWorkItemByAnyRef(workItemId || workItemKey);
   if (!rawItem) return NextResponse.json({ error: 'Work item not found' }, { status: 404 });
   const item: any = {
     ...rawItem,
@@ -298,8 +238,8 @@ export async function POST(request: Request) {
   if (!canView) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
   const milestoneId = (item.milestoneIds || [])[0] || item.milestoneId;
-  const milestone = await resolveMilestone(db, milestoneId);
-  const policyRef = await resolvePolicyRef(db, { milestoneId, bundleId: item.bundleId });
+  const milestone = await resolveMilestone(milestoneId);
+  const policyRef = await resolvePolicyRef({ milestoneId, bundleId: item.bundleId });
   const policy = policyRef.effective;
   const nudgesPolicy = policy?.staleness?.nudges;
   if (!nudgesPolicy?.enabled) {
@@ -313,7 +253,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Nudges disabled', code: 'NUDGE_DISABLED' }, { status: 409 });
   }
 
-  const allowed = await canNudge(db, authUser, item, milestone, policy);
+  const allowed = await canNudge(authUser, item, milestone, policy);
   if (!allowed) {
     await emitEvent({
       ts: new Date().toISOString(),
@@ -325,13 +265,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Forbidden', code: 'NUDGE_FORBIDDEN' }, { status: 403 });
   }
 
-  await ensureNudgeIndexes(db);
   const nowTs = Date.now();
   const nowIso = new Date(nowTs).toISOString();
   const cooldownHours = Number(nudgesPolicy.cooldownHoursPerItem || 0);
   if (cooldownHours > 0) {
     const since = new Date(nowTs - cooldownHours * 60 * 60 * 1000).toISOString();
-    const existing = await db.collection('staleness_nudges').findOne({ workItemId: String(item._id || item.id || ''), nudgedAt: { $gte: since } });
+    const existing = await getRecentStalenessNudgeForWorkItem(String(item._id || item.id || ''), since);
     if (existing) {
       await emitEvent({
         ts: nowIso,
@@ -357,10 +296,7 @@ export async function POST(request: Request) {
   }
 
   const sinceDay = new Date(nowTs - 24 * 60 * 60 * 1000).toISOString();
-  const recentCount = await db.collection('staleness_nudges').countDocuments({
-    nudgedBy: String(authUser.userId || authUser.id || ''),
-    nudgedAt: { $gte: sinceDay }
-  });
+  const recentCount = await countRecentStalenessNudgesByUser(String(authUser.userId || authUser.id || ''), sinceDay);
   if (recentCount >= maxPerDay) {
     await emitEvent({
       ts: nowIso,
@@ -379,7 +315,7 @@ export async function POST(request: Request) {
     email: authUser.email ? String(authUser.email) : undefined
   };
 
-  await db.collection('staleness_nudges').insertOne({
+  await insertStalenessNudgeRecord({
     workItemId: itemId,
     nudgedBy: String(authUser.userId || authUser.id || ''),
     nudgedAt: nowIso,

@@ -1,6 +1,9 @@
-import { ObjectId } from 'mongodb';
-import { getDb } from './db';
 import { EntityReference, EvidenceItem, RelatedEntitiesMeta, StructuredPortfolioReport } from '../types/ai';
+import { listApplicationHealthCountsByBundleRefs, listApplicationMetaByRefs } from '../server/db/repositories/applicationsRepo';
+import { listBundleMetaByRefs } from '../server/db/repositories/bundlesRepo';
+import { listMilestoneMetaByRefs } from '../server/db/repositories/milestonesRepo';
+import { listReviewMetaByRefs } from '../server/db/repositories/reviewsRepo';
+import { listWorkItemMetaByRefs } from '../server/db/repositories/workItemsRepo';
 
 const WORKITEM_GROUP_IDS = new Set(['unassigned', 'blocked', 'overdue', 'in-progress', 'all', 'status-unassigned']);
 const MILESTONE_GROUP_IDS = new Set(['all', 'overdue']);
@@ -62,20 +65,6 @@ const addFromReport = (report?: StructuredPortfolioReport) => {
   return grouped;
 };
 
-const buildIdFilters = (ids: string[]) => {
-  const objectIds = ids.filter((id) => ObjectId.isValid(id)).map((id) => new ObjectId(id));
-  const stringIds = ids.filter((id) => !ObjectId.isValid(id));
-  const filters: any[] = [];
-  if (objectIds.length) filters.push({ _id: { $in: objectIds } });
-  if (stringIds.length) {
-    filters.push({ id: { $in: stringIds } });
-    filters.push({ key: { $in: stringIds } });
-    filters.push({ aid: { $in: stringIds } });
-    filters.push({ name: { $in: stringIds } });
-  }
-  return filters.length > 0 ? { $or: filters } : null;
-};
-
 const fmtDate = (value?: string | Date | null) => {
   if (!value) return '';
   const d = new Date(value);
@@ -94,7 +83,6 @@ const mapLabelFallback = (ref: EntityReference) => ref.secondary || '';
 const aliasIds = (...values: any[]) => Array.from(new Set(values.map((v) => String(v || '').trim()).filter(Boolean)));
 
 export const resolveRelatedEntitiesMetaFromRefs = async (groupedRefs: GroupedRefs): Promise<RelatedEntitiesMeta> => {
-  const db = await getDb();
   const out: RelatedEntitiesMeta = {};
 
   const setMeta = (type: keyof GroupedRefs, id: string, text: string) => {
@@ -121,120 +109,84 @@ export const resolveRelatedEntitiesMetaFromRefs = async (groupedRefs: GroupedRef
 
   const workItemIds = groupedRefs.workitem.map((r) => r.id).filter((id) => !WORKITEM_GROUP_IDS.has(id));
   if (workItemIds.length) {
-    const filter = buildIdFilters(workItemIds);
-    if (filter) {
-      const rows = await db.collection('workitems').find(filter, {
-        projection: { _id: 1, id: 1, key: 1, status: 1, blocked: 1, assignedTo: 1, dueAt: 1, dueDate: 1 }
-      }).toArray();
-      rows.forEach((row: any) => {
-        const ids = aliasIds(row._id, row.id, row.key);
-        if (!ids.length) return;
-        const status = String(row.status || '').trim();
-        const parts: string[] = [];
-        if (status) parts.push(status.replaceAll('_', ' '));
-        if (row.blocked === true) parts.push('Blocked');
-        if (!row.assignedTo) parts.push('Unassigned');
-        const due = row.dueAt || row.dueDate;
-        if (isOverdue(due, status.toLowerCase() === 'done')) parts.push('Overdue');
-        const dueLabel = fmtDate(due);
-        if (dueLabel) parts.push(`Due ${dueLabel}`);
-        ids.forEach((id) => setMeta('workitem', id, parts.join(' • ')));
-      });
-    }
+    const rows = await listWorkItemMetaByRefs(workItemIds);
+    rows.forEach((row: any) => {
+      const ids = aliasIds(row._id, row.id, row.key);
+      if (!ids.length) return;
+      const status = String(row.status || '').trim();
+      const parts: string[] = [];
+      if (status) parts.push(status.replaceAll('_', ' '));
+      if (row.blocked === true) parts.push('Blocked');
+      if (!row.assignedTo) parts.push('Unassigned');
+      const due = row.dueAt || row.dueDate;
+      if (isOverdue(due, status.toLowerCase() === 'done')) parts.push('Overdue');
+      const dueLabel = fmtDate(due);
+      if (dueLabel) parts.push(`Due ${dueLabel}`);
+      ids.forEach((id) => setMeta('workitem', id, parts.join(' • ')));
+    });
   }
 
   const milestoneIds = groupedRefs.milestone.map((r) => r.id).filter((id) => !MILESTONE_GROUP_IDS.has(id));
   if (milestoneIds.length) {
-    const filter = buildIdFilters(milestoneIds);
-    if (filter) {
-      const rows = await db.collection('milestones').find(filter, {
-        projection: { _id: 1, id: 1, name: 1, status: 1, endDate: 1, dueDate: 1, targetDate: 1 }
-      }).toArray();
-      rows.forEach((row: any) => {
-        const ids = aliasIds(row._id, row.id, row.name);
-        if (!ids.length) return;
-        const status = String(row.status || '').toLowerCase();
-        const date = row.targetDate || row.endDate || row.dueDate;
-        const parts: string[] = [];
-        if (status.includes('overdue') || status.includes('late') || isOverdue(date, status === 'done')) parts.push('Overdue');
-        const target = fmtDate(date);
-        if (target) parts.push(`Target ${target}`);
-        if (!parts.length && row.status) parts.push(String(row.status));
-        ids.forEach((id) => setMeta('milestone', id, parts.join(' • ')));
-      });
-    }
+    const rows = await listMilestoneMetaByRefs(milestoneIds);
+    rows.forEach((row: any) => {
+      const ids = aliasIds(row._id, row.id, row.name);
+      if (!ids.length) return;
+      const status = String(row.status || '').toLowerCase();
+      const date = row.targetDate || row.endDate || row.dueDate;
+      const parts: string[] = [];
+      if (status.includes('overdue') || status.includes('late') || isOverdue(date, status === 'done')) parts.push('Overdue');
+      const target = fmtDate(date);
+      if (target) parts.push(`Target ${target}`);
+      if (!parts.length && row.status) parts.push(String(row.status));
+      ids.forEach((id) => setMeta('milestone', id, parts.join(' • ')));
+    });
   }
 
   const reviewIds = groupedRefs.review.map((r) => r.id).filter((id) => !REVIEW_GROUP_IDS.has(id));
   if (reviewIds.length) {
-    const filter = buildIdFilters(reviewIds);
-    if (filter) {
-      const rows = await db.collection('reviews').find(filter, {
-        projection: { _id: 1, id: 1, status: 1, currentCycleStatus: 1, currentDueAt: 1, currentCycleDueAt: 1 }
-      }).toArray();
-      rows.forEach((row: any) => {
-        const ids = aliasIds(row._id, row.id);
-        if (!ids.length) return;
-        const status = String(row.currentCycleStatus || row.status || '').trim();
-        const due = row.currentDueAt || row.currentCycleDueAt;
-        const doneLike = status.toLowerCase() === 'closed' || status.toLowerCase() === 'approved';
-        const parts: string[] = [];
-        if (status) parts.push(status);
-        if (isOverdue(due, doneLike)) parts.push('Overdue');
-        const dueLabel = fmtDate(due);
-        if (dueLabel) parts.push(`Due ${dueLabel}`);
-        ids.forEach((id) => setMeta('review', id, parts.join(' • ')));
-      });
-    }
+    const rows = await listReviewMetaByRefs(reviewIds);
+    rows.forEach((row: any) => {
+      const ids = aliasIds(row._id, row.id);
+      if (!ids.length) return;
+      const status = String(row.currentCycleStatus || row.status || '').trim();
+      const due = row.currentDueAt || row.currentCycleDueAt;
+      const doneLike = status.toLowerCase() === 'closed' || status.toLowerCase() === 'approved';
+      const parts: string[] = [];
+      if (status) parts.push(status);
+      if (isOverdue(due, doneLike)) parts.push('Overdue');
+      const dueLabel = fmtDate(due);
+      if (dueLabel) parts.push(`Due ${dueLabel}`);
+      ids.forEach((id) => setMeta('review', id, parts.join(' • ')));
+    });
   }
 
   const appIds = groupedRefs.application.map((r) => r.id).filter((id) => !APPLICATION_GROUP_IDS.has(id));
   if (appIds.length) {
-    const filter = buildIdFilters(appIds);
-    if (filter) {
-      const rows = await db.collection('applications').find(filter, {
-        projection: { _id: 1, id: 1, aid: 1, name: 1, health: 1, status: 1 }
-      }).toArray();
-      rows.forEach((row: any) => {
-        const ids = aliasIds(row._id, row.id, row.aid, row.name);
-        if (!ids.length) return;
-        const health = String(row.health || row.status || '').trim();
-        ids.forEach((id) => setMeta('application', id, health ? `Health: ${health}` : ''));
-      });
-    }
+    const rows = await listApplicationMetaByRefs(appIds);
+    rows.forEach((row: any) => {
+      const ids = aliasIds(row._id, row.id, row.aid, row.name);
+      if (!ids.length) return;
+      const health = String(row.health || row.status || '').trim();
+      ids.forEach((id) => setMeta('application', id, health ? `Health: ${health}` : ''));
+    });
   }
 
   const bundleIds = groupedRefs.bundle.map((r) => r.id).filter((id) => !BUNDLE_GROUP_IDS.has(id));
   if (bundleIds.length) {
-    const filter = buildIdFilters(bundleIds);
-    if (filter) {
-      const rows = await db.collection('bundles').find(filter, {
-        projection: { _id: 1, id: 1, key: 1, name: 1 }
-      }).toArray();
-      const normalizedIds = rows.map((row: any) => String(row._id || row.id || row.key || '')).filter(Boolean);
-      const appRows = normalizedIds.length
-        ? await db.collection('applications').find({ bundleId: { $in: normalizedIds } }, {
-            projection: { bundleId: 1, health: 1 }
-          }).toArray()
-        : [];
-      const byBundle = new Map<string, { total: number; critical: number }>();
-      appRows.forEach((app: any) => {
-        const bundleId = String(app.bundleId || '');
-        if (!bundleId) return;
-        const acc = byBundle.get(bundleId) || { total: 0, critical: 0 };
-        acc.total += 1;
-        const h = String(app.health || '').toLowerCase();
-        if (h === 'critical' || h === 'at_risk' || h === 'blocked') acc.critical += 1;
-        byBundle.set(bundleId, acc);
-      });
-      rows.forEach((row: any) => {
-        const ids = aliasIds(row._id, row.id, row.key);
-        if (!ids.length) return;
-        const stats = byBundle.get(String(row._id || row.id || row.key || ''));
-        if (!stats) return;
-        ids.forEach((id) => setMeta('bundle', id, `${stats.total} Apps • ${stats.critical} Critical`));
-      });
-    }
+    const rows = await listBundleMetaByRefs(bundleIds);
+    const normalizedIds = rows.map((row: any) => String(row._id || row.id || row.key || '')).filter(Boolean);
+    const counts = await listApplicationHealthCountsByBundleRefs(normalizedIds);
+    const byBundle = new Map<string, { total: number; critical: number }>(
+      counts.map((row) => [String(row._id || ''), { total: Number(row.total || 0), critical: Number(row.critical || 0) }] as const)
+    );
+    rows.forEach((row: any) => {
+      const ids = aliasIds(row._id, row.id, row.key);
+      if (!ids.length) return;
+      const stats = byBundle.get(String(row._id || row.id || row.key || ''));
+      if (!stats) return;
+      ids.forEach((id) => setMeta('bundle', id, `${stats.total} Apps • ${stats.critical} Critical`));
+    });
   }
 
   return out;

@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { WorkItem, WorkItemType, WorkItemStatus, Bundle, Application } from '../types';
 import WorkItemDetails from './WorkItemDetails';
 import CreateWorkItemModal from './CreateWorkItemModal';
-import { useSearchParams } from '../App';
+import { useSearchParams } from '../lib/navigation';
 
 interface WorkItemsTreeViewProps {
   applications: Application[];

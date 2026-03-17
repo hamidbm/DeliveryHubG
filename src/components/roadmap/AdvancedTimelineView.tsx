@@ -84,8 +84,13 @@ const computeBounds = (
       max = Math.max(max, new Date(probabilistic.p90Date).getTime());
     }
   });
-  if (!Number.isFinite(min) || !Number.isFinite(max) || min === max) return null;
-  return { min, max, span: max - min };
+  if (!Number.isFinite(min) || !Number.isFinite(max)) return null;
+  if (min === max) {
+    const oneDayMs = 24 * 60 * 60 * 1000;
+    min -= oneDayMs;
+    max += oneDayMs;
+  }
+  return { min, max, span: Math.max(max - min, 1) };
 };
 
 const AdvancedTimelineView: React.FC<{
@@ -108,6 +113,7 @@ const AdvancedTimelineView: React.FC<{
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [zoom, setZoom] = useState<TimelineZoomLevel>('month');
   const [groupBy, setGroupBy] = useState<GroupBy>('none');
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const bounds = useMemo(() => computeBounds(milestones, forecastByMilestone, probabilisticForecastByMilestone), [
     milestones,
     forecastByMilestone,
@@ -153,15 +159,8 @@ const AdvancedTimelineView: React.FC<{
     return Array.from(map.values());
   }, [rows, groupBy]);
 
-  if (!milestones.length) {
-    return <div className="text-sm text-slate-400">No milestones available for timeline view.</div>;
-  }
-
-  if (!bounds) {
-    return <div className="text-sm text-slate-400">Timeline bounds unavailable.</div>;
-  }
-
   const renderRows = useMemo(() => {
+    if (!milestones.length || !bounds) return [];
     let cursor = 0;
     const rowsToRender: Array<{ type: 'label' | 'milestone'; id: string; label?: string; milestone?: RoadmapMilestoneVM; top: number }> = [];
     groupedRows.forEach((group) => {
@@ -177,7 +176,7 @@ const AdvancedTimelineView: React.FC<{
 
   const positions = useMemo(() => {
     const map: Record<string, { id: string; xStart: number; xEnd: number; y: number }> = {};
-    if (!bounds) return map;
+    if (!milestones.length || !bounds) return map;
     renderRows.forEach((row) => {
       if (row.type !== 'milestone' || !row.milestone) return;
       const m = row.milestone;
@@ -190,10 +189,17 @@ const AdvancedTimelineView: React.FC<{
     return map;
   }, [renderRows, bounds, width]);
 
-  const [expandedId, setExpandedId] = useState<string | null>(null);
   const ticks = buildTicks(bounds, zoom, width);
   const totalRows = groupedRows.reduce((acc, group) => acc + group.milestones.length, 0);
   const timelineHeight = 140 + totalRows * 48 + groupedRows.length * 24;
+
+  if (!milestones.length) {
+    return <div className="text-sm text-slate-400">No milestones available for timeline view.</div>;
+  }
+
+  if (!bounds) {
+    return <div className="text-sm text-slate-400">Timeline bounds unavailable.</div>;
+  }
 
   return (
     <div className="space-y-5">

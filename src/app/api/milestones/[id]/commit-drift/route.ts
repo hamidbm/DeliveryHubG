@@ -1,17 +1,11 @@
 import { NextResponse } from 'next/server';
-import { ObjectId } from 'mongodb';
-import { emitEvent, getDb } from '../../../../../services/db';
+import { emitEvent } from '../../../../../shared/events/emitEvent';
 import { createVisibilityContext, getAuthUserFromCookies } from '../../../../../services/visibility';
 import { evaluateMilestoneCommitmentDrift } from '../../../../../services/commitmentDrift';
 import { getEffectivePolicyForMilestone } from '../../../../../services/policy';
 import { createNotificationsForEvent } from '../../../../../services/notifications';
-
-const buildMilestoneQuery = (id: string) => {
-  if (ObjectId.isValid(id)) {
-    return { $or: [{ _id: new ObjectId(id) }, { id }, { name: id }] };
-  }
-  return { $or: [{ id }, { name: id }] };
-};
+import { getCommitmentDriftSnapshotByMilestoneId, upsertCommitmentDriftSnapshotRecord } from '../../../../../server/db/repositories/commitmentRepo';
+import { getMilestoneByRef } from '../../../../../server/db/repositories/milestonesRepo';
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -20,8 +14,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     if (!authUser?.userId) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
     const visibility = createVisibilityContext(authUser);
 
-    const db = await getDb();
-    const milestone = await db.collection('milestones').findOne(buildMilestoneQuery(id));
+    const milestone = await getMilestoneByRef(id);
     if (!milestone) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     if (!(await visibility.canViewBundle(String(milestone.bundleId || '')))) {
       return NextResponse.json({ error: 'Forbidden', code: 'BUNDLE_RESTRICTED' }, { status: 403 });
@@ -35,13 +28,15 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     const drift = await evaluateMilestoneCommitmentDrift(String(milestone._id || milestone.id || milestone.name || id));
     if (!drift) return NextResponse.json({ error: 'Unable to evaluate drift' }, { status: 500 });
 
-    const previous = await db.collection('commitment_drift_snapshots').findOne({ milestoneId: drift.milestoneId });
+    const previous = await getCommitmentDriftSnapshotByMilestoneId(drift.milestoneId);
     const now = new Date().toISOString();
-    await db.collection('commitment_drift_snapshots').updateOne(
-      { milestoneId: drift.milestoneId },
-      { $set: { milestoneId: drift.milestoneId, evaluatedAt: now, driftBand: drift.driftBand, deltas: drift.deltas, baselineAt: drift.baselineAt || null, hasBaseline: drift.hasBaseline } },
-      { upsert: true }
-    );
+    await upsertCommitmentDriftSnapshotRecord(drift.milestoneId, {
+      evaluatedAt: now,
+      driftBand: drift.driftBand,
+      deltas: drift.deltas,
+      baselineAt: drift.baselineAt || null,
+      hasBaseline: drift.hasBaseline
+    });
 
     const prevBand = previous?.driftBand || 'NONE';
     if (prevBand !== drift.driftBand) {

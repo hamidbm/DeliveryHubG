@@ -1,28 +1,21 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import { jwtVerify } from 'jose';
-import { closeFeedbackPackage, emitEvent, fetchReview, updateReviewCycleStatus, emitReviewCycleEvent, closeReviewWorkItem, syncReviewCycleWorkItem } from '../../../../../services/db';
+import { emitEvent } from '../../../../../shared/events/emitEvent';
+import { fetchReview, updateReviewCycleStatus, emitReviewCycleEvent, closeReviewWorkItem, syncReviewCycleWorkItem } from '../../../../../services/reviewLifecycle';
+import { closeFeedbackPackageRecord } from '../../../../../server/db/repositories/feedbackPackagesRepo';
 import { canCloseCycle } from '../../../../../services/authz';
-
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
-
-const getUser = async () => {
-  const cookieStore = await cookies();
-  const token = cookieStore.get('nexus_auth_token')?.value;
-  if (!token) return null;
-  const { payload } = await jwtVerify(token, JWT_SECRET);
-  return {
-    userId: String(payload.id || payload.userId || ''),
-    displayName: String(payload.name || 'Unknown'),
-    email: payload.email ? String(payload.email) : undefined,
-    role: payload.role ? String(payload.role) : undefined
-  };
-};
+import { requireStandardUser } from '../../../../../shared/auth/guards';
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const user = await getUser();
-    if (!user?.userId) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
+    const auth = await requireStandardUser(request);
+    if (!auth.ok) return auth.response;
+    const user = {
+      userId: auth.principal.userId,
+      displayName: auth.principal.fullName || 'Unknown',
+      email: auth.principal.email,
+      role: auth.principal.role || undefined,
+      accountType: auth.principal.accountType
+    };
     if (!(await canCloseCycle(user))) return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
 
     const { id } = await params;
@@ -31,7 +24,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const resourceId = body.resourceId ? String(body.resourceId) : undefined;
     const resourceTitle = body.resourceTitle ? String(body.resourceTitle) : undefined;
 
-    await closeFeedbackPackage(id, user.userId);
+    await closeFeedbackPackageRecord(id, user.userId);
 
     if (resourceType && resourceId) {
       const review = (await fetchReview(resourceType, resourceId)) as any;

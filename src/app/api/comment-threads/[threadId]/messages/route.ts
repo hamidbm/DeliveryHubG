@@ -1,30 +1,14 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import { jwtVerify } from 'jose';
-import { addCommentMessage, fetchCommentMessages, emitEvent, fetchCommentThreadById, resolveMentionUsers } from '../../../../../services/db';
+import { emitEvent } from '../../../../../shared/events/emitEvent';
+import { resolveMentionUsers } from '../../../../../services/userDirectory';
 import { extractMentionTokens } from '../../../../../lib/mentions';
-import { canComment } from '../../../../../services/authz';
-import { normalizeAccountType } from '../../../../../services/authPrincipal';
-
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
-
-const getUserFromCookies = async () => {
-  const cookieStore = await cookies();
-  const token = cookieStore.get('nexus_auth_token')?.value;
-  if (!token) return null;
-  const { payload } = await jwtVerify(token, JWT_SECRET);
-  return {
-    userId: String(payload.id || payload.userId || ''),
-    displayName: String(payload.name || 'Unknown'),
-    email: payload.email ? String(payload.email) : undefined,
-    accountType: normalizeAccountType(String(payload.accountType || ''))
-  };
-};
+import { requireCommentPermission } from '../../../../../shared/auth/guards';
+import { addCommentMessageRecord, getCommentThreadById, listCommentMessages } from '../../../../../server/db/repositories/commentThreadsRepo';
 
 export async function GET(request: Request, { params }: { params: Promise<{ threadId: string }> }) {
   try {
     const { threadId } = await params;
-    const messages = await fetchCommentMessages(threadId);
+    const messages = await listCommentMessages(threadId);
     return NextResponse.json(messages);
   } catch (error: any) {
     console.error('Failed to load comment messages', error);
@@ -34,9 +18,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ thre
 
 export async function POST(request: Request, { params }: { params: Promise<{ threadId: string }> }) {
   try {
-    const user = await getUserFromCookies();
-    if (!user?.userId) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
-    if (!canComment(user as any)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    const auth = await requireCommentPermission();
+    if (!auth.ok) return auth.response;
+    const user = {
+      userId: auth.principal.userId,
+      displayName: auth.principal.fullName || 'Unknown',
+      email: auth.principal.email
+    };
 
     const { threadId } = await params;
     const body = await request.json();
@@ -48,14 +36,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ thr
     const mentionUsers = await resolveMentionUsers(mentionTokens);
     const mentionUserIds = mentionUsers.map((u) => u.userId).filter(Boolean);
 
-    await addCommentMessage({
+    await addCommentMessageRecord({
       threadId,
       body: body.message.trim(),
       author: user,
       mentions: mentionUserIds
     });
 
-    const thread = await fetchCommentThreadById(threadId);
+    const thread = await getCommentThreadById(threadId);
     const reviewId = thread?.reviewId;
     const reviewCycleId = thread?.reviewCycleId;
 

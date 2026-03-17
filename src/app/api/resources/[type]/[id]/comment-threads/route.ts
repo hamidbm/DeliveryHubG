@@ -1,30 +1,15 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import { jwtVerify } from 'jose';
-import { createCommentThread, fetchCommentThreads, emitEvent, fetchReviewById, resolveMentionUsers, ensureInReview, syncReviewCycleWorkItem } from '../../../../../../services/db';
+import { emitEvent } from '../../../../../../shared/events/emitEvent';
+import { fetchReviewById, ensureInReview, syncReviewCycleWorkItem } from '../../../../../../services/reviewLifecycle';
+import { resolveMentionUsers } from '../../../../../../services/userDirectory';
 import { extractMentionTokens } from '../../../../../../lib/mentions';
-import { canComment } from '../../../../../../services/authz';
-import { normalizeAccountType } from '../../../../../../services/authPrincipal';
-
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
-
-const getUserFromCookies = async () => {
-  const cookieStore = await cookies();
-  const token = cookieStore.get('nexus_auth_token')?.value;
-  if (!token) return null;
-  const { payload } = await jwtVerify(token, JWT_SECRET);
-  return {
-    userId: String(payload.id || payload.userId || ''),
-    displayName: String(payload.name || 'Unknown'),
-    email: payload.email ? String(payload.email) : undefined,
-    accountType: normalizeAccountType(String(payload.accountType || ''))
-  };
-};
+import { requireCommentPermission } from '../../../../../../shared/auth/guards';
+import { createCommentThreadRecord, listCommentThreads } from '../../../../../../server/db/repositories/commentThreadsRepo';
 
 export async function GET(request: Request, { params }: { params: Promise<{ type: string; id: string }> }) {
   try {
     const { type, id } = await params;
-    const threads = await fetchCommentThreads(type, id);
+    const threads = await listCommentThreads(type, id);
     return NextResponse.json(threads);
   } catch {
     return NextResponse.json({ error: 'Failed to load comment threads' }, { status: 500 });
@@ -33,9 +18,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ type
 
 export async function POST(request: Request, { params }: { params: Promise<{ type: string; id: string }> }) {
   try {
-    const user = await getUserFromCookies();
-    if (!user?.userId) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
-    if (!canComment(user as any)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    const auth = await requireCommentPermission();
+    if (!auth.ok) return auth.response;
+    const user = {
+      userId: auth.principal.userId,
+      displayName: auth.principal.fullName || 'Unknown',
+      email: auth.principal.email
+    };
 
     const { type, id } = await params;
     const body = await request.json();
@@ -62,7 +51,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ typ
       }
     }
 
-    const result = await createCommentThread({
+    const result = await createCommentThreadRecord({
       resource: { type, id, title: resourceTitle },
       anchor,
       body: body.message.trim(),

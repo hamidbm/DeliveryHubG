@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getAuthUserFromCookies } from '../../../../services/visibility';
 import { WatcherType } from '../../../../types/ai';
 import { createWatcherForUser, evaluateWatchersForUser, getWatcherUsage, listWatchersForUser } from '../../../../services/ai/notificationEngine';
-import { fetchAiAnalysisCache } from '../../../../services/db';
+import { fetchAiAnalysisCache } from '../../../../services/aiPersistence';
 
 const CACHE_KEY = 'portfolio-summary';
 

@@ -5,7 +5,9 @@ This section describes how to work on DeliveryHub safely and consistently.
 ## Guidelines
 - Follow App Router conventions for new routes
 - Keep DB access server-side only
-- Prefer repository-style functions in `src/services/db.ts`
+- Prefer domain repositories in `src/server/db/repositories`
+- Prefer shared infrastructure in `src/shared/*`
+- Do not add new domain persistence logic to `src/services/db.ts`
 - Add UI changes after API shapes are stable
 - Avoid breaking markdown rendering and sanitization
 
@@ -38,5 +40,6 @@ Notes:
 - `src/app`: Next.js routes and API handlers
 - `src/components`: UI components
 - `src/lib`: shared helpers
-- `src/services`: DB and AI services
+- `src/services`: orchestration and AI services
+- `src/shared`: DB, bootstrap, and event infrastructure
 - `src/types.ts`: shared types

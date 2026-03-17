@@ -1,7 +1,7 @@
 import React from "react";
 import type { Metadata } from "next";
 import "./globals.css";
-import { runBootstrap } from "../lib/bootstrap/runBootstrap";
+import { runBootstrap } from "../shared/bootstrap/runBootstrap";
 
 export const metadata: Metadata = {
   title: "DeliveryHub",

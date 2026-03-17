@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useRouter, useSearchParams } from '../App';
+import { useRouter, useSearchParams } from '../lib/navigation';
 import ChangeFeed from './ChangeFeed';
 import OnboardingTip from './OnboardingTip';
 import { useOnboarding } from '../lib/onboardingClient';

@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
-import { getDb } from '../../../../services/db';
 import { getAuthUserFromCookies } from '../../../../services/visibility';
 import { ScenarioDefinition } from '../../../../types/ai';
-
-const COLLECTION = 'ai_scenarios';
+import {
+  listAiScenarioRecords,
+  saveAiScenarioRecord
+} from '../../../../server/db/repositories/aiWorkspaceRepo';
 
 const parseScenario = async (request: Request): Promise<ScenarioDefinition | null> => {
   try {
@@ -34,11 +35,7 @@ export async function GET() {
     return NextResponse.json({ status: 'error', error: 'Unauthenticated' }, { status: 401 });
   }
 
-  const db = await getDb();
-  const scenarios = await db.collection(COLLECTION)
-    .find({ userId: authUser.userId }, { projection: { _id: 0, userId: 0 } })
-    .sort({ updatedAt: -1 })
-    .toArray();
+  const scenarios = await listAiScenarioRecords(authUser.userId);
 
   return NextResponse.json({ status: 'success', scenarios });
 }
@@ -56,22 +53,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ status: 'error', error: validationError }, { status: 400 });
   }
 
-  const db = await getDb();
-  const now = new Date().toISOString();
-  await db.collection(COLLECTION).updateOne(
-    { userId: authUser.userId, id: scenario.id },
-    {
-      $set: {
-        ...scenario,
-        userId: authUser.userId,
-        updatedAt: now
-      },
-      $setOnInsert: {
-        createdAt: now
-      }
-    },
-    { upsert: true }
-  );
+  await saveAiScenarioRecord(authUser.userId, scenario as unknown as Record<string, unknown>);
 
   return NextResponse.json({ status: 'success', scenarioId: scenario.id });
 }

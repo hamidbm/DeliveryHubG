@@ -1,25 +1,19 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import { jwtVerify } from 'jose';
-import { fetchWorkItemById, emitEvent } from '../../../../../../services/db';
+import { emitEvent } from '../../../../../../shared/events/emitEvent';
+import { fetchWorkItemById } from '../../../../../../server/db/repositories/workItemsRepo';
 import { createNotificationsForEvent } from '../../../../../../services/notifications';
 import { isAdminOrCmo } from '../../../../../../services/authz';
-
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
+import { requireStandardUser } from '../../../../../../shared/auth/guards';
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
-    const testToken = process.env.NODE_ENV === 'test' ? (globalThis as any).__testToken : null;
-    const cookieStore = testToken ? null : await cookies();
-    const token = testToken || cookieStore?.get('nexus_auth_token')?.value;
-    if (!token) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
-
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const auth = await requireStandardUser(request);
+    if (!auth.ok) return auth.response;
     const authUser = {
-      userId: String((payload as any).id || (payload as any).userId || ''),
-      role: String((payload as any).role || ''),
-      team: String((payload as any).team || '')
+      userId: auth.principal.userId,
+      role: String(auth.principal.role || ''),
+      team: String(auth.principal.team || '')
     };
     if (!(await isAdminOrCmo(authUser))) {
       return NextResponse.json({ error: 'FORBIDDEN_NOTIFY_OWNER' }, { status: 403 });
@@ -33,10 +27,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (!item) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
     const actor = {
-      userId: String((payload as any).id || (payload as any).userId || (payload as any).email || ''),
-      displayName: String((payload as any).name || (payload as any).displayName || ''),
-      email: (payload as any).email ? String((payload as any).email) : undefined,
-      role: (payload as any).role ? String((payload as any).role) : undefined
+      userId: auth.principal.userId,
+      displayName: auth.principal.fullName || auth.principal.email || 'Unknown',
+      email: auth.principal.email,
+      role: auth.principal.role || undefined
     };
 
     await createNotificationsForEvent({

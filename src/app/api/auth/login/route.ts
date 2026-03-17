@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { SignJWT } from 'jose';
-import { ensureUserIndexes, getAdminBootstrapEmails, getDb, upsertAdmin } from '../../../../services/db';
+import { saveAdminRecord } from '../../../../server/db/repositories/adminsRepo';
+import { ensureUserIndexesInRepo, findUserByEmail, getAdminBootstrapEmailsFromEnv } from '../../../../server/db/repositories/usersRepo';
 import { normalizeAccountType } from '../../../../services/authPrincipal';
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
@@ -11,9 +12,8 @@ export async function POST(request: Request) {
     const { email, password, rememberMe } = await request.json();
     const normalizedEmail = String(email || '').trim().toLowerCase();
 
-    const db = await getDb();
-    await ensureUserIndexes(db);
-    const user = await db.collection('users').findOne({ email: normalizedEmail });
+    await ensureUserIndexesInRepo();
+    const user = await findUserByEmail(normalizedEmail);
 
     if (!user || !(await bcrypt.compare(password, user.password))) {
       return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 });
@@ -39,10 +39,10 @@ export async function POST(request: Request) {
       .setExpirationTime(expirationTime)
       .sign(JWT_SECRET);
 
-    const bootstrapEmails = getAdminBootstrapEmails();
+    const bootstrapEmails = getAdminBootstrapEmailsFromEnv();
     const isBootstrapAdmin = bootstrapEmails.has(String(user.email || '').toLowerCase());
     if (isBootstrapAdmin) {
-      await upsertAdmin(String(user._id), 'system');
+      await saveAdminRecord(String(user._id), 'system');
     }
 
     const response = NextResponse.json({ 

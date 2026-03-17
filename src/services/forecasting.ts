@@ -1,23 +1,16 @@
-import { getMongoClientPromise, getMongoDbName } from '../lib/mongodb';
 import { getDeliveryPolicy, DeliveryPolicy } from './policy';
-import { WorkItemStatus } from '../types';
+import { listClosedSprintsByBundle } from '../server/db/repositories/milestonesRepo';
+import {
+  listDoneWorkItemsByBundleAndSprintIds,
+  listDoneWorkItemsByBundleSince
+} from '../server/db/repositories/workItemsRepo';
 
 const DEFAULT_SPRINT_LENGTH_DAYS = 14;
 
-const getDb = async () => {
-  const client = await getMongoClientPromise();
-  return client.db(getMongoDbName());
-};
-
 export const computeBundleVelocity = async (bundleId: string, windowSprints = 5) => {
-  const db = await getDb();
   const sprintWindow = Math.max(1, windowSprints || 5);
 
-  const sprints = await db.collection('workitems_sprints')
-    .find({ bundleId: String(bundleId), status: 'CLOSED' })
-    .sort({ endDate: -1 })
-    .limit(sprintWindow)
-    .toArray();
+  const sprints = await listClosedSprintsByBundle(bundleId, sprintWindow);
 
   const now = Date.now();
 
@@ -30,11 +23,7 @@ export const computeBundleVelocity = async (bundleId: string, windowSprints = 5)
   if (sprints.length) {
     const sprintIds = sprints.map((s: any) => String(s._id || s.id || '')).filter(Boolean);
     divisor = sprints.length;
-    items = await db.collection('workitems').find({
-      bundleId: String(bundleId),
-      sprintId: { $in: sprintIds },
-      status: WorkItemStatus.DONE
-    }).toArray();
+    items = await listDoneWorkItemsByBundleAndSprintIds(bundleId, sprintIds);
     weeklySamples = sprints.map((s: any) => {
       const start = s.startDate ? new Date(s.startDate) : null;
       const end = s.endDate ? new Date(s.endDate) : null;
@@ -47,11 +36,7 @@ export const computeBundleVelocity = async (bundleId: string, windowSprints = 5)
     }).filter((v: number) => Number.isFinite(v) && v > 0);
   } else {
     const since = new Date(now - sprintWindow * 7 * 24 * 60 * 60 * 1000).toISOString();
-    items = await db.collection('workitems').find({
-      bundleId: String(bundleId),
-      status: WorkItemStatus.DONE,
-      updatedAt: { $gte: since }
-    }).toArray();
+    items = await listDoneWorkItemsByBundleSince(bundleId, since);
     const buckets = new Map<string, number>();
     items.forEach((item: any) => {
       const updated = item.updatedAt ? new Date(item.updatedAt) : null;

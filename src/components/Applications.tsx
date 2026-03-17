@@ -1,7 +1,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { Application, ApplicationPlanningMetadata, Bundle, BundleAssignment, BundleProfile, WorkItem, WorkItemType } from '../types';
-import { usePathname, useRouter, useSearchParams } from '../App';
+import { usePathname, useRouter, useSearchParams } from '../lib/navigation';
 import { canEditBundleProfileClient } from '../lib/authzClient';
 import CreateWorkItemModal from './CreateWorkItemModal';
 import ChangeFeed from './ChangeFeed';

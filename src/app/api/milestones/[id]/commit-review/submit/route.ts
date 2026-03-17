@@ -1,40 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import { jwtVerify } from 'jose';
-import { ObjectId } from 'mongodb';
-import { emitEvent, getDb } from '../../../../../../services/db';
+import { emitEvent } from '../../../../../../shared/events/emitEvent';
 import { canCommitMilestone, isAdminOrCmo } from '../../../../../../services/authz';
 import { evaluateMilestoneCommitReview } from '../../../../../../services/commitmentReview';
 import { getEffectivePolicyForMilestone } from '../../../../../../services/policy';
 import { ensureMilestoneBaseline } from '../../../../../../services/baselineDelta';
 import { createDecision } from '../../../../../../services/decisionLog';
-
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
-
-const buildMilestoneQuery = (id: string) => {
-  if (ObjectId.isValid(id)) {
-    return { $or: [{ _id: new ObjectId(id) }, { id }, { name: id }] };
-  }
-  return { $or: [{ id }, { name: id }] };
-};
+import { requireStandardUser } from '../../../../../../shared/auth/guards';
+import { insertCommitmentReviewRecord } from '../../../../../../server/db/repositories/commitmentRepo';
+import { getMilestoneByRef, updateMilestoneRecordByRef } from '../../../../../../server/db/repositories/milestonesRepo';
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
-    let token: string | undefined;
-    if (process.env.NODE_ENV === 'test') {
-      token = (globalThis as any).__testToken as string | undefined;
-    } else {
-      const cookieStore = await cookies();
-      token = cookieStore.get('nexus_auth_token')?.value;
-    }
-    if (!token) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
-
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const auth = await requireStandardUser(request);
+    if (!auth.ok) return auth.response;
+    const payload = auth.principal.rawPayload;
     const authUser = {
-      userId: String((payload as any).id || (payload as any).userId || ''),
-      role: String((payload as any).role || ''),
-      team: String((payload as any).team || '')
+      userId: auth.principal.userId,
+      role: String(auth.principal.role || ''),
+      team: String(auth.principal.team || ''),
+      accountType: auth.principal.accountType
     };
 
     const body = await request.json();
@@ -56,8 +41,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       }
     }
 
-    const db = await getDb();
-    const milestone = await db.collection('milestones').findOne(buildMilestoneQuery(id));
+    const milestone = await getMilestoneByRef(id);
     if (!milestone) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
     const policyRef = await getEffectivePolicyForMilestone(String(milestone._id || milestone.id || milestone.name || id));
@@ -85,9 +69,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     const now = new Date().toISOString();
-    await db.collection('milestones').updateOne(buildMilestoneQuery(id), { $set: { status: 'COMMITTED', updatedAt: now } });
-    await db.collection('commitment_reviews').createIndex({ milestoneId: 1, evaluatedAt: -1 });
-    const reviewInsert = await db.collection('commitment_reviews').insertOne({
+    await updateMilestoneRecordByRef(id, { status: 'COMMITTED', updatedAt: now });
+    const reviewInsert = await insertCommitmentReviewRecord({
       milestoneId: String(milestone._id || milestone.id || milestone.name || id),
       evaluatedAt: now,
       evaluatedBy: String(authUser.userId || ''),

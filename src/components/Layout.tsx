@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { useRouter, usePathname, useSearchParams } from '../App';
+import { useRouter, usePathname, useSearchParams } from '../lib/navigation';
 import { NAV_TOP, NAV_DELIVERY } from '../constants';
 import { WikiSpace, Application, Bundle, WorkItem, Notification } from '../types';
 
@@ -91,12 +91,29 @@ const Layout: React.FC<LayoutProps> = ({
   const unreadCount = notifications.filter(n => !n.read).length;
   const hasImpediment = notifications.some(n => !n.read && n.type === 'IMPEDIMENT');
 
+  const selectedBundleRefs = useMemo(() => {
+    if (activeBundle === 'all') return null;
+    const selected = bundles.find((bundle) => [bundle._id, bundle.id, bundle.key].filter(Boolean).map(String).includes(String(activeBundle)));
+    if (!selected) return new Set([String(activeBundle)]);
+    return new Set([selected._id, selected.id, selected.key].filter(Boolean).map(String));
+  }, [bundles, activeBundle]);
+
   const markRead = async (id: string) => {
     await fetch(`/api/notifications/${id}/read`, { method: 'PATCH' });
     setNotifications(prev => prev.map(n => n._id === id ? { ...n, read: true } : n));
   };
 
-  const filteredApps = (applications || []).filter(a => activeBundle === 'all' || a.bundleId === activeBundle);
+  const filteredApps = (applications || []).filter((a) => {
+    if (activeBundle === 'all') return true;
+    const appBundleId = String(a.bundleId || '');
+    return !!appBundleId && !!selectedBundleRefs?.has(appBundleId);
+  });
+
+  useEffect(() => {
+    if (!setActiveApp || activeApp === 'all') return;
+    const valid = filteredApps.some((app) => String(app._id || app.id || app.aid) === String(activeApp));
+    if (!valid) setActiveApp('all');
+  }, [activeApp, filteredApps, setActiveApp]);
   const showFilterBar = ['applications', 'work-items', 'wiki', 'reviews', 'documents'].includes(activeTab);
   const isGuestUser = String(userAccountType || '').toUpperCase() === 'GUEST';
   const showDeliveryNav = isDeliveryActive;

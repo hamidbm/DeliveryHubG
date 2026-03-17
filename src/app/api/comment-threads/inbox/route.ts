@@ -1,26 +1,11 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import { jwtVerify } from 'jose';
-import { fetchCommentThreadsInbox } from '../../../../services/db';
-
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
-
-const getUserFromCookies = async () => {
-  const cookieStore = await cookies();
-  const token = cookieStore.get('nexus_auth_token')?.value;
-  if (!token) return null;
-  const { payload } = await jwtVerify(token, JWT_SECRET);
-  return {
-    userId: String(payload.id || payload.userId || ''),
-    displayName: String(payload.name || 'Unknown'),
-    email: payload.email ? String(payload.email) : undefined
-  };
-};
+import { requireUser } from '../../../../shared/auth/guards';
+import { listCommentThreadsInbox } from '../../../../server/db/repositories/commentThreadsRepo';
 
 export async function GET(request: Request) {
   try {
-    const user = await getUserFromCookies();
-    if (!user?.userId) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
+    const auth = await requireUser(request);
+    if (!auth.ok) return auth.response;
 
     const { searchParams } = new URL(request.url);
     const limit = Number(searchParams.get('limit') || '200');
@@ -35,8 +20,8 @@ export async function GET(request: Request) {
     const participatingOnly = scope === 'participating';
     const resolvedStatus = scope === 'open' && !status ? 'open' : status;
 
-    const threads = await fetchCommentThreadsInbox({
-      userId: user.userId,
+    const threads = await listCommentThreadsInbox({
+      userId: auth.principal.userId,
       resourceType,
       status: resolvedStatus,
       mentionsOnly: resolvedMentionsOnly,

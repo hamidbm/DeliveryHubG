@@ -1,4 +1,6 @@
 import { evaluateWorkItemStaleness } from '../lib/staleness';
+import { getServerDb } from '../server/db/client';
+import { enqueueNotificationDigestItem, getNotificationDigestQueueItem } from '../server/db/repositories/notificationPlatformRepo';
 import { computeMilestoneCriticalPath } from './criticalPath';
 import { WorkItemStatus } from '../types';
 import { getDeliveryPolicy, getEffectivePolicyForBundle, getStrictestPolicyForBundles } from './policy';
@@ -111,10 +113,11 @@ export const buildStaleSummaryForUser = async (db: any, user: any) => {
 export const queueStaleSummaryForUser = async (db: any, user: any, dateKey: string) => {
   if (!user?._id) return null;
   const userId = String(user._id);
-  const existing = await db.collection('notification_digest_queue').findOne({ userId, type: 'workitem.stale.summary', dateKey });
+  const resolvedDb = db || await getServerDb();
+  const existing = await getNotificationDigestQueueItem({ userId, type: 'workitem.stale.summary', dateKey });
   if (existing) return null;
 
-  const summary = await buildStaleSummaryForUser(db, user);
+  const summary = await buildStaleSummaryForUser(resolvedDb, user);
   if (!summary) return null;
 
   const counts = summary.counts;
@@ -127,7 +130,7 @@ export const queueStaleSummaryForUser = async (db: any, user: any, dateKey: stri
   ].filter(Boolean);
   const body = parts.length ? `Stale items: ${parts.join(', ')}.` : 'Stale work items need attention.';
 
-  await db.collection('notification_digest_queue').insertOne({
+  await enqueueNotificationDigestItem({
     userId,
     type: 'workitem.stale.summary',
     title: 'Stale work items summary',

@@ -2,7 +2,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useRouter } from '../../App';
+import { useRouter } from '../../lib/navigation';
 import Layout from '../../components/Layout';
 import { Role } from '../../types';
 

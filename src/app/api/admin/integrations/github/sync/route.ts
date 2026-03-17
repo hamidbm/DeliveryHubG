@@ -1,40 +1,12 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import { jwtVerify } from 'jose';
 import { getGitHubClient, getGitHubConfig, extractWorkItemKeys } from '../../../../../../services/github';
 import { isAdminOrCmo } from '../../../../../../services/authz';
-import { emitEvent, getDb } from '../../../../../../services/db';
-
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
+import { emitEvent } from '../../../../../../shared/events/emitEvent';
+import { findWorkItemRecord, updateWorkItemRecordById } from '../../../../../../server/db/repositories/workItemsRepo';
+import { getGithubLinkRecord, upsertGithubLinkRecord } from '../../../../../../server/db/repositories/githubLinksRepo';
 
 const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-const getUser = async () => {
-  const testToken = process.env.NODE_ENV === 'test' ? (globalThis as any).__testToken : null;
-  const cookieStore = testToken ? null : await cookies();
-  const token = testToken || cookieStore?.get('nexus_auth_token')?.value;
-  if (!token) return null;
-  const { payload } = await jwtVerify(token, JWT_SECRET);
-  return {
-    userId: String(payload.id || payload.userId || ''),
-    role: payload.role ? String(payload.role) : undefined,
-    email: payload.email ? String(payload.email) : undefined,
-    name: payload.name ? String(payload.name) : undefined
-  };
-};
-
-const requireAdmin = async () => {
-  const user = await getUser();
-  if (!user?.userId) return { ok: false, status: 401, user: null };
-  const allowed = await isAdminOrCmo(user);
-  if (!allowed) return { ok: false, status: 403, user };
-  return { ok: true, status: 200, user };
-};
-
-const ensureGithubIndexes = async (db: any) => {
-  await db.collection('github_links').createIndex({ repo: 1, prNumber: 1 }, { unique: true });
-  await db.collection('github_links').createIndex({ workItemId: 1 });
-};
+import { requireStandardUser } from '../../../../../../shared/auth/guards';
 
 const upsertWorkItemPr = (item: any, pr: any, repo: string) => {
   const existing = Array.isArray(item.github?.prs) ? item.github.prs : [];
@@ -59,9 +31,12 @@ const upsertWorkItemPr = (item: any, pr: any, repo: string) => {
 export async function POST(request: Request) {
   try {
     const startMs = Date.now();
-    const auth = await requireAdmin();
+    const auth = await requireStandardUser(request);
     if (!auth.ok) {
-      return NextResponse.json({ error: 'Forbidden', code: 'ADMIN_ONLY' }, { status: auth.status });
+      return auth.response;
+    }
+    if (!(await isAdminOrCmo({ userId: auth.principal.userId, role: auth.principal.role || undefined, email: auth.principal.email }))) {
+      return NextResponse.json({ error: 'Forbidden', code: 'ADMIN_ONLY' }, { status: 403 });
     }
 
     const body = await request.json().catch(() => ({}));
@@ -82,8 +57,6 @@ export async function POST(request: Request) {
     }
 
     const client = getGitHubClient();
-    const db = await getDb();
-    await ensureGithubIndexes(db);
 
     let fetched = 0;
     let linked = 0;
@@ -107,7 +80,7 @@ export async function POST(request: Request) {
             continue;
           }
           const key = keys[0];
-          const item = await db.collection('workitems').findOne({
+          const item = await findWorkItemRecord({
             key: { $regex: new RegExp(`^${escapeRegex(key)}$`, 'i') }
           });
           if (!item) {
@@ -115,32 +88,25 @@ export async function POST(request: Request) {
             continue;
           }
 
-          const existingLink = await db.collection('github_links').findOne({ repo: repoName, prNumber: pr.number });
+          const existingLink = await getGithubLinkRecord(repoName, pr.number);
           const nextState = pr.mergedAt ? 'merged' : pr.state;
           const isNewLink = !existingLink;
           const isMergedTransition = existingLink && existingLink.state !== 'merged' && nextState === 'merged';
 
-          await db.collection('github_links').updateOne(
-            { repo: repoName, prNumber: pr.number },
-            {
-              $set: {
-                workItemId: String(item._id || item.id || ''),
-                repo: repoName,
-                prNumber: pr.number,
-                url: pr.url,
-                state: nextState,
-                title: pr.title,
-                updatedAt: pr.updatedAt
-              }
-            },
-            { upsert: true }
-          );
+          await upsertGithubLinkRecord({
+            workItemId: String(item._id || item.id || ''),
+            repo: repoName,
+            prNumber: pr.number,
+            url: pr.url,
+            state: nextState,
+            title: pr.title,
+            updatedAt: pr.updatedAt
+          });
 
           const nextGithub = upsertWorkItemPr(item, pr, repoName);
-          await db.collection('workitems').updateOne(
-            { _id: item._id },
-            { $set: { github: nextGithub, updatedAt: nowIso } }
-          );
+          await updateWorkItemRecordById(String(item._id || item.id || ''), {
+            set: { github: nextGithub, updatedAt: nowIso }
+          });
 
           if (isNewLink) linked += 1;
           else updated += 1;
@@ -150,7 +116,7 @@ export async function POST(request: Request) {
               await emitEvent({
                 ts: nowIso,
                 type: 'workitem.github.linked',
-                actor: { userId: auth.user?.userId, email: auth.user?.email, displayName: auth.user?.name },
+                actor: { userId: auth.principal.userId, email: auth.principal.email, displayName: auth.principal.fullName },
                 resource: { type: 'workitems.item', id: String(item._id || item.id || ''), title: item.title },
                 payload: { repo: repoName, prNumber: pr.number, prUrl: pr.url, prTitle: pr.title, state: nextState }
               });
@@ -161,7 +127,7 @@ export async function POST(request: Request) {
               await emitEvent({
                 ts: nowIso,
                 type: 'workitem.github.merged',
-                actor: { userId: auth.user?.userId, email: auth.user?.email, displayName: auth.user?.name },
+                actor: { userId: auth.principal.userId, email: auth.principal.email, displayName: auth.principal.fullName },
                 resource: { type: 'workitems.item', id: String(item._id || item.id || ''), title: item.title },
                 payload: { repo: repoName, prNumber: pr.number, prUrl: pr.url, prTitle: pr.title, state: nextState }
               });
@@ -178,7 +144,7 @@ export async function POST(request: Request) {
       await emitEvent({
         ts: new Date().toISOString(),
         type: 'integrations.github.sync.completed',
-        actor: { userId: auth.user?.userId, email: auth.user?.email, displayName: auth.user?.name },
+        actor: { userId: auth.principal.userId, email: auth.principal.email, displayName: auth.principal.fullName },
         resource: { type: 'integrations.github', id: targetRepos.join(','), title: 'GitHub Sync' },
         payload: {
           name: 'job.github.sync',

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
-import { ensureUserIndexes, getDb } from '../../../../services/db';
+import { ensureUserIndexesInRepo, findUserByEmail, findUserByUsername, insertUserRecord } from '../../../../server/db/repositories/usersRepo';
 
 const GUEST_TEAM = 'External';
 const GUEST_ROLE = 'Guest Viewer';
@@ -11,11 +11,11 @@ const normalizeUsernameBase = (email: string) => {
   return sanitized || 'guest';
 };
 
-const buildGuestUsername = async (db: any, email: string) => {
+const buildGuestUsername = async (email: string) => {
   const base = `guest.${normalizeUsernameBase(email)}`;
   let candidate = base;
   let suffix = 2;
-  while (await db.collection('users').findOne({ username: candidate }, { projection: { _id: 1 } })) {
+  while (await findUserByUsername(candidate, { _id: 1 })) {
     candidate = `${base}.${suffix}`;
     suffix += 1;
   }
@@ -36,18 +36,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Password must be at least 8 characters long' }, { status: 400 });
     }
 
-    const db = await getDb();
-    await ensureUserIndexes(db);
+    await ensureUserIndexesInRepo();
 
-    const existingUser = await db.collection('users').findOne({ email: normalizedEmail }, { projection: { _id: 1 } });
+    const existingUser = await findUserByEmail(normalizedEmail, { _id: 1 });
     if (existingUser) {
       return NextResponse.json({ error: 'Account already exists' }, { status: 409 });
     }
 
-    const username = await buildGuestUsername(db, normalizedEmail);
+    const username = await buildGuestUsername(normalizedEmail);
     const hashedPassword = await bcrypt.hash(password, 12);
 
-    const result = await db.collection('users').insertOne({
+    const result = await insertUserRecord({
       name: normalizedName,
       username,
       email: normalizedEmail,

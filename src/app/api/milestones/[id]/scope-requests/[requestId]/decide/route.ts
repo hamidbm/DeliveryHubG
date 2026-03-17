@@ -1,41 +1,34 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import { jwtVerify } from 'jose';
-import { ObjectId } from 'mongodb';
-import { getDb, computeMilestoneRollup, ensureScopeChangeRequestIndexes, emitEvent, fetchUsersByIds } from '../../../../../../../services/db';
+import { emitEvent } from '../../../../../../../shared/events/emitEvent';
+import { fetchUsersByIds } from '../../../../../../../services/userDirectory';
+import { computeMilestoneRollup } from '../../../../../../../services/rollupAnalytics';
 import { canOverrideCapacity, isAdminOrCmo } from '../../../../../../../services/authz';
 import { evaluateCapacity } from '../../../../../../../services/milestoneGovernance';
 import { createNotificationsForEvent } from '../../../../../../../services/notifications';
 import { createDecision } from '../../../../../../../services/decisionLog';
-
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
-
-const getUser = async () => {
-  const testToken = process.env.NODE_ENV === 'test' ? (globalThis as any).__testToken : null;
-  const cookieStore = testToken ? null : await cookies();
-  const token = testToken || cookieStore?.get('nexus_auth_token')?.value;
-  if (!token) return null;
-  const { payload } = await jwtVerify(token, JWT_SECRET);
-  return {
-    userId: String((payload as any).id || (payload as any).userId || ''),
-    role: String((payload as any).role || ''),
-    email: (payload as any).email ? String((payload as any).email) : undefined,
-    name: (payload as any).name ? String((payload as any).name) : undefined
-  };
-};
-
-const resolveMilestone = async (db: any, id: string) => {
-  if (ObjectId.isValid(id)) {
-    return await db.collection('milestones').findOne({ _id: new ObjectId(id) });
-  }
-  return await db.collection('milestones').findOne({ $or: [{ id }, { name: id }] });
-};
+import { requireStandardUser } from '../../../../../../../shared/auth/guards';
+import { getMilestoneByRef } from '../../../../../../../server/db/repositories/milestonesRepo';
+import {
+  getScopeChangeRequestByRef,
+  updateScopeChangeRequestRecord
+} from '../../../../../../../server/db/repositories/scopeRequestsRepo';
+import {
+  listWorkItemsByAnyRefs,
+  updateWorkItemsMilestoneAssignment
+} from '../../../../../../../server/db/repositories/workItemsRepo';
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string; requestId: string }> }) {
   try {
     const { id, requestId } = await params;
-    const user = await getUser();
-    if (!user?.userId) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
+    const auth = await requireStandardUser(request);
+    if (!auth.ok) return auth.response;
+    const user = {
+      userId: auth.principal.userId,
+      role: String(auth.principal.role || ''),
+      email: auth.principal.email,
+      name: auth.principal.fullName,
+      accountType: auth.principal.accountType
+    };
 
     const body = await request.json();
     const decision = String(body?.decision || '').toUpperCase();
@@ -47,14 +40,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: 'DECISION_REASON_REQUIRED' }, { status: 400 });
     }
 
-    const db = await getDb();
-    await ensureScopeChangeRequestIndexes(db);
-    const milestone = await resolveMilestone(db, id);
+    const milestone = await getMilestoneByRef(id);
     if (!milestone) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-    const scopeRequest = ObjectId.isValid(requestId)
-      ? await db.collection('scope_change_requests').findOne({ _id: new ObjectId(requestId) })
-      : await db.collection('scope_change_requests').findOne({ _id: requestId as any });
+    const scopeRequest = await getScopeChangeRequestByRef(requestId);
     if (!scopeRequest) return NextResponse.json({ error: 'Request not found' }, { status: 404 });
 
     if (decision === 'CANCEL') {
@@ -79,10 +68,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     if (decision === 'REJECT' || decision === 'CANCEL') {
       const status = decision === 'REJECT' ? 'REJECTED' : 'CANCELLED';
-      await db.collection('scope_change_requests').updateOne(
-        { _id: scopeRequest._id },
-        { $set: { status, decidedBy: user.userId, decidedAt: now, decisionReason: reason } }
-      );
+      await updateScopeChangeRequestRecord(String(scopeRequest._id), {
+        status,
+        decidedBy: user.userId,
+        decidedAt: now,
+        decisionReason: reason
+      });
 
       const actor = { userId: user.userId, displayName: user.name, email: user.email, role: user.role };
       const eventType = status === 'REJECTED' ? 'milestones.scope.rejected' : 'milestones.scope.cancelled';
@@ -159,14 +150,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     const milestoneId = String(milestone._id || milestone.id || id);
     const workItemIds = Array.isArray(scopeRequest.workItemIds) ? scopeRequest.workItemIds.map(String) : [];
-    const objectIds = workItemIds.filter(ObjectId.isValid).map((itemId) => new ObjectId(itemId));
-    const items = await db.collection('workitems').find({
-      $or: [
-        { _id: { $in: objectIds } },
-        { id: { $in: workItemIds } },
-        { key: { $in: workItemIds } }
-      ]
-    }).toArray();
+    const items = await listWorkItemsByAnyRefs(workItemIds);
 
     const rollup = await computeMilestoneRollup(milestoneId);
     const targetCapacity = typeof milestone.targetCapacity === 'number' ? milestone.targetCapacity : undefined;
@@ -209,24 +193,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       }
     }
 
-    const updateFilter = {
-      $or: [
-        { _id: { $in: objectIds } },
-        { id: { $in: workItemIds } },
-        { key: { $in: workItemIds } }
-      ]
-    };
-    if (scopeRequest.action === 'ADD_ITEMS') {
-      await db.collection('workitems').updateMany(
-        updateFilter,
-        { $addToSet: { milestoneIds: milestoneId }, $set: { updatedAt: now } }
-      );
-    } else {
-      await db.collection('workitems').updateMany(
-        updateFilter,
-        { $pull: { milestoneIds: milestoneId }, $set: { updatedAt: now }, $unset: { milestoneId: '' } } as any
-      );
-    }
+    await updateWorkItemsMilestoneAssignment({
+      workItemRefs: workItemIds,
+      milestoneId,
+      action: scopeRequest.action === 'ADD_ITEMS' ? 'ADD_ITEMS' : 'REMOVE_ITEMS',
+      updatedAt: now
+    });
 
     const afterRollup = await computeMilestoneRollup(milestoneId);
     const afterSnapshot = {
@@ -234,10 +206,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       targetCapacity
     };
 
-    await db.collection('scope_change_requests').updateOne(
-      { _id: scopeRequest._id },
-      { $set: { status: 'APPROVED', decidedBy: user.userId, decidedAt: now, decisionReason: reason, after: afterSnapshot } }
-    );
+    await updateScopeChangeRequestRecord(String(scopeRequest._id), {
+      status: 'APPROVED',
+      decidedBy: user.userId,
+      decidedAt: now,
+      decisionReason: reason,
+      after: afterSnapshot
+    });
 
     const actor = { userId: user.userId, displayName: user.name, email: user.email, role: user.role };
     try {

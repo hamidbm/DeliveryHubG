@@ -11,30 +11,34 @@ Guest Access is intentionally excluded from this assessment.
 - dashboards and program intelligence
 - AI Insights and executive intelligence
 - bootstrap, seeding, and admin operations
+- shared auth/guard usage across API routes
+- repository-based persistence boundaries across the main domains
+- wiki Word image handling through stable served URLs
+- centralized event emission outside the legacy DB compatibility layer
 
 ## Main Gaps
 
-### 1. Route-level auth and authorization are inconsistent
+### 1. App Router adoption is still incomplete in the frontend shell
 
-Some routes use shared visibility and authorization helpers, but others still parse cookies ad hoc or allow writes with weak enforcement.
+App Router is used for routes and API handlers, but parts of the frontend shell still run through a legacy client-side container in `src/App.tsx` plus a custom navigation compatibility layer in `src/lib/navigation.tsx`.
 
-This is most visible in older wiki routes.
+### 2. Notifications remain split at the domain-model level
 
-### 2. DB access is still too centralized
+The user-facing inbox is now substantially unified, but the system still has classic notifications and AI notifications as separate persistence paths. That is workable, but the model is still more fragmented than the ideal long-term design.
 
-The codebase works, but much of the persistence logic remains concentrated in `src/services/db.ts` instead of being split into smaller domain repositories.
+### 3. `src/services/db.ts` still exists as a compatibility layer
 
-### 3. Wiki Word-image handling does not match the target design
+This is no longer a primary persistence gap. The major extraction work is done.
 
-The documented direction prefers extracted images served via stable URLs. The current code often embeds images as base64 data URIs during conversion instead.
+What remains is deliberate compatibility:
 
-### 4. App Router adoption is incomplete in the frontend shell
+- `src/services/db.ts` is frozen and should keep shrinking
+- new code should not add domain persistence there
+- eventual cleanup should be incremental, not a broad repo-wide rewrite
 
-Routes use App Router, but the UI shell still carries some legacy app-level routing patterns.
+### 4. Some legacy reference pages still describe older architecture
 
-### 5. Notifications remain split
-
-There is a classic notifications path and a separate AI notifications path, which makes the overall notification model harder to reason about.
+The code now reflects the repository/shared-module split more accurately than some older wiki pages. Documentation cleanup should continue so older reference pages do not imply that `src/services/db.ts` is still the main repository layer.
 
 ## Why This Page Exists
 

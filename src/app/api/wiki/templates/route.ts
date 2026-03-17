@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server';
-import { fetchWikiTemplates, saveWikiTemplate } from '../../../../services/db';
+import { listWikiTemplates, saveWikiTemplateRecord } from '../../../../server/db/repositories/wikiRepo';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const documentTypeId = searchParams.get('documentTypeId') || undefined;
   const activeOnly = searchParams.get('active') === 'true';
-  const templates = await fetchWikiTemplates({ documentTypeId, activeOnly });
+  const templates = await listWikiTemplates({ documentTypeId, activeOnly });
   return NextResponse.json(templates);
 }
 
@@ -15,7 +15,7 @@ export async function POST(request: Request) {
     if (!templateData?.name || !templateData?.documentTypeId || !templateData?.content) {
       return NextResponse.json({ error: 'Name, document type, and content are required.' }, { status: 400 });
     }
-    const result = await saveWikiTemplate(templateData);
+    const result = await saveWikiTemplateRecord(templateData);
     return NextResponse.json({ success: true, result });
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'Failed to save template' }, { status: 500 });

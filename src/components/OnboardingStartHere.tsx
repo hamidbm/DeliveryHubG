@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo } from 'react';
-import { useRouter } from '../App';
+import { useRouter } from '../lib/navigation';
 import { useOnboarding } from '../lib/onboardingClient';
 import type { OnboardingRole } from '../types';
 

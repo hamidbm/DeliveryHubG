@@ -1,14 +1,21 @@
 import { NextResponse } from 'next/server';
-import { fetchMilestones, computeMilestoneRollups, getDb, deriveWorkItemLinkSummary, emitEvent } from '../../../../services/db';
+import { emitEvent } from '../../../../shared/events/emitEvent';
+import { deriveWorkItemLinkSummary } from '../../../../services/workItemsService';
+import { computeMilestoneRollups } from '../../../../services/rollupAnalytics';
 import { evaluateMilestoneReadiness } from '../../../../services/milestoneGovernance';
-import { ObjectId } from 'mongodb';
-import { cookies } from 'next/headers';
-import { jwtVerify } from 'jose';
 import { createVisibilityContext, getAuthUserFromCookies } from '../../../../services/visibility';
 import { getEffectivePolicyForMilestone } from '../../../../services/policy';
 import { snapshotCacheStats, diffCacheStats, summarizeCacheStats } from '../../../../services/perfStats';
-
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
+import { requireUser } from '../../../../shared/auth/guards';
+import {
+  listMilestoneRecordsByRefs,
+  listMilestones
+} from '../../../../server/db/repositories/milestonesRepo';
+import {
+  listActiveWorkItemsForScope,
+  listBlockingWorkItemRecordsForTargetRefs,
+  listWorkItemRecordsByMilestoneRefs
+} from '../../../../server/db/repositories/workItemsRepo';
 
 const buildMilestoneKey = (m: any) => String(m._id || m.id || m.name);
 
@@ -21,26 +28,12 @@ const getMilestoneCandidates = (m: any) => {
 };
 
 const computeLists = async (milestones: any[], visibility: ReturnType<typeof createVisibilityContext>) => {
-  const db = await getDb();
   const milestoneCandidates = new Map<string, string[]>();
   milestones.forEach((m) => milestoneCandidates.set(buildMilestoneKey(m), getMilestoneCandidates(m)));
   const allCandidateIds = Array.from(new Set(Array.from(milestoneCandidates.values()).flat()));
   if (!allCandidateIds.length) return new Map<string, any>();
 
-  const objectIds = allCandidateIds.filter((id) => ObjectId.isValid(id)).map((id) => new ObjectId(id));
-  const query = {
-    $and: [
-      { $or: [{ isArchived: { $exists: false } }, { isArchived: false }] },
-      { $or: [
-        { milestoneIds: { $in: allCandidateIds } },
-        { milestoneIds: { $in: objectIds } },
-        { milestoneId: { $in: allCandidateIds } },
-        { milestoneId: { $in: objectIds } }
-      ] }
-    ]
-  };
-
-  const items = await db.collection('workitems').find(query).toArray();
+  const items = await listWorkItemRecordsByMilestoneRefs(allCandidateIds);
   const visibleItems = await visibility.filterVisibleWorkItems(items as any[]);
   const enriched = await deriveWorkItemLinkSummary(visibleItems as any[]);
   await visibility.redactWorkItemLinks(enriched as any[]);
@@ -170,23 +163,13 @@ const computeLists = async (milestones: any[], visibility: ReturnType<typeof cre
 };
 
 const computeListCounts = async (milestones: any[], visibility: ReturnType<typeof createVisibilityContext>) => {
-  const db = await getDb();
   const milestoneCandidates = new Map<string, string[]>();
   milestones.forEach((m) => milestoneCandidates.set(buildMilestoneKey(m), getMilestoneCandidates(m)));
   const allCandidateIds = Array.from(new Set(Array.from(milestoneCandidates.values()).flat()));
-  const objectIds = allCandidateIds.filter((id) => ObjectId.isValid(id)).map((id) => new ObjectId(id));
-
-  let items = await db.collection('workitems').find({
-    $and: [
-      { $or: [{ isArchived: { $exists: false } }, { isArchived: false }] },
-      { $or: [
-        { milestoneIds: { $in: allCandidateIds } },
-        { milestoneIds: { $in: objectIds } },
-        { milestoneId: { $in: allCandidateIds } },
-        { milestoneId: { $in: objectIds } }
-      ] }
-    ]
-  }, { projection: { _id: 1, id: 1, key: 1, milestoneIds: 1, milestoneId: 1, status: 1, links: 1, type: 1, risk: 1, dueAt: 1 } }).toArray();
+  let items = await listActiveWorkItemsForScope({
+    milestoneRefs: allCandidateIds,
+    projection: { _id: 1, id: 1, key: 1, milestoneIds: 1, milestoneId: 1, status: 1, links: 1, type: 1, risk: 1, dueAt: 1 }
+  });
   items = await visibility.filterVisibleWorkItems(items as any[]);
 
   const itemToMilestone = new Map<string, string>();
@@ -274,6 +257,8 @@ const computeListCounts = async (milestones: any[], visibility: ReturnType<typeo
 export async function GET(request: Request) {
   const startTime = Date.now();
   const cacheBefore = snapshotCacheStats();
+  const auth = await requireUser(request);
+  if (!auth.ok) return auth.response;
   const authUser = await getAuthUserFromCookies();
   if (!authUser?.userId) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
   const visibility = createVisibilityContext(authUser);
@@ -284,17 +269,9 @@ export async function GET(request: Request) {
   let milestones: any[] = [];
   if (milestoneIds) {
     const ids = milestoneIds.split(',').map((id) => id.trim()).filter(Boolean);
-    const objectIds = ids.filter((id) => ObjectId.isValid(id)).map((id) => new ObjectId(id));
-    const db = await getDb();
-    milestones = await db.collection('milestones').find({
-      $or: [
-        { _id: { $in: objectIds } },
-        { id: { $in: ids } },
-        { name: { $in: ids } }
-      ]
-    }).toArray();
+    milestones = await listMilestoneRecordsByRefs(ids);
   } else {
-    milestones = await fetchMilestones({
+    milestones = await listMilestones({
       bundleId: searchParams.get('bundleId'),
       applicationId: searchParams.get('applicationId'),
       status: searchParams.get('status')
@@ -350,17 +327,11 @@ export async function GET(request: Request) {
     includeLists
   });
   try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get('nexus_auth_token')?.value;
-    let actor: any = undefined;
-    if (token) {
-      const { payload: authPayload } = await jwtVerify(token, JWT_SECRET);
-      actor = {
-        userId: String((authPayload as any).id || (authPayload as any).userId || (authPayload as any).email || ''),
-        displayName: String((authPayload as any).name || (authPayload as any).displayName || ''),
-        email: (authPayload as any).email ? String((authPayload as any).email) : undefined
-      };
-    }
+    const actor = {
+      userId: auth.principal.userId,
+      displayName: auth.principal.fullName || auth.principal.email || 'Unknown',
+      email: auth.principal.email
+    };
     await emitEvent({
       ts: new Date().toISOString(),
       type: 'perf.roadmap.intel',

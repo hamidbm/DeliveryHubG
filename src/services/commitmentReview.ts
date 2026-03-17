@@ -1,16 +1,10 @@
 import { ObjectId } from 'mongodb';
-import { computeMilestoneRollup, getDb } from './db';
+import { computeMilestoneRollup } from './rollupAnalytics';
 import { computeMilestoneCriticalPath } from './criticalPath';
 import { getEffectivePolicyForMilestone } from './policy';
 import { computeBundleCapacityPlans } from './capacityPlanning';
 import type { CommitmentReview, MilestoneRollup } from '../types';
-
-const buildMilestoneQuery = (id: string) => {
-  if (ObjectId.isValid(id)) {
-    return { $or: [{ _id: new ObjectId(id) }, { id }, { name: id }] };
-  }
-  return { $or: [{ id }, { name: id }] };
-};
+import { getMilestoneByRef } from '../server/db/repositories/milestonesRepo';
 
 const scoreFromChecks = (checks: CommitmentReview['checks']) => {
   let score = 100;
@@ -28,8 +22,7 @@ const scoreFromChecks = (checks: CommitmentReview['checks']) => {
 export const evaluateMilestoneCommitReview = async (milestoneId: string): Promise<CommitmentReview | null> => {
   const id = String(milestoneId || '');
   if (!id) return null;
-  const db = await getDb();
-  const milestone = await db.collection('milestones').findOne(buildMilestoneQuery(id));
+  const milestone = await getMilestoneByRef(id);
   if (!milestone) return null;
 
   const rollup = await computeMilestoneRollup(String(milestone._id || milestone.id || milestone.name || id));

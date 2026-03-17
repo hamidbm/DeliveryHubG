@@ -1,7 +1,10 @@
-import { getDb } from '../db';
 import { PortfolioSnapshot, PortfolioSnapshotHistory, PortfolioTrendSignal } from '../../types/ai';
+import {
+  deleteExpiredPortfolioSnapshotRecords,
+  insertPortfolioSnapshotRecord,
+  listRecentPortfolioSnapshotRecords
+} from '../../server/db/repositories/aiWorkspaceRepo';
 
-const COLLECTION = 'portfolio_snapshots';
 const MAX_HISTORY_READ = 14;
 const DEFAULT_WINDOW = 7;
 const RETENTION_DAYS = 90;
@@ -53,26 +56,15 @@ const sortByCreatedAtAsc = <T extends { createdAt: string }>(rows: T[]) => rows
   .sort((a, b) => (parseDate(a.createdAt)?.getTime() || 0) - (parseDate(b.createdAt)?.getTime() || 0));
 
 export const persistPortfolioSnapshot = async (snapshot: PortfolioSnapshot) => {
-  const db = await getDb();
-  const col = db.collection(COLLECTION);
-  await col.createIndex({ createdAt: -1 });
-
   const doc = summarizeSnapshot(snapshot);
-  await col.insertOne(doc as any);
+  await insertPortfolioSnapshotRecord(doc as any);
 
   const retentionCutoff = new Date(Date.now() - RETENTION_DAYS * DAY_MS).toISOString();
-  await col.deleteMany({ createdAt: { $lt: retentionCutoff } } as any);
+  await deleteExpiredPortfolioSnapshotRecords(retentionCutoff);
 };
 
 export const loadRecentPortfolioSnapshots = async (limit = MAX_HISTORY_READ): Promise<PortfolioSnapshotHistory[]> => {
-  const db = await getDb();
-  const col = db.collection(COLLECTION);
-  await col.createIndex({ createdAt: -1 });
-  const rows = await col
-    .find({}, { projection: { _id: 1, createdAt: 1, totalApplications: 1, criticalApplications: 1, totalWorkItems: 1, unassignedWorkItems: 1, blockedWorkItems: 1, overdueWorkItems: 1, activeWorkItems: 1, openReviews: 1, overdueMilestones: 1 } })
-    .sort({ createdAt: -1 })
-    .limit(Math.max(2, Math.min(limit, MAX_HISTORY_READ)))
-    .toArray();
+  const rows = await listRecentPortfolioSnapshotRecords(Math.max(2, Math.min(limit, MAX_HISTORY_READ)));
 
   return sortByCreatedAtAsc(rows.map(mapHistoryRow));
 };

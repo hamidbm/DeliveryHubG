@@ -1,17 +1,9 @@
-import { ObjectId } from 'mongodb';
-import { getDb, ensureApplicationPlanningMetadataIndexes } from './db';
+import { findApplicationByAnyId } from '../server/db/repositories/applicationsRepo';
+import { getPlanningMetadataRecordByScope, upsertPlanningMetadataRecord } from '../server/db/repositories/applicationPlanningMetadataRepo';
 import type { Application, ApplicationPlanningMetadata, PlanningEnvironmentEntry } from '../types';
 
 const resolveApplication = async (applicationId: string): Promise<Application | null> => {
-  const db = await getDb();
-  const candidates: any[] = [
-    { id: applicationId },
-    { aid: applicationId }
-  ];
-  if (ObjectId.isValid(applicationId)) {
-    candidates.push({ _id: new ObjectId(applicationId) });
-  }
-  return await db.collection<Application>('applications').findOne({ $or: candidates });
+  return (await findApplicationByAnyId(applicationId)) as unknown as Application | null;
 };
 
 const parseIsoDate = (value?: string | null) => {
@@ -194,20 +186,7 @@ export const fetchApplicationById = async (applicationId: string) => {
 };
 
 export const getPlanningMetadataByScope = async (scopeType: 'bundle' | 'application', scopeId: string) => {
-  const db = await getDb();
-  await ensureApplicationPlanningMetadataIndexes(db);
-  if (scopeType === 'application') {
-    return await db.collection<ApplicationPlanningMetadata>('application_planning_metadata').findOne({
-      $or: [
-        { scopeType: 'application', scopeId: String(scopeId) },
-        { applicationId: String(scopeId) }
-      ]
-    });
-  }
-  return await db.collection<ApplicationPlanningMetadata>('application_planning_metadata').findOne({
-    scopeType: 'bundle',
-    scopeId: String(scopeId)
-  });
+  return await getPlanningMetadataRecordByScope(scopeType, scopeId);
 };
 
 export const getApplicationPlanningMetadata = async (applicationId: string) => {
@@ -223,26 +202,7 @@ export const upsertPlanningMetadata = async (
   scopeId: string,
   payload: Partial<ApplicationPlanningMetadata> & { bundleId?: string | null; applicationId?: string | null }
 ) => {
-  const db = await getDb();
-  await ensureApplicationPlanningMetadataIndexes(db);
-  const now = new Date().toISOString();
-  const { createdAt: _createdAt, _id: _id, ...rest } = payload || {};
-  const doc: Partial<ApplicationPlanningMetadata> = {
-    ...rest,
-    scopeType,
-    scopeId: String(scopeId),
-    bundleId: payload.bundleId ?? null,
-    applicationId: payload.applicationId ?? (scopeType === 'application' ? String(scopeId) : undefined),
-    updatedAt: now
-  };
-  await db.collection<ApplicationPlanningMetadata>('application_planning_metadata').updateOne(
-    { scopeType, scopeId: String(scopeId) },
-    {
-      $set: doc,
-      $setOnInsert: { createdAt: now }
-    },
-    { upsert: true }
-  );
+  await upsertPlanningMetadataRecord(scopeType, scopeId, payload);
 };
 
 export const normalizePlanningMetadata = (

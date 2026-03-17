@@ -1,16 +1,18 @@
-import { ObjectId } from 'mongodb';
 import { Notification, NotificationDeliveryStatus, PortfolioRiskSeverity, Watcher, WatcherDeliveryPreferences } from '../../types/ai';
-import { getDb } from '../db';
 import { sendNotificationEmail } from './emailChannel';
 import { sendSlackNotification } from './slackChannel';
 import { sendTeamsNotification } from './teamsChannel';
 import { enqueueNotificationForDigest, startDigestScheduler } from './digestService';
 import { getNotificationPolicy, isRateLimitedForUser, isWithinQuietHours } from './notificationPolicy';
 import { processNotificationRetries, startNotificationRetryScheduler } from './notificationRetryScheduler';
+import {
+  findUserContactByAnyId,
+  getAiNotificationByIdRecord,
+  getAiWatcherByIdRecord,
+  listRecentDeliveredAiNotificationsForWatcherChannel,
+  updateAiNotificationRecord
+} from '../../server/db/repositories/aiNotificationsRepo';
 
-const WATCHERS_COLLECTION = 'ai_watchers';
-const NOTIFICATIONS_COLLECTION = 'ai_notifications';
-const USERS_COLLECTION = 'users';
 const COOLDOWN_MS = 30 * 60 * 1000;
 
 const CHANNELS = ['email', 'slack', 'teams'] as const;
@@ -20,8 +22,6 @@ type DispatchOptions = {
   retryFailedOnly?: boolean;
   forceDeliver?: boolean;
 };
-
-const toObjectId = (id: string) => (ObjectId.isValid(id) ? new ObjectId(id) : id);
 
 const severityRank: Record<PortfolioRiskSeverity, number> = {
   low: 1,
@@ -102,17 +102,14 @@ const severityAllowed = (notification: Notification, watcher: Watcher, channel: 
   return severityRank[sev] >= severityRank[min as PortfolioRiskSeverity];
 };
 
-const shouldSuppressByCooldown = async (db: any, notification: Notification, channel: ExternalChannel) => {
-  const recentSent = await db.collection(NOTIFICATIONS_COLLECTION)
-    .find({
-      userId: notification.userId,
-      watcherId: notification.watcherId,
-      _id: { $ne: toObjectId(notification.id) },
-      [`delivery.${channel}.status`]: 'sent'
-    })
-    .sort({ createdAt: -1 })
-    .limit(1)
-    .toArray();
+const shouldSuppressByCooldown = async (notification: Notification, channel: ExternalChannel) => {
+  const recentSent = await listRecentDeliveredAiNotificationsForWatcherChannel(
+    notification.userId,
+    notification.watcherId,
+    notification.id,
+    channel,
+    1
+  );
 
   if (!recentSent.length) return false;
   const lastAttemptedAt = recentSent[0]?.delivery?.[channel]?.lastAttemptedAt || recentSent[0]?.createdAt;
@@ -121,10 +118,8 @@ const shouldSuppressByCooldown = async (db: any, notification: Notification, cha
   return Date.now() - lastTs < COOLDOWN_MS;
 };
 
-const resolveUserContact = async (db: any, userId: string) => {
-  const row = await db.collection(USERS_COLLECTION).findOne({
-    $or: [{ _id: toObjectId(userId) }, { id: userId }, { userId }]
-  } as any, { projection: { _id: 1, email: 1, name: 1 } });
+const resolveUserContact = async (userId: string) => {
+  const row = await findUserContactByAnyId(userId);
 
   return {
     email: row?.email ? String(row.email) : '',
@@ -145,12 +140,7 @@ const shouldAttemptRetryNow = (notification: Notification, channel: ExternalChan
   return ts <= Date.now();
 };
 
-const updateChannelStatus = async (
-  db: any,
-  notification: Notification,
-  channel: ExternalChannel,
-  payload: NotificationDeliveryStatus
-) => {
+const updateChannelStatus = async (notification: Notification, channel: ExternalChannel, payload: NotificationDeliveryStatus) => {
   const setData: Record<string, any> = {
     [`delivery.${channel}.status`]: payload.status,
     [`delivery.${channel}.lastAttemptedAt`]: payload.lastAttemptedAt || nowIso()
@@ -171,23 +161,17 @@ const updateChannelStatus = async (
     unsetData[`delivery.${channel}.nextRetryAt`] = '';
   }
 
-  await db.collection(NOTIFICATIONS_COLLECTION).updateOne(
-    { _id: toObjectId(notification.id) } as any,
-    Object.keys(unsetData).length
-      ? { $set: setData, $unset: unsetData }
-      : { $set: setData }
-  );
+  await updateAiNotificationRecord(notification.id, setData, Object.keys(unsetData).length ? unsetData : undefined);
 };
 
 const suppressChannel = async (
-  db: any,
   notification: Notification,
   watcher: Watcher,
   channel: ExternalChannel,
   reason: string,
   metricEvent: 'notification_suppressed' | 'notification_rate_limited' | 'notification_quiet_hours'
 ) => {
-  await updateChannelStatus(db, notification, channel, {
+  await updateChannelStatus(notification, channel, {
     status: 'suppressed',
     lastAttemptedAt: nowIso(),
     lastErrorMessage: reason,
@@ -212,7 +196,6 @@ const getBackoffRetryAt = (attempts: number) => {
 };
 
 const failChannelWithRetry = async (
-  db: any,
   notification: Notification,
   watcher: Watcher,
   channel: ExternalChannel,
@@ -223,7 +206,7 @@ const failChannelWithRetry = async (
   const hasRetry = attempts < policy.retryMaxAttempts;
   const nextRetryAt = hasRetry ? getBackoffRetryAt(attempts) : undefined;
 
-  await updateChannelStatus(db, notification, channel, {
+  await updateChannelStatus(notification, channel, {
     status: 'failed',
     lastAttemptedAt: nowIso(),
     lastErrorMessage: hasRetry ? errorMessage : `${errorMessage} Max retry attempts reached.`,
@@ -266,31 +249,30 @@ const queueDigestForSuppressed = async (notification: Notification, watcher: Wat
 };
 
 const canDispatchExternal = async (
-  db: any,
   notification: Notification,
   watcher: Watcher,
   channel: ExternalChannel,
   options: DispatchOptions
 ) => {
   if (!channelEnabled(watcher.deliveryPreferences, channel)) {
-    await suppressChannel(db, notification, watcher, channel, `${channel} delivery disabled by watcher preferences.`, 'notification_suppressed');
+    await suppressChannel(notification, watcher, channel, `${channel} delivery disabled by watcher preferences.`, 'notification_suppressed');
     return false;
   }
 
   if (!options.forceDeliver && !severityAllowed(notification, watcher, channel)) {
-    await suppressChannel(db, notification, watcher, channel, 'Suppressed by severityMin preference.', 'notification_suppressed');
+    await suppressChannel(notification, watcher, channel, 'Suppressed by severityMin preference.', 'notification_suppressed');
     return false;
   }
 
   if (!options.forceDeliver) {
-    const suppressedByCooldown = await shouldSuppressByCooldown(db, notification, channel);
+    const suppressedByCooldown = await shouldSuppressByCooldown(notification, channel);
     if (suppressedByCooldown) {
-      await suppressChannel(db, notification, watcher, channel, 'Suppressed by cooldown window.', 'notification_suppressed');
+      await suppressChannel(notification, watcher, channel, 'Suppressed by cooldown window.', 'notification_suppressed');
       return false;
     }
 
     if (isWithinQuietHours(new Date())) {
-      await suppressChannel(db, notification, watcher, channel, 'Suppressed due to quiet hours.', 'notification_quiet_hours');
+      await suppressChannel(notification, watcher, channel, 'Suppressed due to quiet hours.', 'notification_quiet_hours');
       await queueDigestForSuppressed(notification, watcher);
       return false;
     }
@@ -298,7 +280,6 @@ const canDispatchExternal = async (
     const rateLimit = await isRateLimitedForUser(notification.userId);
     if (rateLimit.limited) {
       await suppressChannel(
-        db,
         notification,
         watcher,
         channel,
@@ -313,16 +294,16 @@ const canDispatchExternal = async (
   return true;
 };
 
-const dispatchEmail = async (db: any, watcher: Watcher, notification: Notification, options: DispatchOptions) => {
+const dispatchEmail = async (watcher: Watcher, notification: Notification, options: DispatchOptions) => {
   const channel: ExternalChannel = 'email';
   if (!shouldRetryThisChannel(notification, channel, Boolean(options.retryFailedOnly))) return;
 
-  const allowed = await canDispatchExternal(db, notification, watcher, channel, options);
+  const allowed = await canDispatchExternal(notification, watcher, channel, options);
   if (!allowed) return;
 
-  const contact = await resolveUserContact(db, notification.userId);
+  const contact = await resolveUserContact(notification.userId);
   if (!contact.email) {
-    await failChannelWithRetry(db, notification, watcher, channel, 'User email not found.');
+    await failChannelWithRetry(notification, watcher, channel, 'User email not found.');
     return;
   }
 
@@ -342,7 +323,7 @@ const dispatchEmail = async (db: any, watcher: Watcher, notification: Notificati
   });
 
   if (email.ok) {
-    await updateChannelStatus(db, notification, channel, {
+    await updateChannelStatus(notification, channel, {
       status: 'sent',
       lastAttemptedAt: nowIso(),
       lastErrorMessage: '',
@@ -360,19 +341,19 @@ const dispatchEmail = async (db: any, watcher: Watcher, notification: Notificati
   }
 
   const errorMessage = 'error' in email ? email.error : 'Email dispatch failed.';
-  await failChannelWithRetry(db, notification, watcher, channel, errorMessage);
+  await failChannelWithRetry(notification, watcher, channel, errorMessage);
 };
 
-const dispatchSlack = async (db: any, watcher: Watcher, notification: Notification, options: DispatchOptions) => {
+const dispatchSlack = async (watcher: Watcher, notification: Notification, options: DispatchOptions) => {
   const channel: ExternalChannel = 'slack';
   if (!shouldRetryThisChannel(notification, channel, Boolean(options.retryFailedOnly))) return;
 
-  const allowed = await canDispatchExternal(db, notification, watcher, channel, options);
+  const allowed = await canDispatchExternal(notification, watcher, channel, options);
   if (!allowed) return;
 
   const webhookUrl = String(watcher.deliveryPreferences?.slack?.webhookUrl || '').trim();
   if (!webhookUrl) {
-    await failChannelWithRetry(db, notification, watcher, channel, 'Slack webhook URL missing in watcher preferences.');
+    await failChannelWithRetry(notification, watcher, channel, 'Slack webhook URL missing in watcher preferences.');
     return;
   }
 
@@ -386,7 +367,7 @@ const dispatchSlack = async (db: any, watcher: Watcher, notification: Notificati
 
   try {
     await sendSlackNotification(webhookUrl, notification, process.env.APP_BASE_URL || process.env.NEXT_PUBLIC_APP_BASE_URL);
-    await updateChannelStatus(db, notification, channel, {
+    await updateChannelStatus(notification, channel, {
       status: 'sent',
       lastAttemptedAt: nowIso(),
       lastErrorMessage: '',
@@ -401,20 +382,20 @@ const dispatchSlack = async (db: any, watcher: Watcher, notification: Notificati
     });
     emitMetric('notifications.sent.slack', { userId: notification.userId });
   } catch (error) {
-    await failChannelWithRetry(db, notification, watcher, channel, (error as Error).message || 'Unknown Slack dispatch error.');
+    await failChannelWithRetry(notification, watcher, channel, (error as Error).message || 'Unknown Slack dispatch error.');
   }
 };
 
-const dispatchTeams = async (db: any, watcher: Watcher, notification: Notification, options: DispatchOptions) => {
+const dispatchTeams = async (watcher: Watcher, notification: Notification, options: DispatchOptions) => {
   const channel: ExternalChannel = 'teams';
   if (!shouldRetryThisChannel(notification, channel, Boolean(options.retryFailedOnly))) return;
 
-  const allowed = await canDispatchExternal(db, notification, watcher, channel, options);
+  const allowed = await canDispatchExternal(notification, watcher, channel, options);
   if (!allowed) return;
 
   const webhookUrl = String(watcher.deliveryPreferences?.teams?.webhookUrl || '').trim();
   if (!webhookUrl) {
-    await failChannelWithRetry(db, notification, watcher, channel, 'Teams webhook URL missing in watcher preferences.');
+    await failChannelWithRetry(notification, watcher, channel, 'Teams webhook URL missing in watcher preferences.');
     return;
   }
 
@@ -428,7 +409,7 @@ const dispatchTeams = async (db: any, watcher: Watcher, notification: Notificati
 
   try {
     await sendTeamsNotification(webhookUrl, notification, process.env.APP_BASE_URL || process.env.NEXT_PUBLIC_APP_BASE_URL);
-    await updateChannelStatus(db, notification, channel, {
+    await updateChannelStatus(notification, channel, {
       status: 'sent',
       lastAttemptedAt: nowIso(),
       lastErrorMessage: '',
@@ -443,28 +424,23 @@ const dispatchTeams = async (db: any, watcher: Watcher, notification: Notificati
     });
     emitMetric('notifications.sent.teams', { userId: notification.userId });
   } catch (error) {
-    await failChannelWithRetry(db, notification, watcher, channel, (error as Error).message || 'Unknown Teams dispatch error.');
+    await failChannelWithRetry(notification, watcher, channel, (error as Error).message || 'Unknown Teams dispatch error.');
   }
 };
 
-const applyDigestMode = async (db: any, notification: Notification, watcher: Watcher) => {
-  await db.collection(NOTIFICATIONS_COLLECTION).updateOne(
-    { _id: toObjectId(notification.id) } as any,
-    {
-      $set: {
-        deliveryMode: 'digest',
-        'delivery.email.status': 'suppressed',
-        'delivery.email.lastAttemptedAt': nowIso(),
-        'delivery.email.lastErrorMessage': 'Suppressed due to digest mode.',
-        'delivery.slack.status': 'suppressed',
-        'delivery.slack.lastAttemptedAt': nowIso(),
-        'delivery.slack.lastErrorMessage': 'Suppressed due to digest mode.',
-        'delivery.teams.status': 'suppressed',
-        'delivery.teams.lastAttemptedAt': nowIso(),
-        'delivery.teams.lastErrorMessage': 'Suppressed due to digest mode.'
-      }
-    }
-  );
+const applyDigestMode = async (notification: Notification, watcher: Watcher) => {
+  await updateAiNotificationRecord(notification.id, {
+    deliveryMode: 'digest',
+    'delivery.email.status': 'suppressed',
+    'delivery.email.lastAttemptedAt': nowIso(),
+    'delivery.email.lastErrorMessage': 'Suppressed due to digest mode.',
+    'delivery.slack.status': 'suppressed',
+    'delivery.slack.lastAttemptedAt': nowIso(),
+    'delivery.slack.lastErrorMessage': 'Suppressed due to digest mode.',
+    'delivery.teams.status': 'suppressed',
+    'delivery.teams.lastAttemptedAt': nowIso(),
+    'delivery.teams.lastErrorMessage': 'Suppressed due to digest mode.'
+  });
 
   await enqueueNotificationForDigest({
     userId: notification.userId,
@@ -480,15 +456,14 @@ export const dispatchNotification = async (notificationId: string, options: Disp
     await dispatchNotification(id, { retryFailedOnly: true });
   });
 
-  const db = await getDb();
-  const raw = await db.collection(NOTIFICATIONS_COLLECTION).findOne({ _id: toObjectId(notificationId) } as any);
+  const raw = await getAiNotificationByIdRecord(notificationId);
   if (!raw) return;
   const notification = normalizeNotification(raw);
 
-  const watcherRaw = await db.collection(WATCHERS_COLLECTION).findOne({ _id: toObjectId(notification.watcherId) } as any);
+  const watcherRaw = await getAiWatcherByIdRecord(notification.watcherId);
   if (!watcherRaw) {
     for (const channel of CHANNELS) {
-      await updateChannelStatus(db, notification, channel, {
+      await updateChannelStatus(notification, channel, {
         status: 'failed',
         lastAttemptedAt: nowIso(),
         lastErrorMessage: 'Watcher not found for notification.',
@@ -501,26 +476,23 @@ export const dispatchNotification = async (notificationId: string, options: Disp
   const watcher = normalizeWatcher(watcherRaw);
   if (!watcher.enabled) {
     for (const channel of CHANNELS) {
-      await suppressChannel(db, notification, watcher, channel, 'Watcher disabled.', 'notification_suppressed');
+      await suppressChannel(notification, watcher, channel, 'Watcher disabled.', 'notification_suppressed');
     }
     return;
   }
 
   const digestEnabled = watcher.deliveryPreferences?.digest?.enabled === true;
   if (digestEnabled && !options.forceDeliver) {
-    await applyDigestMode(db, notification, watcher);
+    await applyDigestMode(notification, watcher);
     return;
   }
 
-  await db.collection(NOTIFICATIONS_COLLECTION).updateOne(
-    { _id: toObjectId(notification.id) } as any,
-    { $set: { deliveryMode: 'immediate' } }
-  );
+  await updateAiNotificationRecord(notification.id, { deliveryMode: 'immediate' });
 
   await Promise.all([
-    dispatchEmail(db, watcher, notification, options),
-    dispatchSlack(db, watcher, notification, options),
-    dispatchTeams(db, watcher, notification, options)
+    dispatchEmail(watcher, notification, options),
+    dispatchSlack(watcher, notification, options),
+    dispatchTeams(watcher, notification, options)
   ]);
 };
 

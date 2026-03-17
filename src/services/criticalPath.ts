@@ -1,8 +1,8 @@
-import { ObjectId } from 'mongodb';
-import { getDb } from './db';
 import { getDeliveryPolicy, getEffectivePolicyForBundle, getStrictestPolicyForBundles } from './policy';
 import { WorkItemStatus, WorkItemType } from '../types';
 import { recordCacheHit, recordCacheMiss } from './perfStats';
+import { getMilestoneByRef } from '../server/db/repositories/milestonesRepo';
+import { listBlockingWorkItemRecordsForTargetRefs, listWorkItemRecordsByMilestoneRefs } from '../server/db/repositories/workItemsRepo';
 
 const HOURS_PER_POINT = 4;
 const CACHE_TTL_MS = 30_000;
@@ -90,15 +90,6 @@ const normalizeId = (item: any) => {
   return raw ? String(raw) : '';
 };
 
-const resolveMilestone = async (milestoneId: string) => {
-  const db = await getDb();
-  if (ObjectId.isValid(milestoneId)) {
-    const byId = await db.collection('milestones').findOne({ _id: new ObjectId(milestoneId) });
-    if (byId) return byId;
-  }
-  return await db.collection('milestones').findOne({ $or: [{ id: milestoneId }, { name: milestoneId }] });
-};
-
 const buildMilestoneCandidates = (milestone: any, fallbackId: string) => {
   const candidates = new Set<string>();
   if (fallbackId) candidates.add(String(fallbackId));
@@ -116,12 +107,10 @@ export const computeMilestoneCriticalPath = async (
   const includeExternal = options?.includeExternal ?? globalPolicy.criticalPath.defaultIncludeExternal;
   const maxExternalDepth = typeof options?.maxExternalDepth === 'number' ? options!.maxExternalDepth : globalPolicy.criticalPath.defaultExternalDepth;
   const limit = typeof options?.limit === 'number' ? options!.limit : 50;
-  const milestone = await resolveMilestone(milestoneId);
+  const milestone = await getMilestoneByRef(milestoneId);
   if (!milestone) return null;
 
   const candidates = buildMilestoneCandidates(milestone, milestoneId);
-  const objectIds = candidates.filter((id) => ObjectId.isValid(id)).map((id) => new ObjectId(id));
-  const db = await getDb();
   const allowedTypes = new Set([
     WorkItemType.EPIC,
     WorkItemType.FEATURE,
@@ -133,17 +122,7 @@ export const computeMilestoneCriticalPath = async (
     WorkItemType.RISK
   ]);
 
-  const items = await db.collection('workitems').find({
-    $and: [
-      { $or: [{ isArchived: { $exists: false } }, { isArchived: false }] },
-      { $or: [
-        { milestoneIds: { $in: candidates } },
-        { milestoneIds: { $in: objectIds } },
-        { milestoneId: { $in: candidates } },
-        { milestoneId: { $in: objectIds } }
-      ] }
-    ]
-  }).toArray();
+  const items = await listWorkItemRecordsByMilestoneRefs(candidates);
 
   const scopedItems = items.filter((item: any) => allowedTypes.has(item.type));
   const bundleIds = Array.from(new Set(scopedItems.map((i: any) => String(i.bundleId || '')).filter(Boolean)));
@@ -198,15 +177,7 @@ export const computeMilestoneCriticalPath = async (
         if (item?.key) frontierKeys.add(String(item.key));
       });
       const candidates = Array.from(new Set([...frontierIds, ...frontierKeys]));
-      const objectIds = candidates.filter((id) => ObjectId.isValid(id)).map((id) => new ObjectId(id));
-
-      const blockers = await db.collection('workitems').find({
-        $and: [
-          { $or: [{ isArchived: { $exists: false } }, { isArchived: false }] },
-          { 'links.type': 'BLOCKS' },
-          { 'links.targetId': { $in: [...candidates, ...objectIds] } }
-        ]
-      }).toArray();
+      const blockers = await listBlockingWorkItemRecordsForTargetRefs(candidates);
 
       const nextFrontier: string[] = [];
       blockers.forEach((item: any) => {

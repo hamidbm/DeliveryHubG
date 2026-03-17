@@ -1,24 +1,18 @@
 
 import { NextResponse } from 'next/server';
-import { fetchWorkItemById, saveWikiPage, getDb } from '@/services/db';
-import { jwtVerify } from 'jose';
-import { cookies } from 'next/headers';
-import { ObjectId } from 'mongodb';
-
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
+import { saveWikiPageRecord } from '@/server/db/repositories/wikiRepo';
+import { fetchWorkItemById } from '@/services/workItemsService';
+import { requireStandardUser } from '@/shared/auth/guards';
+import { appendWorkItemActivityRecord } from '@/server/db/repositories/workItemsRepo';
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
-    const cookieStore = await cookies();
-    const token = cookieStore.get('nexus_auth_token')?.value;
-    if (!token) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
-    
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const auth = await requireStandardUser(request);
+    if (!auth.ok) return auth.response;
     const item = await fetchWorkItemById(id);
     if (!item) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-    const db = await getDb();
     const now = new Date().toISOString();
 
     // Create Audit Content
@@ -27,7 +21,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 ## Artifact: ${item.title}
 **Status:** ${item.status} | **Priority:** ${item.priority} | **Assigned To:** ${item.assignedTo}
 **Snapshot Date:** ${now}
-**Auditor:** ${payload.name}
+**Auditor:** ${auth.principal.fullName || auth.principal.email || 'Unknown'}
 
 ### Accepting Definition of Done (DoD)
 ${(item.checklists || []).map(c => `- [${c.isCompleted ? 'x' : ' '}] ${c.label}`).join('\n')}
@@ -40,7 +34,7 @@ ${item.description || 'No description provided.'}
     `;
 
     // Save to Wiki Registry (Hidden 'audit' space or global)
-    await saveWikiPage({
+    await saveWikiPageRecord({
       title: `Audit Report: ${item.key}`,
       content: reportContent,
       slug: `audit-${item.key.toLowerCase()}`,
@@ -51,10 +45,7 @@ ${item.description || 'No description provided.'}
     });
 
     // Mark item as snapshotted in activity
-    await db.collection('workitems').updateOne(
-      { _id: new ObjectId(id) },
-      { $push: { activity: { user: 'DeliveryHub Governance', action: 'AUDIT_SNAPSHOT_CREATED', createdAt: now } } } as any
-    );
+    await appendWorkItemActivityRecord(id, { user: 'DeliveryHub Governance', action: 'AUDIT_SNAPSHOT_CREATED', createdAt: now });
 
     return NextResponse.json({ success: true });
   } catch (error: any) {

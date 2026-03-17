@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import * as db from '../../../../services/db';
+import { clearWikiAiInsightRecords, listWikiAiInsights, saveWikiAiInsightRecord } from '../../../../server/db/repositories/wikiRepo';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -8,7 +8,7 @@ export async function GET(request: Request) {
   if (!targetId || !targetType) {
     return NextResponse.json({ error: 'targetId and targetType are required.' }, { status: 400 });
   }
-  const insights = await db.fetchWikiAiInsights(targetId, targetType);
+  const insights = await listWikiAiInsights(targetId, targetType);
   return NextResponse.json({ insights });
 }
 
@@ -18,7 +18,7 @@ export async function POST(request: Request) {
     if (!targetId || !targetType || !type || !content) {
       return NextResponse.json({ error: 'Missing insight payload.' }, { status: 400 });
     }
-    await db.saveWikiAiInsight({ targetId, targetType, type, content });
+    await saveWikiAiInsightRecord({ targetId, targetType, type, content });
     return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json({ error: 'Failed to save insight.' }, { status: 500 });
@@ -31,7 +31,7 @@ export async function DELETE(request: Request) {
     if (!targetId || !targetType) {
       return NextResponse.json({ error: 'Missing target.' }, { status: 400 });
     }
-    await db.clearWikiAiInsights(targetId, targetType);
+    await clearWikiAiInsightRecords(targetId, targetType);
     return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json({ error: 'Failed to clear insights.' }, { status: 500 });

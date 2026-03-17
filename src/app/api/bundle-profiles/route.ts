@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { fetchBundleProfiles } from '../../../services/db';
+import { listBundleProfiles } from '../../../server/db/repositories/bundlesRepo';
 import { createVisibilityContext, getAuthUserFromCookies } from '../../../services/visibility';
 
 export async function GET(request: Request) {
@@ -17,7 +17,7 @@ export async function GET(request: Request) {
         visible: await visibility.canViewBundle(id)
       })))).filter((entry) => entry.visible).map((entry) => entry.id)
       : undefined;
-    const profiles = await fetchBundleProfiles(visibleIds);
+    const profiles = await listBundleProfiles(visibleIds);
     return NextResponse.json(profiles);
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'Failed to fetch bundle profiles' }, { status: 500 });

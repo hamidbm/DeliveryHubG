@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
-import { ObjectId } from 'mongodb';
-import { getDb, saveWorkItem } from '../../../../../services/db';
-import { getAuthUserFromCookies } from '../../../../../services/visibility';
+import { saveWorkItem } from '../../../../../services/workItemsService';
 import { EntityReference } from '../../../../../types/ai';
 import { WorkItemStatus, WorkItemType } from '../../../../../types';
+import { requireStandardUser } from '../../../../../shared/auth/guards';
+import { findUserByEmail, findUserById } from '../../../../../server/db/repositories/usersRepo';
 
 type IncomingTask = {
   title?: string;
@@ -36,10 +36,12 @@ const priorityMap = (value?: IncomingTask['priority']) => {
 };
 
 export async function POST(request: Request) {
-  const authUser = await getAuthUserFromCookies();
-  if (!authUser?.userId) {
-    return NextResponse.json({ status: 'error', error: 'Unauthenticated' }, { status: 401 });
-  }
+  const auth = await requireStandardUser(request);
+  if (!auth.ok) return auth.response;
+  const authUser = {
+    userId: auth.principal.userId,
+    email: auth.principal.email
+  };
 
   let body: { tasks?: IncomingTask[] };
   try {
@@ -56,19 +58,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ status: 'error', error: 'Maximum 25 tasks per request.' }, { status: 400 });
   }
 
-  const db = await getDb();
-  const userId = String(authUser.userId || '');
-  const userObjectId = ObjectId.isValid(userId) ? new ObjectId(userId) : null;
-  const actor = await db.collection('users').findOne(
-    {
-      $or: [
-        { id: userId },
-        ...(userObjectId ? [{ _id: userObjectId }] : []),
-        { email: authUser.email }
-      ]
-    },
-    { projection: { name: 1, email: 1 } }
-  );
+  const actor = (await findUserById(String(authUser.userId || ''), { name: 1, email: 1 }))
+    || (authUser.email ? await findUserByEmail(String(authUser.email), { name: 1, email: 1 }) : null);
   const createdTaskIds: string[] = [];
 
   for (const task of tasks) {

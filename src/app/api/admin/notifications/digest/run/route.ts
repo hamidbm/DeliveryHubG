@@ -1,19 +1,18 @@
 import { NextResponse } from 'next/server';
-import { getDb, emitEvent } from '../../../../../../services/db';
-import { ObjectId } from 'mongodb';
+import { emitEvent } from '../../../../../../shared/events/emitEvent';
 import { getNotificationSettings } from '../../../../../../services/notifications';
 import { queueStaleSummaryForUser } from '../../../../../../services/stalenessSummary';
+import {
+  deleteNotificationDigestQueueItemsByIds,
+  getDigestRunRecord,
+  insertClassicNotification,
+  listDigestOptInUserPrefsDocs,
+  listNotificationDigestQueueItemsForUserSince,
+  upsertDigestRunRecord
+} from '../../../../../../server/db/repositories/notificationPlatformRepo';
+import { findUserById } from '../../../../../../server/db/repositories/usersRepo';
 
 const resolveDateKey = (date = new Date()) => date.toISOString().slice(0, 10);
-
-const ensureDigestRunIndexes = async (db: any) => {
-  await db.collection('digest_runs').createIndex({ userId: 1, dateKey: 1 }, { unique: true });
-  await db.collection('digest_runs').createIndex({ sentAt: -1 });
-};
-
-const ensureDigestQueueIndexes = async (db: any) => {
-  await db.collection('notification_digest_queue').createIndex({ userId: 1, createdAt: -1 });
-};
 
 const buildDigestBody = (items: any[]) => {
   const grouped = items.reduce((acc: Record<string, any[]>, item: any) => {
@@ -56,16 +55,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Digest disabled', code: 'DIGEST_DISABLED' }, { status: 409 });
     }
 
-    const db = await getDb();
-    await ensureDigestRunIndexes(db);
-    await ensureDigestQueueIndexes(db);
-
     const dateKey = resolveDateKey();
 
-    const users = await db.collection('notification_user_prefs')
-      .find({ digestOptIn: true }, { projection: { userId: 1 } })
-      .limit(maxUsers)
-      .toArray();
+    const users = await listDigestOptInUserPrefsDocs(maxUsers);
 
     let usersProcessed = 0;
     let digestsSent = 0;
@@ -78,21 +70,18 @@ export async function POST(request: Request) {
         if (!userId) continue;
         usersProcessed += 1;
 
-        const existingRun = await db.collection('digest_runs').findOne({ userId, dateKey });
+        const existingRun = await getDigestRunRecord(userId, dateKey);
         if (existingRun && !force && !dryRun) continue;
 
-        const user = await db.collection<any>('users').findOne({ _id: new ObjectId(userId) });
+        const user = await findUserById(userId);
         if (!user) continue;
 
         if (!dryRun) {
-          await queueStaleSummaryForUser(db, user, dateKey);
+          await queueStaleSummaryForUser(null, user, dateKey);
         }
 
         const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-        const items = await db.collection('notification_digest_queue')
-          .find({ userId, createdAt: { $gte: since } })
-          .sort({ createdAt: -1 })
-          .toArray();
+        const items = await listNotificationDigestQueueItemsForUserSince(userId, since);
 
         if (!items.length) continue;
 
@@ -105,7 +94,7 @@ export async function POST(request: Request) {
         const recipientName = user?.name || user?.email || userId;
         const body = buildDigestBody(items);
 
-        await db.collection('notifications').insertOne({
+        await insertClassicNotification({
           recipient: recipientName,
           sender: 'DeliveryHub',
           type: 'digest.daily',
@@ -117,13 +106,9 @@ export async function POST(request: Request) {
           createdAt: new Date().toISOString()
         });
 
-        await db.collection('digest_runs').updateOne(
-          { userId, dateKey },
-          { $set: { userId, dateKey, sentAt: new Date().toISOString(), countItems: items.length } },
-          { upsert: true }
-        );
+        await upsertDigestRunRecord(userId, dateKey, items.length);
 
-        await db.collection('notification_digest_queue').deleteMany({ _id: { $in: items.map((i: any) => i._id) } });
+        await deleteNotificationDigestQueueItemsByIds(items.map((i: any) => i._id));
 
         digestsSent += 1;
         totalItems += items.length;

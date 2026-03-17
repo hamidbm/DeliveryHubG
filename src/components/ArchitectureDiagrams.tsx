@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback, Suspense, lazy, useMemo } from 'react';
 import { ArchitectureDiagram, DiagramFormat, Application, Bundle, Milestone, ReviewRecord, TaxonomyCategory, TaxonomyDocumentType } from '../types';
-import { useRouter, useSearchParams } from '../App';
+import { useRouter, useSearchParams } from '../lib/navigation';
 import CommentsDrawer from './CommentsDrawer';
 import DocumentTypePicker from './DocumentTypePicker';
 import { canSubmitForReviewClient, canResubmitClient, canMarkFeedbackSentClient, isEngineeringRoleClient, isVendorRoleClient } from '../lib/authzClient';

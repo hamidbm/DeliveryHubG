@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getAuthUserFromCookies } from '../../../../../../services/visibility';
 import { refreshInvestigation } from '../../../../../../services/ai/investigationService';
 import { evaluateWatchersForUser } from '../../../../../../services/ai/notificationEngine';
-import { fetchAiAnalysisCache } from '../../../../../../services/db';
+import { fetchAiAnalysisCache } from '../../../../../../services/aiPersistence';
 
 export async function POST(_request: Request, context: { params: Promise<{ id: string }> }) {
   const authUser = await getAuthUserFromCookies();

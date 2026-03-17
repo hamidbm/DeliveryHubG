@@ -1,20 +1,8 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import { jwtVerify } from 'jose';
-import { emitEvent } from '../../../../../../services/db';
+import { emitEvent } from '../../../../../../shared/events/emitEvent';
 import { isAdminOrCmo } from '../../../../../../services/authz';
 import { deleteDeliveryPolicyOverride, getDeliveryPolicy, getDeliveryPolicyOverride, getEffectivePolicyForBundle, mergeDeliveryPolicy, saveDeliveryPolicyOverride, validateDeliveryPolicy } from '../../../../../../services/policy';
-
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
-
-const getAuthUser = async () => {
-  const testToken = process.env.NODE_ENV === 'test' ? (globalThis as any).__testToken : null;
-  const cookieStore = testToken ? null : await cookies();
-  const token = testToken || cookieStore?.get('nexus_auth_token')?.value;
-  if (!token) return { token: null, payload: null };
-  const { payload } = await jwtVerify(token, JWT_SECRET);
-  return { token, payload };
-};
+import { requireStandardUser } from '../../../../../../shared/auth/guards';
 
 const buildDiffSummary = (before: any, after: any) => {
   const changes: string[] = [];
@@ -32,12 +20,12 @@ const buildDiffSummary = (before: any, after: any) => {
 
 export async function GET(request: Request, { params }: { params: Promise<{ bundleId: string }> }) {
   try {
-    const { token, payload } = await getAuthUser();
-    if (!token) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
+    const auth = await requireStandardUser(request);
+    if (!auth.ok) return auth.response;
     const authUser = {
-      userId: String((payload as any).id || (payload as any).userId || ''),
-      role: String((payload as any).role || ''),
-      team: String((payload as any).team || '')
+      userId: auth.principal.userId,
+      role: auth.principal.role || '',
+      team: auth.principal.team || ''
     };
     if (!(await isAdminOrCmo(authUser))) {
       return NextResponse.json({ error: 'FORBIDDEN_POLICY_READ' }, { status: 403 });
@@ -60,12 +48,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ bund
 
 export async function PUT(request: Request, { params }: { params: Promise<{ bundleId: string }> }) {
   try {
-    const { token, payload } = await getAuthUser();
-    if (!token) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
+    const auth = await requireStandardUser(request);
+    if (!auth.ok) return auth.response;
     const authUser = {
-      userId: String((payload as any).id || (payload as any).userId || ''),
-      role: String((payload as any).role || ''),
-      team: String((payload as any).team || '')
+      userId: auth.principal.userId,
+      role: auth.principal.role || '',
+      team: auth.principal.team || ''
     };
     if (!(await isAdminOrCmo(authUser))) {
       return NextResponse.json({ error: 'FORBIDDEN_POLICY_UPDATE' }, { status: 403 });
@@ -87,16 +75,16 @@ export async function PUT(request: Request, { params }: { params: Promise<{ bund
       if (!validation.ok) {
         return NextResponse.json({ error: validation.error || 'Invalid override' }, { status: 400 });
       }
-      await saveDeliveryPolicyOverride(bundleId, overrides, String((payload as any).name || (payload as any).email || 'unknown'));
+      await saveDeliveryPolicyOverride(bundleId, overrides, auth.principal.fullName || auth.principal.email || 'unknown');
     }
 
     const afterEffective = (await getEffectivePolicyForBundle(bundleId)).effective;
     const diff = buildDiffSummary(beforeEffective, afterEffective);
     const actor = {
-      userId: String((payload as any).id || (payload as any).userId || (payload as any).email || ''),
-      displayName: String((payload as any).name || (payload as any).displayName || ''),
-      email: (payload as any).email ? String((payload as any).email) : undefined,
-      role: (payload as any).role ? String((payload as any).role) : undefined
+      userId: auth.principal.userId || auth.principal.email || '',
+      displayName: auth.principal.fullName || '',
+      email: auth.principal.email,
+      role: auth.principal.role || undefined
     };
     await emitEvent({
       ts: new Date().toISOString(),

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getAuthUserFromCookies } from '../../../../../services/visibility';
-import { getDb } from '../../../../../services/db';
+import { getLatestOptimizationAppliedRunRecord } from '../../../../../server/db/repositories/optimizationRunsRepo';
 
 export async function GET(request: Request) {
   const user = await getAuthUserFromCookies();
@@ -19,10 +19,7 @@ export async function GET(request: Request) {
     query.scopeId = scopeId;
   }
 
-  const db = await getDb();
-  const item = await db.collection('optimization_applied_runs').findOne(query, {
-    sort: { appliedAt: -1 }
-  });
+  const item = await getLatestOptimizationAppliedRunRecord(query);
 
   return NextResponse.json({ item: item || null });
 }

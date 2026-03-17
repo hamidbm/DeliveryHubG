@@ -1,21 +1,23 @@
 import { NextResponse } from 'next/server';
-import { getDb, emitEvent, fetchBundleCapacity, upsertBundleCapacity } from '../../../../services/db';
-import { getAuthUserFromCookies } from '../../../../services/visibility';
+import { emitEvent } from '../../../../shared/events/emitEvent';
 import { isAdminOrCmo } from '../../../../services/authz';
+import { requireStandardUser } from '../../../../shared/auth/guards';
+import { listBundleCapacity, saveBundleCapacity } from '../../../../server/db/repositories/bundleCapacityRepo';
+import { listBundleRefs } from '../../../../server/db/repositories/bundlesRepo';
 
 export async function GET() {
   try {
-    const authUser = await getAuthUserFromCookies();
-    if (!authUser?.userId) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
+    const auth = await requireStandardUser();
+    if (!auth.ok) return auth.response;
+    const authUser = { userId: auth.principal.userId, role: auth.principal.role || undefined, email: auth.principal.email, id: auth.principal.userId };
     if (!(await isAdminOrCmo(authUser))) return NextResponse.json({ error: 'Forbidden', code: 'ADMIN_ONLY' }, { status: 403 });
 
-    const db = await getDb();
-    const bundles = await db.collection('bundles').find({}, { projection: { _id: 1, name: 1, title: 1 } }).sort({ name: 1 }).toArray();
-    const capacities = await fetchBundleCapacity();
+    const bundles = await listBundleRefs();
+    const capacities = await listBundleCapacity();
     return NextResponse.json({
       bundles: bundles.map((b: any) => ({
         id: String(b._id || b.id || b.key || ''),
-        name: String(b.name || b.title || b._id || '')
+        name: String(b.name || b.title || b.key || b.id || b._id || '')
       })),
       capacities
     });
@@ -26,8 +28,9 @@ export async function GET() {
 
 export async function PUT(request: Request) {
   try {
-    const authUser = await getAuthUserFromCookies();
-    if (!authUser?.userId) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
+    const auth = await requireStandardUser(request);
+    if (!auth.ok) return auth.response;
+    const authUser = { userId: auth.principal.userId, role: auth.principal.role || undefined, email: auth.principal.email, id: auth.principal.userId };
     if (!(await isAdminOrCmo(authUser))) return NextResponse.json({ error: 'Forbidden', code: 'ADMIN_ONLY' }, { status: 403 });
 
     const body = await request.json();
@@ -37,7 +40,7 @@ export async function PUT(request: Request) {
     if (!bundleId) return NextResponse.json({ error: 'bundleId required' }, { status: 400 });
     if (!Number.isFinite(value) || value < 0) return NextResponse.json({ error: 'value must be >= 0' }, { status: 400 });
 
-    await upsertBundleCapacity(bundleId, { unit, value }, String(authUser.userId || authUser.id || ''));
+    await saveBundleCapacity(bundleId, { unit, value }, String(authUser.userId || authUser.id || ''));
 
     await emitEvent({
       ts: new Date().toISOString(),

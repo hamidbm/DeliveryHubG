@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useRouter } from '../App';
+import { useRouter } from '../lib/navigation';
 
 type InboxThread = {
   _id: string;

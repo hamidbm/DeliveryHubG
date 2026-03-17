@@ -1,7 +1,16 @@
-import { ObjectId } from 'mongodb';
-import { getDb, computeMilestoneRollups, deriveWorkItemLinkSummary } from './db';
+import { deriveWorkItemLinkSummary, listWorkItemsByIds } from '../server/db/repositories/workItemsRepo';
+import { computeMilestoneRollups } from './rollupAnalytics';
 import { evaluateMilestoneReadiness } from './milestoneGovernance';
 import { getEffectivePolicyForMilestone } from './policy';
+import { findApplicationByAnyId } from '../server/db/repositories/applicationsRepo';
+import { findBundleByAnyId } from '../server/db/repositories/bundlesRepo';
+import { listMilestoneRecordsByIds } from '../server/db/repositories/milestonesRepo';
+import {
+  getWorkDeliveryPlanRunRecord,
+  getWorkPlanPreviewRecord,
+  listWorkDeliveryPlanRunRecords,
+  listWorkPlanPreviewRecords
+} from '../server/db/repositories/workPlansRepo';
 import { createVisibilityContext } from './visibility';
 import type {
   PortfolioPlanSummary,
@@ -91,21 +100,16 @@ const derivePlanName = async ({
   createdAt?: string;
   source?: PortfolioPlanSource;
 }) => {
-  const db = await getDb();
   const type = String(scopeType || '').toUpperCase();
   const id = String(scopeId || '');
   let base = '';
   if (type === 'PROGRAM') {
     base = 'Program';
   } else if (type === 'BUNDLE') {
-    const bundle = ObjectId.isValid(id)
-      ? await db.collection('bundles').findOne({ _id: new ObjectId(id) })
-      : await db.collection('bundles').findOne({ $or: [{ id }, { key: id }] });
+    const bundle = await findBundleByAnyId(id);
     base = bundle?.name || bundle?.key || id;
   } else if (type === 'APPLICATION' || type === 'APP') {
-    const app = ObjectId.isValid(id)
-      ? await db.collection('applications').findOne({ _id: new ObjectId(id) })
-      : await db.collection('applications').findOne({ $or: [{ id }, { key: id }, { aid: id }] });
+    const app = await findApplicationByAnyId(id);
     base = app?.name || app?.key || id;
   } else {
     base = id || 'Plan';
@@ -269,27 +273,16 @@ const computePlanMilestonesFromRun = async (milestones: any[]) => {
 };
 
 export const listPortfolioPlans = async (user: { userId?: string; role?: string } | null) => {
-  const db = await getDb();
   const visibility = createVisibilityContext(user);
 
-  const planRuns = await db.collection('work_delivery_plan_runs')
-    .find({})
-    .sort({ createdAt: -1 })
-    .limit(50)
-    .toArray();
+  const planRuns = await listWorkDeliveryPlanRunRecords(50);
   const createdScopeKeys = new Set(planRuns.map((r: any) => `${r.scopeType}:${r.scopeId}`));
 
-  const previews = await db.collection('work_plan_previews')
-    .find({})
-    .sort({ createdAt: -1 })
-    .limit(50)
-    .toArray();
+  const previews = await listWorkPlanPreviewRecords({ limit: 50 });
 
   const createdSummaries: PortfolioPlanSummary[] = [];
   for (const run of planRuns) {
-    const milestones = await db.collection('milestones').find({
-      _id: { $in: (run.milestoneIds || []).filter((id: any) => ObjectId.isValid(String(id))).map((id: any) => new ObjectId(String(id))) }
-    }).toArray();
+    const milestones = await listMilestoneRecordsByIds(run.milestoneIds || []);
     const visibleMilestones = [];
     for (const ms of milestones) {
       const canView = await visibility.canViewBundle(String(ms.bundleId || ''));
@@ -338,16 +331,13 @@ export const getPortfolioOverview = async (user: { userId?: string; role?: strin
   let utilizationSum = 0;
   let utilizationCount = 0;
 
-  const db = await getDb();
   for (const plan of plans) {
     const parsed = parsePlanId(plan.id);
     if (!parsed) continue;
     if (parsed.source === 'CREATED_PLAN') {
-      const run = await db.collection('work_delivery_plan_runs').findOne({ _id: new ObjectId(parsed.id) });
+      const run = await getWorkDeliveryPlanRunRecord(parsed.id);
       if (!run) continue;
-      const milestones = await db.collection('milestones').find({
-        _id: { $in: (run.milestoneIds || []).filter((id: any) => ObjectId.isValid(String(id))).map((id: any) => new ObjectId(String(id))) }
-      }).toArray();
+      const milestones = await listMilestoneRecordsByIds(run.milestoneIds || []);
       const visibleMilestones = [];
       for (const ms of milestones) {
         const canView = await visibility.canViewBundle(String(ms.bundleId || ''));
@@ -364,7 +354,7 @@ export const getPortfolioOverview = async (user: { userId?: string; role?: strin
         if (ms.utilizationState === 'OVERLOADED') overloadedMilestones += 1;
       });
     } else {
-      const preview = await db.collection('work_plan_previews').findOne({ _id: new ObjectId(parsed.id) });
+      const preview = await getWorkPlanPreviewRecord(parsed.id);
       if (!preview) continue;
       const milestoneInsights = computePlanMilestonesFromPreview(preview.preview as DeliveryPlanPreview);
       totalMilestones += milestoneInsights.length;
@@ -393,7 +383,6 @@ export const comparePortfolioPlans = async (
   planIds: string[],
   user: { userId?: string; role?: string } | null
 ): Promise<{ plans: PortfolioPlanDetail[]; dependencies: PortfolioDependencyEdge[] }> => {
-  const db = await getDb();
   const visibility = createVisibilityContext(user);
   const planDetails: PortfolioPlanDetail[] = [];
   const allItems: WorkItem[] = [];
@@ -402,20 +391,16 @@ export const comparePortfolioPlans = async (
     const parsed = parsePlanId(planId);
     if (!parsed) continue;
     if (parsed.source === 'CREATED_PLAN') {
-      const run = await db.collection('work_delivery_plan_runs').findOne({ _id: new ObjectId(parsed.id) });
+      const run = await getWorkDeliveryPlanRunRecord(parsed.id);
       if (!run) continue;
-      const milestones = await db.collection('milestones').find({
-        _id: { $in: (run.milestoneIds || []).filter((id: any) => ObjectId.isValid(String(id))).map((id: any) => new ObjectId(String(id))) }
-      }).toArray();
+      const milestones = await listMilestoneRecordsByIds(run.milestoneIds || []);
       const visibleMilestones = [];
       for (const ms of milestones) {
         const canView = await visibility.canViewBundle(String(ms.bundleId || ''));
         if (canView) visibleMilestones.push(ms);
       }
       if (!visibleMilestones.length) continue;
-      const items = await db.collection('workitems').find({
-        _id: { $in: (run.workItemIds || []).filter((id: any) => ObjectId.isValid(String(id))).map((id: any) => new ObjectId(String(id))) }
-      }).toArray();
+      const items = await listWorkItemsByIds(run.workItemIds || []);
       const visibleItems = await visibility.filterVisibleWorkItems(items as unknown as WorkItem[]);
       const enriched = await deriveWorkItemLinkSummary(visibleItems as WorkItem[]);
       allItems.push(...(enriched as WorkItem[]));
@@ -433,7 +418,7 @@ export const comparePortfolioPlans = async (
         milestones: milestoneInsights
       });
     } else {
-      const preview = await db.collection('work_plan_previews').findOne({ _id: new ObjectId(parsed.id) });
+      const preview = await getWorkPlanPreviewRecord(parsed.id);
       if (!preview) continue;
       const milestoneInsights = computePlanMilestonesFromPreview(preview.preview as DeliveryPlanPreview);
       const name = await derivePlanName({ scopeType: preview.scopeType, scopeId: preview.scopeId, createdAt: preview.createdAt, source: 'PREVIEW' });

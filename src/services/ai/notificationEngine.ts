@@ -8,12 +8,20 @@ import {
   Watcher,
   WatcherType
 } from '../../types/ai';
-import { getDb } from '../db';
 import { dispatchNotification } from './notificationDispatcher';
 import { enforceWatcherQuota, getWatcherUsageForUser } from './notificationPolicy';
+import {
+  createAiWatcherRecord,
+  deleteAiWatcherForUserRecord,
+  insertAiNotificationRecord,
+  listAiNotificationsForUserRecords,
+  listAiWatchersForUserRecords,
+  listEnabledAiWatchersForUserRecords,
+  updateAiNotificationReadStateRecord,
+  updateAiWatcherForUserRecord,
+  updateAiWatcherLastTriggeredRecord
+} from '../../server/db/repositories/aiNotificationsRepo';
 
-const WATCHERS_COLLECTION = 'ai_watchers';
-const NOTIFICATIONS_COLLECTION = 'ai_notifications';
 const TRIGGER_COOLDOWN_MS = 30 * 60 * 1000;
 
 type EvaluateContext = {
@@ -27,12 +35,6 @@ type EvaluateContext = {
 const nowIso = () => new Date().toISOString();
 
 const toObjectId = (id: string) => (ObjectId.isValid(id) ? new ObjectId(id) : id);
-
-const ensureIndexes = async (db: any) => {
-  await db.collection(WATCHERS_COLLECTION).createIndex({ userId: 1, type: 1 });
-  await db.collection(NOTIFICATIONS_COLLECTION).createIndex({ userId: 1, watcherId: 1, read: 1 });
-  await db.collection(NOTIFICATIONS_COLLECTION).createIndex({ userId: 1, createdAt: -1 });
-};
 
 const toWatcher = (row: any): Watcher => ({
   id: String(row._id || row.id || ''),
@@ -68,12 +70,7 @@ const toNotification = (row: any): Notification => ({
 });
 
 export const listWatchersForUser = async (userId: string): Promise<Watcher[]> => {
-  const db = await getDb();
-  await ensureIndexes(db);
-  const rows = await db.collection(WATCHERS_COLLECTION)
-    .find({ userId: String(userId) })
-    .sort({ createdAt: -1 })
-    .toArray();
+  const rows = await listAiWatchersForUserRecords(String(userId));
   return rows.map(toWatcher);
 };
 
@@ -87,8 +84,6 @@ export const createWatcherForUser = async (
     deliveryPreferences?: Watcher['deliveryPreferences'];
   }
 ): Promise<string> => {
-  const db = await getDb();
-  await ensureIndexes(db);
   await enforceWatcherQuota(String(userId));
   const now = nowIso();
   const doc = {
@@ -107,7 +102,7 @@ export const createWatcherForUser = async (
     createdAt: now,
     lastTriggeredAt: undefined
   };
-  const res = await db.collection(WATCHERS_COLLECTION).insertOne(doc);
+  const res = await createAiWatcherRecord(doc);
   console.info('notification_metric', JSON.stringify({
     name: 'watchers.created',
     userId: String(userId),
@@ -122,8 +117,6 @@ export const updateWatcherForUser = async (
   watcherId: string,
   patch: Partial<Pick<Watcher, 'enabled' | 'condition' | 'targetId' | 'deliveryPreferences'>>
 ): Promise<boolean> => {
-  const db = await getDb();
-  await ensureIndexes(db);
   const setData: any = {};
   if (typeof patch.enabled === 'boolean') setData.enabled = patch.enabled;
   if (typeof patch.targetId === 'string') setData.targetId = patch.targetId.trim();
@@ -133,17 +126,12 @@ export const updateWatcherForUser = async (
   }
   if (!Object.keys(setData).length) return false;
 
-  const res = await db.collection(WATCHERS_COLLECTION).updateOne(
-    { _id: toObjectId(watcherId), userId: String(userId) } as any,
-    { $set: setData }
-  );
+  const res = await updateAiWatcherForUserRecord(String(userId), watcherId, setData);
   return res.modifiedCount > 0;
 };
 
 export const deleteWatcherForUser = async (userId: string, watcherId: string): Promise<boolean> => {
-  const db = await getDb();
-  await ensureIndexes(db);
-  const res = await db.collection(WATCHERS_COLLECTION).deleteOne({ _id: toObjectId(watcherId), userId: String(userId) } as any);
+  const res = await deleteAiWatcherForUserRecord(String(userId), watcherId);
   if (res.deletedCount > 0) {
     console.info('notification_metric', JSON.stringify({
       name: 'watchers.deleted',
@@ -160,23 +148,12 @@ export const getWatcherUsage = async (userId: string): Promise<{ used: number; m
 };
 
 export const listNotificationsForUser = async (userId: string): Promise<Notification[]> => {
-  const db = await getDb();
-  await ensureIndexes(db);
-  const rows = await db.collection(NOTIFICATIONS_COLLECTION)
-    .find({ userId: String(userId) })
-    .sort({ read: 1, createdAt: -1 })
-    .limit(200)
-    .toArray();
+  const rows = await listAiNotificationsForUserRecords(String(userId), 200);
   return rows.map(toNotification);
 };
 
 export const updateNotificationReadState = async (userId: string, notificationId: string, read: boolean): Promise<boolean> => {
-  const db = await getDb();
-  await ensureIndexes(db);
-  const res = await db.collection(NOTIFICATIONS_COLLECTION).updateOne(
-    { _id: toObjectId(notificationId), userId: String(userId) } as any,
-    { $set: { read: Boolean(read) } }
-  );
+  const res = await updateAiNotificationReadStateRecord(String(userId), notificationId, Boolean(read));
   return res.modifiedCount > 0;
 };
 
@@ -301,12 +278,7 @@ const evaluateWatcher = (
 };
 
 export const evaluateWatchersForUser = async (userId: string, context: EvaluateContext) => {
-  const db = await getDb();
-  await ensureIndexes(db);
-
-  const rows = await db.collection(WATCHERS_COLLECTION)
-    .find({ userId: String(userId), enabled: true })
-    .toArray();
+  const rows = await listEnabledAiWatchersForUserRecords(String(userId));
 
   const watchers = rows.map(toWatcher);
   const created: Notification[] = [];
@@ -353,11 +325,8 @@ export const evaluateWatchersForUser = async (userId: string, context: EvaluateC
       }
     };
 
-    const insertRes = await db.collection(NOTIFICATIONS_COLLECTION).insertOne(notificationDoc);
-    await db.collection(WATCHERS_COLLECTION).updateOne(
-      { _id: toObjectId(watcher.id), userId: String(userId) } as any,
-      { $set: { lastTriggeredAt: createdAt } }
-    );
+    const insertRes = await insertAiNotificationRecord(notificationDoc);
+    await updateAiWatcherLastTriggeredRecord(String(userId), watcher.id, createdAt);
 
     const notification = toNotification({ ...notificationDoc, _id: insertRes.insertedId });
     created.push(notification);

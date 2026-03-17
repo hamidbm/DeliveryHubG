@@ -1,19 +1,18 @@
-import { ObjectId } from 'mongodb';
-import { getDb, fetchAiAnalysisCache } from '../db';
+import { fetchAiAnalysisCache } from '../db';
 import { SavedInvestigation, PortfolioQueryResponse, PortfolioSummaryResponse } from '../../types/ai';
 import { detectPortfolioQueryIntent, answerPortfolioQuestionDeterministically } from './queryEngine';
 import { derivePortfolioSignals } from './portfolioSignals';
 import { loadTrendSignals } from './trendAnalyzer';
 import { resolveRelatedEntitiesMetaFromEvidence } from '../entityMetaResolver';
+import {
+  deleteSavedInvestigationRecord,
+  getSavedInvestigationRecord,
+  insertSavedInvestigationRecord,
+  listSavedInvestigationRecords,
+  updateSavedInvestigationRecord
+} from '../../server/db/repositories/aiWorkspaceRepo';
 
-const COLLECTION = 'ai_saved_queries';
 const CACHE_KEY = 'portfolio-summary';
-
-const ensureIndexes = async (db: any) => {
-  const col = db.collection(COLLECTION);
-  await col.createIndex({ userId: 1, createdAt: -1 });
-  await col.createIndex({ userId: 1, pinned: 1, updatedAt: -1 });
-};
 
 const toSavedInvestigation = (doc: any): SavedInvestigation => ({
   id: String(doc._id || doc.id || ''),
@@ -31,16 +30,11 @@ const toSavedInvestigation = (doc: any): SavedInvestigation => ({
   updatedAt: String(doc.updatedAt || new Date().toISOString())
 });
 
-const toDocId = (id: string) => (ObjectId.isValid(id) ? new ObjectId(id) : id);
-
 export const saveInvestigation = async (
   userId: string,
   question: string,
   queryResult: PortfolioQueryResponse
 ) => {
-  const db = await getDb();
-  await ensureIndexes(db);
-  const col: any = db.collection(COLLECTION);
   const now = new Date().toISOString();
   const doc = {
     userId: String(userId),
@@ -56,18 +50,12 @@ export const saveInvestigation = async (
     createdAt: now,
     updatedAt: now
   };
-  const res = await col.insertOne(doc);
+  const res = await insertSavedInvestigationRecord(doc);
   return String(res.insertedId);
 };
 
 export const getInvestigations = async (userId: string) => {
-  const db = await getDb();
-  await ensureIndexes(db);
-  const col: any = db.collection(COLLECTION);
-  const rows = await col
-    .find({ userId: String(userId) })
-    .sort({ pinned: -1, updatedAt: -1 })
-    .toArray();
+  const rows = await listSavedInvestigationRecords(userId);
   return rows.map(toSavedInvestigation);
 };
 
@@ -76,24 +64,15 @@ export const updateInvestigation = async (
   id: string,
   patch: Partial<Pick<SavedInvestigation, 'pinned'>>
 ) => {
-  const db = await getDb();
-  await ensureIndexes(db);
-  const col: any = db.collection(COLLECTION);
-  const _id = toDocId(id);
-  await col.updateOne(
-    { _id, userId: String(userId) },
-    { $set: { ...patch, updatedAt: new Date().toISOString() } }
-  );
-  const next = await col.findOne({ _id, userId: String(userId) });
+  const next = await updateSavedInvestigationRecord(userId, id, {
+    ...patch,
+    updatedAt: new Date().toISOString()
+  });
   return next ? toSavedInvestigation(next) : null;
 };
 
 export const deleteInvestigation = async (userId: string, id: string) => {
-  const db = await getDb();
-  await ensureIndexes(db);
-  const col: any = db.collection(COLLECTION);
-  const _id = toDocId(id);
-  const res = await col.deleteOne({ _id, userId: String(userId) });
+  const res = await deleteSavedInvestigationRecord(userId, id);
   return res.deletedCount > 0;
 };
 
@@ -114,11 +93,7 @@ const loadPortfolioContext = async (): Promise<PortfolioSummaryResponse | null> 
 };
 
 export const refreshInvestigation = async (userId: string, id: string) => {
-  const db = await getDb();
-  await ensureIndexes(db);
-  const col: any = db.collection(COLLECTION);
-  const _id = toDocId(id);
-  const row = await col.findOne({ _id, userId: String(userId) });
+  const row = await getSavedInvestigationRecord(userId, id);
   if (!row) return null;
   const current = toSavedInvestigation(row);
 
@@ -145,7 +120,6 @@ export const refreshInvestigation = async (userId: string, id: string) => {
     relatedEntitiesMeta,
     updatedAt: new Date().toISOString()
   };
-  await col.updateOne({ _id, userId: String(userId) }, { $set: update });
-  const next = await col.findOne({ _id, userId: String(userId) });
+  const next = await updateSavedInvestigationRecord(userId, id, update);
   return next ? toSavedInvestigation(next) : null;
 };

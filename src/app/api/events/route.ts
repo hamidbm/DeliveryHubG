@@ -1,26 +1,11 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import { jwtVerify } from 'jose';
-import { fetchEvents, setUserEventState } from '../../../services/db';
-
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
-
-const getUserFromCookies = async () => {
-  const cookieStore = await cookies();
-  const token = cookieStore.get('nexus_auth_token')?.value;
-  if (!token) return null;
-  const { payload } = await jwtVerify(token, JWT_SECRET);
-  return {
-    userId: String(payload.id || payload.userId || ''),
-    displayName: String(payload.name || 'Unknown'),
-    email: payload.email ? String(payload.email) : undefined
-  };
-};
+import { listEvents, saveUserEventStateRecord } from '../../../server/db/repositories/eventsRepo';
+import { requireUser } from '../../../shared/auth/guards';
 
 export async function GET(request: Request) {
   try {
-    const user = await getUserFromCookies();
-    if (!user?.userId) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
+    const auth = await requireUser(request);
+    if (!auth.ok) return auth.response;
 
     const { searchParams } = new URL(request.url);
     const limit = Number(searchParams.get('limit') || '200');
@@ -38,7 +23,7 @@ export async function GET(request: Request) {
     const documentTypeId = searchParams.get('documentTypeId') || undefined;
     const search = searchParams.get('search') || undefined;
 
-    const events = await fetchEvents({
+    const events = await listEvents({
       limit,
       type: mentionsOnly ? 'comments.message.mentioned' : type,
       typePrefix,
@@ -46,7 +31,7 @@ export async function GET(request: Request) {
       resourceId,
       actorId,
       since,
-      mentionUserId: mentionsOnly ? user.userId : undefined,
+      mentionUserId: mentionsOnly ? auth.principal.userId : undefined,
       bundleId,
       appId,
       milestoneId,
@@ -54,7 +39,7 @@ export async function GET(request: Request) {
       search
     });
     if (markSeen) {
-      await setUserEventState(user.userId, new Date().toISOString());
+      await saveUserEventStateRecord(auth.principal.userId, new Date().toISOString());
     }
     return NextResponse.json({ events });
   } catch (error: any) {

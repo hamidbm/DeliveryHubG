@@ -1,25 +1,14 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import { jwtVerify } from 'jose';
-import { getDb } from '../../../services/db';
 import type { Sort, SortDirection } from 'mongodb';
-
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
-
-const requireAuth = async () => {
-  const cookieStore = await cookies();
-  const token = cookieStore.get('nexus_auth_token')?.value;
-  if (!token) return { ok: false, status: 401, payload: null };
-  const { payload } = await jwtVerify(token, JWT_SECRET);
-  return { ok: true, status: 200, payload };
-};
+import { requireUser } from '../../../shared/auth/guards';
+import { listReviewsPage } from '../../../server/db/repositories/reviewsRepo';
 
 const parseBool = (value: string | null) => value === 'true' || value === '1';
 
 export async function GET(request: Request) {
   try {
-    const auth = await requireAuth();
-    if (!auth.ok) return NextResponse.json({ error: 'Unauthenticated' }, { status: auth.status });
+    const auth = await requireUser(request);
+    if (!auth.ok) return auth.response;
 
     const { searchParams } = new URL(request.url);
     const bundleId = searchParams.get('bundleId');
@@ -40,11 +29,11 @@ export async function GET(request: Request) {
       if (bundleIds.length > 1) query['resource.bundleId'] = { $in: bundleIds };
     }
     if (status) query.currentCycleStatus = status;
-    if (assignedToMe && auth.payload?.userId) {
-      query.currentReviewerUserIds = String(auth.payload.userId);
+    if (assignedToMe) {
+      query.currentReviewerUserIds = auth.principal.userId;
     }
-    if (requestedByMe && auth.payload?.userId) {
-      query.currentRequestedByUserId = String(auth.payload.userId);
+    if (requestedByMe) {
+      query.currentRequestedByUserId = auth.principal.userId;
     }
     if (overdue) {
       query.currentDueAt = { $ne: null, $lt: new Date().toISOString() };
@@ -60,14 +49,7 @@ export async function GET(request: Request) {
       'updatedAt';
     const sortClause: Sort = { [sortField]: dir };
 
-    const db = await getDb();
-    const total = await db.collection('reviews').countDocuments(query);
-    const reviews = await db.collection('reviews')
-      .find(query)
-      .sort(sortClause)
-      .skip((page - 1) * pageSize)
-      .limit(pageSize)
-      .toArray();
+    const { total, reviews } = await listReviewsPage({ query, sort: sortClause, page, pageSize });
 
     const items = reviews.map((review: any) => {
       const currentCycle = (review.cycles || []).find((c: any) => c.cycleId === review.currentCycleId);

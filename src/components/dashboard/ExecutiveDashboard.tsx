@@ -13,7 +13,7 @@ import {
   XAxis,
   YAxis
 } from 'recharts';
-import { useRouter } from '../../App';
+import { useRouter } from '../../lib/navigation';
 import { Application, Bundle } from '../../types';
 import { DashboardFilters, ExecutiveDashboardResponse } from '../../types/dashboard';
 import MetricCard from './MetricCard';

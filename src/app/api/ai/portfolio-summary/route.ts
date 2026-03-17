@@ -3,10 +3,10 @@ import { createHash } from 'crypto';
 import {
   checkAndIncrementAiRateLimit,
   fetchAiAnalysisCache,
-  fetchSystemSettings,
   saveAiAnalysisCache,
   saveAiAuditLog
-} from '../../../../services/db';
+} from '../../../../services/aiPersistence';
+import { fetchSystemSettings } from '../../../../services/aiSettings';
 import { getRateLimitPerHour, getRequestIdentity, getRetentionDays } from '../../../../services/aiPolicy';
 import { executeAiTextTask } from '../../../../services/aiRouting';
 import { buildPortfolioIntelligenceSnapshot } from '../../../../services/ai/portfolioSnapshot';

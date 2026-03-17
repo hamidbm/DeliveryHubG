@@ -1,13 +1,6 @@
 import { NextResponse } from 'next/server';
-import { ObjectId } from 'mongodb';
-import { getDb } from '../../../../../services/db';
-
-const resolveMilestone = async (db: any, id: string) => {
-  if (ObjectId.isValid(id)) {
-    return await db.collection('milestones').findOne({ _id: new ObjectId(id) });
-  }
-  return await db.collection('milestones').findOne({ $or: [{ id }, { name: id }] });
-};
+import { getMilestoneByRef, listRecentSprintsByBundle } from '../../../../../server/db/repositories/milestonesRepo';
+import { listWorkItemRecordsByMilestoneRefs } from '../../../../../server/db/repositories/workItemsRepo';
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -15,8 +8,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const sprintLimit = Math.min(Math.max(Number(searchParams.get('sprintLimit') || 12), 1), 50);
   const bundleIdParam = searchParams.get('bundleId');
 
-  const db = await getDb();
-  const milestone = await resolveMilestone(db, id);
+  const milestone = await getMilestoneByRef(id);
   if (!milestone) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
   const milestoneId = String(milestone._id || milestone.id || id);
@@ -25,28 +17,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const sprintQuery: any = {};
   if (bundleId) sprintQuery.bundleId = String(bundleId);
 
-  let sprints = await db.collection('workitems_sprints')
-    .find(sprintQuery)
-    .sort({ endDate: -1 })
-    .limit(sprintLimit)
-    .toArray();
-
+  let sprints = bundleId ? await listRecentSprintsByBundle(String(bundleId), sprintLimit) : [];
   sprints = sprints.reverse();
 
-  const milestoneIds = [milestoneId];
-  if (ObjectId.isValid(milestoneId)) milestoneIds.push(new ObjectId(milestoneId) as any);
-
-  const items = await db.collection('workitems').find({
-    $and: [
-      { $or: [{ isArchived: { $exists: false } }, { isArchived: false }] },
-      {
-        $or: [
-          { milestoneIds: { $in: milestoneIds } },
-          { milestoneId: { $in: milestoneIds } }
-        ]
-      }
-    ]
-  }).toArray();
+  const items = await listWorkItemRecordsByMilestoneRefs([milestoneId]);
 
   const committedPoints = items.reduce((sum: number, item: any) => sum + (Number(item.storyPoints) || 0), 0);
   const doneItems = items.filter((item: any) => String(item.status || '').toUpperCase() === 'DONE');

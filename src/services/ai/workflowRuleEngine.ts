@@ -1,6 +1,20 @@
 import { ObjectId } from 'mongodb';
 import { ActionPlan, ForecastSignal, PortfolioSnapshot, WorkflowRule } from '../../types/ai';
-import { getDb, saveNotification } from '../db';
+import { saveNotification } from '../db';
+import {
+  listActiveWorkflowRuleRecords,
+  listWorkflowRuleRecords,
+  upsertWorkflowRuleRecord
+} from '../../server/db/repositories/aiWorkspaceRepo';
+import {
+  bulkAssignWorkItems,
+  bulkFlagWorkItems,
+  listUnassignedWorkItemCandidates
+} from '../../server/db/repositories/workItemsRepo';
+import {
+  findWorkflowRuleAssigneeCandidate,
+  listWorkflowRuleStakeholderEmails
+} from '../../server/db/repositories/usersRepo';
 
 export type RuleEvaluationContext = {
   snapshot: PortfolioSnapshot;
@@ -27,11 +41,6 @@ const toPersistedRule = (rule: WorkflowRule): PersistedWorkflowRule => ({
   suggestedBy: rule.suggestedBy || 'deterministic'
 });
 
-const ensureIndexes = async (db: any) => {
-  await db.collection('ai_workflow_rules').createIndex({ id: 1 }, { unique: true });
-  await db.collection('ai_workflow_rules').createIndex({ enabled: 1, updatedAt: -1 });
-};
-
 const unassignedRatio = (snapshot: PortfolioSnapshot) => {
   const total = snapshot.workItems.total || 0;
   if (total <= 0) return 0;
@@ -51,60 +60,25 @@ const shouldTriggerRule = (rule: WorkflowRule, context: RuleEvaluationContext) =
   }
 };
 
-const autoAssignUnassignedWork = async (db: any) => {
-  const candidate = await db.collection('users').findOne(
-    {
-      $or: [
-        { role: { $in: ['SVP SME', 'SVP Architect', 'SVP Engineer'] } },
-        { team: 'SVP' }
-      ]
-    },
-    { projection: { _id: 1, email: 1, name: 1 } }
-  );
+const autoAssignUnassignedWork = async () => {
+  const candidate = await findWorkflowRuleAssigneeCandidate();
   if (!candidate) return ['No SVP assignee candidate found; skipped auto-assign.'];
 
   const assignee = String(candidate.email || candidate.name || candidate._id || '').trim();
   if (!assignee) return ['Assignee identity not resolvable; skipped auto-assign.'];
 
-  const unassigned = await db.collection('workitems')
-    .find({
-      $or: [{ assignedTo: { $exists: false } }, { assignedTo: null }, { assignedTo: '' }],
-      status: { $nin: ['DONE'] }
-    })
-    .limit(10)
-    .project({ _id: 1, title: 1, activity: 1 })
-    .toArray();
+  const unassigned = await listUnassignedWorkItemCandidates(10);
 
   if (!unassigned.length) return ['No unassigned work items found.'];
 
-  const now = new Date().toISOString();
   const ids = unassigned.map((item: any) => item._id);
-  await db.collection('workitems').updateMany(
-    { _id: { $in: ids } },
-    {
-      $set: { assignedTo: assignee, updatedAt: now, updatedBy: 'Workflow Rule Engine' },
-      $push: {
-        activity: {
-          user: 'Workflow Rule Engine',
-          action: 'AUTO_ASSIGNED',
-          field: 'assignedTo',
-          to: assignee,
-          createdAt: now
-        }
-      }
-    } as any
-  );
+  await bulkAssignWorkItems(ids, assignee, 'Workflow Rule Engine');
 
   return [`Auto-assigned ${ids.length} unassigned work items to ${assignee}.`];
 };
 
-const notifyStakeholders = async (db: any) => {
-  const recipients = await db.collection('users')
-    .find({ role: { $in: ['Director', 'VP', 'CIO', 'CMO Architect'] } })
-    .project({ email: 1 })
-    .limit(30)
-    .toArray();
-  const emails = recipients.map((item: any) => String(item.email || '').trim()).filter(Boolean);
+const notifyStakeholders = async () => {
+  const emails = await listWorkflowRuleStakeholderEmails(30);
   if (!emails.length) return ['No stakeholder recipients found; skipped notification.'];
 
   await Promise.all(
@@ -119,7 +93,7 @@ const notifyStakeholders = async (db: any) => {
   return [`Notified ${emails.length} stakeholder(s) about milestone risk.`];
 };
 
-const flagSlipRiskItems = async (db: any, context: RuleEvaluationContext) => {
+const flagSlipRiskItems = async (context: RuleEvaluationContext) => {
   const workItemIds = new Set<string>();
   context.forecastSignals.forEach((signal) => {
     (signal.relatedEntities || []).forEach((entity) => {
@@ -129,22 +103,7 @@ const flagSlipRiskItems = async (db: any, context: RuleEvaluationContext) => {
   const ids = Array.from(workItemIds).filter((id) => ObjectId.isValid(id)).map((id) => new ObjectId(id));
   if (!ids.length) return ['No work-item references in high slip risk signals.'];
 
-  const now = new Date().toISOString();
-  await db.collection('workitems').updateMany(
-    { _id: { $in: ids } },
-    {
-      $set: { isFlagged: true, updatedAt: now, updatedBy: 'Workflow Rule Engine' },
-      $push: {
-        activity: {
-          user: 'Workflow Rule Engine',
-          action: 'AUTO_FLAGGED',
-          field: 'isFlagged',
-          to: true,
-          createdAt: now
-        }
-      }
-    } as any
-  );
+  await bulkFlagWorkItems(ids, 'Workflow Rule Engine');
 
   return [`Flagged ${ids.length} work item(s) due to high slip risk.`];
 };
@@ -180,10 +139,8 @@ export const suggestWorkflowRules = (context: RuleEvaluationContext): WorkflowRu
 };
 
 export const listWorkflowRules = async (context: RuleEvaluationContext): Promise<WorkflowRule[]> => {
-  const db = await getDb();
-  await ensureIndexes(db);
   const suggestions = suggestWorkflowRules(context);
-  const rows = await db.collection('ai_workflow_rules').find({}).toArray();
+  const rows = await listWorkflowRuleRecords();
   const byId = new Map<string, PersistedWorkflowRule>();
   rows.forEach((row: any) => {
     if (row?.id) byId.set(String(row.id), row as PersistedWorkflowRule);
@@ -196,21 +153,16 @@ export const listWorkflowRules = async (context: RuleEvaluationContext): Promise
 };
 
 export const setWorkflowRuleEnabled = async (rule: WorkflowRule, enabled: boolean) => {
-  const db = await getDb();
-  await ensureIndexes(db);
   const now = new Date().toISOString();
   const toSave = toPersistedRule({ ...rule, enabled });
-  await db.collection('ai_workflow_rules').updateOne(
-    { id: rule.id },
-    { $set: { ...toSave, updatedAt: now }, $setOnInsert: { createdAt: now } },
-    { upsert: true }
+  await upsertWorkflowRuleRecord(
+    rule.id,
+    { $set: { ...toSave, updatedAt: now }, $setOnInsert: { createdAt: now } }
   );
 };
 
 export const enforceActiveWorkflowRules = async (context: RuleEvaluationContext) => {
-  const db = await getDb();
-  await ensureIndexes(db);
-  const active = await db.collection('ai_workflow_rules').find({ enabled: true }).toArray();
+  const active = await listActiveWorkflowRuleRecords();
   const out: RuleActionResult[] = [];
 
   for (const rawRule of active) {
@@ -231,11 +183,11 @@ export const enforceActiveWorkflowRules = async (context: RuleEvaluationContext)
 
     let actions: string[] = [];
     if (rule.id === 'auto-assign-unassigned') {
-      actions = await autoAssignUnassignedWork(db);
+      actions = await autoAssignUnassignedWork();
     } else if (rule.id === 'notify-milestone-overdue') {
-      actions = await notifyStakeholders(db);
+      actions = await notifyStakeholders();
     } else if (rule.id === 'flag-slip-risk') {
-      actions = await flagSlipRiskItems(db, context);
+      actions = await flagSlipRiskItems(context);
     }
 
     out.push({ ruleId: rule.id, triggered: true, actions });

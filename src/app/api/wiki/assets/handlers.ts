@@ -1,122 +1,25 @@
 import { NextResponse } from 'next/server';
 import { Buffer } from 'buffer';
-import { saveWikiAsset, getDb } from '../../../../services/db';
-import { jwtVerify } from 'jose';
-import { cookies } from 'next/headers';
-import { execSync } from 'child_process';
-import fs from 'fs';
+import { saveWikiAssetRecord } from '../../../../server/db/repositories/wikiRepo';
 import { Readable } from 'stream';
-import path from 'path';
-import os from 'os';
 import ExcelJS from 'exceljs';
 import { buildSheetData } from '../../../../lib/wikiSpreadsheet';
-
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
-
-/**
- * Robustly embeds images as Base64.
- * Pandoc often inserts the absolute path of the temporary media directory into the Markdown.
- * This function finds those paths and replaces them with Data URIs.
- */
-function embedImagesAsBase64(markdown: string, mediaDir: string): string {
-  let processedMarkdown = markdown;
-
-  if (!fs.existsSync(mediaDir)) return markdown;
-
-  const mediaFiles = fs.readdirSync(mediaDir);
-
-  for (const fileName of mediaFiles) {
-    const filePath = path.join(mediaDir, fileName);
-    const stats = fs.statSync(filePath);
-
-    if (stats.isFile()) {
-      const ext = path.extname(fileName).toLowerCase().replace('.', '');
-      const mimeType = (ext === 'jpg' || ext === 'jpeg') ? 'image/jpeg' : `image/${ext}`;
-      const base64 = fs.readFileSync(filePath).toString('base64');
-      const dataUri = `data:${mimeType};base64,${base64}`;
-
-      // Escape filename for regex
-      const safeFileName = fileName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-      // Pattern 1: Replace Markdown style ![](path/to/media/image.png)
-      const mdPattern = new RegExp(`\\([^"\\)]*?\\/?media\\/${safeFileName}\\)`, 'g');
-      processedMarkdown = processedMarkdown.replace(mdPattern, `(${dataUri})`);
-
-      // Pattern 2: Replace HTML style src="path/to/media/image.png"
-      const htmlPattern = new RegExp(`src="[^"]*?\\/?media\\/${safeFileName}"`, 'g');
-      processedMarkdown = processedMarkdown.replace(htmlPattern, `src="${dataUri}"`);
-    }
-  }
-
-  return processedMarkdown;
-}
-
-/**
- * Converts Docx to High-Quality Markdown using Pandoc with embedded media.
- */
-async function convertDocxToMarkdown(buffer: Buffer): Promise<string> {
-  const tempId = Date.now();
-  const workDir = path.join(os.tmpdir(), `nexus_conv_${tempId}`);
-  const tempDocxPath = path.join(workDir, `input.docx`);
-  const tempMdPath = path.join(workDir, `output.md`);
-
-  try {
-    if (!fs.existsSync(workDir)) fs.mkdirSync(workDir, { recursive: true });
-    fs.writeFileSync(tempDocxPath, buffer);
-
-    // Execute Pandoc with media extraction
-    // -t gfm ensures GitHub Flavored Markdown (standard ATX headers)
-    execSync(
-      `pandoc -f docx -t gfm --wrap=none --extract-media="${workDir}" "${tempDocxPath}" -o "${tempMdPath}"`
-    );
-
-    let content = fs.readFileSync(tempMdPath, 'utf8');
-
-    // Process images: find extracted files and embed them as Data URIs
-    const mediaDir = path.join(workDir, 'media');
-    content = embedImagesAsBase64(content, mediaDir);
-
-    // Standardize headers and cleanup Word artifacts
-    content = content
-      // Remove Pandoc header IDs: # Header {#id}
-      .replace(/\{#.*?\}/g, '')
-      // Remove empty HTML anchors
-      .replace(/<a id="[^"]+"><\/a>/g, '')
-      // Ensure headers have a newline before them if they don't already
-      .replace(/([^\n])\n#(?!#)/g, '$1\n\n#')
-      .trim();
-
-    return content;
-  } catch (err: any) {
-    console.error("Pandoc conversion pipeline failed:", err.message);
-    throw new Error(`Advanced document conversion failed: ${err.message}`);
-  } finally {
-    // Recursive cleanup of the workspace
-    try {
-      if (fs.existsSync(workDir)) {
-        fs.rmSync(workDir, { recursive: true, force: true });
-      }
-    } catch (e) {
-      console.warn("Workspace cleanup warning:", e);
-    }
-  }
-}
+import { requireStandardUser } from '../../../../shared/auth/guards';
+import { listWikiAssets } from '../../../../server/db/repositories/wikiRepo';
+import { ObjectId } from 'mongodb';
+import { convertDocxToAssetPreview } from '../../../../server/wiki/docxAssetPreview';
 
 export async function GET(request: Request) {
-  const db = await getDb();
   const { searchParams } = new URL(request.url);
   const includeFeedback = searchParams.get('includeFeedback') === 'true';
-  const query = includeFeedback ? {} : { artifactKind: { $ne: 'feedback' } };
-  const assets = await db.collection('wiki_assets').find(query).toArray();
+  const assets = await listWikiAssets({ includeFeedback });
   return NextResponse.json(assets);
 }
 
 export async function POST(request: Request) {
   try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get('nexus_auth_token')?.value;
-    if (!token) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const auth = await requireStandardUser(request);
+    if (!auth.ok) return auth.response;
 
     const formData = await request.formData();
     const file = formData.get('file') as File;
@@ -140,18 +43,22 @@ export async function POST(request: Request) {
     const buffer = Buffer.from(arrayBuffer);
     const base64Data = buffer.toString('base64');
     const ext = file.name.split('.').pop()?.toLowerCase() || '';
+    const assetId = new ObjectId().toHexString();
 
     let previewKind: 'pdf' | 'html' | 'images' | 'markdown' | 'none' | 'sheet' = 'none';
     let previewData = "";
     let previewStatus: 'ready' | 'pending' | 'failed' = 'ready';
-    let previewMeta: { sheetNames?: string[] } = {};
+    let previewMeta: { sheetNames?: string[]; imageCount?: number } = {};
+    let extractedImages: Array<{ id: string; filename: string; contentType: string; data: string }> = [];
 
     if (ext === 'docx') {
       try {
         console.log(`[Pandoc] Converting document: ${file.name}`);
-        const markdown = await convertDocxToMarkdown(buffer);
+        const preview = await convertDocxToAssetPreview(buffer, assetId);
         previewKind = 'markdown';
-        previewData = markdown;
+        previewData = preview.markdown;
+        extractedImages = preview.images;
+        previewMeta = { ...previewMeta, imageCount: preview.images.length };
       } catch (err: any) {
         console.error("[Pandoc] Conversion failed:", err.message);
         previewStatus = 'failed';
@@ -189,11 +96,12 @@ export async function POST(request: Request) {
     }
 
     const assetData = {
+      _id: assetId,
       title: title || file.name,
       spaceId,
       content: previewKind === 'markdown' ? previewData : "",
-      author: payload.name as string,
-      lastModifiedBy: payload.name as string,
+      author: auth.principal.fullName || auth.principal.email || 'Unknown',
+      lastModifiedBy: auth.principal.fullName || auth.principal.email || 'Unknown',
       status: 'Published',
       version: 1,
       bundleId: bundleId || undefined,
@@ -204,6 +112,7 @@ export async function POST(request: Request) {
       artifactKind: artifactKind || 'primary',
       reviewContext: reviewContext || undefined,
       themeKey: themeKey || undefined,
+      images: extractedImages,
       file: {
         originalName: file.name,
         ext,
@@ -222,7 +131,7 @@ export async function POST(request: Request) {
       },
     };
 
-    const result = await saveWikiAsset(assetData as any);
+    const result = await saveWikiAssetRecord(assetData as any);
     return NextResponse.json({ success: true, result });
   } catch (error: any) {
     console.error("Asset Upload API Error:", error);
@@ -232,10 +141,8 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get('nexus_auth_token')?.value;
-    if (!token) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const auth = await requireStandardUser(request);
+    if (!auth.ok) return auth.response;
 
     const { id, sheetData, content } = await request.json();
     if (!id || (!sheetData && typeof content !== 'string')) {
@@ -244,7 +151,7 @@ export async function PATCH(request: Request) {
 
     let result;
     if (sheetData) {
-      result = await saveWikiAsset({
+      result = await saveWikiAssetRecord({
         _id: id,
         preview: {
           status: 'ready',
@@ -254,10 +161,10 @@ export async function PATCH(request: Request) {
         },
       } as any);
     } else {
-      result = await saveWikiAsset({
+      result = await saveWikiAssetRecord({
         _id: id,
         content,
-        lastModifiedBy: payload?.name as string,
+        lastModifiedBy: auth.principal.fullName || auth.principal.email || 'Unknown',
         preview: {
           status: 'ready',
           kind: 'markdown',

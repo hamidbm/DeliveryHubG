@@ -1,33 +1,11 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import { jwtVerify } from 'jose';
-import { getDb, emitEvent, saveWorkItem, ensureWorkItemsIndexes } from '../../../../../../services/db';
+import { emitEvent } from '../../../../../../shared/events/emitEvent';
+import { saveWorkItem } from '../../../../../../services/workItemsService';
 import { isAdminOrCmo } from '../../../../../../services/authz';
 import { getJiraClient, getJiraConfig, mapJiraIssueToWorkItem } from '../../../../../../services/jira';
-
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
-
-const getUser = async () => {
-  const testToken = process.env.NODE_ENV === 'test' ? (globalThis as any).__testToken : null;
-  const cookieStore = testToken ? null : await cookies();
-  const token = testToken || cookieStore?.get('nexus_auth_token')?.value;
-  if (!token) return null;
-  const { payload } = await jwtVerify(token, JWT_SECRET);
-  return {
-    userId: String(payload.id || payload.userId || ''),
-    role: payload.role ? String(payload.role) : undefined,
-    email: payload.email ? String(payload.email) : undefined,
-    name: payload.name ? String(payload.name) : undefined
-  };
-};
-
-const requireAdmin = async () => {
-  const user = await getUser();
-  if (!user?.userId) return { ok: false, status: 401, user: null };
-  const allowed = await isAdminOrCmo(user);
-  if (!allowed) return { ok: false, status: 403, user };
-  return { ok: true, status: 200, user };
-};
+import { requireStandardUser } from '../../../../../../shared/auth/guards';
+import { findBundleByAnyId } from '../../../../../../server/db/repositories/bundlesRepo';
+import { findWorkItemRecord, updateWorkItemRecordById, ensureWorkItemsIndexes } from '../../../../../../server/db/repositories/workItemsRepo';
 
 const buildJql = (projectKey: string | null, configuredKeys: string[], jql?: string | null) => {
   if (jql) return jql;
@@ -38,9 +16,12 @@ const buildJql = (projectKey: string | null, configuredKeys: string[], jql?: str
 
 export async function POST(request: Request) {
   try {
-    const auth = await requireAdmin();
+    const auth = await requireStandardUser(request);
     if (!auth.ok) {
-      return NextResponse.json({ error: 'Forbidden', code: 'ADMIN_ONLY' }, { status: auth.status });
+      return auth.response;
+    }
+    if (!(await isAdminOrCmo({ userId: auth.principal.userId, role: auth.principal.role || undefined, email: auth.principal.email }))) {
+      return NextResponse.json({ error: 'Forbidden', code: 'ADMIN_ONLY' }, { status: 403 });
     }
 
     const body = await request.json();
@@ -58,8 +39,7 @@ export async function POST(request: Request) {
     const client = getJiraClient();
     const jqlQuery = buildJql(projectKey, config.projectKeys, jql);
 
-    const db = await getDb();
-    await ensureWorkItemsIndexes(db);
+    await ensureWorkItemsIndexes();
 
     let fetched = 0;
     let created = 0;
@@ -83,7 +63,7 @@ export async function POST(request: Request) {
     for (const issue of issues) {
       try {
         const mapped = mapJiraIssueToWorkItem(issue, config);
-        const existing = await db.collection('workitems').findOne({
+        const existing = await findWorkItemRecord({
           'jira.host': config.host,
           'jira.key': mapped.key
         });
@@ -92,17 +72,16 @@ export async function POST(request: Request) {
             skipped += 1;
             continue;
           }
-          await db.collection('workitems').updateOne(
-            { _id: existing._id },
-            { $set: {
+          await updateWorkItemRecordById(String(existing._id || existing.id || ''), {
+            set: {
               title: mapped.title,
               status: mapped.status,
               storyPoints: mapped.storyPoints,
               assignedTo: mapped.assignedTo,
               updatedAt: new Date().toISOString(),
               jira: { ...existing.jira, ...mapped.jira }
-            } }
-          );
+            }
+          });
           updated += 1;
           continue;
         }
@@ -110,7 +89,7 @@ export async function POST(request: Request) {
         const projectKeyResolved = mapped.jiraProjectKey || projectKey || mapped.key.split('-')[0];
         let bundleId = projectKeyResolved || 'unassigned';
         if (projectKeyResolved) {
-          const bundle = await db.collection('bundles').findOne({ key: projectKeyResolved });
+          const bundle = await findBundleByAnyId(projectKeyResolved);
           if (bundle?._id) bundleId = String(bundle._id);
         }
 
@@ -124,7 +103,7 @@ export async function POST(request: Request) {
           priority: 'MEDIUM',
           bundleId: bundleId,
           jira: mapped.jira
-        }, { name: 'Jira Sync', userId: 'jira-sync', email: auth.user?.email });
+        }, { name: 'Jira Sync', userId: 'jira-sync', email: auth.principal.email });
         created += 1;
       } catch (err: any) {
         errors.push({ key: issue?.key, error: err.message || String(err) });
@@ -135,7 +114,7 @@ export async function POST(request: Request) {
       await emitEvent({
         ts: new Date().toISOString(),
         type: 'integrations.jira.sync.completed',
-        actor: { userId: auth.user?.userId, email: auth.user?.email, displayName: auth.user?.name },
+        actor: { userId: auth.principal.userId, email: auth.principal.email, displayName: auth.principal.fullName },
         resource: { type: 'integrations.jira', id: config.host, title: 'Jira Sync' },
         payload: { fetched: issues.length, created, updated, skipped, errors: errors.length }
       });

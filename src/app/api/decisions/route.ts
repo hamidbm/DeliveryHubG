@@ -1,34 +1,15 @@
 import { NextResponse } from 'next/server';
-import { ObjectId } from 'mongodb';
-import { getDb } from '../../../services/db';
-import { createVisibilityContext, getAuthUserFromCookies } from '../../../services/visibility';
+import { createVisibilityContext } from '../../../services/visibility';
 import { canCreateDecisionForScope, createDecision, listDecisions } from '../../../services/decisionLog';
+import { requireStandardUser, requireUser } from '../../../shared/auth/guards';
+import { findBundleByAnyId } from '../../../server/db/repositories/bundlesRepo';
+import { getMilestoneByRef } from '../../../server/db/repositories/milestonesRepo';
+import { getWorkItemByAnyRef } from '../../../server/db/repositories/workItemsRepo';
 
 const parseLimit = (value: string | null) => {
   const num = Number(value || 50);
   if (!Number.isFinite(num)) return 50;
   return Math.min(Math.max(num, 1), 200);
-};
-
-const buildMilestoneQuery = (id: string) => {
-  if (ObjectId.isValid(id)) {
-    return { $or: [{ _id: new ObjectId(id) }, { id }, { name: id }] };
-  }
-  return { $or: [{ id }, { name: id }] };
-};
-
-const buildBundleQuery = (id: string) => {
-  if (ObjectId.isValid(id)) {
-    return { $or: [{ _id: new ObjectId(id) }, { id }, { name: id }] };
-  }
-  return { $or: [{ id }, { name: id }] };
-};
-
-const buildWorkItemQuery = (id: string) => {
-  if (ObjectId.isValid(id)) {
-    return { $or: [{ _id: new ObjectId(id) }, { id }, { key: id }] };
-  }
-  return { $or: [{ id }, { key: id }] };
 };
 
 const DECISION_TYPES = new Set([
@@ -44,8 +25,9 @@ const DECISION_OUTCOMES = new Set(['APPROVED', 'REJECTED', 'ACKNOWLEDGED']);
 const DECISION_SEVERITIES = new Set(['info', 'warn', 'critical']);
 
 export async function GET(request: Request) {
-  const authUser = await getAuthUserFromCookies();
-  if (!authUser?.userId) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
+  const auth = await requireUser(request);
+  if (!auth.ok) return auth.response;
+  const authUser = auth.principal;
   const visibility = createVisibilityContext(authUser);
   const { searchParams } = new URL(request.url);
   const scopeType = String(searchParams.get('scopeType') || '').toUpperCase();
@@ -58,7 +40,6 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Missing scopeId' }, { status: 400 });
   }
 
-  const db = await getDb();
   if (scopeType === 'PROGRAM') {
     const items = await listDecisions({
       scopeType,
@@ -71,21 +52,21 @@ export async function GET(request: Request) {
     return NextResponse.json({ items, nextCursor });
   }
   if (scopeType === 'BUNDLE' && scopeId) {
-    const bundle = await db.collection('bundles').findOne(buildBundleQuery(scopeId));
+    const bundle = await findBundleByAnyId(scopeId);
     if (!bundle) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     if (!(await visibility.canViewBundle(String(bundle._id || bundle.id || scopeId)))) {
       return NextResponse.json({ error: 'Forbidden', code: 'BUNDLE_RESTRICTED' }, { status: 403 });
     }
   }
   if (scopeType === 'MILESTONE' && scopeId) {
-    const milestone = await db.collection('milestones').findOne(buildMilestoneQuery(scopeId));
+    const milestone = await getMilestoneByRef(scopeId);
     if (!milestone) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     if (!(await visibility.canViewBundle(String(milestone.bundleId || '')))) {
       return NextResponse.json({ error: 'Forbidden', code: 'BUNDLE_RESTRICTED' }, { status: 403 });
     }
   }
   if (scopeType === 'WORK_ITEM' && scopeId) {
-    const item = await db.collection('workitems').findOne(buildWorkItemQuery(scopeId));
+    const item = await getWorkItemByAnyRef(scopeId);
     if (!item) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     const visible = await visibility.filterVisibleWorkItems([{ ...item, _id: String(item._id) } as any]);
     if (!visible.length) {
@@ -105,8 +86,9 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const authUser = await getAuthUserFromCookies();
-  if (!authUser?.userId) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
+  const auth = await requireStandardUser(request);
+  if (!auth.ok) return auth.response;
+  const authUser = auth.principal;
   const body = await request.json().catch(() => ({}));
   const scopeType = String(body?.scopeType || '').toUpperCase();
   let scopeId = body?.scopeId ? String(body.scopeId) : undefined;
@@ -128,23 +110,22 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Invalid severity' }, { status: 400 });
   }
 
-  const db = await getDb();
   let bundleId: string | undefined;
   if (scopeType !== 'PROGRAM' && !scopeId) {
     return NextResponse.json({ error: 'Missing scopeId' }, { status: 400 });
   }
   if (scopeType === 'BUNDLE' && scopeId) {
-    const bundle = await db.collection('bundles').findOne(buildBundleQuery(scopeId));
+    const bundle = await findBundleByAnyId(scopeId);
     if (!bundle) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     bundleId = String(bundle._id || bundle.id || scopeId);
   }
   if (scopeType === 'MILESTONE' && scopeId) {
-    const milestone = await db.collection('milestones').findOne(buildMilestoneQuery(scopeId));
+    const milestone = await getMilestoneByRef(scopeId);
     if (!milestone) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     bundleId = String(milestone.bundleId || '');
   }
   if (scopeType === 'WORK_ITEM' && scopeId) {
-    const item = await db.collection('workitems').findOne(buildWorkItemQuery(scopeId));
+    const item = await getWorkItemByAnyRef(scopeId);
     if (!item) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     bundleId = String(item.bundleId || '');
   }
@@ -161,7 +142,7 @@ export async function POST(request: Request) {
     createdBy: {
       userId: String(authUser.userId || ''),
       email: String(authUser.email || ''),
-      name: (authUser as any).name ? String((authUser as any).name) : undefined
+      name: authUser.fullName ? String(authUser.fullName) : undefined
     },
     source: 'MANUAL',
     scopeType: scopeType as any,

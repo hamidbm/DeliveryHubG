@@ -1,32 +1,26 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import { jwtVerify } from 'jose';
-import { ObjectId } from 'mongodb';
-import { getDb } from '../../../../../services/db';
 import { isAdminOrCmo } from '../../../../../services/authz';
 import { getNotificationSettings } from '../../../../../services/notifications';
 import { queueStaleSummaryForUser } from '../../../../../services/stalenessSummary';
-
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
-
-const getUser = async () => {
-  const testToken = process.env.NODE_ENV === 'test' ? (globalThis as any).__testToken : null;
-  const cookieStore = testToken ? null : await cookies();
-  const token = testToken || cookieStore?.get('nexus_auth_token')?.value;
-  if (!token) return null;
-  const { payload } = await jwtVerify(token, JWT_SECRET);
-  return {
-    userId: String(payload.id || payload.userId || ''),
-    role: payload.role ? String(payload.role) : undefined,
-    email: payload.email ? String(payload.email) : undefined,
-    name: payload.name ? String(payload.name) : undefined
-  };
-};
+import { requireStandardUser } from '../../../../../shared/auth/guards';
+import {
+  deleteNotificationDigestQueueItemsByIds,
+  insertClassicNotification,
+  listNotificationDigestQueueItemsForUserSince
+} from '../../../../../server/db/repositories/notificationPlatformRepo';
+import { findUserById } from '../../../../../server/db/repositories/usersRepo';
 
 export async function POST(request: Request) {
   try {
-    const actor = await getUser();
-    if (!actor?.userId) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
+    const auth = await requireStandardUser(request);
+    if (!auth.ok) return auth.response;
+    const actor = {
+      userId: auth.principal.userId,
+      role: auth.principal.role || undefined,
+      email: auth.principal.email,
+      name: auth.principal.fullName || undefined,
+      accountType: auth.principal.accountType
+    };
     const { searchParams } = new URL(request.url);
     const targetUserId = searchParams.get('userId') || actor.userId;
     const allowed = targetUserId === actor.userId || (await isAdminOrCmo(actor));
@@ -37,18 +31,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Digest disabled', code: 'DIGEST_DISABLED' }, { status: 409 });
     }
 
-    const db = await getDb();
-    const user = await db.collection('users').findOne({ _id: new ObjectId(targetUserId) });
+    const user = await findUserById(targetUserId);
     if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
 
     const dateKey = new Date().toISOString().slice(0, 10);
-    await queueStaleSummaryForUser(db, user, dateKey);
+    await queueStaleSummaryForUser(null, user, dateKey);
 
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    const items = await db.collection('notification_digest_queue')
-      .find({ userId: targetUserId, createdAt: { $gte: since } })
-      .sort({ createdAt: -1 })
-      .toArray();
+    const items = await listNotificationDigestQueueItemsForUserSince(targetUserId, since);
 
     if (!items.length) {
       return NextResponse.json({ success: true, created: false, message: 'No digest items found.' });
@@ -73,7 +63,7 @@ export async function POST(request: Request) {
     });
 
     const now = new Date().toISOString();
-    await db.collection('notifications').insertOne({
+    await insertClassicNotification({
       recipient: user.name || user.email || String(user._id),
       sender: actor.name || actor.email || 'System',
       type: 'digest.daily',
@@ -85,7 +75,7 @@ export async function POST(request: Request) {
       createdAt: now
     });
 
-    await db.collection('notification_digest_queue').deleteMany({ _id: { $in: items.map((i: any) => i._id) } });
+    await deleteNotificationDigestQueueItemsByIds(items.map((i: any) => i._id));
 
     return NextResponse.json({ success: true, created: true, count: items.length });
   } catch (error: any) {

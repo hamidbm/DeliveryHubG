@@ -1,12 +1,12 @@
 import { ObjectId } from 'mongodb';
-import { cookies } from 'next/headers';
-import { jwtVerify } from 'jose';
-import { getDb } from './db';
 import { isAdminOrCmo } from './authz';
-import { normalizeAccountType } from './authPrincipal';
+import { resolveCurrentPrincipal } from '../shared/auth/principal';
 import type { WorkItem, Bundle } from '../types';
-
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
+import { findBundleByAnyId } from '../server/db/repositories/bundlesRepo';
+import { listBundleAssignments } from '../server/db/repositories/bundleAssignmentsRepo';
+import { getMilestoneByRef } from '../server/db/repositories/milestonesRepo';
+import { listWatcherUserIdsForScopeRecord } from '../server/db/repositories/watchersRepo';
+import { listWorkItemMetaByRefs } from '../server/db/repositories/workItemsRepo';
 
 type AuthUser = {
   userId?: string;
@@ -26,30 +26,14 @@ const buildIdCandidates = (value: string) => {
   return candidates;
 };
 
-const ensureBundleVisibilityIndexes = async (db: any) => {
-  await db.collection('bundles').createIndex({ visibility: 1 });
-};
-
 export const getAuthUserFromCookies = async (): Promise<AuthUser | null> => {
-  const testToken = process.env.NODE_ENV === 'test' ? (globalThis as any).__testToken : null;
-  if (testToken) {
-    const { payload } = await jwtVerify(testToken, JWT_SECRET);
-    return {
-      userId: String((payload as any).id || (payload as any).userId || ''),
-      role: (payload as any).role ? String((payload as any).role) : undefined,
-      email: (payload as any).email ? String((payload as any).email) : undefined,
-      accountType: normalizeAccountType((payload as any).accountType)
-    };
-  }
-  const cookieStore = await cookies();
-  const token = cookieStore?.get('nexus_auth_token')?.value;
-  if (!token) return null;
-  const { payload } = await jwtVerify(token, JWT_SECRET);
+  const principal = await resolveCurrentPrincipal();
+  if (!principal) return null;
   return {
-    userId: String((payload as any).id || (payload as any).userId || ''),
-    role: (payload as any).role ? String((payload as any).role) : undefined,
-    email: (payload as any).email ? String((payload as any).email) : undefined,
-    accountType: normalizeAccountType((payload as any).accountType)
+    userId: principal.userId,
+    role: principal.role || undefined,
+    email: principal.email,
+    accountType: principal.accountType
   };
 };
 
@@ -63,28 +47,18 @@ export const createVisibilityContext = (user: AuthUser | null) => {
     const id = String(bundleId || '');
     if (!id) return null;
     if (bundleCache.has(id)) return bundleCache.get(id) || null;
-    const db = await getDb();
-    await ensureBundleVisibilityIndexes(db);
-    const candidates = buildIdCandidates(id);
-    const bundle = await db.collection('bundles').findOne({
-      $or: [
-        { _id: { $in: candidates.filter((c) => c instanceof ObjectId) } },
-        { id: { $in: candidates.filter((c) => typeof c === 'string') as string[] } },
-        { key: { $in: candidates.filter((c) => typeof c === 'string') as string[] } }
-      ]
-    });
+    const bundle = await findBundleByAnyId(id);
     bundleCache.set(id, bundle || null);
     return bundle || null;
   };
 
   const resolveBundleOwners = async (bundleId: string) => {
     if (bundleOwnerCache.has(bundleId)) return bundleOwnerCache.get(bundleId) as Set<string>;
-    const db = await getDb();
-    const assignments = await db.collection('bundle_assignments').find({
+    const assignments = await listBundleAssignments({
       bundleId: String(bundleId),
       assignmentType: 'bundle_owner',
       active: true
-    }).toArray();
+    });
     const owners = new Set(assignments.map((a: any) => String(a.userId || '')).filter(Boolean));
     bundleOwnerCache.set(bundleId, owners);
     return owners;
@@ -92,12 +66,8 @@ export const createVisibilityContext = (user: AuthUser | null) => {
 
   const resolveBundleWatchers = async (bundleId: string) => {
     if (bundleWatcherCache.has(bundleId)) return bundleWatcherCache.get(bundleId) as Set<string>;
-    const db = await getDb();
-    const watchers = await db.collection('notification_watchers').find({
-      scopeType: 'BUNDLE',
-      scopeId: String(bundleId)
-    }).toArray();
-    const ids = new Set(watchers.map((w: any) => String(w.userId || '')).filter(Boolean));
+    const watcherIds = await listWatcherUserIdsForScopeRecord('BUNDLE', String(bundleId));
+    const ids = new Set(watcherIds.map(String).filter(Boolean));
     bundleWatcherCache.set(bundleId, ids);
     return ids;
   };
@@ -140,15 +110,7 @@ export const createVisibilityContext = (user: AuthUser | null) => {
     const id = String(milestoneId || '');
     if (!id) return null;
     if (milestoneBundleCache.has(id)) return milestoneBundleCache.get(id) || null;
-    const db = await getDb();
-    const candidates = buildIdCandidates(id);
-    const milestone = await db.collection('milestones').findOne({
-      $or: [
-        { _id: { $in: candidates.filter((c) => c instanceof ObjectId) } },
-        { id: { $in: candidates.filter((c) => typeof c === 'string') as string[] } },
-        { name: { $in: candidates.filter((c) => typeof c === 'string') as string[] } }
-      ]
-    }, { projection: { bundleId: 1 } });
+    const milestone = await getMilestoneByRef(id);
     const bundleId = milestone?.bundleId ? String(milestone.bundleId) : null;
     milestoneBundleCache.set(id, bundleId);
     return bundleId;
@@ -182,18 +144,7 @@ export const createVisibilityContext = (user: AuthUser | null) => {
       });
     });
     if (!targetIds.size) return items;
-    const ids = Array.from(targetIds);
-    const objectIds = ids.filter(ObjectId.isValid).map((id) => new ObjectId(id));
-    const db = await getDb();
-    const targets = await db.collection('workitems')
-      .find({
-        $or: [
-          { _id: { $in: objectIds } },
-          { id: { $in: ids } },
-          { key: { $in: ids } }
-        ]
-      }, { projection: { _id: 1, id: 1, key: 1, bundleId: 1 } })
-      .toArray();
+    const targets = await listWorkItemMetaByRefs(Array.from(targetIds));
 
     const visibilityMap = new Map<string, boolean>();
     await Promise.all(targets.map(async (t: any) => {

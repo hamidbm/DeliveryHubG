@@ -1,25 +1,21 @@
 import { NextResponse } from 'next/server';
-import { fetchWorkItemById, getDb, emitEvent } from '../../../../../services/db';
-import { jwtVerify } from 'jose';
-import { cookies } from 'next/headers';
-import { ObjectId } from 'mongodb';
+import { emitEvent } from '../../../../../shared/events/emitEvent';
+import { fetchWorkItemById } from '../../../../../services/workItemsService';
 import { invalidateWorkItemScopesFromCandidates } from '../../../../../services/workItemCache';
-
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
+import { requireStandardUser } from '../../../../../shared/auth/guards';
+import { restoreWorkItemRecord } from '../../../../../server/db/repositories/workItemsRepo';
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
-    const cookieStore = await cookies();
-    const token = cookieStore.get('nexus_auth_token')?.value;
-    if (!token) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
-
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const auth = await requireStandardUser(request);
+    if (!auth.ok) return auth.response;
+    const payload = auth.principal.rawPayload;
     const item = await fetchWorkItemById(id);
     if (!item) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-    const userName = String(payload.name || '');
-    const userRole = String((payload as any).role || '');
+    const userName = String(auth.principal.fullName || payload.name || '');
+    const userRole = String(auth.principal.role || (payload as any).role || '');
     const privilegedRoles = new Set([
       'CMO Architect',
       'SVP Architect',
@@ -34,12 +30,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const db = await getDb();
-    const now = new Date().toISOString();
-    await db.collection('workitems').updateOne(
-      { _id: new ObjectId(id) },
-      { $set: { isArchived: false, updatedAt: now }, $unset: { archivedAt: '', archivedBy: '' } }
-    );
+    const { now } = await restoreWorkItemRecord(id);
     await invalidateWorkItemScopesFromCandidates(
       [{ bundleId: item?.bundleId, applicationId: item?.applicationId }],
       'workitems.restore'
@@ -50,9 +41,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         ts: now,
         type: 'workitems.item.restored',
         actor: {
-          userId: String((payload as any).id || (payload as any).userId || (payload as any).email || userName),
-          displayName: String((payload as any).name || (payload as any).displayName || userName),
-          email: (payload as any).email ? String((payload as any).email) : undefined
+          userId: auth.principal.userId || String((payload as any).id || (payload as any).userId || (payload as any).email || userName),
+          displayName: auth.principal.fullName || String((payload as any).name || (payload as any).displayName || userName),
+          email: auth.principal.email || ((payload as any).email ? String((payload as any).email) : undefined)
         },
         resource: { type: 'workitems.item', id: String(item._id || item.id || id), title: item.title },
         context: { bundleId: item.bundleId, appId: item.applicationId }

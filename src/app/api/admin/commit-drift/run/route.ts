@@ -1,8 +1,15 @@
 import { NextResponse } from 'next/server';
-import { ObjectId } from 'mongodb';
 import { evaluateMilestoneCommitmentDrift } from '../../../../../services/commitmentDrift';
-import { emitEvent, getDb } from '../../../../../services/db';
+import { emitEvent } from '../../../../../shared/events/emitEvent';
 import { createNotificationsForEvent } from '../../../../../services/notifications';
+import {
+  getCommitmentDriftSnapshotByMilestoneId,
+  getDriftRunRecordByRunKey,
+  insertDriftRunRecord,
+  updateDriftRunRecord,
+  upsertCommitmentDriftSnapshotRecord
+} from '../../../../../server/db/repositories/commitmentRepo';
+import { listMilestonesByStatuses } from '../../../../../server/db/repositories/milestonesRepo';
 
 const resolveFlag = (value: string | null, defaultValue = false) => {
   if (value === null) return defaultValue;
@@ -37,13 +44,10 @@ export async function POST(request: Request) {
   const maxMilestones = resolveNumber(searchParams.get('maxMilestones'), 200);
   const batchSize = resolveNumber(searchParams.get('batchSize'), 50);
 
-  const db = await getDb();
   const runKey = `commitdrift:${toRunKey()}`;
 
-  const driftRuns = db.collection<Record<string, any>>('drift_runs');
-
   if (!force) {
-    const existing = await driftRuns.findOne({ runKey });
+    const existing = await getDriftRunRecordByRunKey(runKey);
     if (existing) {
       return NextResponse.json({
         skipped: true,
@@ -59,7 +63,7 @@ export async function POST(request: Request) {
   const startedAt = new Date().toISOString();
 
   if (!dryRun) {
-    await driftRuns.insertOne({
+    await insertDriftRunRecord({
       runId,
       runKey,
       startedAt,
@@ -71,11 +75,8 @@ export async function POST(request: Request) {
     });
   }
 
-  const statuses = ['COMMITTED', 'IN_PROGRESS'];
-  const milestones = await db.collection('milestones')
-    .find({ status: { $in: statuses } })
-    .limit(maxMilestones)
-    .toArray();
+  const milestones = (await listMilestonesByStatuses(['COMMITTED', 'IN_PROGRESS']))
+    .slice(0, maxMilestones);
 
   const counts = {
     scanned: 0,
@@ -94,7 +95,7 @@ export async function POST(request: Request) {
       try {
         const drift = await evaluateMilestoneCommitmentDrift(milestoneId);
         if (!drift) continue;
-        const previous = await db.collection('commitment_drift_snapshots').findOne({ milestoneId: drift.milestoneId });
+        const previous = await getCommitmentDriftSnapshotByMilestoneId(drift.milestoneId);
 
         const changed = !previous
           || previous.driftBand !== drift.driftBand
@@ -106,20 +107,14 @@ export async function POST(request: Request) {
         const now = new Date().toISOString();
 
         if (!dryRun && changed) {
-          await db.collection('commitment_drift_snapshots').updateOne(
-            { milestoneId: drift.milestoneId },
-            {
-              $set: {
-                milestoneId: drift.milestoneId,
-                evaluatedAt: now,
-                driftBand: drift.driftBand,
-                deltas: drift.deltas,
-                baselineAt: drift.baselineAt || null,
-                hasBaseline: drift.hasBaseline
-              }
-            },
-            { upsert: true }
-          );
+          await upsertCommitmentDriftSnapshotRecord(drift.milestoneId, {
+            milestoneId: drift.milestoneId,
+            evaluatedAt: now,
+            driftBand: drift.driftBand,
+            deltas: drift.deltas,
+            baselineAt: drift.baselineAt || null,
+            hasBaseline: drift.hasBaseline
+          });
           counts.updated += 1;
         }
 
@@ -169,10 +164,7 @@ export async function POST(request: Request) {
   const durationMs = Date.now() - startMs;
 
   if (!dryRun) {
-    await driftRuns.updateOne(
-      { runId },
-      { $set: { status: 'completed', completedAt, summary: counts } }
-    );
+    await updateDriftRunRecord(runId, { status: 'completed', completedAt, summary: counts });
   }
 
   try {

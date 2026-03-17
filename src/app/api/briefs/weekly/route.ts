@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
-import { ObjectId } from 'mongodb';
-import { getDb } from '../../../../services/db';
 import { createVisibilityContext, getAuthUserFromCookies } from '../../../../services/visibility';
 import { fetchWeeklyBrief, generateBundleBrief, generateMilestoneBrief, generateProgramBrief, resolveWeekKey, upsertWeeklyBrief, queueWeeklyBriefDigest } from '../../../../services/weeklyBrief';
+import { findBundleByAnyId } from '../../../../server/db/repositories/bundlesRepo';
+import { getMilestoneByRef } from '../../../../server/db/repositories/milestonesRepo';
 
 export async function GET(request: Request) {
   const authUser = await getAuthUserFromCookies();
@@ -16,22 +16,15 @@ export async function GET(request: Request) {
   const weekKey = resolveWeekKey(searchParams.get('weekKey') || undefined);
   const force = searchParams.get('force') === 'true';
 
-  const db = await getDb();
   if (scopeType === 'BUNDLE' && scopeId) {
-    const bundleQuery = ObjectId.isValid(scopeId)
-      ? { $or: [{ _id: new ObjectId(scopeId) }, { id: scopeId }, { name: scopeId }] }
-      : { $or: [{ id: scopeId }, { name: scopeId }] };
-    const bundle = await db.collection('bundles').findOne(bundleQuery);
+    const bundle = await findBundleByAnyId(scopeId);
     if (!bundle) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     if (!(await visibility.canViewBundle(String(bundle._id || bundle.id || scopeId)))) {
       return NextResponse.json({ error: 'Forbidden', code: 'BUNDLE_RESTRICTED' }, { status: 403 });
     }
   }
   if (scopeType === 'MILESTONE' && scopeId) {
-    const milestoneQuery = ObjectId.isValid(scopeId)
-      ? { $or: [{ _id: new ObjectId(scopeId) }, { id: scopeId }, { name: scopeId }] }
-      : { $or: [{ id: scopeId }, { name: scopeId }] };
-    const milestone = await db.collection('milestones').findOne(milestoneQuery);
+    const milestone = await getMilestoneByRef(scopeId);
     if (!milestone) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     if (!(await visibility.canViewBundle(String(milestone.bundleId || '')))) {
       return NextResponse.json({ error: 'Forbidden', code: 'BUNDLE_RESTRICTED' }, { status: 403 });

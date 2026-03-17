@@ -1,6 +1,6 @@
 
 import { NextResponse } from 'next/server';
-import { seedDatabase } from '../../../services/db';
+import { seedDatabase } from '../../../shared/bootstrap/seedDatabase';
 import { APPLICATIONS, WORK_ITEMS, WIKI_PAGES } from '../../../constants';
 
 export async function GET() {

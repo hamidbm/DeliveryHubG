@@ -8,7 +8,7 @@ import OpsCenter from './OpsCenter';
 import GovernanceDocuments from './GovernanceDocuments';
 import ArchitectureDiagrams from './ArchitectureDiagrams';
 import { Application, Bundle } from '../types';
-import { useSearchParams } from '../App';
+import { useSearchParams } from '../lib/navigation';
 
 interface ArchitectureHubProps {
   applications: Application[];

@@ -37,6 +37,7 @@ Use this section when you want to understand what DeliveryHub does and how to us
 Use this section when you are building or maintaining the product:
 
 - architecture and source layout
+- persistence, event, and bootstrap boundaries
 - operations and deployment
 - data model and collections
 - development workflow

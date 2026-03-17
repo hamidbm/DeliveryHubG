@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
-import { ensureUserIndexes, getDb, getAdminBootstrapEmails, upsertAdmin } from '../../../../services/db';
+import { saveAdminRecord } from '../../../../server/db/repositories/adminsRepo';
+import { ensureUserIndexesInRepo, findUserByEmail, findUserByUsername, getAdminBootstrapEmailsFromEnv, insertUserRecord } from '../../../../server/db/repositories/usersRepo';
 import { Role, Team, TEAM_ROLE_OPTIONS } from '../../../../types';
 
 export async function POST(request: Request) {
@@ -12,10 +13,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    const db = await getDb();
-    await ensureUserIndexes(db);
-    const existingUser = await db.collection('users').findOne({ email: normalizedEmail });
-    const existingUsername = await db.collection('users').findOne({ username });
+    await ensureUserIndexesInRepo();
+    const existingUser = await findUserByEmail(normalizedEmail);
+    const existingUsername = await findUserByUsername(username);
 
     if (existingUser) {
       return NextResponse.json({ error: 'Account already exists' }, { status: 409 });
@@ -33,7 +33,7 @@ export async function POST(request: Request) {
 
     const hashedPassword = await bcrypt.hash(password, 12);
 
-    const result = await db.collection('users').insertOne({
+    const result = await insertUserRecord({
       name,
       username,
       email: normalizedEmail,
@@ -44,10 +44,10 @@ export async function POST(request: Request) {
       createdAt: new Date(),
     });
 
-    const bootstrapEmails = getAdminBootstrapEmails();
+    const bootstrapEmails = getAdminBootstrapEmailsFromEnv();
     const isBootstrapAdmin = bootstrapEmails.has(normalizedEmail);
     if (isBootstrapAdmin) {
-      await upsertAdmin(String(result.insertedId), 'system');
+      await saveAdminRecord(String(result.insertedId), 'system');
     }
 
     return NextResponse.json({ message: 'User created successfully', userId: result.insertedId, isAdmin: isBootstrapAdmin });

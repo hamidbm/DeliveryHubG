@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, Suspense, createContext, useContext, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, Suspense, useContext, useMemo, useCallback } from 'react';
 import Layout from './components/Layout';
 import Dashboard from './components/Dashboard';
 import Applications from './components/Applications';
@@ -17,6 +17,7 @@ import ArchitectureHub from './components/ArchitectureHub';
 import LoginPage from './app/login/page';
 import RegisterPage from './app/register/page';
 import { Bundle, Application, WorkItem, WorkItemType } from './types';
+import { NavigationContext, usePathname, useRouter, useSearchParams } from './lib/navigation';
 
 // Global declaration for the platform AI selection bridge
 declare global {
@@ -28,37 +29,6 @@ declare global {
     // Fix: Re-added the readonly modifier to match the standard ambient environment's declaration and resolve the identical modifiers error.
     readonly aistudio: AIStudio;
   }
-}
-
-// Safe Routing Context for sandboxed environment
-const NavigationContext = createContext<{
-  push: (url: string) => void;
-  searchParams: URLSearchParams;
-  currentPath: string;
-  pathname: string;
-}>({
-  push: () => {},
-  searchParams: new URLSearchParams(),
-  currentPath: '/',
-  pathname: '/',
-});
-
-export function useRouter() {
-  const ctx = useContext(NavigationContext);
-  return {
-    push: ctx.push,
-    back: () => window.history.back(),
-    forward: () => window.history.forward(),
-    refresh: () => window.location.reload(),
-  };
-}
-
-export function useSearchParams() {
-  return useContext(NavigationContext).searchParams;
-}
-
-export function usePathname() {
-  return useContext(NavigationContext).pathname;
 }
 
 export default function Home() {

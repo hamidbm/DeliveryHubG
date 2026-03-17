@@ -1,11 +1,8 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import { jwtVerify } from 'jose';
-import { emitEvent } from '../../../../services/db';
+import { emitEvent } from '../../../../shared/events/emitEvent';
 import { isAdminOrCmo } from '../../../../services/authz';
 import { getDeliveryPolicy, getDefaultDeliveryPolicy, normalizeDeliveryPolicy, saveDeliveryPolicy, validateDeliveryPolicy } from '../../../../services/policy';
-
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
+import { requireStandardUser } from '../../../../shared/auth/guards';
 
 const buildDiffSummary = (before: any, after: any) => {
   const changes: string[] = [];
@@ -21,23 +18,15 @@ const buildDiffSummary = (before: any, after: any) => {
   return changes;
 };
 
-const getAuthUser = async () => {
-  const testToken = process.env.NODE_ENV === 'test' ? (globalThis as any).__testToken : null;
-  const cookieStore = testToken ? null : await cookies();
-  const token = testToken || cookieStore?.get('nexus_auth_token')?.value;
-  if (!token) return { token: null, payload: null };
-  const { payload } = await jwtVerify(token, JWT_SECRET);
-  return { token, payload };
-};
-
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const { token, payload } = await getAuthUser();
-    if (!token) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
+    const auth = await requireStandardUser(request);
+    if (!auth.ok) return auth.response;
     const authUser = {
-      userId: String((payload as any).id || (payload as any).userId || ''),
-      role: String((payload as any).role || ''),
-      team: String((payload as any).team || '')
+      userId: auth.principal.userId,
+      role: String(auth.principal.role || ''),
+      team: String(auth.principal.team || ''),
+      accountType: auth.principal.accountType
     };
     if (!(await isAdminOrCmo(authUser))) {
       return NextResponse.json({ error: 'FORBIDDEN_POLICY_READ' }, { status: 403 });
@@ -52,12 +41,13 @@ export async function GET() {
 
 export async function PUT(request: Request) {
   try {
-    const { token, payload } = await getAuthUser();
-    if (!token) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
+    const auth = await requireStandardUser(request);
+    if (!auth.ok) return auth.response;
     const authUser = {
-      userId: String((payload as any).id || (payload as any).userId || ''),
-      role: String((payload as any).role || ''),
-      team: String((payload as any).team || '')
+      userId: auth.principal.userId,
+      role: String(auth.principal.role || ''),
+      team: String(auth.principal.team || ''),
+      accountType: auth.principal.accountType
     };
     if (!(await isAdminOrCmo(authUser))) {
       return NextResponse.json({ error: 'FORBIDDEN_POLICY_UPDATE' }, { status: 403 });
@@ -76,17 +66,17 @@ export async function PUT(request: Request) {
       _id: 'global' as const,
       version: (existing?.version || 0) + 1,
       updatedAt: new Date().toISOString(),
-      updatedBy: String((payload as any).name || (payload as any).displayName || (payload as any).email || 'unknown')
+      updatedBy: auth.principal.fullName || auth.principal.email || 'unknown'
     };
 
     const saved = await saveDeliveryPolicy(next);
 
     const diff = buildDiffSummary(existing || getDefaultDeliveryPolicy(), next);
     const actor = {
-      userId: String((payload as any).id || (payload as any).userId || (payload as any).email || ''),
-      displayName: String((payload as any).name || (payload as any).displayName || ''),
-      email: (payload as any).email ? String((payload as any).email) : undefined,
-      role: (payload as any).role ? String((payload as any).role) : undefined
+      userId: auth.principal.userId,
+      displayName: auth.principal.fullName || '',
+      email: auth.principal.email,
+      role: auth.principal.role || undefined
     };
     await emitEvent({
       ts: new Date().toISOString(),

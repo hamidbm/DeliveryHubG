@@ -1,33 +1,30 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import { jwtVerify } from 'jose';
-import { ensureInReview, fetchReviewById, updateReviewCycleStatus, emitReviewCycleEvent, getDb, syncReviewCycleWorkItem } from '../../../../../../../services/db';
+import { ensureInReview, updateReviewCycleStatus, emitReviewCycleEvent, syncReviewCycleWorkItem } from '../../../../../../../services/reviewLifecycle';
 import { WorkItemStatus } from '../../../../../../../types';
-
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
-
-const getUser = async () => {
-  const cookieStore = await cookies();
-  const token = cookieStore.get('nexus_auth_token')?.value;
-  if (!token) return null;
-  const { payload } = await jwtVerify(token, JWT_SECRET);
-  return {
-    userId: String(payload.id || payload.userId || ''),
-    displayName: String(payload.name || 'Unknown'),
-    email: payload.email ? String(payload.email) : undefined
-  };
-};
+import { requireStandardUser } from '../../../../../../../shared/auth/guards';
+import { getReviewById } from '../../../../../../../server/db/repositories/reviewsRepo';
+import { findWorkItemByReviewRefs, updateWorkItemRecordById } from '../../../../../../../server/db/repositories/workItemsRepo';
 
 export async function POST(request: Request, { params }: { params: Promise<{ reviewId: string; cycleId: string }> }) {
   try {
-    const user = await getUser();
-    if (!user?.userId) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
+    const auth = await requireStandardUser(request);
+    if (!auth.ok) return auth.response;
+    const user = {
+      userId: auth.principal.userId,
+      displayName: auth.principal.fullName || 'Unknown',
+      email: auth.principal.email
+    };
     const { reviewId, cycleId } = await params;
-    const review = (await fetchReviewById(reviewId)) as any;
+    const review = (await getReviewById(reviewId)) as any;
     if (!review) return NextResponse.json({ error: 'Review not found' }, { status: 404 });
     const cycle = (review.cycles || []).find((c) => c.cycleId === cycleId);
     if (!cycle) return NextResponse.json({ error: 'Cycle not found' }, { status: 404 });
-    const isReviewer = (cycle.reviewerUserIds || []).includes(user.userId);
+    const reviewerIds = Array.isArray(cycle.reviewerUserIds)
+      ? cycle.reviewerUserIds.map((id: unknown) => String(id))
+      : Array.isArray(cycle.reviewers)
+        ? cycle.reviewers.map((reviewer: any) => String(reviewer.userId || ''))
+        : [];
+    const isReviewer = reviewerIds.includes(user.userId);
     if (!isReviewer) return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     if (!['requested', 'in_review'].includes(cycle.status)) {
       return NextResponse.json({ error: 'Cycle not eligible for feedback sent.' }, { status: 409 });
@@ -49,27 +46,22 @@ export async function POST(request: Request, { params }: { params: Promise<{ rev
     });
 
     try {
-      const db = await getDb();
-      const item = await db.collection('workitems').findOne({
-        $or: [
-          { reviewCycleId: cycleId },
-          {
-            reviewCycleId: cycleId,
-            'linkedResource.type': review.resource.type,
-            'linkedResource.id': review.resource.id
-          },
-          { reviewId: String(review._id || `${review.resource.type}:${review.resource.id}`) }
-        ]
+      const item = await findWorkItemByReviewRefs({
+        reviewId: String(review._id || `${review.resource.type}:${review.resource.id}`),
+        cycleId
       });
       if (item && item.status !== WorkItemStatus.REVIEW) {
         const now = new Date().toISOString();
-        await db.collection('workitems').updateOne(
-          { _id: item._id },
-          {
-            $set: { status: WorkItemStatus.REVIEW, updatedAt: now },
-            $push: { activity: { user: user.displayName, action: 'CHANGED_STATUS', from: item.status, to: WorkItemStatus.REVIEW, createdAt: now } }
-          } as any
-        );
+        await updateWorkItemRecordById(String(item._id || item.id), {
+          set: { status: WorkItemStatus.REVIEW, updatedAt: now },
+          activityEntry: {
+            user: user.displayName,
+            action: 'CHANGED_STATUS',
+            from: item.status,
+            to: WorkItemStatus.REVIEW,
+            createdAt: now
+          }
+        });
       }
     } catch {}
     await syncReviewCycleWorkItem({ reviewId: String(review._id), cycleId, actor: user });

@@ -1,14 +1,15 @@
 import { NextResponse } from 'next/server';
-import { computeMilestoneRollups, fetchMilestones, emitEvent } from '../../../../services/db';
-import { cookies } from 'next/headers';
-import { jwtVerify } from 'jose';
+import { emitEvent } from '../../../../shared/events/emitEvent';
+import { fetchMilestones } from '../../../../services/workItemsService';
+import { computeMilestoneRollups } from '../../../../services/rollupAnalytics';
 import { createVisibilityContext, getAuthUserFromCookies } from '../../../../services/visibility';
 import { snapshotCacheStats, diffCacheStats, summarizeCacheStats } from '../../../../services/perfStats';
-
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'nexus_super_secret_key_123');
+import { requireUser } from '../../../../shared/auth/guards';
 
 export async function GET(request: Request) {
   const startTime = Date.now();
+  const auth = await requireUser(request);
+  if (!auth.ok) return auth.response;
   const authUser = await getAuthUserFromCookies();
   if (!authUser?.userId) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
   const visibility = createVisibilityContext(authUser);
@@ -45,17 +46,11 @@ export async function GET(request: Request) {
   const cacheSummary = summarizeCacheStats(cacheDelta);
   console.info('[perf] milestone-rollups', { durationMs, milestones: ids.length });
   try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get('nexus_auth_token')?.value;
-    let actor: any = undefined;
-    if (token) {
-      const { payload } = await jwtVerify(token, JWT_SECRET);
-      actor = {
-        userId: String((payload as any).id || (payload as any).userId || (payload as any).email || ''),
-        displayName: String((payload as any).name || (payload as any).displayName || ''),
-        email: (payload as any).email ? String((payload as any).email) : undefined
-      };
-    }
+    const actor = {
+      userId: auth.principal.userId,
+      displayName: auth.principal.fullName || auth.principal.email || 'Unknown',
+      email: auth.principal.email
+    };
     await emitEvent({
       ts: new Date().toISOString(),
       type: 'perf.milestone.rollups',

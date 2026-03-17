@@ -1,8 +1,17 @@
 import { ObjectId } from 'mongodb';
-import { computeMilestoneRollups, deriveWorkItemLinkSummary, emitEvent, getDb } from './db';
+import { emitEvent } from '../shared/events/emitEvent';
+import { computeMilestoneRollups } from './rollupAnalytics';
 import { evaluateMilestoneReadiness } from './milestoneGovernance';
 import { getEffectivePolicyForMilestone } from './policy';
-import { createVisibilityContext } from './visibility';
+import { getPlanningMetadataByScope } from './applicationPlanningMetadata';
+import {
+  getLatestWorkDeliveryPlanRunRecord,
+  getWorkDeliveryPlanRunRecord,
+  getWorkPlanPreviewRecord,
+  updateWorkPlanPreviewRecord
+} from '../server/db/repositories/workPlansRepo';
+import { insertOptimizationAppliedRunRecord } from '../server/db/repositories/optimizationRunsRepo';
+import { patchMilestoneRecordById } from '../server/db/repositories/milestonesRepo';
 import type {
   OptimizationApplyRequest,
   OptimizationApplyResult,
@@ -16,8 +25,7 @@ import type {
   PortfolioOptimizationPlanSummary,
   WorkItem
 } from '../types';
-
-type PlanIdParsed = { source: 'CREATED_PLAN' | 'PREVIEW'; id: string };
+import { getCreatedPlanExecutionData, getPreviewPlanExecutionData, parsePlanExecutionId } from './planExecutionData';
 
 type MilestoneState = {
   milestoneId: string;
@@ -52,21 +60,6 @@ const DEFAULT_CONSTRAINTS: OptimizationConstraints = {
 };
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
-
-const parsePlanId = (value: string): PlanIdParsed | null => {
-  if (!value) return null;
-  const [prefix, raw] = value.split(':');
-  if (!raw) return null;
-  if (prefix === 'created') return { source: 'CREATED_PLAN', id: raw };
-  if (prefix === 'preview') return { source: 'PREVIEW', id: raw };
-  return null;
-};
-
-const ensureOptimizationIndexes = async (db: any) => {
-  await db.collection('optimization_applied_runs').createIndex({ planId: 1, appliedAt: -1 });
-  await db.collection('optimization_applied_runs').createIndex({ appliedBy: 1, appliedAt: -1 });
-  await db.collection('optimization_applied_runs').createIndex({ scopeType: 1, scopeId: 1, appliedAt: -1 });
-};
 
 const toDate = (value?: string | null) => {
   if (!value) return null;
@@ -133,23 +126,10 @@ const computeDependencyInbound = (items: WorkItem[]) => {
 
 const computeEnvironmentBounds = async (scopeType?: string, scopeId?: string) => {
   if (!scopeType || !scopeId) return undefined;
-  const db = await getDb();
   const normalizedScope = String(scopeType).toUpperCase();
-
   let metadata: any = null;
-  if (normalizedScope === 'BUNDLE') {
-    metadata = await db.collection('application_planning_metadata').findOne({
-      scopeType: 'bundle',
-      scopeId: String(scopeId)
-    });
-  }
-
-  if (normalizedScope === 'APPLICATION') {
-    const appMeta = await db.collection('application_planning_metadata').findOne({
-      $or: [{ scopeType: 'application', scopeId: String(scopeId) }, { applicationId: String(scopeId) }]
-    });
-    metadata = appMeta || metadata;
-  }
+  if (normalizedScope === 'BUNDLE') metadata = await getPlanningMetadataByScope('bundle', String(scopeId));
+  if (normalizedScope === 'APPLICATION') metadata = await getPlanningMetadataByScope('application', String(scopeId));
 
   const rows = Array.isArray(metadata?.environments) ? metadata.environments : [];
   const dates: Date[] = [];
@@ -436,14 +416,13 @@ const loadOptimizationContext = async (
   planId: string,
   user: { userId?: string; role?: string } | null
 ): Promise<PlanOptimizationContext | null> => {
-  const parsed = parsePlanId(planId);
+  const parsed = parsePlanExecutionId(planId);
   if (!parsed) return null;
-  const db = await getDb();
-  const visibility = createVisibilityContext(user);
 
   if (parsed.source === 'PREVIEW') {
-    const preview = await db.collection('work_plan_previews').findOne({ _id: new ObjectId(parsed.id) });
-    if (!preview) return null;
+    const previewData = await getPreviewPlanExecutionData(parsed.id);
+    if (!previewData?.preview) return null;
+    const preview = previewData.preview;
     const data = preview.preview || {};
     const loadByMilestone = new Map<number, number>();
     (data.artifacts || []).forEach((artifact: any) => {
@@ -472,37 +451,18 @@ const loadOptimizationContext = async (
     };
   }
 
-  const run = await db.collection('work_delivery_plan_runs').findOne({ _id: new ObjectId(parsed.id) });
+  const run = await getWorkDeliveryPlanRunRecord(parsed.id);
   if (!run) return null;
-
-  const milestoneIds = (run.milestoneIds || [])
-    .map((id: any) => String(id))
-    .filter((id: string) => ObjectId.isValid(id));
-
-  const milestonesRaw = await db.collection('milestones').find({
-    _id: { $in: milestoneIds.map((id: string) => new ObjectId(id)) }
-  }).toArray();
-
-  const visibleMilestones = [] as any[];
-  for (const milestone of milestonesRaw) {
-    const canView = await visibility.canViewBundle(String(milestone.bundleId || ''));
-    if (canView) visibleMilestones.push(milestone);
-  }
+  const runData = await getCreatedPlanExecutionData(parsed.id, user);
+  if (!runData) return null;
+  const visibleMilestones = runData.visibleMilestones as any[];
 
   const milestoneKeys = visibleMilestones.map((m) => String(m._id || m.id || m.name));
   const rollups = await computeMilestoneRollups(milestoneKeys);
   const rollupById = new Map<string, any>();
   rollups.forEach((rollup: any) => rollupById.set(String(rollup.milestoneId), rollup));
 
-  const itemIds = (run.workItemIds || [])
-    .map((id: any) => String(id))
-    .filter((id: string) => ObjectId.isValid(id));
-  const items = await db.collection('workitems').find({
-    _id: { $in: itemIds.map((id: string) => new ObjectId(id)) }
-  }).toArray();
-  const visibleItems = await visibility.filterVisibleWorkItems(items as unknown as WorkItem[]);
-  const enriched = await deriveWorkItemLinkSummary(visibleItems as WorkItem[]);
-  const dependencyInbound = computeDependencyInbound(enriched as WorkItem[]);
+  const dependencyInbound = computeDependencyInbound(runData.enrichedItems as WorkItem[]);
 
   const milestones: MilestoneState[] = [];
   for (const milestone of visibleMilestones) {
@@ -644,11 +604,10 @@ export const optimizePortfolio = async (
 };
 
 const getPlanSourceInfo = async (planId: string) => {
-  const parsed = parsePlanId(planId);
+  const parsed = parsePlanExecutionId(planId);
   if (!parsed) return null;
-  const db = await getDb();
   if (parsed.source === 'PREVIEW') {
-    const preview = await db.collection('work_plan_previews').findOne({ _id: new ObjectId(parsed.id) });
+    const preview = await getWorkPlanPreviewRecord(parsed.id);
     if (!preview) return null;
     return {
       parsed,
@@ -656,7 +615,7 @@ const getPlanSourceInfo = async (planId: string) => {
       scopeId: preview.scopeId
     };
   }
-  const run = await db.collection('work_delivery_plan_runs').findOne({ _id: new ObjectId(parsed.id) });
+  const run = await getWorkDeliveryPlanRunRecord(parsed.id);
   if (!run) return null;
   return {
     parsed,
@@ -666,8 +625,7 @@ const getPlanSourceInfo = async (planId: string) => {
 };
 
 const applyVariantToPreviewPlan = async (previewId: string, variant: OptimizationVariant) => {
-  const db = await getDb();
-  const doc = await db.collection('work_plan_previews').findOne({ _id: new ObjectId(previewId) });
+  const doc = await getWorkPlanPreviewRecord(previewId);
   if (!doc) return 0;
   const preview = doc.preview || {};
   const milestones = Array.isArray(preview.milestones) ? [...preview.milestones] : [];
@@ -690,24 +648,18 @@ const applyVariantToPreviewPlan = async (previewId: string, variant: Optimizatio
   });
 
   if (!appliedCount) return 0;
-  await db.collection('work_plan_previews').updateOne(
-    { _id: new ObjectId(previewId) },
-    {
-      $set: {
-        preview: {
-          ...preview,
-          milestones
-        },
-        updatedAt: new Date().toISOString()
-      }
-    }
-  );
+  await updateWorkPlanPreviewRecord(previewId, {
+    preview: {
+      ...preview,
+      milestones
+    },
+    updatedAt: new Date().toISOString()
+  });
   return appliedCount;
 };
 
 const applyVariantToCreatedPlan = async (runId: string, variant: OptimizationVariant, user: { userId?: string; email?: string }) => {
-  const db = await getDb();
-  const run = await db.collection('work_delivery_plan_runs').findOne({ _id: new ObjectId(runId) });
+  const run = await getWorkDeliveryPlanRunRecord(runId);
   if (!run) return 0;
   const allowedIds = new Set((run.milestoneIds || []).map((id: any) => String(id)));
 
@@ -726,10 +678,7 @@ const applyVariantToCreatedPlan = async (runId: string, variant: OptimizationVar
     }
     if (typeof change.newTargetCapacity === 'number') update.targetCapacity = change.newTargetCapacity;
     if (Object.keys(update).length <= 2) continue;
-    await db.collection('milestones').updateOne(
-      { _id: new ObjectId(milestoneId) },
-      { $set: update }
-    );
+    await patchMilestoneRecordById(milestoneId, update);
     appliedCount += 1;
   }
   return appliedCount;
@@ -759,9 +708,6 @@ export const applyOptimizationVariant = async (
   if (!Array.isArray(variant.changes) || !variant.changes.length) {
     throw new Error('Variant has no applicable changes');
   }
-
-  const db = await getDb();
-  await ensureOptimizationIndexes(db);
 
   let appliedChanges = 0;
   if (parsed.source === 'PREVIEW') {
@@ -804,7 +750,7 @@ export const applyOptimizationVariant = async (
     changes: variant.changes
   };
 
-  const auditInsert = await db.collection('optimization_applied_runs').insertOne(auditRecord);
+  const auditInsert = await insertOptimizationAppliedRunRecord(auditRecord);
 
   try {
     await emitEvent({
